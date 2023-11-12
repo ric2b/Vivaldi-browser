@@ -58,6 +58,24 @@ enum class COMPONENT_EXPORT(KCER) Error {
   kInvalidCertificate = 9,
   kFailedToImportCertificate = 10,
   kFailedToRemoveCertificate = 11,
+  kKeyNotFound = 12,
+  kUnknownKeyType = 13,
+  kFailedToGetKeyId = 14,
+  kFailedToReadAttribute = 15,
+  kFailedToWriteAttribute = 16,
+  kFailedToParseKeyPermissions = 17,
+  kUnexpectedSigningScheme = 18,
+  kKeyDoesNotSupportSigningScheme = 19,
+  kFailedToSignFailedToDigest = 20,
+  kFailedToSignFailedToAddPrefix = 21,
+  kFailedToSignFailedToGetSignatureLength = 22,
+  kFailedToSign = 23,
+  kFailedToSignBadSignatureLength = 24,
+  kFailedToDerEncode = 25,
+  kInputTooLong = 26,
+  kFailedToListKeys = 27,
+  kFailedToRemovePrivateKey = 28,
+  kFailedToRemovePublicKey = 29,
 };
 
 // Handles for tokens on ChromeOS.
@@ -89,19 +107,19 @@ enum class COMPONENT_EXPORT(KCER) EllipticCurve {
   kP256,
 };
 
+// Possible sign schemes (aka algorithms) for Kcer::Sign() method. Maps 1-to-1
+// to OpenSSL SSL_* constants. It is allowed to cast SigningScheme to SSL_*.
 enum class COMPONENT_EXPORT(KCER) SigningScheme {
   kRsaPkcs1Sha1 = SSL_SIGN_RSA_PKCS1_SHA1,
   kRsaPkcs1Sha256 = SSL_SIGN_RSA_PKCS1_SHA256,
   kRsaPkcs1Sha384 = SSL_SIGN_RSA_PKCS1_SHA384,
   kRsaPkcs1Sha512 = SSL_SIGN_RSA_PKCS1_SHA512,
-  kEcdsaSha1 = SSL_SIGN_ECDSA_SHA1,
   kEcdsaSecp256r1Sha256 = SSL_SIGN_ECDSA_SECP256R1_SHA256,
   kEcdsaSecp384r1Sha384 = SSL_SIGN_ECDSA_SECP384R1_SHA384,
   kEcdsaSecp521r1Sha512 = SSL_SIGN_ECDSA_SECP521R1_SHA512,
   kRsaPssRsaeSha256 = SSL_SIGN_RSA_PSS_RSAE_SHA256,
   kRsaPssRsaeSha384 = SSL_SIGN_RSA_PSS_RSAE_SHA384,
   kRsaPssRsaeSha512 = SSL_SIGN_RSA_PSS_RSAE_SHA512,
-  kEd25519 = SSL_SIGN_ED25519,
 };
 
 class COMPONENT_EXPORT(KCER) PublicKey {
@@ -114,6 +132,9 @@ class COMPONENT_EXPORT(KCER) PublicKey {
   PublicKey(PublicKey&&);
   PublicKey& operator=(PublicKey&&);
   ~PublicKey();
+
+  bool operator==(const PublicKey& other) const;
+  bool operator!=(const PublicKey& other) const;
 
   Token GetToken() const { return token_; }
   const Pkcs11Id& GetPkcs11Id() const { return pkcs11_id_; }
@@ -177,7 +198,14 @@ class COMPONENT_EXPORT(KCER) PrivateKeyHandle {
  public:
   explicit PrivateKeyHandle(const PublicKey& public_key);
   explicit PrivateKeyHandle(const Cert&);
+  PrivateKeyHandle(Token token, PublicKeySpki pub_key_spki);
+  // If possible, prefer specifying the token (use another constructor) for
+  // better performance. Calling a Kcer method using this overload will make it
+  // search on all tokens for the key before proceeding with the request.
   explicit PrivateKeyHandle(PublicKeySpki pub_key_spki);
+  // Used internally to convert from `PrivateKeyHandle(PublicKeySpki)`. `other`
+  // must have no token set.
+  PrivateKeyHandle(Token token, PrivateKeyHandle&& other);
   ~PrivateKeyHandle();
 
   PrivateKeyHandle(const PrivateKeyHandle&);
@@ -185,12 +213,18 @@ class COMPONENT_EXPORT(KCER) PrivateKeyHandle {
   PrivateKeyHandle(PrivateKeyHandle&&);
   PrivateKeyHandle& operator=(PrivateKeyHandle&&);
 
+  // Public for implementations of Kcer only.
+  const absl::optional<Token>& GetTokenInternal() const { return token_; }
+  const Pkcs11Id& GetPkcs11IdInternal() const { return pkcs11_id_; }
+  const PublicKeySpki& GetSpkiInternal() const { return pub_key_spki_; }
+
  private:
   // Depending on how PrivateKeyHandle is constructed, some member variables
   // might not contain valid values, possible combinations:
-  // * Only `token_` and `pkcs11_id_` are valid.
-  // * Only `pub_key_spki_` is valid.
-  // * All of them are valid.
+  // * Only `token_` and `pkcs11_id_` are populated.
+  // * Only `token_` and `pub_key_spki_` are populated.
+  // * Only `pub_key_spki_` is populated.
+  // * All member variables are populated.
   absl::optional<Token> token_;
   Pkcs11Id pkcs11_id_;
   PublicKeySpki pub_key_spki_;
@@ -256,9 +290,9 @@ class COMPONENT_EXPORT(KCER) Kcer {
 
   // Imports a key pair from bytes `key_pair` in the PKCS#8 format (DER encoded)
   // into the `token`. It is caller's responsibility to make sure that the same
-  // key doesn't end up on two different tokens (otherwise Kcer is allowed to
-  // perform any future operations, such as RemoveKey, with only one of the
-  // keys). Returns a public key on success, an error otherwise.
+  // key doesn't end up on several different tokens at the same time (otherwise
+  // Kcer is allowed to perform any future operations, such as RemoveKey, with
+  // only one of the keys). Returns a public key on success, an error otherwise.
   virtual void ImportKey(Token token,
                          Pkcs8PrivateKeyInfoDer pkcs8_private_key_info_der,
                          ImportKeyCallback callback) = 0;

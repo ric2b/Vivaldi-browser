@@ -191,6 +191,9 @@ class WebContentsViewMac : public WebContentsView,
   // The WebContentsImpl whose contents we display.
   raw_ptr<WebContentsImpl> web_contents_;
 
+  // Vivaldi: Used in DragPromisedFileTo to set correct referrer.
+  raw_ptr<WebContentsImpl> dragowner_webcontents_ = nullptr;
+
   // Destination for drag-drop.
   base::scoped_nsobject<WebDragDest> drag_dest_;
 

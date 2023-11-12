@@ -106,6 +106,8 @@ class Menu_Node : public ui::TreeNode<Menu_Node> {
   Menu_Node* GetByAction(const std::string& action);
   // Returns the menu that this node belongs to.
   const Menu_Node* GetMenu() const;
+  // Returns the menu in the node tree that matches the name.
+  Menu_Node* GetMenuByResourceName(const std::string& menu);
 
   bool is_menu() const { return type_ == MENU; }
   bool is_command() const { return type_ == COMMAND; }

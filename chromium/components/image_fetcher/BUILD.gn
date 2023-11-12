@@ -24,8 +24,11 @@ android_library("java") {
     "//third_party/gif_player:gif_player_java",
     "//url:gurl_java",
   ]
-  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
-  srcjar_deps = [ "//components/image_fetcher/core:java_enums_srcjar" ]
+
+  srcjar_deps = [
+    ":jni_headers",
+    "//components/image_fetcher/core:java_enums_srcjar",
+  ]
 }
 
 generate_jni("jni_headers") {
@@ -47,6 +50,17 @@ source_set("android") {
     "//components/image_fetcher/core:metrics",
     "//services/data_decoder/public/cpp",
     "//ui/gfx",
+  ]
+}
+
+android_library("test_support_java") {
+  sources = [ "android/java/src/org/chromium/components/image_fetcher/test/TestImageFetcher.java" ]
+
+  deps = [
+    ":java",
+    "//base:base_java",
+    "//third_party/androidx:androidx_annotation_annotation_java",
+    "//third_party/gif_player:gif_player_java",
   ]
 }
 

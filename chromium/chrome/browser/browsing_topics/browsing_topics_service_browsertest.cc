@@ -14,7 +14,6 @@
 #include "chrome/browser/optimization_guide/browser_test_util.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
-#include "chrome/browser/optimization_guide/page_content_annotations_service_factory.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -27,11 +26,13 @@
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "components/optimization_guide/content/browser/page_content_annotations_service.h"
-#include "components/optimization_guide/content/browser/test_page_content_annotations_service.h"
-#include "components/optimization_guide/content/browser/test_page_content_annotator.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/test_model_info_builder.h"
 #include "components/optimization_guide/core/test_optimization_guide_model_provider.h"
+#include "components/optimization_guide/proto/page_topics_model_metadata.pb.h"
+#include "components/privacy_sandbox/privacy_sandbox_attestations/privacy_sandbox_attestations.h"
+#include "components/privacy_sandbox/privacy_sandbox_attestations/scoped_privacy_sandbox_attestations.h"
+#include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/privacy_sandbox/privacy_sandbox_settings.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/browsing_topics_site_data_manager.h"
@@ -43,9 +44,11 @@
 #include "content/public/test/fenced_frame_test_util.h"
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "net/base/schemeful_site.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
 
@@ -60,7 +63,6 @@ constexpr base::Time kTime1 =
 constexpr base::Time kTime2 =
     base::Time::FromDeltaSinceWindowsEpoch(base::Days(2));
 
-constexpr size_t kTaxonomySize = 349;
 constexpr int kTaxonomyVersion = 1;
 constexpr int64_t kModelVersion = 2;
 constexpr size_t kPaddedTopTopicsStartIndex = 5;
@@ -73,17 +75,14 @@ constexpr char kExpectedApiResult[] =
     "\"configVersion\":\"chrome.1\",\"modelVersion\":\"2\","
     "\"taxonomyVersion\":\"1\",\"topic\":10,\"version\":\"chrome.1:1:2\"};]";
 
+constexpr char kExpectedHeaderValueForEmptyTopics[] =
+    "();p=P0000000000000000000000000000000";
+
 constexpr char kExpectedHeaderValueForSiteA[] =
-    "1;version=\"chrome.1:1:2\";config_version=\"chrome.1\";model_version="
-    "\"2\";taxonomy_version=\"1\", "
-    "10;version=\"chrome.1:1:2\";config_version=\"chrome.1\";model_version="
-    "\"2\";taxonomy_version=\"1\"";
+    "(1 10);v=chrome.1:1:2, ();p=P00000000";
 
 constexpr char kExpectedHeaderValueForSiteB[] =
-    "1;version=\"chrome.1:1:2\";config_version=\"chrome.1\";model_version="
-    "\"2\";taxonomy_version=\"1\", "
-    "7;version=\"chrome.1:1:2\";config_version=\"chrome.1\";model_version="
-    "\"2\";taxonomy_version=\"1\"";
+    "(1 7);v=chrome.1:1:2, ();p=P000000000";
 
 static constexpr char kBrowsingTopicsApiActionTypeHistogramId[] =
     "BrowsingTopics.ApiActionType";
@@ -100,8 +99,9 @@ EpochTopics CreateTestEpochTopics(
   }
 
   return EpochTopics(std::move(top_topics_and_observing_domains),
-                     kPaddedTopTopicsStartIndex, kTaxonomySize,
-                     kTaxonomyVersion, kModelVersion, calculation_time);
+                     kPaddedTopTopicsStartIndex, kTaxonomyVersion,
+                     kModelVersion, calculation_time,
+                     /*from_manually_triggered_calculation=*/false);
 }
 
 class PortalActivationWaiter : public content::WebContentsObserver {
@@ -139,14 +139,14 @@ class TesterBrowsingTopicsService : public BrowsingTopicsServiceImpl {
       privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings,
       history::HistoryService* history_service,
       content::BrowsingTopicsSiteDataManager* site_data_manager,
-      optimization_guide::PageContentAnnotationsService* annotations_service,
+      std::unique_ptr<Annotator> annotator,
       base::OnceClosure calculation_finish_callback)
       : BrowsingTopicsServiceImpl(
             profile_path,
             privacy_sandbox_settings,
             history_service,
             site_data_manager,
-            annotations_service,
+            std::move(annotator),
             base::BindRepeating(
                 content_settings::PageSpecificContentSettings::TopicAccessed)),
         calculation_finish_callback_(std::move(calculation_finish_callback)) {}
@@ -291,6 +291,91 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsDisabledBrowserTest, NoTopicsAPI) {
   EXPECT_EQ("not a function", InvokeTopicsAPI(web_contents()));
 }
 
+// Enables the feature flags for BrowsingTopics but does not override the
+// Annotator to a mocked instance.
+class BrowsingTopicsAnnotationGoldenDataBrowserTest
+    : public BrowsingTopicsBrowserTestBase {
+ public:
+  BrowsingTopicsAnnotationGoldenDataBrowserTest() {
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/
+        {blink::features::kBrowsingTopics, blink::features::kBrowsingTopicsXHR,
+         blink::features::kBrowsingTopicsBypassIPIsPubliclyRoutableCheck,
+         features::kPrivacySandboxAdsAPIsOverride, blink::features::kPortals},
+        /*disabled_features=*/{
+            optimization_guide::features::kPreventLongRunningPredictionModels});
+  }
+  ~BrowsingTopicsAnnotationGoldenDataBrowserTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Running a TFLite model in a test is expensive so it can only be done in a
+// browser test without any page loads.
+IN_PROC_BROWSER_TEST_F(BrowsingTopicsAnnotationGoldenDataBrowserTest,
+                       GoldenData) {
+  // Boilerplate for getting the model to work for a real execution.
+  optimization_guide::proto::Any any_metadata;
+  any_metadata.set_type_url(
+      "type.googleapis.com/com.foo.PageTopicsModelMetadata");
+  optimization_guide::proto::PageTopicsModelMetadata page_topics_model_metadata;
+  page_topics_model_metadata.set_version(123);
+  page_topics_model_metadata.add_supported_output(
+      optimization_guide::proto::PAGE_TOPICS_SUPPORTED_OUTPUT_CATEGORIES);
+  auto* output_params =
+      page_topics_model_metadata.mutable_output_postprocessing_params();
+  auto* category_params = output_params->mutable_category_params();
+  category_params->set_max_categories(5);
+  category_params->set_min_none_weight(0.8);
+  category_params->set_min_category_weight(0.1);
+  category_params->set_min_normalized_weight_within_top_n(0.1);
+  page_topics_model_metadata.SerializeToString(any_metadata.mutable_value());
+  base::FilePath source_root_dir;
+  ASSERT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &source_root_dir));
+  base::FilePath model_file_path = source_root_dir.AppendASCII("chrome")
+                                       .AppendASCII("test")
+                                       .AppendASCII("data")
+                                       .AppendASCII("browsing_topics")
+                                       .AppendASCII("golden_data_model.tflite");
+
+  OptimizationGuideKeyedServiceFactory::GetForProfile(browser()->profile())
+      ->OverrideTargetModelForTesting(
+          optimization_guide::proto::OPTIMIZATION_TARGET_PAGE_TOPICS_V2,
+          optimization_guide::TestModelInfoBuilder()
+              .SetModelFilePath(model_file_path)
+              .SetModelMetadata(any_metadata)
+              .Build());
+
+  BrowsingTopicsService* service =
+      BrowsingTopicsServiceFactory::GetForProfile(browser()->profile());
+
+  base::HistogramTester histogram_tester;
+  base::RunLoop run_loop;
+  service->GetAnnotator()->BatchAnnotate(
+      base::BindOnce(
+          [](base::RunLoop* run_loop,
+             const std::vector<Annotation>& annotations) {
+            ASSERT_EQ(annotations.size(), 1U);
+            EXPECT_EQ(annotations[0].input, "foo.bar.com");
+            EXPECT_THAT(annotations[0].topics,
+                        testing::UnorderedElementsAre(1, 289));
+            run_loop->Quit();
+          },
+          &run_loop),
+      {"foo.bar.com"});
+
+  run_loop.Run();
+
+  optimization_guide::RetryForHistogramUntilCountReached(
+      &histogram_tester,
+      "OptimizationGuide.ModelExecutor.ExecutionStatus.PageTopicsV2", 1);
+
+  histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.ModelExecutor.ExecutionStatus.PageTopicsV2",
+      /*kSuccess=*/1, 1);
+}
+
 class BrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTestBase {
  public:
   BrowsingTopicsBrowserTest()
@@ -404,28 +489,15 @@ class BrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTestBase {
     return browsing_topics_service()->browsing_topics_state();
   }
 
+  privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings() {
+    return PrivacySandboxSettingsFactory::GetForProfile(browser()->profile());
+  }
+
   content::test::PrerenderTestHelper& prerender_helper() {
     return prerender_helper_;
   }
 
-  std::vector<optimization_guide::WeightedIdentifier> TopicsAndWeight(
-      const std::vector<int32_t>& topics,
-      double weight) {
-    std::vector<optimization_guide::WeightedIdentifier> result;
-    for (int32_t topic : topics) {
-      result.emplace_back(topic, weight);
-    }
-
-    return result;
-  }
-
   void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
-    PageContentAnnotationsServiceFactory::GetInstance()->SetTestingFactory(
-        context,
-        base::BindRepeating(
-            &BrowsingTopicsBrowserTest::CreatePageContentAnnotationsService,
-            base::Unretained(this)));
-
     browsing_topics::BrowsingTopicsServiceFactory::GetInstance()
         ->SetTestingFactory(
             context,
@@ -434,43 +506,23 @@ class BrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTestBase {
                 base::Unretained(this)));
   }
 
-  std::unique_ptr<KeyedService> CreatePageContentAnnotationsService(
-      content::BrowserContext* context) {
-    Profile* profile = Profile::FromBrowserContext(context);
-
-    history::HistoryService* history_service =
-        HistoryServiceFactory::GetForProfile(
-            profile, ServiceAccessType::IMPLICIT_ACCESS);
-
-    DCHECK(!base::Contains(optimization_guide_model_providers_, profile));
-    optimization_guide_model_providers_.emplace(
-        profile, std::make_unique<
-                     optimization_guide::TestOptimizationGuideModelProvider>());
-
-    auto page_content_annotations_service =
-        optimization_guide::TestPageContentAnnotationsService::Create(
-            optimization_guide_model_providers_.at(profile).get(),
-            history_service);
-
-    page_content_annotations_service->OverridePageContentAnnotatorForTesting(
-        &test_page_content_annotator_);
-
-    return page_content_annotations_service;
-  }
-
   void InitializePreexistingState(
       history::HistoryService* history_service,
       content::BrowsingTopicsSiteDataManager* site_data_manager,
-      const base::FilePath& profile_path) {
+      const base::FilePath& profile_path,
+      TestAnnotator* annotator) {
     // Configure the (mock) model.
-    test_page_content_annotator_.UsePageTopics(
-        *optimization_guide::TestModelInfoBuilder().SetVersion(1).Build(),
-        {{"foo6.com", TopicsAndWeight({1, 2, 3, 4, 5, 6}, 0.1)},
-         {"foo5.com", TopicsAndWeight({2, 3, 4, 5, 6}, 0.1)},
-         {"foo4.com", TopicsAndWeight({3, 4, 5, 6}, 0.1)},
-         {"foo3.com", TopicsAndWeight({4, 5, 6}, 0.1)},
-         {"foo2.com", TopicsAndWeight({5, 6}, 0.1)},
-         {"foo1.com", TopicsAndWeight({6}, 0.1)}});
+
+    annotator->UseModelInfo(
+        *optimization_guide::TestModelInfoBuilder().SetVersion(1).Build());
+    annotator->UseAnnotations({
+        {"foo6.com", {1, 2, 3, 4, 5, 6}},
+        {"foo5.com", {2, 3, 4, 5, 6}},
+        {"foo4.com", {3, 4, 5, 6}},
+        {"foo3.com", {4, 5, 6}},
+        {"foo2.com", {5, 6}},
+        {"foo1.com", {6}},
+    });
 
     // Add some initial history.
     history::HistoryAddPageArgs add_page_args;
@@ -531,11 +583,11 @@ class BrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTestBase {
         context->GetDefaultStoragePartition()
             ->GetBrowsingTopicsSiteDataManager();
 
-    optimization_guide::PageContentAnnotationsService* annotations_service =
-        PageContentAnnotationsServiceFactory::GetForProfile(profile);
+    std::unique_ptr<TestAnnotator> annotator =
+        std::make_unique<TestAnnotator>();
 
     InitializePreexistingState(history_service, site_data_manager,
-                               profile->GetPath());
+                               profile->GetPath(), annotator.get());
 
     DCHECK(!base::Contains(calculation_finish_waiters_, profile));
     calculation_finish_waiters_.emplace(profile,
@@ -546,7 +598,7 @@ class BrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTestBase {
 
     return std::make_unique<TesterBrowsingTopicsService>(
         profile->GetPath(), privacy_sandbox_settings, history_service,
-        site_data_manager, annotations_service,
+        site_data_manager, std::move(annotator),
         calculation_finish_waiters_.at(profile)->QuitClosure());
   }
 
@@ -556,15 +608,10 @@ class BrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTestBase {
 
   base::test::ScopedFeatureList scoped_feature_list_;
 
-  std::map<
-      Profile*,
-      std::unique_ptr<optimization_guide::TestOptimizationGuideModelProvider>>
-      optimization_guide_model_providers_;
-
   std::map<Profile*, std::unique_ptr<base::RunLoop>>
       calculation_finish_waiters_;
 
-  optimization_guide::TestPageContentAnnotator test_page_content_annotator_;
+  optimization_guide::TestOptimizationGuideModelProvider model_provider_;
 
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> ukm_recorder_;
 
@@ -637,10 +684,6 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest, BrowsingTopicsStateOnStart) {
 IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest, CalculationResultUkm) {
   auto entries = ukm_recorder_->GetEntriesByName(
       ukm::builders::BrowsingTopics_EpochTopicsCalculationResult::kEntryName);
-
-  // The number of entries should equal the number of profiles, which could be
-  // greater than 1 on some platform.
-  EXPECT_EQ(optimization_guide_model_providers_.size(), entries.size());
 
   for (auto* entry : entries) {
     ukm_recorder_->ExpectEntryMetric(
@@ -1195,9 +1238,8 @@ IN_PROC_BROWSER_TEST_F(
   // away later.
   content::TestNavigationObserver popup_observer(main_frame_url);
   popup_observer.StartWatchingNewWebContents();
-  EXPECT_TRUE(
-      ExecuteScript(web_contents()->GetPrimaryMainFrame(),
-                    content::JsReplace("window.open($1)", main_frame_url)));
+  EXPECT_TRUE(ExecJs(web_contents()->GetPrimaryMainFrame(),
+                     content::JsReplace("window.open($1)", main_frame_url)));
   popup_observer.Wait();
 
   GURL new_url =
@@ -1296,7 +1338,7 @@ IN_PROC_BROWSER_TEST_F(
   // Expect an empty header value as "b.test" did not observe the candidate
   // topics.
   EXPECT_TRUE(topics_header_value);
-  EXPECT_TRUE(topics_header_value->empty());
+  EXPECT_EQ(topics_header_value, kExpectedHeaderValueForEmptyTopics);
 
   // No observation should have been recorded in addition to the pre-existing
   // one, as the response did not have the `Observe-Browsing-Topics: ?1` header.
@@ -1596,7 +1638,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
 
     // An empty topics header value was sent, because "c.test" did not observe
     // the candidate topics.
-    EXPECT_TRUE(topics_header_value->empty());
+    EXPECT_EQ(topics_header_value, kExpectedHeaderValueForEmptyTopics);
   }
 
   // Two new observations should have been recorded in addition to the
@@ -1696,7 +1738,7 @@ IN_PROC_BROWSER_TEST_F(
 
     // An empty topics header value was sent, as "c.test" did not observe the
     // candidate topics.
-    EXPECT_TRUE(topics_header_value->empty());
+    EXPECT_EQ(topics_header_value, kExpectedHeaderValueForEmptyTopics);
   }
 
   // A new observation should have been recorded in addition to the pre-existing
@@ -2281,7 +2323,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
 
     // An empty topics header value was sent, because "c.test" did not observe
     // the candidate topics.
-    EXPECT_TRUE(topics_header_value->empty());
+    EXPECT_EQ(topics_header_value, kExpectedHeaderValueForEmptyTopics);
   }
 
   // Two new observations should have been recorded in addition to the
@@ -2302,6 +2344,98 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
   EXPECT_EQ(api_usage_contexts[2].hashed_main_frame_host,
             HashMainFrameHostForStorage("foo1.com"));
   EXPECT_EQ(api_usage_contexts[2].hashed_context_domain, HashedDomain(1));
+}
+
+// Tests that the Topics API abides by the Privacy Sandbox Enrollment framework.
+class AttestationBrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTest {
+ public:
+  AttestationBrowsingTopicsBrowserTest() {
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/
+        {blink::features::kBrowsingTopics, blink::features::kBrowsingTopicsXHR,
+         blink::features::kBrowsingTopicsBypassIPIsPubliclyRoutableCheck,
+         features::kPrivacySandboxAdsAPIsOverride,
+         privacy_sandbox::kEnforcePrivacySandboxAttestations},
+        /*disabled_features=*/{});
+  }
+
+  void SetUpOnMainThread() override {
+    // `PrivacySandboxAttestations` has a member of type
+    // `scoped_refptr<base::SequencedTaskRunner>`, its initialization must be
+    // done after a browser process is created.
+    BrowsingTopicsBrowserTestBase::SetUpOnMainThread();
+    scoped_attestations_ =
+        std::make_unique<privacy_sandbox::ScopedPrivacySandboxAttestations>(
+            privacy_sandbox::PrivacySandboxAttestations::CreateForTesting());
+  }
+
+  ~AttestationBrowsingTopicsBrowserTest() override = default;
+
+ protected:
+  base::test::ScopedFeatureList scoped_feature_list_;
+  std::unique_ptr<privacy_sandbox::ScopedPrivacySandboxAttestations>
+      scoped_attestations_;
+};
+
+// Site a.test is attested for Topics, so it should receive a valid response.
+IN_PROC_BROWSER_TEST_F(AttestationBrowsingTopicsBrowserTest,
+                       AttestedSiteCanGetBrowsingTopics) {
+  privacy_sandbox::PrivacySandboxAttestationsMap map;
+  map.insert_or_assign(
+      net::SchemefulSite(GURL("https://a.test")),
+      privacy_sandbox::PrivacySandboxAttestationsGatedAPISet{
+          privacy_sandbox::PrivacySandboxAttestationsGatedAPI::kTopics});
+  privacy_sandbox::PrivacySandboxAttestations::GetInstance()
+      ->SetAttestationsForTesting(map);
+
+  GURL main_frame_url =
+      https_server_.GetURL("a.test", "/browsing_topics/one_iframe_page.html");
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), main_frame_url));
+
+  std::string result = InvokeTopicsAPI(web_contents());
+  EXPECT_EQ(result, kExpectedApiResult);
+}
+
+// Site b.test is not attested for Topics, so it should receive no topics. Note:
+// Attestation failure works differently from other failure modes like operating
+// in an insecure context. In this case, the API is still exposed, but handling
+// will exit before any topics are filled.
+IN_PROC_BROWSER_TEST_F(AttestationBrowsingTopicsBrowserTest,
+                       UnattestedSiteCannotGetBrowsingTopics) {
+  privacy_sandbox::PrivacySandboxAttestationsMap map;
+  map.insert_or_assign(
+      net::SchemefulSite(GURL("https://a.test")),
+      privacy_sandbox::PrivacySandboxAttestationsGatedAPISet{
+          privacy_sandbox::PrivacySandboxAttestationsGatedAPI::kTopics});
+  privacy_sandbox::PrivacySandboxAttestations::GetInstance()
+      ->SetAttestationsForTesting(map);
+
+  GURL main_frame_url =
+      https_server_.GetURL("b.test", "/browsing_topics/one_iframe_page.html");
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), main_frame_url));
+
+  EXPECT_EQ("[]", InvokeTopicsAPI(web_contents()));
+}
+
+// Site a.test is attested, but not for Topics, so no topics should be returned.
+IN_PROC_BROWSER_TEST_F(AttestationBrowsingTopicsBrowserTest,
+                       AttestedSiteCannotGetBrowsingTopicsWithMismatchedMap) {
+  privacy_sandbox::PrivacySandboxAttestationsMap map;
+  map.insert_or_assign(net::SchemefulSite(GURL("https://a.test")),
+                       privacy_sandbox::PrivacySandboxAttestationsGatedAPISet{
+                           privacy_sandbox::PrivacySandboxAttestationsGatedAPI::
+                               kProtectedAudience});
+  privacy_sandbox::PrivacySandboxAttestations::GetInstance()
+      ->SetAttestationsForTesting(map);
+
+  GURL main_frame_url =
+      https_server_.GetURL("a.test", "/browsing_topics/one_iframe_page.html");
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), main_frame_url));
+
+  EXPECT_EQ("[]", InvokeTopicsAPI(web_contents()));
 }
 
 }  // namespace browsing_topics

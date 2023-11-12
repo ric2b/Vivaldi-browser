@@ -103,6 +103,10 @@ class UI_TOUCH_SELECTION_EXPORT TouchSelectionController
   void HandleLongPressEvent(base::TimeTicks event_time,
                                 const gfx::PointF& location);
 
+  // To be called before forwarding a double press event.
+  void HandleDoublePressEvent(base::TimeTicks event_time,
+                              const gfx::PointF& location);
+
   // To be called before forwarding a gesture scroll begin event to prevent
   // long-press drag.
   void OnScrollBeginEvent();
@@ -117,6 +121,12 @@ class UI_TOUCH_SELECTION_EXPORT TouchSelectionController
   // Ticks an active animation, as requested to the client by |SetNeedsAnimate|.
   // Returns true if an animation is active and requires further ticking.
   bool Animate(base::TimeTicks animate_time);
+
+  // Returns the current focus bound. For an active selection, this is the
+  // selection bound that has most recently been dragged or updated (defaulting
+  // to the end if neither endpoint has moved). For an active insertion it is
+  // the caret bound. Should only be called when touch selection is active.
+  const gfx::SelectionBound& GetFocusBound() const;
 
   // Returns the rect between the two active selection bounds. If just one of
   // the bounds is visible, or both bounds are visible and on the same line,
@@ -206,7 +216,7 @@ class UI_TOUCH_SELECTION_EXPORT TouchSelectionController
 
   void LogSelectionEnd();
 
-  const raw_ptr<TouchSelectionControllerClient> client_;
+  const raw_ptr<TouchSelectionControllerClient, DanglingUntriaged> client_;
   const Config config_;
 
   InputEventType response_pending_input_event_;

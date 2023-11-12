@@ -56,7 +56,7 @@
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/instance.h"
 #include "components/services/app_service/public/cpp/instance_registry.h"
-#include "components/sync/driver/sync_service.h"
+#include "components/sync/service/sync_service.h"
 #include "components/sync/test/test_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/ukm/test_ukm_recorder.h"
@@ -81,6 +81,8 @@ namespace {
 
 constexpr char kChromeAppId[] = "plfjlfohfjjpmmifkbcmalnmcebkklkh";
 constexpr char kExtensionId[] = "mhjfbmdgcfjbbpaeojofohoefgiehjai";
+constexpr char kAndroidAppId[] = "a";
+constexpr char kAndroidAppPublisherId[] = "com.google.A";
 
 constexpr apps::InstanceState kActiveInstanceState =
     static_cast<apps::InstanceState>(
@@ -218,13 +220,17 @@ class AppPlatformMetricsServiceTest
     if (IsLacrosPrimary()) {
       feature_list_.InitWithFeatures(
           /*enabled_features=*/{ash::features::kLacrosSupport,
-                                ash::features::kLacrosPrimary},
+                                ash::features::kLacrosPrimary,
+                                ash::features::kLacrosOnly,
+                                ash::features::kLacrosProfileMigrationForceOff},
           {});
     } else {
       feature_list_.InitWithFeatures(
           {},
-          /*disabled_features=*/{ash::features::kLacrosSupport,
-                                 ash::features::kLacrosPrimary});
+          /*disabled_features=*/{
+              ash::features::kLacrosSupport, ash::features::kLacrosPrimary,
+              ash::features::kLacrosOnly,
+              ash::features::kLacrosProfileMigrationForceOff});
     }
 
     InstallApps();
@@ -250,7 +256,7 @@ class AppPlatformMetricsServiceTest
     auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile());
     apps::AppRegistryCache& cache = proxy->AppRegistryCache();
 
-    AddApp(cache, /*app_id=*/"a", AppType::kArc, "com.google.A",
+    AddApp(cache, kAndroidAppId, AppType::kArc, kAndroidAppPublisherId,
            Readiness::kReady, InstallReason::kUser, InstallSource::kPlayStore,
            true /* should_notify_initialized */);
 
@@ -1283,7 +1289,7 @@ TEST_P(AppPlatformMetricsServiceTest, UsageTimeUkm) {
 
   // Set sync is not allowed.
   sync_service()->SetDisableReasons(
-      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
+      {syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY});
 
   // Fast forward by 2 hours and verify no usage data is reported to UKM.
   task_environment_.FastForwardBy(base::Hours(2));
@@ -1902,12 +1908,17 @@ TEST_P(AppPlatformMetricsServiceTest, LaunchApps) {
   // Simulate registering publishers for the launch interface to record metrics.
   proxy->RegisterPublishersForTesting();
   FakePublisher fake_arc_apps(proxy, AppType::kArc);
+  FakePublisher fake_borealis_apps(proxy, AppType::kBorealis);
   FakePublisher fake_standalone_browser(proxy, AppType::kStandaloneBrowser);
   FakePublisher fake_standalone_browser_chrome_app(
       proxy, AppType::kStandaloneBrowserChromeApp);
   FakePublisher fake_standalone_browser_extension(
       proxy, AppType::kStandaloneBrowserExtension);
 
+  EXPECT_CALL(fake_borealis_apps,
+              Launch(/*app_id=*/borealis::kClientAppId, ui::EF_NONE,
+                     LaunchSource::kFromChromeInternal, _))
+      .Times(1);
   proxy->Launch(
       /*app_id=*/borealis::kClientAppId, ui::EF_NONE,
       LaunchSource::kFromChromeInternal, nullptr);
@@ -1917,9 +1928,12 @@ TEST_P(AppPlatformMetricsServiceTest, LaunchApps) {
   VerifyAppLaunchPerAppTypeHistogram(1, AppTypeName::kBorealis);
   VerifyAppLaunchPerAppTypeV2Histogram(1, AppTypeNameV2::kBorealis);
 
-  proxy->Launch(
-      /*app_id=*/borealis::FakeAppId("borealistest"), ui::EF_NONE,
-      LaunchSource::kFromChromeInternal, nullptr);
+  std::string fake_borealis_app = borealis::FakeAppId("borealistest");
+  EXPECT_CALL(fake_borealis_apps, Launch(fake_borealis_app, ui::EF_NONE,
+                                         LaunchSource::kFromChromeInternal, _))
+      .Times(1);
+  proxy->Launch(fake_borealis_app, ui::EF_NONE,
+                LaunchSource::kFromChromeInternal, nullptr);
   VerifyAppsLaunchUkm("app://borealis/123", AppTypeName::kBorealis,
                       LaunchSource::kFromChromeInternal);
 
@@ -1935,11 +1949,11 @@ TEST_P(AppPlatformMetricsServiceTest, LaunchApps) {
   VerifyAppLaunchPerAppTypeHistogram(1, AppTypeName::kCrostini);
   VerifyAppLaunchPerAppTypeV2Histogram(1, AppTypeNameV2::kCrostini);
 
-  EXPECT_CALL(fake_arc_apps, Launch(/*app_id=*/"a", ui::EF_NONE,
+  EXPECT_CALL(fake_arc_apps, Launch(kAndroidAppId, ui::EF_NONE,
                                     LaunchSource::kFromChromeInternal, _))
       .Times(1);
-  proxy->Launch(
-      /*app_id=*/"a", ui::EF_NONE, LaunchSource::kFromChromeInternal, nullptr);
+  proxy->Launch(kAndroidAppId, ui::EF_NONE, LaunchSource::kFromChromeInternal,
+                nullptr);
   VerifyAppsLaunchUkm("app://com.google.A", AppTypeName::kArc,
                       LaunchSource::kFromChromeInternal);
   VerifyAppLaunchPerAppTypeHistogram(1, AppTypeName::kArc);
@@ -2083,8 +2097,7 @@ TEST_P(AppPlatformMetricsServiceTest, UninstallAppUkm) {
   FakePublisher fake_standalone_browser_extension(
       proxy, AppType::kStandaloneBrowserExtension);
 
-  proxy->UninstallSilently(
-      /*app_id=*/"a", UninstallSource::kAppList);
+  proxy->UninstallSilently(kAndroidAppId, UninstallSource::kAppList);
   VerifyAppsUninstallUkm("app://com.google.A", AppTypeName::kArc,
                          UninstallSource::kAppList);
 
@@ -2108,23 +2121,22 @@ TEST_P(AppPlatformMetricsServiceTest,
   window->Init(ui::LAYER_NOT_DRAWN);
 
   // Set the window active state.
-  static constexpr char kAppId[] = "a";
   const base::UnguessableToken& kInstanceId = base::UnguessableToken::Create();
-  ModifyInstance(kInstanceId, kAppId, window.get(),
+  ModifyInstance(kInstanceId, kAndroidAppId, window.get(),
                  ::apps::InstanceState::kActive);
   static constexpr base::TimeDelta kAppRunningDuration = base::Minutes(5);
   task_environment_.FastForwardBy(kAppRunningDuration);
 
   // Close app window to stop tracking further usage and verify usage info is
   // persisted in the pref store.
-  ModifyInstance(kInstanceId, kAppId, window.get(),
+  ModifyInstance(kInstanceId, kAndroidAppId, window.get(),
                  ::apps::InstanceState::kDestroyed);
   const auto& usage_dict_pref = GetPrefService()->GetDict(kAppUsageTime);
   ASSERT_THAT(usage_dict_pref.size(), Eq(1UL));
   ASSERT_THAT(usage_dict_pref.Find(kInstanceId.ToString()), NotNull());
-  EXPECT_THAT(*usage_dict_pref.Find(kInstanceId.ToString())
-                   ->FindStringKey(kUsageTimeAppIdKey),
-              StrEq(kAppId));
+  EXPECT_THAT(*usage_dict_pref.FindDict(kInstanceId.ToString())
+                   ->FindString(kUsageTimeAppIdKey),
+              StrEq(kAndroidAppId));
   EXPECT_THAT(
       base::ValueToTimeDelta(usage_dict_pref.FindDict(kInstanceId.ToString())
                                  ->Find(kUsageTimeDurationKey)),
@@ -2152,7 +2164,7 @@ TEST_P(AppPlatformMetricsServiceTest,
 
   // Disable sync state.
   sync_service()->SetDisableReasons(
-      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
+      {syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY});
 
   // Fast forward by two hours and verify usage info is cleared from the pref
   // store.
@@ -2167,23 +2179,22 @@ TEST_P(AppPlatformMetricsServiceTest,
   window->Init(ui::LAYER_NOT_DRAWN);
 
   // Set the window active state.
-  static constexpr char kAppId[] = "a";
   const base::UnguessableToken& kInstanceId = base::UnguessableToken::Create();
-  ModifyInstance(kInstanceId, kAppId, window.get(),
+  ModifyInstance(kInstanceId, kAndroidAppId, window.get(),
                  ::apps::InstanceState::kActive);
   static constexpr base::TimeDelta kAppRunningDuration = base::Minutes(5);
   task_environment_.FastForwardBy(kAppRunningDuration);
 
   // Close app window to stop tracking further usage and verify usage info is
   // persisted in the pref store.
-  ModifyInstance(kInstanceId, kAppId, window.get(),
+  ModifyInstance(kInstanceId, kAndroidAppId, window.get(),
                  ::apps::InstanceState::kDestroyed);
   const auto& usage_dict_pref = GetPrefService()->GetDict(kAppUsageTime);
   ASSERT_THAT(usage_dict_pref.size(), Eq(1UL));
   ASSERT_THAT(usage_dict_pref.Find(kInstanceId.ToString()), NotNull());
-  EXPECT_THAT(*usage_dict_pref.Find(kInstanceId.ToString())
-                   ->FindStringKey(kUsageTimeAppIdKey),
-              StrEq(kAppId));
+  EXPECT_THAT(*usage_dict_pref.FindDict(kInstanceId.ToString())
+                   ->FindString(kUsageTimeAppIdKey),
+              StrEq(kAndroidAppId));
   EXPECT_THAT(
       base::ValueToTimeDelta(usage_dict_pref.FindDict(kInstanceId.ToString())
                                  ->Find(kUsageTimeDurationKey)),
@@ -2196,6 +2207,8 @@ TEST_P(AppPlatformMetricsServiceTest,
     usage_dict->FindDictByDottedPath(kInstanceId.ToString())
         ->Set(kReportingUsageTimeDurationKey,
               base::TimeDeltaToValue(kAppRunningDuration));
+    usage_dict->FindDictByDottedPath(kInstanceId.ToString())
+        ->Set(kUsageTimeAppPublisherIdKey, kAndroidAppPublisherId);
   }
 
   // Fast forward by two hours so it reports usage data and we can verify usage
@@ -2206,9 +2219,12 @@ TEST_P(AppPlatformMetricsServiceTest,
       GetPrefService()->GetDict(kAppUsageTime);
   ASSERT_THAT(updated_usage_dict_pref.size(), Eq(1UL));
   EXPECT_THAT(updated_usage_dict_pref.Find(kInstanceId.ToString()), NotNull());
-  EXPECT_THAT(*usage_dict_pref.Find(kInstanceId.ToString())
-                   ->FindStringKey(kUsageTimeAppIdKey),
-              StrEq(kAppId));
+  EXPECT_THAT(*usage_dict_pref.FindDict(kInstanceId.ToString())
+                   ->FindString(kUsageTimeAppIdKey),
+              StrEq(kAndroidAppId));
+  EXPECT_THAT(*usage_dict_pref.FindDict(kInstanceId.ToString())
+                   ->FindString(kUsageTimeAppPublisherIdKey),
+              StrEq(kAndroidAppPublisherId));
   EXPECT_THAT(
       base::ValueToTimeDelta(usage_dict_pref.FindDict(kInstanceId.ToString())
                                  ->Find(kUsageTimeDurationKey)),
@@ -2222,23 +2238,22 @@ TEST_P(AppPlatformMetricsServiceTest,
 TEST_P(AppPlatformMetricsServiceTest, ShouldNotPersistUsageDataIfSyncDisabled) {
   // Disable sync state.
   sync_service()->SetDisableReasons(
-      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
+      {syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY});
 
   // Create a new window for the app.
   auto window = std::make_unique<aura::Window>(nullptr);
   window->Init(ui::LAYER_NOT_DRAWN);
 
   // Set the window active state and simulate app usage.
-  static constexpr char kAppId[] = "a";
   const base::UnguessableToken& kInstanceId = base::UnguessableToken::Create();
-  ModifyInstance(kInstanceId, kAppId, window.get(),
+  ModifyInstance(kInstanceId, kAndroidAppId, window.get(),
                  ::apps::InstanceState::kActive);
   static constexpr base::TimeDelta kAppRunningDuration = base::Minutes(5);
   task_environment_.FastForwardBy(kAppRunningDuration);
 
   // Close app window to stop tracking further usage and verify usage info is
   // not persisted in the pref store.
-  ModifyInstance(kInstanceId, kAppId, window.get(),
+  ModifyInstance(kInstanceId, kAndroidAppId, window.get(),
                  ::apps::InstanceState::kDestroyed);
   ASSERT_TRUE(GetPrefService()->GetDict(kAppUsageTime).empty());
 }
@@ -2370,7 +2385,7 @@ class AppPlatformInputMetricsTest : public AppPlatformMetricsServiceTest {
 
 // Verify no more input event is recorded when the window is destroyed.
 TEST_P(AppPlatformInputMetricsTest, WindowIsDestroyed) {
-  ModifyInstance(/*app_id=*/"a", window(), kActive);
+  ModifyInstance(kAndroidAppId, window(), kActive);
   CreateInputEvent(InputEventSource::kMouse);
   app_platform_input_metrics()->OnFiveMinutes();
   VerifyNoUkm();
@@ -2378,7 +2393,7 @@ TEST_P(AppPlatformInputMetricsTest, WindowIsDestroyed) {
   VerifyUkm("app://com.google.A", AppTypeName::kArc, /*event_count=*/1,
             InputEventSource::kMouse);
 
-  ModifyInstance(/*app_id=*/"a", window(), apps::InstanceState::kDestroyed);
+  ModifyInstance(kAndroidAppId, window(), apps::InstanceState::kDestroyed);
   CreateInputEvent(InputEventSource::kMouse);
   app_platform_input_metrics()->OnTwoHours();
   // Verify no more input event is recorded.
@@ -2387,7 +2402,7 @@ TEST_P(AppPlatformInputMetricsTest, WindowIsDestroyed) {
 }
 
 TEST_P(AppPlatformInputMetricsTest, MouseEvent) {
-  ModifyInstance(/*app_id=*/"a", window(), apps::InstanceState::kActive);
+  ModifyInstance(kAndroidAppId, window(), apps::InstanceState::kActive);
   CreateInputEvent(InputEventSource::kMouse);
   app_platform_input_metrics()->OnFiveMinutes();
   VerifyNoUkm();
@@ -2407,7 +2422,7 @@ TEST_P(AppPlatformInputMetricsTest, StylusEvent) {
 }
 
 TEST_P(AppPlatformInputMetricsTest, TouchEvents) {
-  ModifyInstance(/*app_id=*/"a", window(), apps::InstanceState::kActive);
+  ModifyInstance(kAndroidAppId, window(), apps::InstanceState::kActive);
   CreateInputEvent(InputEventSource::kTouch);
   CreateInputEvent(InputEventSource::kTouch);
   app_platform_input_metrics()->OnFiveMinutes();
@@ -2418,7 +2433,7 @@ TEST_P(AppPlatformInputMetricsTest, TouchEvents) {
 }
 
 TEST_P(AppPlatformInputMetricsTest, KeyEvents) {
-  ModifyInstance(/*app_id=*/"a", window(), apps::InstanceState::kActive);
+  ModifyInstance(kAndroidAppId, window(), apps::InstanceState::kActive);
   CreateInputEvent(InputEventSource::kKeyboard);
   app_platform_input_metrics()->OnFiveMinutes();
   VerifyNoUkm();
@@ -2455,7 +2470,7 @@ TEST_P(AppPlatformInputMetricsTest, KeyEvents) {
 }
 
 TEST_P(AppPlatformInputMetricsTest, MultipleEvents) {
-  ModifyInstance(/*app_id=*/"a", window(), apps::InstanceState::kActive);
+  ModifyInstance(kAndroidAppId, window(), apps::InstanceState::kActive);
   CreateInputEvent(InputEventSource::kMouse);
   CreateInputEvent(InputEventSource::kMouse);
   CreateInputEvent(InputEventSource::kKeyboard);
@@ -2586,13 +2601,13 @@ TEST_P(AppPlatformInputMetricsTest, BrowserWindow) {
 }
 
 TEST_P(AppPlatformInputMetricsTest, InputEventsUkmReportAfterReboot) {
-  ModifyInstance(/*app_id=*/"a", window(), apps::InstanceState::kActive);
+  ModifyInstance(kAndroidAppId, window(), apps::InstanceState::kActive);
   CreateInputEvent(InputEventSource::kKeyboard);
   CreateInputEvent(InputEventSource::kStylus);
   CreateInputEvent(InputEventSource::kStylus);
   app_platform_input_metrics()->OnFiveMinutes();
   VerifyNoUkm();
-  ModifyInstance(/*app_id=*/"a", window(), kInactiveInstanceState);
+  ModifyInstance(kAndroidAppId, window(), kInactiveInstanceState);
 
   // Reset PlatformMetricsService to simulate the system reboot, and verify
   // AppKM is restored from the user pref and reported after 5 minutes after
@@ -2600,7 +2615,7 @@ TEST_P(AppPlatformInputMetricsTest, InputEventsUkmReportAfterReboot) {
   ResetAppPlatformMetricsService();
   VerifyNoUkm();
 
-  ModifyInstance(/*app_id=*/"a", window(), apps::InstanceState::kActive);
+  ModifyInstance(kAndroidAppId, window(), apps::InstanceState::kActive);
   CreateInputEvent(InputEventSource::kStylus);
 
   app_platform_input_metrics()->OnFiveMinutes();
@@ -2636,7 +2651,7 @@ TEST_P(AppPlatformInputMetricsTest, InputEventsUkmReportAfterReboot) {
   entries = test_ukm_recorder()->GetEntriesByName("ChromeOSApp.InputEvent");
   ASSERT_EQ(2U, entries.size());
 
-  ModifyInstance(/*app_id=*/"a", window(), kInactiveInstanceState);
+  ModifyInstance(kAndroidAppId, window(), kInactiveInstanceState);
 
   // Reset PlatformMetricsService to simulate the system reboot, and verify
   // only the new AppKM is reported.
@@ -2780,13 +2795,14 @@ class AppPlatformMetricsObserverTest : public AppPlatformMetricsServiceTest {
   }
 
   MockAppPlatformMetricsObserver observer_;
-  raw_ptr<AppPlatformMetricsService> app_platform_metrics_service_;
+  raw_ptr<AppPlatformMetricsService, DanglingUntriaged>
+      app_platform_metrics_service_;
 };
 
 TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppInstalled) {
   // Observers should be notified even when app sync is disabled.
   sync_service()->SetDisableReasons(
-      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
+      {syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY});
 
   const std::string app_id(borealis::FakeAppId("borealis-fake"));
   EXPECT_CALL(
@@ -2802,44 +2818,42 @@ TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppInstalled) {
 TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppLaunch) {
   // Observers should be notified even when app sync is disabled.
   sync_service()->SetDisableReasons(
-      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
+      {syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY});
 
   // Launch a pre-installed app and verify the observer is notified.
-  const std::string& app_id = "a";
-  EXPECT_CALL(observer_, OnAppLaunched(app_id, AppType::kArc,
+  EXPECT_CALL(observer_, OnAppLaunched(kAndroidAppId, AppType::kArc,
                                        apps::LaunchSource::kFromChromeInternal))
       .Times(1);
 
   auto* const proxy = apps::AppServiceProxyFactory::GetForProfile(profile());
   proxy->SetAppPlatformMetricsServiceForTesting(GetAppPlatformMetricsService());
   FakePublisher fake_arc_apps(proxy, AppType::kArc);
-  proxy->Launch(app_id, ui::EF_NONE, apps::LaunchSource::kFromChromeInternal,
-                nullptr);
+  proxy->Launch(kAndroidAppId, ui::EF_NONE,
+                apps::LaunchSource::kFromChromeInternal, nullptr);
   task_environment_.RunUntilIdle();
 }
 
 TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppUninstall) {
   // Observers should be notified even when app sync is disabled.
   sync_service()->SetDisableReasons(
-      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
+      {syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY});
 
   // Uninstall a pre-installed app and verify the observer is notified.
-  const std::string& app_id = "a";
-  EXPECT_CALL(observer_, OnAppUninstalled(app_id, AppType::kArc,
+  EXPECT_CALL(observer_, OnAppUninstalled(kAndroidAppId, AppType::kArc,
                                           UninstallSource::kAppList))
       .Times(1);
 
   auto* const proxy = AppServiceProxyFactory::GetForProfile(profile());
   proxy->SetAppPlatformMetricsServiceForTesting(GetAppPlatformMetricsService());
   FakePublisher fake_arc_apps(proxy, AppType::kArc);
-  proxy->UninstallSilently(app_id, UninstallSource::kAppList);
+  proxy->UninstallSilently(kAndroidAppId, UninstallSource::kAppList);
   task_environment_.RunUntilIdle();
 }
 
 TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppUsage) {
   // Observers should be notified even when app sync is disabled.
   sync_service()->SetDisableReasons(
-      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
+      {syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY});
 
   // Create a new window for the app.
   auto window = std::make_unique<aura::Window>(nullptr);
@@ -2847,20 +2861,20 @@ TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppUsage) {
 
   // Set the window active state and verify the observer is notified
   // with the appropriate running time with every notification.
-  const std::string& app_id = "a";
   const base::UnguessableToken& instance_id = base::UnguessableToken::Create();
-  ModifyInstance(instance_id, app_id, window.get(), kActiveInstanceState);
+  ModifyInstance(instance_id, kAndroidAppId, window.get(),
+                 kActiveInstanceState);
 
   // Usage metrics are recorded every 5 minutes and on window inactivation, so
   // we can expect two notifications with relevant usage times (5 minutes + 3
   // minutes) across a 8 minute usage window.
   Sequence s;
-  EXPECT_CALL(observer_,
-              OnAppUsage(app_id, AppType::kArc, instance_id, base::Minutes(5)))
+  EXPECT_CALL(observer_, OnAppUsage(kAndroidAppId, AppType::kArc, instance_id,
+                                    base::Minutes(5)))
       .Times(1)
       .InSequence(s);
-  EXPECT_CALL(observer_,
-              OnAppUsage(app_id, AppType::kArc, instance_id, base::Minutes(3)))
+  EXPECT_CALL(observer_, OnAppUsage(kAndroidAppId, AppType::kArc, instance_id,
+                                    base::Minutes(3)))
       .Times(1)
       .InSequence(s);
 
@@ -2869,7 +2883,8 @@ TEST_P(AppPlatformMetricsObserverTest, ShouldNotifyObserverOnAppUsage) {
 
   // Set app inactive. This should also trigger the second notification with
   // usage time delta after the first one.
-  ModifyInstance(instance_id, app_id, window.get(), kInactiveInstanceState);
+  ModifyInstance(instance_id, kAndroidAppId, window.get(),
+                 kInactiveInstanceState);
 }
 
 TEST_P(AppPlatformMetricsObserverTest, ShouldNotNotifyUnregisteredObservers) {
@@ -2879,11 +2894,10 @@ TEST_P(AppPlatformMetricsObserverTest, ShouldNotNotifyUnregisteredObservers) {
 
   // Uninstall a pre-installed app and verify the unregistered observer
   // is not notified.
-  const std::string& app_id = "a";
-  EXPECT_CALL(observer_, OnAppUninstalled(app_id, AppType::kArc,
+  EXPECT_CALL(observer_, OnAppUninstalled(kAndroidAppId, AppType::kArc,
                                           UninstallSource::kAppList))
       .Times(0);
-  proxy->UninstallSilently(app_id, UninstallSource::kAppList);
+  proxy->UninstallSilently(kAndroidAppId, UninstallSource::kAppList);
   task_environment_.RunUntilIdle();
 }
 
@@ -3061,11 +3075,10 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecorded) {
   auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile());
   apps::AppRegistryCache& cache = proxy->AppRegistryCache();
   proxy->SetAppPlatformMetricsServiceForTesting(GetAppPlatformMetricsService());
-  const std::string app_id = "a";
 
   // Install an ARC app to test.
-  AddApp(cache, app_id, AppType::kArc, "com.google.A", Readiness::kReady,
-         InstallReason::kUser, InstallSource::kPlayStore,
+  AddApp(cache, kAndroidAppId, AppType::kArc, kAndroidAppPublisherId,
+         Readiness::kReady, InstallReason::kUser, InstallSource::kPlayStore,
          true /* should_notify_initialized */);
 
   // Simulate registering publishers for the launch interface to record metrics.
@@ -3080,25 +3093,25 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecorded) {
   base::RunLoop launch_event_run_loop;
   auto launch_record_callback = base::BindLambdaForTesting(
       [&, this](const metrics::structured::Event& event) {
-        ValidateAppLaunchEvent(event, app_id, AppType::kArc,
+        ValidateAppLaunchEvent(event, kAndroidAppId, AppType::kArc,
                                LaunchSource::kFromChromeInternal);
         launch_event_run_loop.Quit();
       });
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       launch_record_callback);
 
-  EXPECT_CALL(fake_arc_apps,
-              Launch(app_id, ui::EF_NONE, LaunchSource::kFromChromeInternal, _))
+  EXPECT_CALL(fake_arc_apps, Launch(kAndroidAppId, ui::EF_NONE,
+                                    LaunchSource::kFromChromeInternal, _))
       .Times(1);
-  proxy->Launch(app_id, ui::EF_NONE, LaunchSource::kFromChromeInternal,
+  proxy->Launch(kAndroidAppId, ui::EF_NONE, LaunchSource::kFromChromeInternal,
                 nullptr);
-  ModifyInstance(app_id, window.get(), apps::InstanceState::kStarted);
+  ModifyInstance(kAndroidAppId, window.get(), apps::InstanceState::kStarted);
   launch_event_run_loop.Run();
 
   // Mark app as kRunning otherwise active event will not trigger since the app
   // isn't considered to be running yet.
   ModifyInstance(
-      app_id, window.get(),
+      kAndroidAppId, window.get(),
       static_cast<apps::InstanceState>(apps::InstanceState::kStarted |
                                        apps::InstanceState::kRunning));
 
@@ -3106,14 +3119,14 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecorded) {
   base::RunLoop active_event_run_loop;
   auto active_record_callback = base::BindLambdaForTesting(
       [&, this](const metrics::structured::Event& event) {
-        ValidateAppStateEvent(event, app_id, AppStateChange::kActive);
+        ValidateAppStateEvent(event, kAndroidAppId, AppStateChange::kActive);
         active_event_run_loop.Quit();
       });
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       active_record_callback);
 
   ModifyInstance(
-      app_id, window.get(),
+      kAndroidAppId, window.get(),
       static_cast<apps::InstanceState>(apps::InstanceState::kActive |
                                        apps::InstanceState::kRunning));
   active_event_run_loop.Run();
@@ -3122,14 +3135,14 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecorded) {
   base::RunLoop hidden_event_run_loop;
   auto hidden_record_callback = base::BindLambdaForTesting(
       [&, this](const metrics::structured::Event& event) {
-        ValidateAppStateEvent(event, app_id, AppStateChange::kInactive);
+        ValidateAppStateEvent(event, kAndroidAppId, AppStateChange::kInactive);
         hidden_event_run_loop.Quit();
       });
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       hidden_record_callback);
 
   ModifyInstance(
-      app_id, window.get(),
+      kAndroidAppId, window.get(),
       static_cast<apps::InstanceState>(apps::InstanceState::kHidden |
                                        apps::InstanceState::kRunning));
   hidden_event_run_loop.Run();
@@ -3138,14 +3151,14 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecorded) {
   base::RunLoop active_event_run_loop2;
   auto active_record_callback2 = base::BindLambdaForTesting(
       [&, this](const metrics::structured::Event& event) {
-        ValidateAppStateEvent(event, app_id, AppStateChange::kActive);
+        ValidateAppStateEvent(event, kAndroidAppId, AppStateChange::kActive);
         active_event_run_loop2.Quit();
       });
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       active_record_callback2);
 
   ModifyInstance(
-      app_id, window.get(),
+      kAndroidAppId, window.get(),
       static_cast<apps::InstanceState>(apps::InstanceState::kActive |
                                        apps::InstanceState::kRunning));
   active_event_run_loop2.Run();
@@ -3154,13 +3167,13 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecorded) {
   base::RunLoop closed_event_run_loop;
   auto closed_record_callback = base::BindLambdaForTesting(
       [&, this](const metrics::structured::Event& event) {
-        ValidateAppStateEvent(event, app_id, AppStateChange::kClosed);
+        ValidateAppStateEvent(event, kAndroidAppId, AppStateChange::kClosed);
         closed_event_run_loop.Quit();
       });
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       closed_record_callback);
 
-  ModifyInstance(app_id, window.get(), apps::InstanceState::kDestroyed);
+  ModifyInstance(kAndroidAppId, window.get(), apps::InstanceState::kDestroyed);
   closed_event_run_loop.Run();
 }
 
@@ -3170,11 +3183,10 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecordedForTwoInstances) {
   auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile());
   apps::AppRegistryCache& cache = proxy->AppRegistryCache();
   proxy->SetAppPlatformMetricsServiceForTesting(GetAppPlatformMetricsService());
-  const std::string app_id = "a";
 
   // Install an ARC app to test.
-  AddApp(cache, app_id, AppType::kArc, "com.google.A", Readiness::kReady,
-         InstallReason::kUser, InstallSource::kPlayStore,
+  AddApp(cache, kAndroidAppId, AppType::kArc, kAndroidAppPublisherId,
+         Readiness::kReady, InstallReason::kUser, InstallSource::kPlayStore,
          true /* should_notify_initialized */);
 
   // Simulate registering publishers for the launch interface to record metrics.
@@ -3191,30 +3203,30 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecordedForTwoInstances) {
   base::RunLoop launch_event_run_loop;
   auto launch_record_callback = base::BindLambdaForTesting(
       [&, this](const metrics::structured::Event& event) {
-        ValidateAppLaunchEvent(event, app_id, AppType::kArc,
+        ValidateAppLaunchEvent(event, kAndroidAppId, AppType::kArc,
                                LaunchSource::kFromChromeInternal);
         launch_event_run_loop.Quit();
       });
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       launch_record_callback);
 
-  EXPECT_CALL(fake_arc_apps,
-              Launch(app_id, ui::EF_NONE, LaunchSource::kFromChromeInternal, _))
+  EXPECT_CALL(fake_arc_apps, Launch(kAndroidAppId, ui::EF_NONE,
+                                    LaunchSource::kFromChromeInternal, _))
       .Times(1);
-  proxy->Launch(app_id, ui::EF_NONE, LaunchSource::kFromChromeInternal,
+  proxy->Launch(kAndroidAppId, ui::EF_NONE, LaunchSource::kFromChromeInternal,
                 nullptr);
-  ModifyInstance(app_id, window1.get(), apps::InstanceState::kStarted);
-  ModifyInstance(app_id, window2.get(), apps::InstanceState::kStarted);
+  ModifyInstance(kAndroidAppId, window1.get(), apps::InstanceState::kStarted);
+  ModifyInstance(kAndroidAppId, window2.get(), apps::InstanceState::kStarted);
   launch_event_run_loop.Run();
 
   // Mark app as kRunning otherwise active event will not trigger since the app
   // isn't considered to be running yet.
   ModifyInstance(
-      app_id, window1.get(),
+      kAndroidAppId, window1.get(),
       static_cast<apps::InstanceState>(apps::InstanceState::kStarted |
                                        apps::InstanceState::kRunning));
   ModifyInstance(
-      app_id, window2.get(),
+      kAndroidAppId, window2.get(),
       static_cast<apps::InstanceState>(apps::InstanceState::kStarted |
                                        apps::InstanceState::kRunning));
 
@@ -3222,14 +3234,14 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecordedForTwoInstances) {
   base::RunLoop active_event_run_loop;
   auto active_record_callback = base::BindLambdaForTesting(
       [&, this](const metrics::structured::Event& event) {
-        ValidateAppStateEvent(event, app_id, AppStateChange::kActive);
+        ValidateAppStateEvent(event, kAndroidAppId, AppStateChange::kActive);
         active_event_run_loop.Quit();
       });
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       active_record_callback);
 
   ModifyInstance(
-      app_id, window1.get(),
+      kAndroidAppId, window1.get(),
       static_cast<apps::InstanceState>(apps::InstanceState::kActive |
                                        apps::InstanceState::kRunning));
   active_event_run_loop.Run();
@@ -3242,7 +3254,7 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecordedForTwoInstances) {
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       active_record_callback2);
   ModifyInstance(
-      app_id, window2.get(),
+      kAndroidAppId, window2.get(),
       static_cast<apps::InstanceState>(apps::InstanceState::kActive |
                                        apps::InstanceState::kRunning));
 
@@ -3256,7 +3268,7 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecordedForTwoInstances) {
       hidden_record_callback);
 
   ModifyInstance(
-      app_id, window1.get(),
+      kAndroidAppId, window1.get(),
       static_cast<apps::InstanceState>(apps::InstanceState::kHidden |
                                        apps::InstanceState::kRunning));
 
@@ -3264,14 +3276,14 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecordedForTwoInstances) {
   base::RunLoop inactive_event_run_loop;
   auto inactive_record_callback = base::BindLambdaForTesting(
       [&, this](const metrics::structured::Event& event) {
-        ValidateAppStateEvent(event, app_id, AppStateChange::kInactive);
+        ValidateAppStateEvent(event, kAndroidAppId, AppStateChange::kInactive);
         inactive_event_run_loop.Quit();
       });
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       inactive_record_callback);
 
   ModifyInstance(
-      app_id, window2.get(),
+      kAndroidAppId, window2.get(),
       static_cast<apps::InstanceState>(apps::InstanceState::kVisible |
                                        apps::InstanceState::kRunning));
   inactive_event_run_loop.Run();
@@ -3283,19 +3295,19 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecordedForTwoInstances) {
       });
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       closed_record_callback);
-  ModifyInstance(app_id, window1.get(), apps::InstanceState::kDestroyed);
+  ModifyInstance(kAndroidAppId, window1.get(), apps::InstanceState::kDestroyed);
 
   // Validate closed event is recorded when both instances are closed.
   base::RunLoop closed_event_run_loop;
   auto closed_record_callback2 = base::BindLambdaForTesting(
       [&, this](const metrics::structured::Event& event) {
-        ValidateAppStateEvent(event, app_id, AppStateChange::kClosed);
+        ValidateAppStateEvent(event, kAndroidAppId, AppStateChange::kClosed);
         closed_event_run_loop.Quit();
       });
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       closed_record_callback2);
 
-  ModifyInstance(app_id, window2.get(), apps::InstanceState::kDestroyed);
+  ModifyInstance(kAndroidAppId, window2.get(), apps::InstanceState::kDestroyed);
   closed_event_run_loop.Run();
 }
 

@@ -30,6 +30,7 @@
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -46,6 +47,7 @@
 #include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/updater/constants.h"
+#include "chrome/updater/device_management/dm_storage.h"
 #include "chrome/updater/external_constants_builder.h"
 #include "chrome/updater/external_constants_override.h"
 #include "chrome/updater/persisted_data.h"
@@ -54,6 +56,7 @@
 #include "chrome/updater/service_proxy_factory.h"
 #include "chrome/updater/test/request_matcher.h"
 #include "chrome/updater/test/server.h"
+#include "chrome/updater/test_scope.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_scope.h"
@@ -354,7 +357,6 @@ void PrintLog(UpdaterScope scope) {
 // each failed test. It is useful to capture a few logs from previous failures
 // instead of the log of the last run only.
 void CopyLog(const base::FilePath& src_dir) {
-  // TODO(crbug.com/1159189): copy other test artifacts.
   base::FilePath dest_dir = GetLogDestinationDir();
   const base::FilePath log_path = src_dir.AppendASCII("updater.log");
   if (!dest_dir.empty() && base::PathExists(dest_dir) &&
@@ -431,6 +433,22 @@ void RunCrashMe(UpdaterScope scope) {
                        absl::nullopt);
 }
 
+void RunServer(UpdaterScope scope, int expected_exit_code, bool internal) {
+  const absl::optional<base::FilePath> installed_executable_path =
+      GetVersionedInstallDirectory(scope, base::Version(kUpdaterVersion))
+          ->Append(GetExecutableRelativePath());
+  ASSERT_TRUE(installed_executable_path);
+  ASSERT_TRUE(base::PathExists(*installed_executable_path));
+  base::CommandLine command_line(*installed_executable_path);
+  command_line.AppendSwitch(kServerSwitch);
+  command_line.AppendSwitchASCII(
+      kServerServiceSwitch, internal ? kServerUpdateServiceInternalSwitchValue
+                                     : kServerUpdateServiceSwitchValue);
+  int exit_code = -1;
+  Run(scope, command_line, &exit_code);
+  ASSERT_EQ(exit_code, expected_exit_code);
+}
+
 void CheckForUpdate(UpdaterScope scope, const std::string& app_id) {
   scoped_refptr<UpdateService> update_service = CreateUpdateServiceProxy(scope);
   base::RunLoop loop;
@@ -465,52 +483,66 @@ void UpdateAll(UpdaterScope scope) {
   loop.Run();
 }
 
+void GetAppStates(UpdaterScope updater_scope,
+                  const base::Value::Dict& expected_app_states) {
+  scoped_refptr<UpdateService> update_service =
+      CreateUpdateServiceProxy(updater_scope);
+
+  base::RunLoop loop;
+  update_service->GetAppStates(base::BindLambdaForTesting(
+      [&expected_app_states,
+       &loop](const std::vector<updater::UpdateService::AppState>& states) {
+        for (const auto [expected_app_id, expected_state] :
+             expected_app_states) {
+          const auto& it = base::ranges::find_if(
+              states, [&expected_app_id](const auto& state) {
+                return base::EqualsCaseInsensitiveASCII(state.app_id,
+                                                        expected_app_id);
+              });
+          ASSERT_TRUE(it != std::end(states));
+          const base::Value::Dict* expected = expected_state.GetIfDict();
+          ASSERT_TRUE(expected);
+          EXPECT_EQ(it->app_id, *expected->FindString("app_id"));
+          EXPECT_EQ(it->version.GetString(), *expected->FindString("version"));
+          EXPECT_EQ(it->ap, *expected->FindString("ap"));
+          EXPECT_EQ(it->brand_code, *expected->FindString("brand_code"));
+#if BUILDFLAG(IS_WIN)
+          EXPECT_EQ(base::WideToASCII(it->brand_path.value()),
+                    *expected->FindString("brand_path"));
+          EXPECT_EQ(base::WideToASCII(it->ecp.value()),
+                    *expected->FindString("ecp"));
+#else
+          EXPECT_EQ(it->brand_path.value(),
+                    *expected->FindString("brand_path"));
+          EXPECT_EQ(it->ecp.value(), *expected->FindString("ecp"));
+#endif  // BUILDFLAG(IS_WIN)
+        }
+        loop.Quit();
+      }));
+
+  loop.Run();
+}
+
 void DeleteUpdaterDirectory(UpdaterScope scope) {
   absl::optional<base::FilePath> install_dir = GetInstallDirectory(scope);
   ASSERT_TRUE(install_dir);
   ASSERT_TRUE(base::DeletePathRecursively(*install_dir));
 }
 
-void SetupFakeUpdaterPrefs(UpdaterScope scope, const base::Version& version) {
-  scoped_refptr<GlobalPrefs> global_prefs = CreateGlobalPrefs(scope);
-  ASSERT_TRUE(global_prefs) << "No global prefs.";
-  global_prefs->SetActiveVersion(version.GetString());
-  global_prefs->SetSwapping(false);
-  PrefsCommitPendingWrites(global_prefs->GetPrefService());
-
-  ASSERT_EQ(version.GetString(), global_prefs->GetActiveVersion());
-}
-
-void SetupFakeUpdaterInstallFolder(UpdaterScope scope,
-                                   const base::Version& version) {
-  absl::optional<base::FilePath> folder_path =
-      GetVersionedInstallDirectory(scope, version);
-  ASSERT_TRUE(folder_path);
-  ASSERT_TRUE(base::CreateDirectory(
-      folder_path->Append(GetExecutableRelativePath()).DirName()));
-}
-
-void SetupFakeUpdater(UpdaterScope scope, const base::Version& version) {
-  SetupFakeUpdaterPrefs(scope, version);
-  SetupFakeUpdaterInstallFolder(scope, version);
-}
-
-void SetupFakeUpdaterVersion(UpdaterScope scope, int offset) {
-  ASSERT_NE(offset, 0);
-  std::vector<uint32_t> components =
-      base::Version(kUpdaterVersion).components();
-  base::CheckedNumeric<uint32_t> new_version = components[0];
-  new_version += offset;
-  ASSERT_TRUE(new_version.AssignIfValid(&components[0]));
-  SetupFakeUpdater(scope, base::Version(std::move(components)));
+void DeleteFile(UpdaterScope /*scope*/, const base::FilePath& path) {
+  ASSERT_TRUE(base::DeleteFile(path));
 }
 
 void SetupFakeUpdaterLowerVersion(UpdaterScope scope) {
-  SetupFakeUpdaterVersion(scope, -1);
+  SetupFakeUpdaterVersion(scope, base::Version(kUpdaterVersion),
+                          /*major_version_offset=*/-1,
+                          /*should_create_updater_executable=*/false);
 }
 
 void SetupFakeUpdaterHigherVersion(UpdaterScope scope) {
-  SetupFakeUpdaterVersion(scope, 1);
+  SetupFakeUpdaterVersion(scope, base::Version(kUpdaterVersion),
+                          /*major_version_offset=*/1,
+                          /*should_create_updater_executable=*/false);
 }
 
 void SetExistenceCheckerPath(UpdaterScope scope,
@@ -805,7 +837,7 @@ std::set<base::FilePath::StringType> GetTestProcessNames() {
       GetExecutableRelativePath().BaseName().value(),
       GetSetupExecutablePath().BaseName().value(),
       kTestProcessExecutableName,
-      []() {
+      [] {
         const base::FilePath test_executable =
             base::FilePath::FromASCII(kExecutableName).BaseName();
         return base::StrCat({test_executable.RemoveExtension().value(),
@@ -832,6 +864,38 @@ void ExpectCleanProcesses() {
   for (const base::FilePath::StringType& process_name : GetTestProcessNames()) {
     EXPECT_FALSE(IsProcessRunning(process_name)) << process_name;
   }
+}
+
+#if !BUILDFLAG(IS_WIN)
+void RunOfflineInstall(UpdaterScope scope,
+                       bool is_legacy_install,
+                       bool is_silent_install) {
+  // TODO(crbug.com/1281688).
+  NOTREACHED();
+}
+
+void RunOfflineInstallOsNotSupported(UpdaterScope scope,
+                                     bool is_legacy_install,
+                                     bool is_silent_install) {
+  // TODO(crbug.com/1281688).
+  NOTREACHED();
+}
+#endif  // IS_WIN
+
+void DMDeregisterDevice(UpdaterScope scope) {
+  if (!IsSystemInstall(GetTestScope())) {
+    return;
+  }
+  EXPECT_TRUE(GetDefaultDMStorage()->InvalidateDMToken());
+}
+
+void DMCleanup(UpdaterScope scope) {
+  if (!IsSystemInstall(GetTestScope())) {
+    return;
+  }
+  scoped_refptr<DMStorage> storage = GetDefaultDMStorage();
+  EXPECT_TRUE(storage->StoreEnrollmentToken(""));
+  EXPECT_TRUE(storage->DeleteDMToken());
 }
 
 }  // namespace updater::test

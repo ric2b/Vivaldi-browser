@@ -111,8 +111,8 @@ class ChromiumDepGraph {
             resolveVersion: '1.0',
             licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
             licenseName: 'Apache 2.0'),
-        org_bouncycastle_bcprov_jdk15on: new PropertyOverride(
-            cpePrefix: 'cpe:/a:bouncycastle:legion-of-the-bouncy-castle:1.68',
+        org_bouncycastle_bcprov_jdk18on: new PropertyOverride(
+            cpePrefix: 'cpe:/a:bouncycastle:legion-of-the-bouncy-castle:1.72',
             url: 'https://github.com/bcgit/bc-java',
             licensePath: 'licenses/Bouncy_Castle-2015.txt',
             licenseName: 'MIT'),
@@ -217,6 +217,9 @@ class ChromiumDepGraph {
             licensePath: 'licenses/Codehaus_License-2009.txt',
             licenseName: 'MIT'),
         org_robolectric_nativeruntime: new PropertyOverride(
+            licensePath: 'licenses/Codehaus_License-2009.txt',
+            licenseName: 'MIT'),
+        org_robolectric_nativeruntime_dist_compat: new PropertyOverride(
             licensePath: 'licenses/Codehaus_License-2009.txt',
             licenseName: 'MIT'),
         org_robolectric_pluginapi: new PropertyOverride(

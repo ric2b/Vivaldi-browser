@@ -8,12 +8,13 @@
 
 #import "base/check.h"
 #import "base/strings/escape.h"
+#import "base/strings/strcat.h"
 #import "components/google/core/common/google_util.h"
 #import "components/omnibox/browser/omnibox_field_trial.h"
 #import "components/version_info/version_info.h"
-#import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/google/google_brand.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/public/provider/chrome/browser/app_distribution/app_distribution_api.h"
 #import "ios/web/public/thread/web_thread.h"
@@ -104,15 +105,12 @@ std::string UIThreadSearchTermsData::GetSuggestRequestIdentifier(
 
 std::string UIThreadSearchTermsData::GoogleImageSearchSource() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  std::string version(version_info::GetProductName() + " " +
-                      version_info::GetVersionNumber());
-  if (version_info::IsOfficialBuild())
-    version += " (Official)";
-  version += " " + version_info::GetOSType();
-  std::string modifier(GetChannelString());
-  if (!modifier.empty())
-    version += " " + modifier;
-  return version;
+  const std::string channel_name = GetChannelString();
+  return base::StrCat({version_info::GetProductName(), " ",
+                       version_info::GetVersionNumber(),
+                       version_info::IsOfficialBuild() ? " (Official) " : " ",
+                       version_info::GetOSType(),
+                       channel_name.empty() ? "" : " ", channel_name});
 }
 
 }  // namespace ios

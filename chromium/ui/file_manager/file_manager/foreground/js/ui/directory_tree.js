@@ -6,6 +6,7 @@ import {assert, assertNotReached} from 'chrome://resources/ash/common/assert.js'
 import {dispatchSimpleEvent, getPropertyDescriptor, PropertyKind} from 'chrome://resources/ash/common/cr_deprecated.js';
 
 import {maybeShowTooltip} from '../../../common/js/dom_utils.js';
+import {isEntryInsideDrive} from '../../../common/js/entry_utils.js';
 import {FileType} from '../../../common/js/file_type.js';
 import {vmTypeToIconName} from '../../../common/js/icon_util.js';
 import {metrics} from '../../../common/js/metrics.js';
@@ -13,7 +14,7 @@ import {str, strf, util} from '../../../common/js/util.js';
 import {VolumeManagerCommon} from '../../../common/js/volume_manager_types.js';
 import {FileOperationManager} from '../../../externs/background/file_operation_manager.js';
 import {FilesAppDirEntry} from '../../../externs/files_app_entry_interfaces.js';
-import {PropStatus, SearchData, State} from '../../../externs/ts/state.js';
+import {PropStatus, SearchData, SearchLocation, State} from '../../../externs/ts/state.js';
 import {VolumeInfo} from '../../../externs/volume_info.js';
 import {VolumeManager} from '../../../externs/volume_manager.js';
 import {getStore} from '../../../state/store.js';
@@ -311,6 +312,10 @@ export class DirectoryItem extends FilesTreeItem {
     this.onMetadataUpdateBound_ = undefined;
   }
 
+  get typeName() {
+    return 'directory_item';
+  }
+
   /**
    * The DirectoryEntry corresponding to this DirectoryItem. This may be
    * a dummy DirectoryEntry.
@@ -360,16 +365,7 @@ export class DirectoryItem extends FilesTreeItem {
    * @type {!boolean}
    */
   get insideDrive() {
-    const rootType = this.rootType;
-    return rootType &&
-        (rootType === VolumeManagerCommon.RootType.DRIVE ||
-         rootType === VolumeManagerCommon.RootType.SHARED_DRIVES_GRAND_ROOT ||
-         rootType === VolumeManagerCommon.RootType.SHARED_DRIVE ||
-         rootType === VolumeManagerCommon.RootType.COMPUTERS_GRAND_ROOT ||
-         rootType === VolumeManagerCommon.RootType.COMPUTER ||
-         rootType === VolumeManagerCommon.RootType.DRIVE_OFFLINE ||
-         rootType === VolumeManagerCommon.RootType.DRIVE_SHARED_WITH_ME ||
-         rootType === VolumeManagerCommon.RootType.DRIVE_FAKE_ROOT);
+    return isEntryInsideDrive({rootType: this.rootType});
   }
 
   /**
@@ -1176,10 +1172,16 @@ class VolumeItem extends DirectoryItem {
     if (modelItem.volumeInfo_.providerId !== '@smb' &&
         modelItem.volumeInfo_.volumeType !==
             VolumeManagerCommon.VolumeType.SMB) {
-      this.volumeInfo_.resolveDisplayRoot((displayRoot) => {
-        this.resolved_ = true;
-        this.updateSubDirectories(false /* recursive */);
-      });
+      this.volumeInfo_.resolveDisplayRoot(
+          (displayRoot) => {
+            this.resolved_ = true;
+            this.updateSubDirectories(false /* recursive */);
+          },
+          (error) => {
+            console.warn(
+                'Failed to resolve display root of',
+                modelItem.volumeInfo_.volumeType, 'due to', error);
+          });
     }
   }
 
@@ -1492,9 +1494,14 @@ export class DriveVolumeItem extends VolumeItem {
     if (!target.classList.contains('expand-icon')) {
       // If the Drive volume is clicked, select one of the children instead of
       // this item itself.
-      this.volumeInfo_.resolveDisplayRoot((displayRoot) => {
-        this.searchAndSelectByEntry(displayRoot);
-      });
+      this.volumeInfo_.resolveDisplayRoot(
+          (displayRoot) => {
+            this.searchAndSelectByEntry(displayRoot);
+          },
+          (error) => {
+            console.warn(
+                'Unable to select display root for', target, 'due to', error);
+          });
     }
   }
 
@@ -2010,6 +2017,10 @@ export class DirectoryTree extends Tree {
     this.privateOnDirectoryChangedBound_ = null;
   }
 
+  get typeName() {
+    return 'directory_tree';
+  }
+
   /**
    * Decorates an element.
    * @param {!DirectoryModel} directoryModel Current DirectoryModel.
@@ -2088,7 +2099,9 @@ export class DirectoryTree extends Tree {
         this.setActiveItemHighlighted_(true);
       } else if (
           searchState.status === PropStatus.STARTED && searchState.query) {
-        this.setActiveItemHighlighted_(false);
+        this.setActiveItemHighlighted_(
+            (searchState.options || {}).location ===
+            SearchLocation.THIS_FOLDER);
       }
     }
   }
@@ -2270,14 +2283,18 @@ export class DirectoryTree extends Tree {
     if (!volumeInfo) {
       return;
     }
-    volumeInfo.resolveDisplayRoot(async () => {
-      if (this.sequence_ !== currentSequence) {
-        return;
-      }
-      if (!(await this.searchAndSelectByEntry(entry))) {
-        this.selectedItem = null;
-      }
-    });
+    volumeInfo.resolveDisplayRoot(
+        async () => {
+          if (this.sequence_ !== currentSequence) {
+            return;
+          }
+          if (!(await this.searchAndSelectByEntry(entry))) {
+            this.selectedItem = null;
+          }
+        },
+        (error) => {
+          console.warn('Failed to select by entry due to', error);
+        });
   }
 
   /**

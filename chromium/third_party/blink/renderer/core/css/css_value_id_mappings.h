@@ -457,6 +457,9 @@ inline TextWrap CssValueIDToPlatformEnum(CSSValueID v) {
       return TextWrap::kNoWrap;
     case CSSValueID::kBalance:
       return TextWrap::kBalance;
+    case CSSValueID::kPretty:
+      DCHECK(RuntimeEnabledFeatures::CSSTextWrapPrettyEnabled());
+      return TextWrap::kPretty;
     default:
       NOTREACHED();
       return TextWrap::kWrap;
@@ -477,38 +480,12 @@ inline CSSValueID PlatformEnumToCSSValueID(TextWrap v) {
       return CSSValueID::kNowrap;
     case TextWrap::kBalance:
       return CSSValueID::kBalance;
+    case TextWrap::kPretty:
+      DCHECK(RuntimeEnabledFeatures::CSSTextWrapPrettyEnabled());
+      return CSSValueID::kPretty;
   }
   NOTREACHED();
   return CSSValueID::kNone;
-}
-
-template <>
-inline TimelineAttachment CssValueIDToPlatformEnum(CSSValueID v) {
-  switch (v) {
-    case CSSValueID::kLocal:
-      return TimelineAttachment::kLocal;
-    case CSSValueID::kDefer:
-      return TimelineAttachment::kDefer;
-    case CSSValueID::kAncestor:
-      return TimelineAttachment::kAncestor;
-    default:
-      NOTREACHED();
-      return TimelineAttachment::kAncestor;
-  }
-}
-
-template <>
-inline CSSValueID PlatformEnumToCSSValueID(TimelineAttachment v) {
-  switch (v) {
-    case TimelineAttachment::kLocal:
-      return CSSValueID::kLocal;
-    case TimelineAttachment::kDefer:
-      return CSSValueID::kDefer;
-    case TimelineAttachment::kAncestor:
-      return CSSValueID::kAncestor;
-  }
-  NOTREACHED();
-  return CSSValueID::kLocal;
 }
 
 }  // namespace blink

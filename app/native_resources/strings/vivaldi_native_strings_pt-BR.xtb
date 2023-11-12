@@ -5,7 +5,7 @@
 <translation id="1118377629180821201">Paisagem 12</translation>
 <translation id="1158503667684816647">Não pedir confirmação novamente</translation>
 <translation id="1222195720020481779">Iniciando o instalador...</translation>
-<translation id="1276145862619442150">Speed Dials</translation>
+<translation id="1276145862619442150">Discagem Rápida</translation>
 <translation id="1281950884873973195">Animal 6</translation>
 <translation id="1411638389238344450">Enviar link por &amp;email</translation>
 <translation id="1454726940098520109">Não pedir confirmação novamente</translation>
@@ -23,7 +23,7 @@
 <translation id="1921101374471252440">&amp;Recarregar imagem</translation>
 <translation id="1924750141060565109">Paisagem 15</translation>
 <translation id="19598411548897379">Genérico</translation>
-<translation id="1973351931613083086">autoplay</translation>
+<translation id="1973351931613083086">reprodução automática</translation>
 <translation id="1985669426322966465">Atualização de Software</translation>
 <translation id="2079036669923635404">Clique aqui para atualizar o Vivaldi para a versão <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Ocorreu um erro enquanto baixava a atualização. Por favor, cheque sua conexão com a internet e tente novamente mais tarde.</translation>
@@ -80,7 +80,8 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Não mostrar de novo</translation>
 <translation id="4074744496918018786">Abrir imagem em janela &amp;privada</translation>
-<translation id="410351446219883937">Autoplay</translation>
+<translation id="410351446219883937">Reprodução automática</translation>
+<translation id="4281844954008187215">Termos de serviço</translation>
 <translation id="4324492550286218827">Paisagem 2</translation>
 <translation id="4406101500523955324">Abrir em Nova Janela Privada</translation>
 <translation id="4420816922321010053">Deseja realmente fechar o Vivaldi?</translation>

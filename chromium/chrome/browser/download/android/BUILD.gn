@@ -100,10 +100,12 @@ android_library("java") {
     "//url:gurl_java",
   ]
 
-  srcjar_deps = [ "//chrome:download_enum_javagen" ]
+  srcjar_deps = [
+    ":jni_headers",
+    "//chrome:download_enum_javagen",
+  ]
 
   resources_package = "org.chromium.chrome.browser.download"
-  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
 }
 
 android_library_factory("factory_java") {
@@ -169,6 +171,7 @@ android_library("download_java_tests") {
     "//content/public/test/android:content_java_test_support",
     "//third_party/android_deps:espresso_java",
     "//third_party/androidx:androidx_preference_preference_java",
+    "//third_party/androidx:androidx_test_core_java",
     "//third_party/androidx:androidx_test_monitor_java",
     "//third_party/androidx:androidx_test_runner_java",
     "//third_party/junit",

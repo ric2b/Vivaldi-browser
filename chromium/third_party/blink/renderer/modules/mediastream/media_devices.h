@@ -78,10 +78,6 @@ class MODULES_EXPORT MediaDevices final
 
   ScriptPromise getAllScreensMedia(ScriptState*, ExceptionState&);
 
-  ScriptPromise getDisplayMediaSet(ScriptState*,
-                                   const DisplayMediaStreamOptions*,
-                                   ExceptionState&);
-
   ScriptPromise getDisplayMedia(ScriptState*,
                                 const DisplayMediaStreamOptions*,
                                 ExceptionState&);
@@ -179,12 +175,7 @@ class MODULES_EXPORT MediaDevices final
   HeapVector<Member<Event>> scheduled_events_;
   HeapMojoRemote<mojom::blink::MediaDevicesDispatcherHost> dispatcher_host_;
   HeapMojoReceiver<mojom::blink::MediaDevicesListener, MediaDevices> receiver_;
-
-  struct RequestMetadata {
-    base::TimeTicks start_time;
-  };
-  HeapHashMap<Member<ScriptPromiseResolverWithTracker<EnumerateDevicesResult>>,
-              RequestMetadata>
+  HeapHashSet<Member<ScriptPromiseResolverWithTracker<EnumerateDevicesResult>>>
       enumerate_device_requests_;
 
 #if !BUILDFLAG(IS_ANDROID)

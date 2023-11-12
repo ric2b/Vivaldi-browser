@@ -3,16 +3,19 @@
 #include "sessions/index_model.h"
 
 #include "app/vivaldi_version_info.h"
-#include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/uuid.h"
 #include "browser/sessions/vivaldi_session_utils.h"
+#include "chrome/browser/profiles/profile.h"
+#include "components/prefs/pref_service.h"
 #include "sessions/index_node.h"
 #include "sessions/index_storage.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace sessions {
 
@@ -88,6 +91,19 @@ void Index_Model::LoadFinished(std::unique_ptr<IndexLoadDetails> details) {
       LOG(ERROR) << "Session Model: Failed to restore from backup"
                  << error_code;
     }
+  }
+
+  Profile* profile = Profile::FromBrowserContext(context_);
+  int save_version = profile->GetPrefs()->GetInteger(
+    vivaldiprefs::kSessionsSaveVersion);
+  if (save_version == 0) {
+    // Move all existing auto saved nodes to trash if auto save policy has changed.
+    int error_code = MoveAutoSaveNodesToTrash(context_);
+    if (error_code) {
+      LOG(ERROR) << "Session Model: Failed to move auto saved elements"
+                   << error_code;
+    }
+    profile->GetPrefs()->SetInteger(vivaldiprefs::kSessionsSaveVersion, 1);
   }
 
   loaded_ = true;

@@ -45,11 +45,31 @@ bool ShouldPrepareForRecovery(const AccountId& account_id) {
       static_cast<int>(ReauthReason::kPasswordUpdateSkipped),
       static_cast<int>(ReauthReason::kForgotPassword),
       static_cast<int>(ReauthReason::kCryptohomeRecovery),
+      static_cast<int>(ReauthReason::kOther),
   };
   user_manager::KnownUser known_user(g_browser_process->local_state());
   absl::optional<int> reauth_reason = known_user.FindReauthReason(account_id);
   return reauth_reason.has_value() &&
          base::Contains(kPossibleReasons, reauth_reason.value());
+}
+
+bool ShouldUseReauthEndpoint(const AccountId& account_id) {
+  if (account_id.empty()) {
+    return false;
+  }
+  auto* user = user_manager::UserManager::Get()->FindUser(account_id);
+  DCHECK(user);
+  // Use reauth endpoint for child users.
+  if (user && user->IsChild()) {
+    return true;
+  }
+  // Use reauth endpoint for potential recovery use cases (exclude cases where
+  // reauth enforced by policy).
+  if (features::IsGaiaReauthEndpointEnabled() &&
+      ShouldPrepareForRecovery(account_id)) {
+    return true;
+  }
+  return false;
 }
 
 }  // namespace
@@ -59,6 +79,8 @@ std::string GaiaScreen::GetResultString(Result result) {
   switch (result) {
     case Result::BACK:
       return "Back";
+    case Result::BACK_CHILD:
+      return "BackChild";
     case Result::CANCEL:
       return "Cancel";
     case Result::ENTERPRISE_ENROLL:
@@ -82,11 +104,8 @@ void GaiaScreen::LoadOnline(const AccountId& account) {
   if (!view_)
     return;
   auto gaia_path = GaiaView::GaiaPath::kDefault;
-  if (!account.empty()) {
-    auto* user = user_manager::UserManager::Get()->FindUser(account);
-    DCHECK(user);
-    if (user && (user->IsChild() || features::IsGaiaReauthEndpointEnabled()))
-      gaia_path = GaiaView::GaiaPath::kReauth;
+  if (ShouldUseReauthEndpoint(account)) {
+    gaia_path = GaiaView::GaiaPath::kReauth;
   }
   view_->SetGaiaPath(gaia_path);
   view_->SetReauthRequestToken(std::string());
@@ -101,9 +120,7 @@ void GaiaScreen::LoadOnline(const AccountId& account) {
     return;
   }
 
-  // TODO(272474463): remove the Gaia path check.
-  if (gaia_path == GaiaView::GaiaPath::kDefault &&
-      ShouldPrepareForRecovery(account)) {
+  if (ShouldPrepareForRecovery(account)) {
     auto user_context = std::make_unique<UserContext>();
     user_context->SetAccountId(account);
     auth_factor_editor_.GetAuthFactorsConfiguration(
@@ -171,7 +188,13 @@ void GaiaScreen::HideImpl() {
 void GaiaScreen::OnUserAction(const base::Value::List& args) {
   const std::string& action_id = args[0].GetString();
   if (action_id == kUserActionBack) {
-    exit_callback_.Run(Result::BACK);
+    GaiaView::GaiaPath gaiaPath = view_->GetGaiaPath();
+    if (gaiaPath == GaiaView::GaiaPath::kChildSignup ||
+        gaiaPath == GaiaView::GaiaPath::kChildSignin) {
+      exit_callback_.Run(Result::BACK_CHILD);
+    } else {
+      exit_callback_.Run(Result::BACK);
+    }
   } else if (action_id == kUserActionCancel) {
     exit_callback_.Run(Result::CANCEL);
   } else if (action_id == kUserActionStartEnrollment) {

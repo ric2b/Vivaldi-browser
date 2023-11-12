@@ -318,6 +318,10 @@ void TabStripModel::SetTabStripUI(TabStripModelObserver* observer) {
 }
 
 void TabStripModel::AddObserver(TabStripModelObserver* observer) {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // TODO(crbug.com/1427990): Remove this after fixing the bug.
+  CHECK(!observers_.HasObserver(observer));
+#endif
   observers_.AddObserver(observer);
   observer->StartedObserving(TabStripModelObserver::ModelPasskey(), this);
 }
@@ -658,10 +662,11 @@ int TabStripModel::GetIndexOfWebContents(const WebContents* contents) const {
 
 void TabStripModel::UpdateWebContentsStateAt(int index,
                                              TabChangeType change_type) {
-  CHECK(ContainsIndex(index));
+  WebContents* const web_contents = GetWebContentsAtImpl(index);
 
-  for (auto& observer : observers_)
-    observer.TabChangedAt(GetWebContentsAtImpl(index), index, change_type);
+  for (auto& observer : observers_) {
+    observer.TabChangedAt(web_contents, index, change_type);
+  }
 }
 
 void TabStripModel::SetTabNeedsAttentionAt(int index, bool attention) {
@@ -1289,9 +1294,10 @@ bool TabStripModel::IsContextMenuCommandEnabled(
 
     case CommandDuplicate: {
       std::vector<int> indices = GetIndicesForCommand(context_index);
-      for (size_t i = 0; i < indices.size(); ++i) {
-        if (delegate()->CanDuplicateContentsAt(indices[i]))
+      for (int index : indices) {
+        if (delegate()->CanDuplicateContentsAt(index)) {
           return true;
+        }
       }
       return false;
     }
@@ -1403,10 +1409,11 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
       // Copy the WebContents off as the indices will change as tabs are
       // duplicated.
       std::vector<WebContents*> tabs;
-      for (size_t i = 0; i < indices.size(); ++i)
-        tabs.push_back(GetWebContentsAt(indices[i]));
-      for (size_t i = 0; i < tabs.size(); ++i) {
-        int index = GetIndexOfWebContents(tabs[i]);
+      for (int index : indices) {
+        tabs.push_back(GetWebContentsAt(index));
+      }
+      for (const WebContents* const tab : tabs) {
+        int index = GetIndexOfWebContents(tab);
         if (index != -1 && delegate()->CanDuplicateContentsAt(index))
           delegate()->DuplicateContentsAt(index);
       }

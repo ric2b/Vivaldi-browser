@@ -24,7 +24,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.DialogFragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
-import androidx.preference.CheckBoxPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
@@ -36,9 +35,9 @@ import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
-import org.chromium.chrome.browser.BackPressHelper;
 import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
+import org.chromium.chrome.browser.back_press.BackPressHelper;
 import org.chromium.chrome.browser.feedback.FragmentHelpAndFeedbackLauncher;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -46,7 +45,7 @@ import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridge;
-import org.chromium.chrome.browser.sync.SyncService;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.sync.TrustedVaultClient;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils.SyncError;
 import org.chromium.chrome.browser.sync.ui.PassphraseCreationDialogFragment;
@@ -54,6 +53,7 @@ import org.chromium.chrome.browser.sync.ui.PassphraseDialogFragment;
 import org.chromium.chrome.browser.sync.ui.PassphraseTypeDialogFragment;
 import org.chromium.chrome.browser.ui.signin.SignOutDialogCoordinator;
 import org.chromium.chrome.browser.ui.signin.SignOutDialogCoordinator.Listener;
+import org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
@@ -61,6 +61,7 @@ import org.chromium.components.signin.GAIAServiceType;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SignoutReason;
+import org.chromium.components.sync.SyncService;
 import org.chromium.components.sync.UserSelectableType;
 import org.chromium.ui.modaldialog.ModalDialogManagerHolder;
 import org.chromium.ui.widget.ButtonCompat;
@@ -130,7 +131,7 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
     private static final int REQUEST_CODE_TRUSTED_VAULT_KEY_RETRIEVAL = 1;
     private static final int REQUEST_CODE_TRUSTED_VAULT_RECOVERABILITY_DEGRADED = 2;
 
-    private final SyncService mSyncService = SyncService.get();
+    private SyncService mSyncService;
 
     private boolean mIsFromSigninScreen;
 
@@ -138,11 +139,11 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
     private PreferenceCategory mSyncingCategory;
 
     private ChromeSwitchPreference mSyncEverything;
-    private CheckBoxPreference mSyncPaymentsIntegration;
-    // Maps {@link UserSelectableType} to the corresponding CheckBoxPreference. There is no entry
+    private ChromeBaseCheckBoxPreference mSyncPaymentsIntegration;
+    // Maps {@link UserSelectableType} to the corresponding preference. There is no entry
     // for {@code mSyncPaymentsIntegration} because it does not correspond to a {@link
     // UserSelectableType}
-    private Map<Integer, CheckBoxPreference> mSyncTypePreferencesMap = new HashMap<>();
+    private Map<Integer, ChromeBaseCheckBoxPreference> mSyncTypePreferencesMap = new HashMap<>();
 
     private Preference mGoogleActivityControls;
     private Preference mSyncEncryption;
@@ -165,6 +166,9 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
 
     @Override
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, String rootKey) {
+        Profile profile = Profile.getLastUsedRegularProfile();
+        mSyncService = SyncServiceFactory.getForProfile(profile);
+
         mIsFromSigninScreen =
                 IntentUtils.safeGetBoolean(getArguments(), IS_FROM_SIGNIN_SCREEN, false);
 
@@ -184,7 +188,6 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
 
         Preference turnOffSync = findPreference(PREF_TURN_OFF_SYNC);
 
-        Profile profile = Profile.getLastUsedRegularProfile();
         if (!mIsFromSigninScreen) {
             turnOffSync.setVisible(true);
             if (!profile.isChild()) {
@@ -230,7 +233,7 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
         mSyncTypePreferencesMap.values().forEach(pref -> pref.setOnPreferenceChangeListener(this));
 
         mSyncPaymentsIntegration =
-                (CheckBoxPreference) findPreference(PREF_SYNC_PAYMENTS_INTEGRATION);
+                (ChromeBaseCheckBoxPreference) findPreference(PREF_SYNC_PAYMENTS_INTEGRATION);
         mSyncPaymentsIntegration.setOnPreferenceChangeListener(this);
 
         // Prevent sync settings changes from taking effect until the user leaves this screen.
@@ -585,16 +588,40 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
         boolean syncEverything = mSyncService.hasKeepEverythingSynced();
         mSyncEverything.setChecked(syncEverything);
 
-        Set<Integer> syncTypes = mSyncService.getSelectedTypes();
-        mSyncTypePreferencesMap.values().forEach(pref -> pref.setEnabled(!syncEverything));
-        mSyncTypePreferencesMap.forEach((type, pref) -> pref.setChecked(syncTypes.contains(type)));
+        Set<Integer> selectedSyncTypes = mSyncService.getSelectedTypes();
+        ChromeManagedPreferenceDelegate autofillChromeManagedPreferenceDelegate = null;
 
-        // Payments integration requires AUTOFILL user selectable type
-        boolean syncAutofill = syncTypes.contains(UserSelectableType.AUTOFILL);
-        mSyncPaymentsIntegration.setChecked((syncEverything || syncAutofill)
+        for (Map.Entry<Integer, ChromeBaseCheckBoxPreference> entry :
+                mSyncTypePreferencesMap.entrySet()) {
+            @UserSelectableType
+            int type = entry.getKey();
+            ChromeBaseCheckBoxPreference pref = entry.getValue();
+            boolean managed = mSyncService.isTypeManagedByPolicy(type);
+            pref.setEnabled(!syncEverything);
+            pref.setChecked(selectedSyncTypes.contains(type));
+
+            ChromeManagedPreferenceDelegate managedDelegate =
+                    new ChromeManagedPreferenceDelegate() {
+                        @Override
+                        public boolean isPreferenceControlledByPolicy(Preference preference) {
+                            return managed;
+                        }
+                    };
+            pref.setManagedPreferenceDelegate(managedDelegate);
+            if (type == UserSelectableType.AUTOFILL) {
+                autofillChromeManagedPreferenceDelegate = managedDelegate;
+            }
+        }
+
+        // Payments integration requires AUTOFILL user selectable type.
+        mSyncPaymentsIntegration.setChecked(
+                mSyncTypePreferencesMap.get(UserSelectableType.AUTOFILL).isChecked()
                 && PersonalDataManager.isPaymentsIntegrationEnabled());
-        mSyncPaymentsIntegration.setEnabled(
-                !syncEverything && syncAutofill && !Profile.getLastUsedRegularProfile().isChild());
+        mSyncPaymentsIntegration.setEnabled(!syncEverything
+                && mSyncTypePreferencesMap.get(UserSelectableType.AUTOFILL).isChecked()
+                && !Profile.getLastUsedRegularProfile().isChild());
+        mSyncPaymentsIntegration.setManagedPreferenceDelegate(
+                autofillChromeManagedPreferenceDelegate);
     }
 
     /**
@@ -680,7 +707,7 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
                 return;
             case SyncError.SYNC_SETUP_INCOMPLETE:
                 mSyncService.setSyncRequested();
-                mSyncService.setFirstSetupComplete(
+                mSyncService.setInitialSyncFeatureSetupComplete(
                         SyncFirstSetupCompleteSource.ADVANCED_FLOW_INTERRUPTED_TURN_SYNC_ON);
                 return;
             case SyncError.NO_ERROR:
@@ -700,7 +727,8 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
 
     private void confirmSettings() {
         RecordUserAction.record("Signin_Signin_ConfirmAdvancedSyncSettings");
-        SyncService.get().setFirstSetupComplete(SyncFirstSetupCompleteSource.ADVANCED_FLOW_CONFIRM);
+        mSyncService.setInitialSyncFeatureSetupComplete(
+                SyncFirstSetupCompleteSource.ADVANCED_FLOW_CONFIRM);
 
         Profile profile = Profile.getLastUsedRegularProfile();
         UnifiedConsentServiceBridge.setUrlKeyedAnonymizedDataCollectionEnabled(

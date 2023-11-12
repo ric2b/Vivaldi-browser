@@ -42,68 +42,80 @@ template("sign_bundle") {
 }
 
 sign_bundle("sign_credential_provider_extension") {
-  bindir = "$root_out_dir/obj/ios/chrome/credential_provider_extension"
-  gendir = "$root_out_dir/gen/ios/chrome/credential_provider_extension"
+  bindir = "$root_out_dir/ios_clang_arm64_app_ext/obj/ios/chrome/credential_provider_extension/appex"
+  gendir = "$root_out_dir/ios_clang_arm64_app_ext/gen/ios/chrome/credential_provider_extension/appex"
 
   binary = "$bindir/credential_provider_extension"
   entitlements = "$gendir/credential_provider_extension.appex.entitlements"
   app = "${vivaldi_profiles}/credential_provider_extension.appex"
   plists =[
-    "$gendir/credential_provider_extension_generate_info_plist.plist",
-    "$gendir/credential_provider_extension_partial_info.plist",
+    "$gendir/appex_generate_info_plist.plist",
+    "$gendir/appex_partial_info.plist",
   ]
 }
 
+sign_bundle("sign_intents_extension") {
+  bindir = "$root_out_dir/ios_clang_arm64_app_ext/obj/ios/chrome/intents_extension/appex"
+  gendir = "$root_out_dir/ios_clang_arm64_app_ext/gen/ios/chrome/intents_extension/appex"
+
+  binary = "$bindir/intents_extension"
+  entitlements = "$gendir/chrome_intents.entitlements"
+  app = "${vivaldi_profiles}/intents_extension.appex"
+  plists =[
+    "$gendir/appex_generate_info_plist.plist",
+    "$gendir/appex_partial_info.plist",
+  ]
+}
 
 sign_bundle("sign_share_extension") {
-  bindir = "$root_out_dir/obj/ios/chrome/share_extension"
-  gendir = "$root_out_dir/gen/ios/chrome/share_extension"
+  bindir = "$root_out_dir/ios_clang_arm64_app_ext/obj/ios/chrome/share_extension/appex"
+  gendir = "$root_out_dir/ios_clang_arm64_app_ext/gen/ios/chrome/share_extension/appex"
 
   binary = "$bindir/share_extension"
   entitlements = "$gendir/share_extension.appex.entitlements"
   app = "${vivaldi_profiles}/share_extension.appex"
   plists =[
-    "$gendir/share_extension_generate_info_plist.plist",
-    "$gendir/share_extension_partial_info.plist",
+    "$gendir/appex_generate_info_plist.plist",
+    "$gendir/appex_partial_info.plist",
   ]
 }
 
 sign_bundle("sign_widget_kit_extension") {
-  bindir = "$root_out_dir/obj/ios/chrome/widget_kit_extension"
-  gendir = "$root_out_dir/gen/ios/chrome/widget_kit_extension"
+  bindir = "$root_out_dir/ios_clang_arm64_app_ext/obj/ios/chrome/widget_kit_extension/appex"
+  gendir = "$root_out_dir/ios_clang_arm64_app_ext/gen/ios/chrome/widget_kit_extension/appex"
 
   binary = "$bindir/widget_kit_extension"
   entitlements = "$gendir/widget_kit_extension.appex.entitlements"
   app = "${vivaldi_profiles}/widget_kit_extension.appex"
   plists =[
-    "$gendir/widget_kit_extension_generate_info_plist.plist",
-    "$gendir/widget_kit_extension_partial_info.plist",
+    "$gendir/appex_generate_info_plist.plist",
+    "$gendir/appex_partial_info.plist",
   ]
 }
 
 sign_bundle("sign_content_widget_extension") {
-  bindir = "$root_out_dir/ios_clang_arm64_13_4/obj/ios/chrome/content_widget_extension"
-  gendir = "$root_out_dir/ios_clang_arm64_13_4/gen/ios/chrome/content_widget_extension"
+  bindir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/obj/ios/chrome/content_widget_extension/appex"
+  gendir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/gen/ios/chrome/content_widget_extension/appex"
 
   binary = "$bindir/content_widget_extension"
   entitlements = "$gendir/content_widget_extension.appex.entitlements"
   app = "${vivaldi_profiles}/content_widget_extension.appex"
   plists =[
-    "$gendir/content_widget_extension_generate_info_plist.plist",
-    "$gendir/content_widget_extension_partial_info.plist",
+    "$gendir/appex_generate_info_plist.plist",
+    "$gendir/appex_partial_info.plist",
   ]
 }
 
 sign_bundle("sign_search_widget_extension") {
-  bindir = "$root_out_dir/ios_clang_arm64_13_4/obj/ios/chrome/search_widget_extension"
-  gendir = "$root_out_dir/ios_clang_arm64_13_4/gen/ios/chrome/search_widget_extension"
+  bindir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/obj/ios/chrome/search_widget_extension/appex"
+  gendir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/gen/ios/chrome/search_widget_extension/appex"
 
   binary = "$bindir/search_widget_extension"
   entitlements = "$gendir/search_widget_extension.appex.entitlements"
   app = "${vivaldi_profiles}/search_widget_extension.appex"
   plists =[
-    "$gendir/search_widget_extension_generate_info_plist.plist",
-    "$gendir/search_widget_extension_partial_info.plist",
+    "$gendir/appex_generate_info_plist.plist",
+    "$gendir/appex_partial_info.plist",
   ]
 }
 
@@ -141,6 +153,7 @@ sign_bundle("sign_ios") {
     ":sign_search_widget_extension",
     ":sign_content_widget_extension",
     ":sign_widget_kit_extension",
+    ":sign_intents_extension",
     ":sign_share_extension",
   ]
 }

@@ -158,6 +158,12 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const base::RepeatingCallback<content::WebContents*()>& wc_getter,
       content::NavigationUIData* navigation_ui_data,
       int frame_tree_node_id) override;
+  std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
+  CreateURLLoaderThrottlesForKeepAlive(
+      const network::ResourceRequest& request,
+      content::BrowserContext* browser_context,
+      const base::RepeatingCallback<content::WebContents*()>& wc_getter,
+      int frame_tree_node_id) override;
   bool ShouldOverrideUrlLoading(int frame_tree_node_id,
                                 bool browser_initiated,
                                 const GURL& gurl,
@@ -218,7 +224,9 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
           header_client,
       bool* bypass_redirect_checks,
       bool* disable_secure_dns,
-      network::mojom::URLLoaderFactoryOverridePtr* factory_override) override;
+      network::mojom::URLLoaderFactoryOverridePtr* factory_override,
+      scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner)
+      override;
   uint32_t GetWebSocketOptions(content::RenderFrameHost* frame) override;
   bool WillCreateRestrictedCookieManager(
       network::mojom::RestrictedCookieManagerRole role,
@@ -232,6 +240,12 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       override;
   std::string GetProduct() override;
   std::string GetUserAgent() override;
+  // Override GetUserAgentMetadata API for ContentBrowserClient, it helps
+  // LocalFrameClient get the default user-agent metadata if user-agent isn't
+  // overridden. If Android WebView overrides the user-agent metadata when
+  // calling SetUserAgentOverride in AwSettings, the overridden user-agent
+  // metadata will take effect.
+  blink::UserAgentMetadata GetUserAgentMetadata() override;
   ContentBrowserClient::WideColorGamutHeuristic GetWideColorGamutHeuristic()
       override;
   void LogWebFeatureForCurrentPage(content::RenderFrameHost* render_frame_host,
@@ -258,6 +272,8 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const url::Origin* destination_origin,
       const url::Origin* reporting_origin) override;
   bool IsWebAttributionReportingAllowed() override;
+  bool ShouldUseOsWebSourceAttributionReporting() override;
+  blink::mojom::OriginTrialsSettingsPtr GetOriginTrialsSettings() override;
 
   AwFeatureListCreator* aw_feature_list_creator() {
     return aw_feature_list_creator_;

@@ -6,20 +6,29 @@
 
 #import "base/memory/weak_ptr.h"
 #import "components/favicon/ios/web_favicon_driver.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/url/url_util.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab_title_util.h"
-#import "ios/chrome/browser/url/url_util.h"
 #import "ios/web/public/web_state.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+const CGFloat kSymbolSize = 16;
+}
 
 @implementation WebStateTabSwitcherItem {
   // The web state represented by this item.
@@ -36,9 +45,20 @@
 
     // chrome://newtab (NTP) tabs have no title.
     if (IsUrlNtp(webState->GetVisibleURL())) {
+
+      if (!IsVivaldiRunning()) {
       self.hidesTitle = YES;
+      } // End Vivaldi
+
     }
+
+    // Vivaldi
+    if (IsUrlNtp(webState->GetVisibleURL())) {
+      self.title = l10n_util::GetNSString(IDS_IOS_TABS_SPEED_DIAL);
+    } else {
     self.title = tab_util::GetTabTitle(webState);
+    } // End Vivaldi
+
     self.showsActivity = webState->IsLoading();
 
     [[NSNotificationCenter defaultCenter]
@@ -78,15 +98,7 @@
   }
 
   // Otherwise, set a default favicon.
-  UIImage* defaultFavicon = webState->GetBrowserState()->IsOffTheRecord()
-                                ? [self incognitoDefaultFavicon]
-                                : [self regularDefaultFavicon];
-
-  if (vivaldi::IsVivaldiRunning())
-    defaultFavicon = [UIImage imageNamed:vNTPSDFallbackFavicon];
-  // End Vivaldi
-
-  completion(self, defaultFavicon);
+  completion(self, [self defaultFavicon]);
 }
 
 - (void)fetchSnapshot:(TabSwitcherImageFetchingCompletionBlock)completion {
@@ -112,16 +124,25 @@
 
 #pragma mark - Favicons
 
-- (UIImage*)regularDefaultFavicon {
-  return [UIImage imageNamed:@"default_world_favicon_regular"];
-}
+- (UIImage*)defaultFavicon {
 
-- (UIImage*)incognitoDefaultFavicon {
-  return [UIImage imageNamed:@"default_world_favicon_incognito"];
+  if (IsVivaldiRunning())
+    return [UIImage imageNamed:vNTPSDFallbackFavicon];
+  // End Vivaldi
+
+  UIImageConfiguration* configuration = [UIImageSymbolConfiguration
+      configurationWithPointSize:kSymbolSize
+                          weight:UIImageSymbolWeightBold
+                           scale:UIImageSymbolScaleMedium];
+  return DefaultSymbolWithConfiguration(kGlobeAmericasSymbol, configuration);
 }
 
 - (UIImage*)NTPFavicon {
   // By default NTP tabs gets no favicon.
+
+  if (IsVivaldiRunning())
+    return [UIImage imageNamed:@"toolbar_menu"]; // End Vivaldi
+
   return nil;
 }
 

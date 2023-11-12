@@ -9,9 +9,7 @@
 
 #include "base/containers/cxx20_erase.h"
 #include "chrome/browser/chromeos/policy/dlp/dialogs/dlp_warn_dialog.h"
-#include "chrome/browser/chromeos/policy/dlp/dialogs/files_policy_dialog.h"
 #include "chrome/browser/chromeos/policy/dlp/dialogs/policy_dialog_base.h"
-#include "chrome/browser/chromeos/policy/dlp/dlp_file_destination.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/gfx/native_widget_types.h"
@@ -57,20 +55,6 @@ void DlpWarnNotifier::ShowDlpVideoCaptureWarningDialog(
           DlpWarnDialog::Restriction::kVideoCapture, confidential_contents));
 }
 
-base::WeakPtr<views::Widget> DlpWarnNotifier::ShowDlpFilesWarningDialog(
-    OnDlpRestrictionCheckedCallback callback,
-    const std::vector<DlpConfidentialFile>& confidential_files,
-    const DlpFileDestination& files_destination,
-    DlpFilesController::FileAction files_action,
-    gfx::NativeWindow modal_parent) {
-  return ShowDlpWarningDialog(
-      std::move(callback),
-      DlpWarnDialog::DlpWarnDialogOptions(DlpWarnDialog::Restriction::kFiles,
-                                          confidential_files, files_destination,
-                                          files_action),
-      modal_parent);
-}
-
 base::WeakPtr<views::Widget> DlpWarnNotifier::ShowDlpScreenShareWarningDialog(
     OnDlpRestrictionCheckedCallback callback,
     const DlpConfidentialContents& confidential_contents,
@@ -87,22 +71,15 @@ int DlpWarnNotifier::ActiveWarningDialogsCountForTesting() const {
 
 base::WeakPtr<views::Widget> DlpWarnNotifier::ShowDlpWarningDialog(
     OnDlpRestrictionCheckedCallback callback,
-    DlpWarnDialog::DlpWarnDialogOptions options,
-    gfx::NativeWindow modal_parent) {
-  views::Widget* widget;
-  if (options.restriction == PolicyDialogBase::Restriction::kFiles) {
-    widget = views::DialogDelegate::CreateDialogWidget(
-        std::make_unique<FilesPolicyDialog>(
-            std::move(callback), options.confidential_files,
-            options.files_destination.value(), options.files_action.value(),
-            modal_parent),
-        /*context=*/nullptr, /*parent=*/modal_parent);
-  } else {  // on-screen restriction
-    widget = views::DialogDelegate::CreateDialogWidget(
-        std::make_unique<DlpWarnDialog>(std::move(callback), options),
-        /*context=*/nullptr, /*parent=*/nullptr);
-  }
+    DlpWarnDialog::DlpWarnDialogOptions options) {
+  views::Widget* widget = views::DialogDelegate::CreateDialogWidget(
+      std::make_unique<DlpWarnDialog>(std::move(callback), options),
+      /*context=*/nullptr, /*parent=*/nullptr);
+  ShowWidget(widget);
+  return widget->GetWeakPtr();
+}
 
+void DlpWarnNotifier::ShowWidget(views::Widget* widget) {
   widget->Show();
   // We disable the dialog's hide animations after showing it so that it doesn't
   // end up showing in the screenshots, video recording, or screen share.
@@ -113,7 +90,6 @@ base::WeakPtr<views::Widget> DlpWarnNotifier::ShowDlpWarningDialog(
   widget->GetNativeWindow()->SetCapture();
   widget->AddObserver(this);
   widgets_.push_back(widget);
-  return widget->GetWeakPtr();
 }
 
 void DlpWarnNotifier::RemoveWidget(views::Widget* widget) {

@@ -15,9 +15,6 @@ from dataclasses import dataclass
 
 PRESUBMIT_VERSION = '2.0.0'
 
-# This line is 'magic' in that git-cl looks for it to decide whether to
-# use Python3 instead of Python2 when running the code in this file.
-USE_PYTHON3 = True
 
 _EXCLUDED_PATHS = (
     # Generated file
@@ -291,7 +288,8 @@ _BANNED_JAVA_FUNCTIONS : Sequence[BanRule] = (
       r'/RecordHistogram\.getHistogram(ValueCount|TotalCount|Samples)ForTesting\(',
       (
        'Raw histogram counts are easy to misuse; for example they don\'t reset '
-       'between batched tests. Use HistogramWatcher to check histogram records instead.',
+       'between batched tests. Use HistogramWatcher to check histogram records '
+       'instead.',
       ),
       False,
       excluded_paths=(
@@ -315,7 +313,7 @@ _BANNED_JAVASCRIPT_FUNCTIONS : Sequence [BanRule] = (
           # cleaned up.
           'ash/webui/common/resources/cr.m.js',
           'ash/webui/common/resources/multidevice_setup/multidevice_setup_browser_proxy.js',
-          'ash/webui/common/resources/quick_unlock/lock_screen_constants.js',
+          'ash/webui/common/resources/quick_unlock/lock_screen_constants.ts',
           'ash/webui/common/resources/smb_shares/smb_browser_proxy.js',
           'ash/webui/connectivity_diagnostics/resources/connectivity_diagnostics.js',
           'ash/webui/diagnostics_ui/resources/diagnostics_browser_proxy.ts',
@@ -762,8 +760,8 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
        # Fuchsia provides C++ libraries that use std::shared_ptr<>.
        '^base/fuchsia/.*\.(cc|h)',
        '.*fuchsia.*test\.(cc|h)',
-       # Needed for clang plugin tests
-       '^tools/clang/plugins/tests/',
+       # Clang plugins have different build config.
+       '^tools/clang/plugins/',
        _THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
     BanRule(
@@ -921,6 +919,7 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       [
         # Needed to use QUICHE API.
         r'services/network/web_transport\.cc',
+        r'chrome/browser/ip_protection/.*',
         # Not an error in third_party folders.
         _THIRD_PARTY_EXCEPT_BLINK
       ],
@@ -935,6 +934,8 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
         # Needed to use liburlpattern API.
         r'third_party/blink/renderer/core/url_pattern/.*',
         r'third_party/blink/renderer/modules/manifest/manifest_parser\.cc',
+        # Needed to use QUICHE API.
+        r'chrome/browser/ip_protection/.*',
         # Not an error in third_party folders.
         _THIRD_PARTY_EXCEPT_BLINK
       ],
@@ -970,6 +971,8 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       [
         # Needed to implement and test std::string_view interoperability.
         r'base/strings/string_piece.*',
+        # Needed to use re2::RE2 regular expression library.
+        r'third_party/blink/common/interest_group/ad_display_size_utils.cc',
         # Needed to use liburlpattern API.
         r'third_party/blink/renderer/core/url_pattern/.*',
         r'third_party/blink/renderer/modules/manifest/manifest_parser\.cc',
@@ -985,6 +988,8 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
         r'net/der/.*',
         # Needed to use APIs from the above.
         r'net/cert/.*',
+        # Needed by Caspian, which compiles to WASM.
+        r'tools/binary_size/libsupersize/viewer/caspian/.*',
         # Not an error in third_party folders.
         _THIRD_PARTY_EXCEPT_BLINK
       ],
@@ -1021,7 +1026,12 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
         'absl::optional instead.',
       ),
       True,
-      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+      [
+          # Clang plugins have different build config.
+          '^tools/clang/plugins/',
+          # Not an error in third_party folders.
+          _THIRD_PARTY_EXCEPT_BLINK,
+      ],
     ),
     BanRule(
       r'/#include <chrono>',
@@ -1078,6 +1088,8 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
           # This code is in the process of being extracted into a third-party library.
           # See https://crbug.com/1322914
           '^net/cert/pki/path_builder_unittest\.cc',
+          # Needed to use QUICHE API
+          r'chrome/browser/ip_protection/.*',
           # TODO(https://crbug.com/1364577): Various uses that should be
           # migrated to something else.
           # Should use base::OnceCallback or base::RepeatingCallback.
@@ -1497,6 +1509,7 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       True,
       (
           r'^base/win/scoped_winrt_initializer\.cc$',
+          r'^third_party/abseil-cpp/absl/.*',
       ),
     ),
     BanRule(
@@ -1596,6 +1609,43 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       True,
       []
     ),
+    BanRule(
+      r'/#include <filesystem>',
+      (
+        'libc++ <filesystem> is banned per the Google C++ styleguide.',
+      ),
+      True,
+      # This fuzzing framework is a standalone open source project and
+      # cannot rely on Chromium base.
+      (r'third_party/centipede'),
+    ),
+    BanRule(
+      r'TopDocument()',
+      (
+        'TopDocument() does not work correctly with out-of-process iframes. '
+        'Please do not introduce new uses.',
+      ),
+      True,
+      (
+        # TODO(crbug.com/617677): Remove all remaining uses.
+        r'^third_party/blink/renderer/core/dom/document\.cc',
+        r'^third_party/blink/renderer/core/dom/document\.h',
+        r'^third_party/blink/renderer/core/dom/element\.cc',
+        r'^third_party/blink/renderer/core/exported/web_disallow_transition_scope_test\.cc',
+        r'^third_party/blink/renderer/core/exported/web_document_test\.cc',
+        r'^third_party/blink/renderer/core/html/html_anchor_element\.cc',
+        r'^third_party/blink/renderer/core/html/html_dialog_element\.cc',
+        r'^third_party/blink/renderer/core/html/html_element\.cc',
+        r'^third_party/blink/renderer/core/html/html_frame_owner_element\.cc',
+        r'^third_party/blink/renderer/core/html/media/video_wake_lock\.cc',
+        r'^third_party/blink/renderer/core/loader/anchor_element_interaction_tracker\.cc',
+        r'^third_party/blink/renderer/core/page/scrolling/root_scroller_controller\.cc',
+        r'^third_party/blink/renderer/core/page/scrolling/top_document_root_scroller_controller\.cc',
+        r'^third_party/blink/renderer/core/page/scrolling/top_document_root_scroller_controller\.h',
+        r'^third_party/blink/renderer/core/script/classic_pending_script\.cc',
+        r'^third_party/blink/renderer/core/script/script_loader\.cc',
+      ),
+    ),
 )
 
 _BANNED_MOJOM_PATTERNS : Sequence[BanRule] = (
@@ -1639,7 +1689,7 @@ _KNOWN_TEST_DATA_AND_INVALID_JSON_FILE_PATTERNS = [
     r'testing/buildbot/',
     r'^components/policy/resources/policy_templates\.json$',
     r'^third_party/protobuf/',
-    r'^third_party/blink/perf_tests/speedometer/resources/todomvc/learn.json',
+    r'^third_party/blink/perf_tests/speedometer.*/resources/todomvc/learn\.json',
     r'^third_party/blink/renderer/devtools/protocol\.json$',
     r'^third_party/blink/web_tests/external/wpt/',
     r'^tools/perf/',
@@ -1762,7 +1812,8 @@ _KNOWN_ROBOTS = set(
                     'lacros-version-skew-roller', 'skylab-test-cros-roller',
                     'infra-try-recipes-tester', 'lacros-tracking-roller',
                     'lacros-sdk-version-roller', 'chrome-automated-expectation',
-                    'chromium-automated-expectation', 'chrome-branch-day')
+                    'chromium-automated-expectation', 'chrome-branch-day',
+                    'chromium-autosharder')
   ) | set('%s@skia-public.iam.gserviceaccount.com' % s
           for s in ('chromium-autoroll', 'chromium-release-autoroll')
   ) | set('%s@skia-corp.google.com.iam.gserviceaccount.com' % s
@@ -4955,6 +5006,10 @@ def CheckCorrectProductNameInMessages(input_api, output_api):
         "correct_name": "Chrome",
         "incorrect_name": "Chromium",
     }, {
+        "filename_postfix": "google_chrome_strings.grd",
+        "correct_name": "Chrome",
+        "incorrect_name": "Chrome for Testing",
+    }, {
         "filename_postfix": "chromium_strings.grd",
         "correct_name": "Chromium",
         "incorrect_name": "Chrome",
@@ -4973,6 +5028,9 @@ def CheckCorrectProductNameInMessages(input_api, output_api):
                 if "<message" in line or "<!--" in line or "-->" in line:
                     continue
                 if test_case["incorrect_name"] in line:
+                    # Chrome for Testing is a special edge case: https://goo.gle/chrome-for-testing#bookmark=id.n1rat320av91
+                    if (test_case["correct_name"] == "Chromium" and line.count("Chrome") == line.count("Chrome for Testing")):
+                        continue
                     problems.append("Incorrect product name in %s:%d" %
                                     (f.LocalPath(), line_num))
 
@@ -5399,21 +5457,12 @@ def ChecksCommon(input_api, output_api):
         if not input_api.os_path.exists(test_file):
             continue
 
-        use_python3 = False
-        with open(f.LocalPath(), encoding='utf-8') as fp:
-            use_python3 = any(
-                line.startswith('USE_PYTHON3 = True')
-                for line in fp.readlines())
-
         results.extend(
             input_api.canned_checks.RunUnitTestsInDirectory(
                 input_api,
                 output_api,
                 full_path,
-                files_to_check=[r'^PRESUBMIT_test\.py$'],
-                run_on_python2=not use_python3,
-                run_on_python3=use_python3,
-                skip_shebang_check=True))
+                files_to_check=[r'^PRESUBMIT_test\.py$']))
     return results
 
 
@@ -6037,6 +6086,7 @@ def CheckStrings(input_api, output_api):
     # - If the CL contains removed messages in grd files but the corresponding
     #   .sha1 files aren't removed, warn the developer to remove them.
     unnecessary_screenshots = []
+    invalid_sha1 = []
     missing_sha1 = []
     missing_sha1_modified = []
     unnecessary_sha1_files = []
@@ -6048,18 +6098,33 @@ def CheckStrings(input_api, output_api):
     # break message extraction for translation, hence would block Chromium
     # translations until they are fixed.
     icu_syntax_errors = []
+    sha1_pattern = input_api.re.compile(r'^[a-fA-F0-9]{40}$',
+                                        input_api.re.MULTILINE)
 
     def _CheckScreenshotAdded(screenshots_dir, message_id):
         sha1_path = input_api.os_path.join(screenshots_dir,
                                            message_id + '.png.sha1')
         if sha1_path not in new_or_added_paths:
             missing_sha1.append(sha1_path)
+        elif not _CheckValidSha1(sha1_path):
+          invalid_sha1.append(sha1_path)
 
     def _CheckScreenshotModified(screenshots_dir, message_id):
         sha1_path = input_api.os_path.join(screenshots_dir,
                                            message_id + '.png.sha1')
         if sha1_path not in new_or_added_paths:
             missing_sha1_modified.append(sha1_path)
+        elif not _CheckValidSha1(sha1_path):
+          invalid_sha1.append(sha1_path)
+
+    def _CheckValidSha1(sha1_path):
+      return sha1_pattern.search(
+          next(
+                "\n".join(f.NewContents())
+                for f in input_api.AffectedFiles()
+                if f.LocalPath() == sha1_path
+          )
+      )
 
     def _CheckScreenshotRemoved(screenshots_dir, message_id):
         sha1_path = input_api.os_path.join(screenshots_dir,
@@ -6257,14 +6322,8 @@ def CheckStrings(input_api, output_api):
                 modified_ids.add(key)
             elif old_id_to_msg_map[key].attrs['meaning'] != \
                 new_id_to_msg_map[key].attrs['meaning']:
-                # The message meaning changed. Ensure there is a screenshot for it.
-                sha1_path = input_api.os_path.join(screenshots_dir,
-                                                   key + '.png.sha1')
-                if sha1_path not in new_or_added_paths and not \
-                    input_api.os_path.exists(sha1_path):
-                    # There is neither a previous screenshot nor is a new one added now.
-                    # Require a screenshot.
-                    modified_ids.add(key)
+                # The message meaning changed. We later check for a screenshot.
+                modified_ids.add(key)
 
         if run_screenshot_check:
             # Check the screenshot directory for .png files. Warn if there is any.
@@ -6304,6 +6363,13 @@ def CheckStrings(input_api, output_api):
                     'To ensure the best translations, take screenshots of the relevant UI '
                     '(https://g.co/chrome/translation) and add these files to your '
                     'changelist:', sorted(missing_sha1)))
+
+        if invalid_sha1:
+            results.append(
+                output_api.PresubmitError(
+                    'The following files do not seem to contain valid sha1 hashes. '
+                    'Make sure they contain hashes created by '
+                    'tools/translate/upload_screenshots.py:', sorted(invalid_sha1)))
 
         if missing_sha1_modified:
             results.append(
@@ -6839,7 +6905,7 @@ def CheckNoJsInIos(input_api, output_api):
         return input_api.FilterSourceFile(
             affected_file,
             files_to_skip=input_api.DEFAULT_FILES_TO_SKIP +
-                          (r'^ios/third_party/*', r'^third_party/*'),
+                (r'^ios/third_party/*', r'^ios/tools/*', r'^third_party/*'),
             files_to_check=[r'^ios/.*\.js$', r'.*/ios/.*\.js$'])
 
     deleted_files = []

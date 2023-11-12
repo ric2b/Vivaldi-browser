@@ -12,7 +12,6 @@
 #include <memory>
 #include <tuple>
 
-#include "base/cpu_reduction_experiment.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -147,18 +146,11 @@ void ChannelPosix::ShutDownImpl() {
 }
 
 void ChannelPosix::Write(MessagePtr message) {
-  bool log_histograms = true;
-#if !defined(MOJO_CORE_SHARED_LIBRARY)
-  log_histograms = base::ShouldLogHistogramForCpuReductionExperiment();
-#endif
-  if (log_histograms) {
+  if (ShouldRecordSubsampledHistograms()) {
     UMA_HISTOGRAM_COUNTS_100000("Mojo.Channel.WriteMessageSize",
                                 message->data_num_bytes());
-    UMA_HISTOGRAM_COUNTS_100("Mojo.Channel.WriteMessageHandles",
-                             message->NumHandlesForTransit());
+    LogHistogramForIPCMetrics(MessageType::kSent);
   }
-
-  MaybeLogHistogramForIPCMetrics(MessageType::kSent);
 
   bool write_error = false;
   {
@@ -518,8 +510,6 @@ bool ChannelPosix::WriteOutgoingMessagesWithWritev() {
     iov[num_iovs_set].iov_len = it->data_num_bytes();
     num_iovs_set++;
   }
-
-  UMA_HISTOGRAM_COUNTS_1000("Mojo.Channel.WritevBatchedMessages", num_iovs_set);
 
   size_t iov_offset = 0;
   while (iov_offset < num_iovs_set) {

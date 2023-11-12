@@ -62,6 +62,13 @@ suite('ApnListItemTest', function() {
     await flushTasks();
     assertEquals(
         apnListItem.$.apnName.innerText, apnListItem.apn.accessPointName);
+
+    apnListItem.apn = {
+      accessPointName: apnListItem.apn.accessPointName,
+      name: 'name',
+    };
+    await flushTasks();
+    assertEquals(apnListItem.$.apnName.innerText, apnListItem.apn.name);
   });
 
   test('Check if connected sublabel is shown', async function() {
@@ -143,6 +150,7 @@ suite('ApnListItemTest', function() {
     managedProps = await mojoApi_.getManagedProperties(guid);
     assertEquals(
         0, managedProps.result.typeProperties.cellular.customApnList.length);
+    assertFalse(apnListItem.$.dotsMenu.open);
   });
 
   test('Check if three dot menu disable/enable APN works', async function() {
@@ -182,6 +190,7 @@ suite('ApnListItemTest', function() {
     assertEquals(
         ApnState.kEnabled,
         managedProps.result.typeProperties.cellular.customApnList[0].state);
+    assertFalse(apnListItem.$.dotsMenu.open);
 
     apnListItem.apn = createApn(/*disabled=*/ false);
     await flushTasks();
@@ -193,6 +202,7 @@ suite('ApnListItemTest', function() {
     assertEquals(
         ApnState.kDisabled,
         managedProps.result.typeProperties.cellular.customApnList[0].state);
+    assertFalse(apnListItem.$.dotsMenu.open);
   });
 
   test(
@@ -214,6 +224,7 @@ suite('ApnListItemTest', function() {
 
         assertEquals(TEST_APN_EVENT_DATA.apn.name, eventData.detail.apn.name);
         assertEquals(TEST_APN_EVENT_DATA.mode, eventData.detail.mode);
+        assertFalse(apnListItem.$.dotsMenu.open);
 
         // Case: the apn list item is not auto detected
         apnListItem.apn = {
@@ -228,6 +239,7 @@ suite('ApnListItemTest', function() {
         eventData = await apnDetailsClickedEvent;
         assertEquals(TEST_APN_EVENT_DATA.apn.name, eventData.detail.apn.name);
         assertEquals(ApnDetailDialogMode.EDIT, eventData.detail.mode);
+        assertFalse(apnListItem.$.dotsMenu.open);
       });
 
   test('Test if disable/remove warning event is fired.', async function() {
@@ -263,6 +275,8 @@ suite('ApnListItemTest', function() {
         managedProps.result.typeProperties.cellular.customApnList[0].state);
     assertEquals(
         apnListItem.i18n('apnWarningPromptForDisableRemove'), eventData.detail);
+    assertFalse(apnListItem.$.dotsMenu.open);
+
     promptShowEvent = eventToPromise('show-error-toast', window);
     getRemoveButton().click();
     eventData = await promptShowEvent;
@@ -271,6 +285,7 @@ suite('ApnListItemTest', function() {
         1, managedProps.result.typeProperties.cellular.customApnList.length);
     assertEquals(
         apnListItem.i18n('apnWarningPromptForDisableRemove'), eventData.detail);
+    assertFalse(apnListItem.$.dotsMenu.open);
   });
 
   test('Test if enable warning event is fired.', async function() {
@@ -307,5 +322,6 @@ suite('ApnListItemTest', function() {
     assertEquals(
         `Can't enable this APN. Add a default APN to attach to.`,
         eventData.detail);
+    assertFalse(apnListItem.$.dotsMenu.open);
   });
 });

@@ -34,14 +34,19 @@ absl::optional<const base::Value::Dict*> GetConfigWithEnabledLevel(
 }  // namespace
 
 const char kToolsDlc[] = "termina-tools-dlc";
+const char kUefiDlc[] = "edk2-ovmf-dlc";
 
 const char kBruschettaVmName[] = "bru";
 const char kBruschettaDisplayName[] = "Bruschetta";
 
-const char kBiosPath[] = "Downloads/CROSVM_CODE.fd";
-const char kPflashPath[] = "Downloads/CROSVM_VARS.google.fd";
-
 const char kBruschettaPolicyId[] = "glinux-latest";
+
+const char kBruschettaInstallerDownloadStrategyFlag[] =
+    "bruschetta-installer-download-strategy";
+const char kBruschettaInstallerDownloadStrategySimpleURLLoader[] =
+    "SimpleURLLoader";
+const char kBruschettaInstallerDownloadStrategyDownloadService[] =
+    "DownloadService";
 
 const char* BruschettaResultString(const BruschettaResult res) {
 #define ENTRY(name)            \
@@ -51,7 +56,6 @@ const char* BruschettaResultString(const BruschettaResult res) {
     ENTRY(kUnknown);
     ENTRY(kSuccess);
     ENTRY(kDlcInstallError);
-    ENTRY(kBiosNotAccessible);
     ENTRY(kStartVmFailed);
     ENTRY(kTimeout);
     ENTRY(kForbiddenByPolicy);
@@ -103,6 +107,18 @@ base::flat_map<std::string, base::Value::Dict> GetInstallableConfigs(
   }
 
   return ret;
+}
+
+void SortInstallableConfigs(std::vector<InstallableConfig>* configs) {
+  auto GetDisplayOrder = [](const InstallableConfig& c) -> int {
+    return c.second.FindInt(bruschetta::prefs::kPolicyDisplayOrderKey)
+        .value_or(0);
+  };
+  std::sort(configs->begin(), configs->end(),
+            [&GetDisplayOrder](const InstallableConfig& a,
+                               const InstallableConfig& b) {
+              return GetDisplayOrder(a) < GetDisplayOrder(b);
+            });
 }
 
 bool IsInstalled(Profile* profile, const guest_os::GuestId& guest_id) {

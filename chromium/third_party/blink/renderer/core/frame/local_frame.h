@@ -59,6 +59,7 @@
 #include "third_party/blink/public/mojom/frame/sudden_termination_disabler_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom-blink.h"
 #include "third_party/blink/public/mojom/link_to_text/link_to_text.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/loader/resource_cache.mojom-blink-forward.h"
@@ -135,6 +136,7 @@ class InspectorIssueReporter;
 class InspectorTaskRunner;
 class InspectorTraceEvents;
 class InterfaceRegistry;
+class LCPCriticalPathPredictor;
 class LayoutView;
 class LocalDOMWindow;
 class LocalFrameClient;
@@ -297,6 +299,7 @@ class CORE_EXPORT LocalFrame final
   BackgroundColorPaintImageGenerator* GetBackgroundColorPaintImageGenerator();
   BoxShadowPaintImageGenerator* GetBoxShadowPaintImageGenerator();
   ClipPathPaintImageGenerator* GetClipPathPaintImageGenerator();
+  LCPCriticalPathPredictor* GetLCPP();
 
   // A local root is the root of a connected subtree that contains only
   // LocalFrames. The local root is responsible for coordinating input, layout,
@@ -378,7 +381,7 @@ class CORE_EXPORT LocalFrame final
   // If this frame doesn't need to fit into a page size, default values are
   // used.
   void StartPrinting(const gfx::SizeF& page_size = gfx::SizeF(),
-                     const gfx::SizeF& original_page_size = gfx::SizeF(),
+                     const gfx::SizeF& aspect_ratio = gfx::SizeF(),
                      float maximum_shrink_ratio = 0);
 
   void EndPrinting();
@@ -396,7 +399,13 @@ class CORE_EXPORT LocalFrame final
   void EnsureSaveScrollOffset(Node&);
   void RestoreScrollOffsets();
 
-  gfx::SizeF ResizePageRectsKeepingRatio(const gfx::SizeF& original_size,
+  // Return `expected_size` adjusted to the specified `aspect_ratio`. The
+  // logical width (inline-size) of `expected_size` will be kept unmodified [*],
+  // whereas the logical height (block-size) will be adjusted if needed, to
+  // honor the aspect ratio. The values returned are rounded down to the nearest
+  // integer.
+  // [*] Except that it's rounded down to the nearest integer.
+  gfx::SizeF ResizePageRectsKeepingRatio(const gfx::SizeF& aspect_ratio,
                                          const gfx::SizeF& expected_size) const;
 
   bool InViewSourceMode() const;
@@ -453,7 +462,7 @@ class CORE_EXPORT LocalFrame final
   // navigation at a later time.
   bool CanNavigate(const Frame&, const KURL& destination_url = KURL());
 
-  void WillPotentiallyStartOutermostMainFrameNavigation(const KURL& url) const;
+  void MaybeStartOutermostMainFrameNavigation(const Vector<KURL>& urls) const;
 
   // Whether a navigation should replace the current history entry or not.
   // Note this isn't exhaustive; there are other cases where a navigation does a
@@ -613,7 +622,14 @@ class CORE_EXPORT LocalFrame final
     return client_hints_preferences_;
   }
 
-  SmoothScrollSequencer& GetSmoothScrollSequencer();
+  // Creates a new scroll sequencer in preparation for starting a new scroll
+  // sequence. Returns the current scroll sequencer which can be reinstated if
+  // the new sequence shouldn't clobber it.
+  SmoothScrollSequencer* CreateNewSmoothScrollSequence();
+  void ReinstateSmoothScrollSequence(SmoothScrollSequencer*);
+  void FinishedScrollSequence();
+
+  SmoothScrollSequencer* GetSmoothScrollSequencer() const;
 
   mojom::blink::ReportingServiceProxy* GetReportingService();
 
@@ -632,6 +648,9 @@ class CORE_EXPORT LocalFrame final
       mojom::blink::BackForwardCacheNotRestoredReasonsPtr);
   const mojom::blink::BackForwardCacheNotRestoredReasonsPtr&
   GetNotRestoredReasons();
+
+  // Sets the LCPP Hint available at the navigation commit timing.
+  void SetLCPPHint(mojom::blink::LCPCriticalPathPredictorNavigationTimeHintPtr);
 
   const AtomicString& GetReducedAcceptLanguage() const {
     return reduced_accept_language_;
@@ -660,7 +679,7 @@ class CORE_EXPORT LocalFrame final
   bool IsHidden() const { return hidden_; }
 
   // Whether the frame clips its content to the frame's size.
-  bool ClipsContent(ScrollbarDisableReason* out_reason = nullptr) const;
+  bool ClipsContent() const;
 
   // For a navigation initiated from this LocalFrame with user gesture, record
   // the UseCounter AdClickNavigation if this frame is an adframe.
@@ -836,26 +855,28 @@ class CORE_EXPORT LocalFrame final
   // https://drafts.csswg.org/scroll-animations-1/#avoiding-cycles
   void UpdateScrollSnapshots();
 
-  // All newly created ScrollSnapshotClients are considered "unvalidated". This
-  // means that the internal state of the client is considered tentative, and
-  // computing the actual state may require an additional style/layout pass.
+  // Each ScrollSnapshotClients has their internal state updated at
+  // a specific point in the lifecycle (see call to UpdateSnapshot).
+  // Since this call takes place *before* layout, ScrollSnapshotClients also
+  // get an additional opportunity to update their state (see ValidateSnapshot).
   //
   // The lifecycle update will call this function after style and layout has
-  // completed. The function will then go though all unvalidated clients,
-  // and compare the current state snapshot to a fresh state snapshot. If they
-  // are equal, then the tentative state turned out to be correct, and no
-  // further action is needed. Otherwise, all effects targets associated with
-  // the client are marked for recalc, which causes the style/layout phase to
-  // run again.
+  // completed. The function will then go though all clients, and compare the
+  // current state snapshot to a fresh state snapshot. If they are equal, then
+  // no further action is needed. Otherwise, all effect targets associated
+  // with the client are marked for recalc, which causes the style/layout phase
+  // to run again.
   //
-  // Returns true if all client states are correct, otherwise returns false.
+  // Returns true if all client states are valid, otherwise returns false.
   //
   // https://github.com/w3c/csswg-drafts/issues/5261
   bool ValidateScrollSnapshotClients();
 
+  void ClearScrollSnapshotClients();
+
   const HeapHashSet<WeakMember<ScrollSnapshotClient>>&
-  GetUnvalidatedScrollSnapshotClientsForTesting() {
-    return unvalidated_scroll_snapshot_clients_;
+  GetScrollSnapshotClientsForTesting() {
+    return scroll_snapshot_clients_;
   }
 
   void ScheduleNextServiceForScrollSnapshotClients();
@@ -912,11 +933,11 @@ class CORE_EXPORT LocalFrame final
 
   // Internal implementation for starting or ending printing.
   // |printing| is true when printing starts, false when printing ends.
-  // |page_size|, |original_page_size|, and |maximum_shrink_ratio| are only
+  // |page_size|, |aspect_ratio|, and |maximum_shrink_ratio| are only
   // meaningful when we should use printing layout for this frame.
   void SetPrinting(bool printing,
                    const gfx::SizeF& page_size,
-                   const gfx::SizeF& original_page_size,
+                   const gfx::SizeF& aspect_ratio,
                    float maximum_shrink_ratio);
 
   // FrameScheduler::Delegate overrides:
@@ -1090,9 +1111,6 @@ class CORE_EXPORT LocalFrame final
   // be registered at the actual elements as the references here are weak.
   HeapHashSet<WeakMember<ScrollSnapshotClient>> scroll_snapshot_clients_;
 
-  HeapHashSet<WeakMember<ScrollSnapshotClient>>
-      unvalidated_scroll_snapshot_clients_;
-
   // Set lazily, when the browser asks to host a resource cache in this frame.
   Member<ResourceCacheImpl> resource_cache_;
 
@@ -1122,6 +1140,8 @@ class CORE_EXPORT LocalFrame final
   // synchronous commit and otherwise is signaled from the browser process at
   // ready-to-commit time.
   absl::optional<blink::FrameAdEvidence> ad_evidence_;
+
+  Member<LCPCriticalPathPredictor> lcpp_;
 
   // True if this frame is a frame that had a script tagged as an ad on the v8
   // stack at the time of creation. This is updated in `SetAdEvidence()`,

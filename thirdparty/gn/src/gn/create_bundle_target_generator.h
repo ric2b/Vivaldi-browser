@@ -40,6 +40,7 @@ class CreateBundleTargetGenerator : public TargetGenerator {
   bool FillCodeSigningArgs();
   bool FillBundleDepsFilter();
   bool FillXcassetCompilerFlags();
+  bool FillTransparent();
 
   CreateBundleTargetGenerator(const CreateBundleTargetGenerator&) = delete;
   CreateBundleTargetGenerator& operator=(const CreateBundleTargetGenerator&) =

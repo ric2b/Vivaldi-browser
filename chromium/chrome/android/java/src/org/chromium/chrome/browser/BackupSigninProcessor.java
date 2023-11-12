@@ -17,7 +17,7 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.signin.services.SigninManager.SignInCallback;
 import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridge;
-import org.chromium.chrome.browser.sync.SyncService;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
@@ -73,28 +73,26 @@ public final class BackupSigninProcessor {
     }
 
     private static void signinAndEnableSync(@NonNull Account account, Activity activity) {
-        IdentityServicesProvider.get()
-                .getSigninManager(Profile.getLastUsedRegularProfile())
-                .signinAndEnableSync(account,
-                        SigninAccessPoint.POST_DEVICE_RESTORE_BACKGROUND_SIGNIN,
-                        new SignInCallback() {
-                            @Override
-                            public void onSignInComplete() {
-                                UnifiedConsentServiceBridge
-                                        .setUrlKeyedAnonymizedDataCollectionEnabled(
-                                                Profile.getLastUsedRegularProfile(), true);
-                                SyncService.get().setFirstSetupComplete(
+        Profile profile = Profile.getLastUsedRegularProfile();
+        IdentityServicesProvider.get().getSigninManager(profile).signinAndEnableSync(account,
+                SigninAccessPoint.POST_DEVICE_RESTORE_BACKGROUND_SIGNIN, new SignInCallback() {
+                    @Override
+                    public void onSignInComplete() {
+                        UnifiedConsentServiceBridge.setUrlKeyedAnonymizedDataCollectionEnabled(
+                                profile, true);
+                        SyncServiceFactory.getForProfile(profile)
+                                .setInitialSyncFeatureSetupComplete(
                                         SyncFirstSetupCompleteSource.ANDROID_BACKUP_RESTORE);
-                                setBackupFlowSigninComplete();
-                            }
+                        setBackupFlowSigninComplete();
+                    }
 
-                            @Override
-                            public void onSignInAborted() {
-                                // If sign-in failed, give up and mark as complete.
-                                // TODO(crbug.com/1371130): Measure how often this happens.
-                                setBackupFlowSigninComplete();
-                            }
-                        });
+                    @Override
+                    public void onSignInAborted() {
+                        // If sign-in failed, give up and mark as complete.
+                        // TODO(crbug.com/1371130): Measure how often this happens.
+                        setBackupFlowSigninComplete();
+                    }
+                });
     }
 
     /**
@@ -103,12 +101,6 @@ public final class BackupSigninProcessor {
     private static void setBackupFlowSigninComplete() {
         SharedPreferencesManager.getInstance().removeKey(
                 ChromePreferenceKeys.BACKUP_FLOW_SIGNIN_ACCOUNT_NAME);
-        // The FRE and backup background sign-ins used to mark completion via the same pref.
-        // Keep writing this pref for a while to support rollbacks, i.e. so background sign-ins
-        // don't suddently trigger because the pref isn't set.
-        // TODO(crbug.com/1318463): Remove after crrev.com/c/3870839 reaches stable safely.
-        SharedPreferencesManager.getInstance().writeBoolean(
-                ChromePreferenceKeys.LEGACY_FIRST_RUN_AND_BACKUP_SIGNIN_COMPLETE, true);
     }
 
     /**

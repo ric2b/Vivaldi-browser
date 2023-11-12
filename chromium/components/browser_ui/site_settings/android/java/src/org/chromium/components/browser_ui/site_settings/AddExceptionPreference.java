@@ -14,8 +14,6 @@ import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.os.Vibrator;
 import android.provider.Settings;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
@@ -33,7 +31,9 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.CheckBoxWithDescription;
 import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.ui.KeyboardVisibilityDelegate;
+import org.chromium.ui.text.EmptyTextWatcher;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -137,7 +137,7 @@ public class AddExceptionPreference
         } else if (mCategory.getType() == SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE) {
             // Default to domain level setting for Request Desktop Site.
             checkBox.setChecked(true);
-            if (ContentFeatureList.getFieldTrialParamByFeatureAsBoolean(
+            if (ContentFeatureMap.getInstance().getFieldTrialParamByFeatureAsBoolean(
                         ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS,
                         PARAM_SUBDOMAIN_SETTINGS, true)) {
                 checkBox.setVisibility(View.VISIBLE);
@@ -186,13 +186,7 @@ public class AddExceptionPreference
         final Button okButton = alertDialog.getButton(AlertDialog.BUTTON_POSITIVE);
         okButton.setEnabled(false);
 
-        input.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void afterTextChanged(Editable s) {}
-
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
+        input.addTextChangedListener(new EmptyTextWatcher() {
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 // The intent is to capture a url pattern and register it as an exception.

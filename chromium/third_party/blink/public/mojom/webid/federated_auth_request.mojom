@@ -4,6 +4,7 @@
 
 module blink.mojom;
 
+import "third_party/blink/public/mojom/credentialmanagement/credential_manager.mojom";
 import "url/mojom/url.mojom";
 import "url/mojom/origin.mojom";
 
@@ -29,7 +30,6 @@ enum RequestTokenStatus {
 // the error message of such exception should say.
 enum RequestUserInfoStatus {
   kSuccess,
-  kErrorTooManyRequests,
   kError,
 };
 
@@ -134,9 +134,6 @@ struct IdentityProviderGetParameters {
   // Details of identity provider(s).
   array<IdentityProvider> providers;
 
-  // Whether auto re-authn is enabled by the caller.
-  bool auto_reauthn;
-
   // Controls the wording of the FedCM prompt.
   // TODO(crbug.com/1335237): consider moving this up to IdentityProviderConfig
   // when/if we support the Context API for Multiple IdPs at a time.
@@ -155,7 +152,8 @@ interface FederatedAuthRequest {
   //   A null URL is returned if the token request failed or did not occur due
   //   to an error earlier in the flow.
   // - Raw content of the token.
-  RequestToken(array<IdentityProviderGetParameters> idp_get_params) =>
+  RequestToken(array<IdentityProviderGetParameters> idp_get_params,
+      CredentialMediationRequirement requirement) =>
       (RequestTokenStatus status,
       url.mojom.Url? selected_identity_provider_config_url,
       string? token);
@@ -167,6 +165,11 @@ interface FederatedAuthRequest {
 
   // Cancels the pending token request, if any.
   CancelTokenRequest();
+
+  // Resolve the token request from a JS call from a WebView dialog,
+  // when the id_assertion_endpoint returns a continue_on rather than the
+  // actual token.
+  ResolveTokenRequest(string token) => (bool success);
 
   // Contact the list of Relying Party logout endpoints and account IDs to
   // attempt to initiate user logout.
@@ -180,4 +183,15 @@ interface FederatedAuthRequest {
 
   // Unregisters the url as an IdP's configURL of the user's preference.
   UnregisterIdP(url.mojom.Url url) => (bool success);
+
+  // Closes the modal dialog view, if any.
+  CloseModalDialogView();
+
+  // Require user mediation with navigator.credentials.preventSilentAccess() as
+  // defined in https://w3c.github.io/webappsec-credential-management/#user-mediation
+  // TODO(https://crbug.com/1441075): There's `PreventSilentAccess` in
+  // credential_manager.mojom but that's specific to PasswordManager and it's
+  // hard to reuse it as-is. We should unify the implementation for different
+  // CredentialTypes and avoid the duplication eventually.
+  PreventSilentAccess() => ();
 };

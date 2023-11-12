@@ -7,8 +7,8 @@
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "sync/file_sync/file_store_factory.h"
 #include "sync/file_sync/file_store.h"
+#include "sync/file_sync/file_store_factory.h"
 #include "sync/notes/note_sync_service.h"
 
 namespace vivaldi {
@@ -35,7 +35,8 @@ NoteSyncServiceFactory::~NoteSyncServiceFactory() {}
 
 KeyedService* NoteSyncServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  return new sync_notes::NoteSyncService(SyncedFileStoreFactory::GetForBrowserContext(context));
+  return new sync_notes::NoteSyncService(
+      SyncedFileStoreFactory::GetForBrowserContext(context), false);
 }
 
 content::BrowserContext* NoteSyncServiceFactory::GetBrowserContextToUse(

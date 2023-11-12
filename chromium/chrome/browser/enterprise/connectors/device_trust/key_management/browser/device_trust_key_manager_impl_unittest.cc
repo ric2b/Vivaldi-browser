@@ -9,6 +9,7 @@
 #include "base/barrier_closure.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
@@ -137,7 +138,7 @@ class DeviceTrustKeyManagerImplTest : public testing::Test {
       absl::optional<int> response = kSuccessUploadCode) {
     EXPECT_CALL(*mock_launcher_, SynchronizePublicKey(_, _))
         .WillOnce(Invoke(
-            [response](const SigningKeyPair& key_pair,
+            [response](scoped_refptr<SigningKeyPair> key_pair,
                        KeyRotationLauncher::SynchronizationCallback callback) {
               std::move(callback).Run(response);
             }));
@@ -166,7 +167,8 @@ class DeviceTrustKeyManagerImplTest : public testing::Test {
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
 
-  raw_ptr<StrictMock<MockKeyRotationLauncher>> mock_launcher_;
+  raw_ptr<StrictMock<MockKeyRotationLauncher>, DanglingUntriaged>
+      mock_launcher_;
 
   std::unique_ptr<DeviceTrustKeyManagerImpl> key_manager_;
 };
@@ -184,6 +186,22 @@ TEST_F(DeviceTrustKeyManagerImplTest, Initialization_WithPersistedKey) {
   EXPECT_FALSE(key_metadata->permanent_failure);
 
   EXPECT_FALSE(key_manager()->HasPermanentFailure());
+}
+
+// Tests that StartInitialization will load a key and not trigger key creation
+// if key loading was successful.
+TEST_F(DeviceTrustKeyManagerImplTest, SignString_HardwareKey) {
+  InitializeWithKey();
+  EXPECT_FALSE(key_manager()->HasPermanentFailure());
+
+  base::test::TestFuture<absl::optional<std::vector<uint8_t>>> sign_future;
+  key_manager()->SignStringAsync("test string", sign_future.GetCallback());
+
+  EXPECT_TRUE(sign_future.Get());
+
+  static constexpr char kSignatureHistogramHw[] =
+      "Enterprise.DeviceTrust.Key.Signing.Latency.Hardware";
+  histogram_tester_->ExpectTotalCount(kSignatureHistogramHw, 1);
 }
 
 // Tests that:

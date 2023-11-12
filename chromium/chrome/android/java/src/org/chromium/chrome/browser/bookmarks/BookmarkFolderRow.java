@@ -10,9 +10,8 @@ import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.widget.ImageView;
 
-import androidx.appcompat.content.res.AppCompatResources;
-
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
@@ -42,7 +41,8 @@ public class BookmarkFolderRow extends BookmarkRow {
         super(context, attrs);
 
         if (!ChromeApplicationImpl.isVivaldi())
-        setIconDrawable(BookmarkUtils.getFolderIcon(getContext(), BookmarkType.NORMAL));
+        setIconDrawable(BookmarkUtils.getFolderIcon(
+                getContext(), BookmarkType.NORMAL, BookmarkRowDisplayPref.COMPACT));
     }
 
     // BookmarkRow implementation.
@@ -57,24 +57,8 @@ public class BookmarkFolderRow extends BookmarkRow {
             BookmarkId bookmarkId, @Location int location, boolean fromFilterView) {
         BookmarkItem item = super.setBookmarkId(bookmarkId, location, fromFilterView);
         mTitleView.setText(item.getTitle());
-
-        // Set description and icon.
-        if (item.getId().getType() == BookmarkType.READING_LIST) {
-            int unreadCount = mDelegate.getModel().getUnreadCount(bookmarkId);
-            mDescriptionView.setText(unreadCount > 0
-                            ? getResources().getQuantityString(
-                                    R.plurals.reading_list_unread_page_count, unreadCount,
-                                    unreadCount)
-                            : getResources().getString(R.string.reading_list_no_unread_pages));
-        } else {
-            int childCount = mDelegate.getModel().getTotalBookmarkCount(bookmarkId);
-            if (ChromeApplicationImpl.isVivaldi())
-                childCount = mDelegate.getModel().getChildCountWithoutSeparators(bookmarkId);
-            mDescriptionView.setText((childCount > 0)
-                            ? getResources().getQuantityString(
-                                    R.plurals.bookmarks_count, childCount, childCount)
-                            : getResources().getString(R.string.no_bookmarks));
-        }
+        mDescriptionView.setText(BookmarkUtils.getFolderDescriptionText(
+                bookmarkId, mDelegate.getModel(), getContext().getResources()));
 
         if (ChromeApplicationImpl.isVivaldi()) {
             if (bookmarkId.equals(mDelegate.getModel().getTrashFolderId())) {
@@ -85,7 +69,8 @@ public class BookmarkFolderRow extends BookmarkRow {
             }
         }
         else {
-        setIconDrawable(BookmarkUtils.getFolderIcon(getContext(), item.getId().getType()));
+        setIconDrawable(BookmarkUtils.getFolderIcon(
+                getContext(), item.getId().getType(), BookmarkRowDisplayPref.COMPACT));
         }
         return item;
     }
@@ -100,8 +85,7 @@ public class BookmarkFolderRow extends BookmarkRow {
         if (ChromeApplicationImpl.isVivaldi())
             return null;
         else
-        return AppCompatResources.getColorStateList(
-                getContext(), BookmarkUtils.getFolderIconTint(type));
+        return BookmarkUtils.getFolderIconTint(getContext(), type);
     }
 
     /**

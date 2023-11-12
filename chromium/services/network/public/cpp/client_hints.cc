@@ -4,10 +4,10 @@
 
 #include "services/network/public/cpp/client_hints.h"
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
-#include "base/cxx17_backports.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
@@ -59,7 +59,6 @@ ClientHintToNameMap MakeClientHintToNameMap() {
       {network::mojom::WebClientHintsType::kPrefersColorScheme,
        "sec-ch-prefers-color-scheme"},
       {network::mojom::WebClientHintsType::kUABitness, "sec-ch-ua-bitness"},
-      {network::mojom::WebClientHintsType::kUAReduced, "sec-ch-ua-reduced"},
       {network::mojom::WebClientHintsType::kViewportHeight,
        "sec-ch-viewport-height"},
       {network::mojom::WebClientHintsType::kDeviceMemory,
@@ -70,7 +69,6 @@ ClientHintToNameMap MakeClientHintToNameMap() {
        "sec-ch-viewport-width"},
       {network::mojom::WebClientHintsType::kUAFullVersionList,
        "sec-ch-ua-full-version-list"},
-      {network::mojom::WebClientHintsType::kFullUserAgent, "sec-ch-ua-full"},
       {network::mojom::WebClientHintsType::kUAWoW64, "sec-ch-ua-wow64"},
       {network::mojom::WebClientHintsType::kSaveData, "save-data"},
       {network::mojom::WebClientHintsType::kPrefersReducedMotion,

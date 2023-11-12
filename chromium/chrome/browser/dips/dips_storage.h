@@ -36,7 +36,10 @@ class DIPSStorage {
                     network::mojom::ClearDataFilterPtr filter,
                     const DIPSEventRemovalType type);
 
+  // Delete all DB rows for |sites|.
   void RemoveRows(const std::vector<std::string>& sites);
+  // Delete all DB rows for |sites| without eligible user interactions.
+  void RemoveRowsWithoutInteraction(const std::set<std::string>& sites);
 
   // DIPS Helper Method Impls --------------------------------------------------
 
@@ -56,16 +59,16 @@ class DIPSStorage {
 
   // Returns all sites that did a bounce that aren't protected from DIPS.
   std::vector<std::string> GetSitesThatBounced(
-      const base::TimeDelta& grace_period) const;
+      base::TimeDelta grace_period) const;
 
   // Returns all sites that did a stateful bounce that aren't protected from
   // DIPS.
   std::vector<std::string> GetSitesThatBouncedWithState(
-      const base::TimeDelta& grace_period) const;
+      base::TimeDelta grace_period) const;
 
   // Returns all sites which use storage that aren't protected from DIPS.
   std::vector<std::string> GetSitesThatUsedStorage(
-      const base::TimeDelta& grace_period) const;
+      base::TimeDelta grace_period) const;
 
   // Returns the list of sites that should have their state cleared by DIPS. How
   // these sites are determined is controlled by the value of
@@ -73,6 +76,9 @@ class DIPSStorage {
   // overrides the use of `dips::kGracePeriod` when evaluating sites to clear.
   std::vector<std::string> GetSitesToClear(
       absl::optional<base::TimeDelta> grace_period) const;
+
+  // Returns true if `url`'s site has had user interaction since `bound`.
+  bool DidSiteHaveInteractionSince(const GURL& url, base::Time bound);
 
   // Utility Methods -----------------------------------------------------------
 

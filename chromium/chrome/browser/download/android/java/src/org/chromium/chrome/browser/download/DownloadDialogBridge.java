@@ -49,7 +49,6 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
  * Glues download dialogs UI code and handles the communication to download native backend.
  */
 public class DownloadDialogBridge implements DownloadLocationDialogController {
-    private static final long INVALID_START_TIME = -1;
     private long mNativeDownloadDialogBridge;
 
     private final DownloadLocationDialogCoordinator mLocationDialog;
@@ -188,8 +187,7 @@ public class DownloadDialogBridge implements DownloadLocationDialogController {
     /**
      * @return The status of prompt for download pref, defined by {@link DownloadPromptStatus}.
      */
-    @DownloadPromptStatus
-    public static int getPromptForDownloadAndroid() {
+    public static @DownloadPromptStatus int getPromptForDownloadAndroid() {
         return getPrefService().getInteger(Pref.PROMPT_FOR_DOWNLOAD_ANDROID);
     }
 

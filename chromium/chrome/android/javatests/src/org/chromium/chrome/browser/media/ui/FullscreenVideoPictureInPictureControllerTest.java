@@ -9,8 +9,8 @@ import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_E
 import android.os.Build;
 
 import androidx.annotation.RequiresApi;
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -104,6 +104,13 @@ public class FullscreenVideoPictureInPictureControllerTest {
     public void testEnterPip() throws Throwable {
         enterFullscreen();
         triggerAutoPiPAndWait();
+
+        // Exit Picture in Picture.
+        AsyncInitializationActivity.interceptMoveTaskToBackForTesting();
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> InstrumentationRegistry.getInstrumentation().callActivityOnStop(mActivity));
+        CriteriaHelper.pollUiThread(
+                AsyncInitializationActivity::wasMoveTaskToBackInterceptedForTesting);
     }
 
     /** Tests that PiP is left when we navigate the main page. */
@@ -277,5 +284,30 @@ public class FullscreenVideoPictureInPictureControllerTest {
         public void onDidFinishNavigationInPrimaryMainFrame(Tab tab, NavigationHandle navigation) {
             mNavigationOccurred = true;
         }
+    }
+
+    /** Tests that we exit PiP whe device is locked. */
+    @Test
+    @MediumTest
+    @MinAndroidSdkLevel(Build.VERSION_CODES.O)
+    public void testExitPipWhenDeviceLocked() throws Throwable {
+        AsyncInitializationActivity.interceptMoveTaskToBackForTesting();
+        enterFullscreen();
+        triggerAutoPiPAndWait();
+
+        // Ensure that we entered Picture in Picture.
+        Assert.assertTrue(
+                TestThreadUtils.runOnUiThreadBlocking(mActivity::isInPictureInPictureMode));
+
+        // Call activity OnStop. This simulates user locking the device.
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> InstrumentationRegistry.getInstrumentation().callActivityOnStop(mActivity));
+
+        CriteriaHelper.pollUiThread(
+                AsyncInitializationActivity::wasMoveTaskToBackInterceptedForTesting);
+        // This logic would run if we hadn't intercepted moveTaskToBack (which is how PiP gets
+        // exited), we run it now for completion and proceed to ensure we exited Picture in Picture.
+        mActivity.onPictureInPictureModeChanged(false, mActivity.getResources().getConfiguration());
+        CriteriaHelper.pollUiThread(() -> !mActivity.getLastPictureInPictureModeForTesting());
     }
 }

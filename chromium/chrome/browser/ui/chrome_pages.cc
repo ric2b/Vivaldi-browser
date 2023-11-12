@@ -32,6 +32,8 @@
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/user_education/user_education_service.h"
+#include "chrome/browser/ui/user_education/user_education_service_factory.h"
 #include "chrome/browser/ui/webui/bookmarks/bookmarks_ui.h"
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/common/chrome_features.h"
@@ -92,9 +94,8 @@ void FocusWebContents(Browser* browser) {
 // ignoring the URL path, then that tab becomes selected. Overwrites the new tab
 // page if it is open.
 void ShowSingletonTabIgnorePathOverwriteNTP(Browser* browser, const GURL& url) {
-  NavigateParams params(GetSingletonTabNavigateParams(browser, url));
-  params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(browser, &params);
+  ShowSingletonTabOverwritingNTP(browser, url,
+                                 NavigateParams::IGNORE_AND_NAVIGATE);
 }
 
 void OpenBookmarkManagerForNode(Browser* browser, int64_t node_id) {
@@ -172,12 +173,11 @@ void ShowHelpImpl(Browser* browser, Profile* profile, HelpSource source) {
       NOTREACHED() << "Unhandled help source " << source;
   }
 #endif  // BUILDFLAG_IS_CHROMEOS_LACROS)
-  std::unique_ptr<ScopedTabbedBrowserDisplayer> displayer;
-  if (!browser) {
-    displayer = std::make_unique<ScopedTabbedBrowserDisplayer>(profile);
-    browser = displayer->browser();
+  if (browser) {
+    ShowSingletonTab(browser, url);
+  } else {
+    ShowSingletonTab(profile, url);
   }
-  ShowSingletonTab(browser, url);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 
@@ -192,14 +192,17 @@ std::string GenerateContentSettingsExceptionsSubPage(ContentSettingsType type) {
   // will no longer be needed.
 
   static constexpr auto kSettingsPathOverrides =
-      base::MakeFixedFlatMap<ContentSettingsType, base::StringPiece>(
-          {{ContentSettingsType::AUTOMATIC_DOWNLOADS, "automaticDownloads"},
-           {ContentSettingsType::BACKGROUND_SYNC, "backgroundSync"},
-           {ContentSettingsType::MEDIASTREAM_MIC, "microphone"},
-           {ContentSettingsType::MEDIASTREAM_CAMERA, "camera"},
-           {ContentSettingsType::MIDI_SYSEX, "midiDevices"},
-           {ContentSettingsType::ADS, "ads"},
-           {ContentSettingsType::HID_CHOOSER_DATA, "hidDevices"}});
+      base::MakeFixedFlatMap<ContentSettingsType, base::StringPiece>({
+          {ContentSettingsType::AUTOMATIC_DOWNLOADS, "automaticDownloads"},
+          {ContentSettingsType::BACKGROUND_SYNC, "backgroundSync"},
+          {ContentSettingsType::MEDIASTREAM_MIC, "microphone"},
+          {ContentSettingsType::MEDIASTREAM_CAMERA, "camera"},
+          {ContentSettingsType::MIDI_SYSEX, "midiDevices"},
+          {ContentSettingsType::ADS, "ads"},
+          {ContentSettingsType::HID_CHOOSER_DATA, "hidDevices"},
+          {ContentSettingsType::STORAGE_ACCESS, "storageAccess"},
+      });
+
   const auto* it = kSettingsPathOverrides.find(type);
 
   return base::StrCat({kContentSettingsSubPage, "/",
@@ -241,9 +244,7 @@ void ShowSystemAppInternal(Profile* profile, const ash::SystemWebAppType type) {
 }
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
 void ShowSystemAppInternal(Profile* profile, const GURL& url) {
-  std::unique_ptr<ScopedTabbedBrowserDisplayer> displayer =
-      std::make_unique<ScopedTabbedBrowserDisplayer>(profile);
-  ShowSingletonTab(displayer->browser(), url);
+  ShowSingletonTab(profile, url);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -289,10 +290,7 @@ void ShowDownloads(Browser* browser) {
   base::RecordAction(UserMetricsAction("ShowDownloads"));
   if (browser->window() && browser->window()->IsDownloadShelfVisible())
     browser->window()->GetDownloadShelf()->Close();
-
-  NavigateParams params(
-      GetSingletonTabNavigateParams(browser, GURL(kChromeUIDownloadsURL)));
-  ShowSingletonTabOverwritingNTP(browser, &params);
+  ShowSingletonTabOverwritingNTP(browser, GURL(kChromeUIDownloadsURL));
 }
 
 void ShowExtensions(Browser* browser,
@@ -336,10 +334,6 @@ void LaunchReleaseNotes(Profile* profile, apps::LaunchSource source) {
 
 void ShowBetaForum(Browser* browser) {
   ShowSingletonTab(browser, GURL(kChromeBetaForumURL));
-}
-
-void ShowPolicy(Browser* browser) {
-  ShowSingletonTab(browser, GURL(kChromeUIPolicyURL));
 }
 
 void ShowSlow(Browser* browser) {
@@ -441,6 +435,18 @@ void ShowPasswordManager(Browser* browser) {
   base::RecordAction(UserMetricsAction("Options_ShowPasswordManager"));
   if (base::FeatureList::IsEnabled(
           password_manager::features::kPasswordManagerRedesign)) {
+    // This code is necessary to fix a bug (crbug.com/1448559) during Password
+    // Manager Shortcut tutorial flow.
+    auto* service =
+        UserEducationServiceFactory::GetForProfile(browser->profile());
+    if (service) {
+      auto* tutorial_service = &service->tutorial_service();
+      if (tutorial_service &&
+          tutorial_service->IsRunningTutorial(kPasswordManagerTutorialId)) {
+        ShowSingletonTab(browser, GURL(kChromeUIPasswordManagerSettingsURL));
+        return;
+      }
+    }
     ShowSingletonTabIgnorePathOverwriteNTP(browser,
                                            GURL(kChromeUIPasswordManagerURL));
   } else {
@@ -473,9 +479,7 @@ void ShowAboutChrome(Browser* browser) {
   base::RecordAction(UserMetricsAction("AboutChrome"));
   if (vivaldi::IsVivaldiRunning()) {
     // Use kChromeUIVersionURL which gets mapped into our regular About page.
-    NavigateParams params(
-        GetSingletonTabNavigateParams(browser, GURL(kChromeUIVersionURL)));
-    ShowSingletonTabOverwritingNTP(browser, &params);
+    ShowSingletonTabOverwritingNTP(browser, GURL(kChromeUIVersionURL));
   } else {
   ShowSingletonTabIgnorePathOverwriteNTP(browser, GURL(kChromeUIHelpURL));
   }
@@ -486,11 +490,10 @@ void ShowSearchEngineSettings(Browser* browser) {
   ShowSettingsSubPage(browser, kSearchEnginesSubPage);
 }
 
-void ShowWebStoreFromAppMenu(Browser* browser) {
+void ShowWebStore(Browser* browser, const base::StringPiece& utm_source_value) {
   ShowSingletonTabIgnorePathOverwriteNTP(
-      browser,
-      extension_urls::AppendUtmSource(extension_urls::GetWebstoreLaunchURL(),
-                                      extension_urls::kAppMenuUtmSource));
+      browser, extension_urls::AppendUtmSource(
+                   extension_urls::GetWebstoreLaunchURL(), utm_source_value));
 }
 
 void ShowPrivacySandboxSettings(Browser* browser) {
@@ -625,56 +628,6 @@ void ShowShortcutCustomizationApp(Profile* profile) {
   ShowSystemAppInternal(profile, GURL(kOsUIShortcutCustomizationAppURL));
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
-
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-// SigninViewController::ShowSignin is only available with DICE
-void ShowBrowserSignin(Browser* browser,
-                       signin_metrics::AccessPoint access_point,
-                       signin::ConsentLevel consent_level) {
-  Profile* original_profile = browser->profile()->GetOriginalProfile();
-  DCHECK(original_profile->GetPrefs()->GetBoolean(prefs::kSigninAllowed));
-
-  // NOTE(pettern@vivaldi.com): Disable the modal login dialog for Chrome that
-  // is used as a fallback. See the comments below.
-  if (vivaldi::IsVivaldiRunning())
-    return;
-
-  // If the browser's profile is an incognito profile, make sure to use
-  // a browser window from the original profile. The user cannot sign in
-  // from an incognito window.
-  auto displayer =
-      std::make_unique<ScopedTabbedBrowserDisplayer>(original_profile);
-  browser = displayer->browser();
-
-  profiles::BubbleViewMode bubble_view_mode;
-  if (IdentityManagerFactory::GetForProfile(original_profile)
-          ->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
-    bubble_view_mode = profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH;
-  } else {
-    switch (consent_level) {
-      case signin::ConsentLevel::kSync:
-        bubble_view_mode = profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN;
-        break;
-      case signin::ConsentLevel::kSignin:
-        bubble_view_mode = profiles::BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT;
-        break;
-    }
-  }
-
-  browser->signin_view_controller()->ShowSignin(bubble_view_mode, access_point);
-}
-
-void ShowBrowserSigninOrSettings(Browser* browser,
-                                 signin_metrics::AccessPoint access_point) {
-  Profile* original_profile = browser->profile()->GetOriginalProfile();
-  DCHECK(original_profile->GetPrefs()->GetBoolean(prefs::kSigninAllowed));
-  if (IdentityManagerFactory::GetForProfile(original_profile)
-          ->HasPrimaryAccount(signin::ConsentLevel::kSync))
-    ShowSettings(browser);
-  else
-    ShowBrowserSignin(browser, access_point, signin::ConsentLevel::kSync);
-}
-#endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_FUCHSIA)

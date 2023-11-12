@@ -5,15 +5,22 @@
 #include "ash/system/phonehub/app_stream_launcher_list_item.h"
 
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/style_util.h"
+#include "ash/style/typography.h"
 #include "base/hash/hash.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "ui/color/color_id.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/border.h"
+#include "ui/views/controls/focus_ring.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/layout/flex_layout.h"
 
 namespace ash {
@@ -22,9 +29,25 @@ namespace {
 
 constexpr int kEcheAppListItemHeight = 40;
 constexpr int kEcheAppLIstItemIconSize = 32;
-constexpr double kAlphaValueForInhibitedIconOpacity = 0.3;
+constexpr double kAlphaValueForInhibitedIconOpacity = 0.38;
 
 }  // namespace
+
+AppStreamLauncherListItem::AppButton::AppButton(
+    views::LabelButton::PressedCallback callback,
+    const std::u16string& text)
+    : views::LabelButton(std::move(callback), text) {
+  if (chromeos::features::IsJellyrollEnabled()) {
+    TypographyProvider::Get()->StyleLabel(ash::TypographyToken::kCrosBody2,
+                                          *label());
+  }
+}
+
+AppStreamLauncherListItem::AppButton::~AppButton() = default;
+
+const char* AppStreamLauncherListItem::AppButton::GetClassName() const {
+  return "AppStreamLauncherListItemAppButton";
+}
 
 AppStreamLauncherListItem::AppStreamLauncherListItem(
     views::LabelButton::PressedCallback callback,
@@ -45,8 +68,8 @@ AppStreamLauncherListItem::AppStreamLauncherListItem(
 
   std::u16string accessible_name = GetAppAccessibleName(app_metadata);
 
-  app_button_ = AddChildView(std::make_unique<views::LabelButton>(
-      callback, app_metadata.visible_app_name));
+  app_button_ = AddChildView(
+      std::make_unique<AppButton>(callback, app_metadata.visible_app_name));
 
   gfx::ImageSkia resized_app_icon =
       gfx::ImageSkiaOperations::CreateResizedImage(
@@ -58,12 +81,20 @@ AppStreamLauncherListItem::AppStreamLauncherListItem(
                         resized_app_icon);
 
   // Fade the image in order to make it look like grayed out.
-  // TODO(b/261916553): Make grayed out icons "gray" in
-  // addition to 30% transparent.
   app_button_->SetImage(
       views::Button::ButtonState::STATE_DISABLED,
       gfx::ImageSkiaOperations::CreateTransparentImage(
           resized_app_icon, kAlphaValueForInhibitedIconOpacity));
+
+  if (chromeos::features::IsJellyrollEnabled()) {
+    ash::StyleUtil::SetUpInkDropForButton(app_button_.get(), gfx::Insets(),
+                                          /*highlight_on_hover=*/false,
+                                          /*highlight_on_focus=*/true);
+    views::FocusRing::Get(app_button_.get())
+        ->SetColorId(static_cast<ui::ColorId>(cros_tokens::kCrosSysFocusRing));
+    views::InstallRectHighlightPathGenerator(app_button_.get());
+  }
+
   app_button_->SetTooltipText(accessible_name);
   app_button_->SetEnabled(is_enabled);
 }

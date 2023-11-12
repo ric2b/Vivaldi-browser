@@ -110,8 +110,6 @@ void ProcessFileUpload(base::WeakPtr<FileUploadJob::Delegate> delegate,
       }
       // Check whether this upload is already being processed, based on the
       // whole `upload_settings` (including retry count).
-      const auto settings = log_upload_event.upload_settings();
-      const auto tracker = log_upload_event.upload_tracker();
       FileUploadJob::Manager::GetInstance()->Register(
           priority, std::move(record_copy), std::move(log_upload_event),
           delegate,
@@ -594,25 +592,5 @@ void RecordHandlerImpl::HandleRecords(
       delegate, need_encryption_key, std::move(records),
       std::move(scoped_reservation), std::move(upload_complete_cb),
       std::move(encryption_key_attached_cb), sequenced_task_runner_);
-}
-
-// static
-void RecordHandlerImpl::AddRecordToStorage(
-    Priority priority,
-    Record record_copy,
-    base::OnceCallback<void(Status)> done_cb) {
-  ReportingClient::GetInstance()->sequenced_task_runner()->PostTask(
-      FROM_HERE, base::BindOnce(
-                     [](Priority priority, Record record_copy,
-                        base::OnceCallback<void(Status)> done_cb) {
-                       // We can only get to here from upload, which originates
-                       // from Storage Module, so `storage()` below cannot be
-                       // null.
-                       DCHECK(ReportingClient::GetInstance()->storage());
-                       ReportingClient::GetInstance()->storage()->AddRecord(
-                           priority, std::move(record_copy),
-                           std::move(done_cb));
-                     },
-                     priority, std::move(record_copy), std::move(done_cb)));
 }
 }  // namespace reporting

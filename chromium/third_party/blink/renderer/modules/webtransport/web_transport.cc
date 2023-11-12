@@ -295,8 +295,8 @@ class WebTransport::DatagramUnderlyingSource final
 
   ScriptPromise Cancel(v8::Local<v8::Value> reason, ExceptionState&) override {
     uint8_t code = 0;
-    WebTransportError* exception = V8WebTransportError::ToImplWithTypeCheck(
-        script_state_->GetIsolate(), reason);
+    WebTransportError* exception =
+        V8WebTransportError::ToWrappable(script_state_->GetIsolate(), reason);
     if (exception) {
       code = exception->streamErrorCode().value_or(0);
     }
@@ -1154,6 +1154,13 @@ void WebTransport::Init(const String& url_for_diagnostics,
                         ExceptionState& exception_state) {
   DVLOG(1) << "WebTransport::Init() url=" << url_for_diagnostics
            << " this=" << this;
+  // This is an intentional spec violation due to our limited support for
+  // detached realms.
+  if (!script_state_->ContextIsValid()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Frame is detached.");
+    return;
+  }
   if (!url_.IsValid()) {
     // Do not use `url_` in the error message, since we want to display the
     // original URL and not the canonicalized version stored in `url_`.
@@ -1242,10 +1249,19 @@ void WebTransport::Init(const String& url_for_diagnostics,
   }
 
   if (auto* scheduler = execution_context->GetScheduler()) {
+    // Two features are registered with `DisableBackForwardCache` policy here:
+    // - `kWebTransport`: a non-sticky feature that will disable BFCache for any
+    // page. It will be reset after the `WebTransport` is disposed.
+    // - `kWebTransportSticky`: a sticky feature that will only disable BFCache
+    // for the page containing "Cache-Control: no-store" header. It won't be
+    // reset even if the `WebTransport` is disposed.
     feature_handle_for_scheduler_ = scheduler->RegisterFeature(
         SchedulingPolicy::Feature::kWebTransport,
         SchedulingPolicy{SchedulingPolicy::DisableAggressiveThrottling(),
                          SchedulingPolicy::DisableBackForwardCache()});
+    scheduler->RegisterStickyFeature(
+        SchedulingPolicy::Feature::kWebTransportSticky,
+        SchedulingPolicy{SchedulingPolicy::DisableBackForwardCache()});
   }
 
   if (DoesSubresourceFilterBlockConnection(url_)) {

@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">Op inhoud</translation>
 <translation id="2129408066358825297">Leeftijd</translation>
 <translation id="2148384276939959392">Selectie synchroniseren</translation>
+<translation id="21693288559538605">Samenvatting Reclame- en traceringsfilter</translation>
 <translation id="2195713384412091023">Hiermee worden alle synchronisatiegegevens van onze server verwijderd, het coderingswachtwoord gewist en je wordt uitgelogd.</translation>
 <translation id="2243210264130642074">Notitie opgeslagen</translation>
 <translation id="2272338747456392228">Account is vergrendeld</translation>
 <translation id="2273327106802955778">Menu Meer</translation>
 <translation id="2324160330092901720">Een verificatiecode is verzonden naar <ph name="EMAIL_ID" /></translation>
+<translation id="2336309953058658733">Prullenbak legen</translation>
 <translation id="2359808026110333948">Doorgaan</translation>
 <translation id="2386793615875593361">1 geselecteerd</translation>
 <translation id="2388224692799337242">Zodra je begint met browsen, verschijnt hier jouw geschiedenis</translation>
@@ -117,6 +119,7 @@ geblokkeerd</translation>
 <translation id="3699026013955941879">De code is verlopen. Vraag een nieuwe activatiecode aan.</translation>
 <translation id="3700829948786686853">Welkom bij Vivaldi</translation>
 <translation id="3766350025418769949">Je kunt de in Vivaldi Wachtwoordbeheer opgeslagen wachtwoorden gebruiken in andere apps op jouw iPad.</translation>
+<translation id="3845564230651302310">Toepassen nieuwe traceringsfilterinstellingen...</translation>
 <translation id="3858860766373142691">Naam</translation>
 <translation id="3866249974567520381">Beschrijving</translation>
 <translation id="3872195896030547485">Voer een geldig e-mailadres in.</translation>
@@ -225,6 +228,7 @@ geblokkeerd</translation>
 <translation id="6406506848690869874">Synchronisatie</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> geselecteerd</translation>
 <translation id="6468130661190228905">Sorry, het lijkt erop dat je even moet wachten voordat je lid kunt worden van onze gemenschap. Onze leden moeten minstens 16 jaar oud zijn om toegelaten te worden.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importeren<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Back-up coderingssleutel</translation>
 <translation id="6527303717912515753">Delen</translation>
 <translation id="6535988230515403205">Pools (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@ geblokkeerd</translation>
 <translation id="7461899062138731833">BRONNEN</translation>
 <translation id="750493650310597496">0 geselecteerd</translation>
 <translation id="7525067979554623046">Aanmaken</translation>
-<translation id="7541020606126512786">Reclame- en traceringsfilter samenvatting</translation>
 <translation id="7573518470897278603">Mobiele versie weergeven</translation>
 <translation id="7574321014880720413">Nieuw domein toevoegen</translation>
 <translation id="7587132259180664054">E-mail met succes verzonden</translation>

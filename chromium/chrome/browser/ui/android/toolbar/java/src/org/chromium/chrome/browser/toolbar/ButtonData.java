@@ -15,6 +15,8 @@ import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 
+import java.util.Objects;
+
 /**
  * Data needed to show an optional toolbar button.
  *
@@ -69,8 +71,7 @@ public interface ButtonData {
         }
 
         /** Returns the {@link Drawable} for the button icon. */
-        @NonNull
-        public Drawable getDrawable() {
+        public @NonNull Drawable getDrawable() {
             return mDrawable;
         }
 
@@ -92,8 +93,7 @@ public interface ButtonData {
         }
 
         /** Returns the resource ID of the string for the button's action chip label. */
-        @StringRes
-        public int getActionChipLabelResId() {
+        public @StringRes int getActionChipLabelResId() {
             return mActionChipLabelResId;
         }
 
@@ -107,20 +107,45 @@ public interface ButtonData {
          * a minimum the feature name, content string, and accessibility text, but not the anchor
          * view.
          */
-        @Nullable
-        public IPHCommandBuilder getIPHCommandBuilder() {
+        public @Nullable IPHCommandBuilder getIPHCommandBuilder() {
             return mIPHCommandBuilder;
         }
 
         /** Returns the adaptive button variant used for recording metrics. */
-        @AdaptiveToolbarButtonVariant
-        public int getButtonVariant() {
+        public @AdaptiveToolbarButtonVariant int getButtonVariant() {
             return mButtonVariant;
         }
 
         /** Returns {@code true} if the button is a contextual page action. False otherwise. */
         public boolean isDynamicAction() {
             return mIsDynamicAction;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof ButtonSpec)) {
+                return false;
+            }
+            ButtonSpec that = (ButtonSpec) o;
+            return mSupportsTinting == that.mSupportsTinting
+                    && mButtonVariant == that.mButtonVariant
+                    && mIsDynamicAction == that.mIsDynamicAction
+                    && mActionChipLabelResId == that.mActionChipLabelResId
+                    && Objects.equals(mDrawable, that.mDrawable)
+                    && Objects.equals(mOnClickListener, that.mOnClickListener)
+                    && Objects.equals(mOnLongClickListener, that.mOnLongClickListener)
+                    && Objects.equals(mContentDescription, that.mContentDescription)
+                    && Objects.equals(mIPHCommandBuilder, that.mIPHCommandBuilder);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(mDrawable, mOnClickListener, mOnLongClickListener,
+                    mContentDescription, mSupportsTinting, mIPHCommandBuilder, mButtonVariant,
+                    mIsDynamicAction, mActionChipLabelResId);
         }
     }
 }

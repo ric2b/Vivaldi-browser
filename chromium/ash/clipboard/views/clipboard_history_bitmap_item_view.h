@@ -13,17 +13,14 @@
 
 namespace ash {
 class ClipboardHistory;
-class ClipboardHistoryResourceManager;
 
 // The menu item showing a bitmap.
 class ClipboardHistoryBitmapItemView : public ClipboardHistoryItemView {
  public:
   METADATA_HEADER(ClipboardHistoryBitmapItemView);
-  ClipboardHistoryBitmapItemView(
-      const base::UnguessableToken& item_id,
-      const ClipboardHistory* clipboard_history,
-      const ClipboardHistoryResourceManager* resource_manager,
-      views::MenuItemView* container);
+  ClipboardHistoryBitmapItemView(const base::UnguessableToken& item_id,
+                                 const ClipboardHistory* clipboard_history,
+                                 views::MenuItemView* container);
   ClipboardHistoryBitmapItemView(const ClipboardHistoryBitmapItemView& rhs) =
       delete;
   ClipboardHistoryBitmapItemView& operator=(
@@ -34,11 +31,7 @@ class ClipboardHistoryBitmapItemView : public ClipboardHistoryItemView {
   class BitmapContentsView;
 
   // ClipboardHistoryItemView:
-  std::unique_ptr<ContentsView> CreateContentsView() override;
-
-  // Owned by ClipboardHistoryController.
-  const raw_ptr<const ClipboardHistoryResourceManager, ExperimentalAsh>
-      resource_manager_;
+  std::unique_ptr<views::View> CreateContentsView() override;
 
   // The format of the associated `ClipboardData`.
   const ui::ClipboardInternalFormat data_format_;

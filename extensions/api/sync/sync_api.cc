@@ -23,7 +23,7 @@
 #include "components/sync/base/command_line_switches.h"
 #include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/driver/sync_token_status.h"
+#include "components/sync/service/sync_token_status.h"
 #include "components/sync_device_info/local_device_info_util.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/sync.h"
@@ -51,8 +51,6 @@ vivaldi::sync::CycleStatus ToVivaldiCycleStatus(
       return vivaldi::sync::CycleStatus::CYCLE_STATUS_NOT_SYNCED;
     case ::vivaldi::VivaldiSyncUIHelper::SUCCESS:
       return vivaldi::sync::CycleStatus::CYCLE_STATUS_SUCCESS;
-    case ::vivaldi::VivaldiSyncUIHelper::IN_PROGRESS:
-      return vivaldi::sync::CycleStatus::CYCLE_STATUS_IN_PROGRESS;
     case ::vivaldi::VivaldiSyncUIHelper::AUTH_ERROR:
       return vivaldi::sync::CycleStatus::CYCLE_STATUS_AUTH_ERROR;
     case ::vivaldi::VivaldiSyncUIHelper::SERVER_ERROR:
@@ -81,10 +79,6 @@ ToVivaldiSyncDisableReasons(syncer::SyncService::DisableReasonSet reasons) {
       case syncer::SyncService::DISABLE_REASON_NOT_SIGNED_IN:
         disable_reasons.push_back(
             vivaldi::sync::DisableReason::DISABLE_REASON_NOT_SIGNED_IN);
-        break;
-      case syncer::SyncService::DISABLE_REASON_USER_CHOICE:
-        disable_reasons.push_back(
-            vivaldi::sync::DisableReason::DISABLE_REASON_USER_CHOICE);
         break;
       case syncer::SyncService::DISABLE_REASON_UNRECOVERABLE_ERROR:
         disable_reasons.push_back(
@@ -251,27 +245,23 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
   if (sync_service->is_clearing_sync_data()) {
     engine_data.engine_state =
         vivaldi::sync::EngineState::ENGINE_STATE_CLEARING_DATA;
-  } else if (sync_service->GetDisableReasons().Has(
-        syncer::SyncService::DISABLE_REASON_USER_CHOICE) ||
+  } else if (!sync_service->HasSyncConsent() ||
              sync_service->GetTransportState() ==
                  syncer::SyncService::TransportState::START_DEFERRED) {
     engine_data.engine_state = vivaldi::sync::EngineState::ENGINE_STATE_STOPPED;
-
   } else if (!sync_service->CanSyncFeatureStart()) {
     engine_data.engine_state = vivaldi::sync::EngineState::ENGINE_STATE_FAILED;
-
   } else if (sync_service->IsEngineInitialized()) {
     if (sync_service->GetTransportState() ==
             syncer::SyncService::TransportState::
                 PENDING_DESIRED_CONFIGURATION ||
-        !sync_service->GetUserSettings()->IsFirstSetupComplete()) {
+        !sync_service->GetUserSettings()->IsInitialSyncFeatureSetupComplete()) {
       engine_data.engine_state =
           vivaldi::sync::EngineState::ENGINE_STATE_CONFIGURATION_PENDING;
     } else {
       engine_data.engine_state =
           vivaldi::sync::EngineState::ENGINE_STATE_STARTED;
     }
-
   } else if (sync_service->GetSyncTokenStatusForDebugging().connection_status ==
              syncer::CONNECTION_SERVER_ERROR) {
     engine_data.engine_state =
@@ -305,7 +295,7 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
           ->IsPassphraseRequiredForPreferredDataTypes();
   engine_data.is_setup_in_progress = sync_service->IsSetupInProgress();
   engine_data.is_first_setup_complete =
-      sync_service->GetUserSettings()->IsFirstSetupComplete();
+      sync_service->GetUserSettings()->IsInitialSyncFeatureSetupComplete();
 
   engine_data.sync_everything =
       sync_service->GetUserSettings()->IsSyncEverythingEnabled();
@@ -321,9 +311,7 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
         // doesn't make much sense to show saved tab groups if we don't
         // show tabs. For now we group all three in our UI
         data_type == syncer::UserSelectableType::kTabs ||
-        data_type == syncer::UserSelectableType::kSavedTabGroups ||
-        // Wifi configuration is only used in ChromeOS.
-        data_type == syncer::UserSelectableType::kWifiConfigurations) {
+        data_type == syncer::UserSelectableType::kSavedTabGroups) {
       continue;
     }
 
@@ -618,7 +606,7 @@ ExtensionFunction::ResponseAction SyncSetupCompleteFunction::Run() {
   if (!sync_service)
     return RespondNow(Error("Sync manager is unavailable"));
 
-  sync_service->GetUserSettings()->SetFirstSetupComplete(
+  sync_service->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
       syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
   SyncAPI::GetFactoryInstance()
       ->Get(Profile::FromBrowserContext(browser_context()))

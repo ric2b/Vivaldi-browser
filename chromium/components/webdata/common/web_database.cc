@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
@@ -17,7 +18,7 @@
 // corresponding changes must happen in the unit tests, and new migration test
 // added.  See `WebDatabaseMigrationTest::kCurrentTestedVersionNumber`.
 // static
-const int WebDatabase::kCurrentVersionNumber = 112;
+const int WebDatabase::kCurrentVersionNumber = 116;
 
 const int WebDatabase::kDeprecatedVersionNumber = 82;
 
@@ -48,7 +49,7 @@ void LogInitResult(WebDatabaseInitResult result) {
   base::UmaHistogramEnumeration("WebDatabase.InitResult", result);
 }
 
-const int kCompatibleVersionNumber = 106;
+const int kCompatibleVersionNumber = 115;
 
 // Change the version number and possibly the compatibility version of
 // |meta_table_|.
@@ -237,6 +238,9 @@ sql::InitStatus WebDatabase::MigrateOldVersionsAsNeeded() {
         return FailedMigrationTo(next_version);
       }
     }
+    base::UmaHistogramExactLinear("WebDatabase.SucceededMigrationToVersion",
+                                  next_version,
+                                  WebDatabase::kCurrentVersionNumber + 1);
   }
   return sql::INIT_OK;
 }

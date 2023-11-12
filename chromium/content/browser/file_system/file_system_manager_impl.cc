@@ -11,24 +11,17 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
-#include "base/strings/string_util.h"
-#include "base/task/sequenced_task_runner.h"
-#include "base/threading/thread.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
 #include "components/services/filesystem/public/mojom/types.mojom.h"
-#include "content/browser/bad_message.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/file_system/browser_file_system_helper.h"
-#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/content_features.h"
-#include "ipc/ipc_platform_file.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "net/base/mime_util.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_impl.h"
 #include "storage/browser/blob/blob_storage_context.h"
@@ -244,7 +237,6 @@ void FileSystemManagerImpl::ContinueOpen(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   if (!security_check_success) {
-    NOTREACHED();
     std::move(bad_message_callback).Run("FSMI_OPEN_INVALID_ORIGIN");
     return;
   }
@@ -693,7 +685,7 @@ void FileSystemManagerImpl::ContinueReadDirectorySync(
 
 void FileSystemManagerImpl::Write(
     const GURL& file_path,
-    const std::string& blob_uuid,
+    mojo::PendingRemote<blink::mojom::Blob> blob,
     int64_t position,
     mojo::PendingReceiver<blink::mojom::FileSystemCancellableOperation>
         op_receiver,
@@ -714,26 +706,40 @@ void FileSystemManagerImpl::Write(
       // security_policy_ is a singleton so refcounting is unnecessary
       base::BindOnce(&ChildProcessSecurityPolicyImpl::CanWriteFileSystemFile,
                      base::Unretained(security_policy_), process_id_, url),
-      base::BindOnce(&FileSystemManagerImpl::ContinueWrite,
-                     weak_factory_.GetWeakPtr(), url, blob_uuid, position,
-                     std::move(op_receiver), std::move(listener)));
+      base::BindOnce(
+          &FileSystemManagerImpl::ResolveBlobForWrite,
+          weak_factory_.GetWeakPtr(), std::move(blob),
+          base::BindOnce(&FileSystemManagerImpl::ContinueWrite,
+                         weak_factory_.GetWeakPtr(), url, position,
+                         std::move(op_receiver), std::move(listener))));
+}
+
+void FileSystemManagerImpl::ResolveBlobForWrite(
+    mojo::PendingRemote<blink::mojom::Blob> blob,
+    base::OnceCallback<void(std::unique_ptr<storage::BlobDataHandle>)> callback,
+    bool security_check_success) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (!security_check_success) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+
+  blob_storage_context_->context()->GetBlobDataFromBlobRemote(
+      std::move(blob), std::move(callback));
 }
 
 void FileSystemManagerImpl::ContinueWrite(
     const storage::FileSystemURL& url,
-    const std::string& blob_uuid,
     int64_t position,
     mojo::PendingReceiver<blink::mojom::FileSystemCancellableOperation>
         op_receiver,
     mojo::Remote<blink::mojom::FileSystemOperationListener> listener,
-    bool security_check_success) {
+    std::unique_ptr<storage::BlobDataHandle> blob) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!security_check_success) {
+  if (!blob) {
     listener->ErrorOccurred(base::File::FILE_ERROR_SECURITY);
     return;
   }
-  std::unique_ptr<storage::BlobDataHandle> blob =
-      blob_storage_context_->context()->GetBlobDataFromUUID(blob_uuid);
 
   OperationListenerID listener_id = AddOpListener(std::move(listener));
 
@@ -754,10 +760,11 @@ void FileSystemManagerImpl::ContinueWrite(
       std::move(op_receiver));
 }
 
-void FileSystemManagerImpl::WriteSync(const GURL& file_path,
-                                      const std::string& blob_uuid,
-                                      int64_t position,
-                                      WriteSyncCallback callback) {
+void FileSystemManagerImpl::WriteSync(
+    const GURL& file_path,
+    mojo::PendingRemote<blink::mojom::Blob> blob,
+    int64_t position,
+    WriteSyncCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   FileSystemURL url(
       context_->CrackURL(file_path, receivers_.current_context()));
@@ -771,23 +778,23 @@ void FileSystemManagerImpl::WriteSync(const GURL& file_path,
       // security_policy_ is a singleton so refcounting is unnecessary
       base::BindOnce(&ChildProcessSecurityPolicyImpl::CanWriteFileSystemFile,
                      base::Unretained(security_policy_), process_id_, url),
-      base::BindOnce(&FileSystemManagerImpl::ContinueWriteSync,
-                     weak_factory_.GetWeakPtr(), url, blob_uuid, position,
-                     std::move(callback)));
+      base::BindOnce(&FileSystemManagerImpl::ResolveBlobForWrite,
+                     weak_factory_.GetWeakPtr(), std::move(blob),
+                     base::BindOnce(&FileSystemManagerImpl::ContinueWriteSync,
+                                    weak_factory_.GetWeakPtr(), url, position,
+                                    std::move(callback))));
 }
 
-void FileSystemManagerImpl::ContinueWriteSync(const storage::FileSystemURL& url,
-                                              const std::string& blob_uuid,
-                                              int64_t position,
-                                              WriteSyncCallback callback,
-                                              bool security_check_success) {
+void FileSystemManagerImpl::ContinueWriteSync(
+    const storage::FileSystemURL& url,
+    int64_t position,
+    WriteSyncCallback callback,
+    std::unique_ptr<storage::BlobDataHandle> blob) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!security_check_success) {
+  if (!blob) {
     std::move(callback).Run(0, base::File::FILE_ERROR_SECURITY);
     return;
   }
-  std::unique_ptr<storage::BlobDataHandle> blob =
-      blob_storage_context_->context()->GetBlobDataFromUUID(blob_uuid);
 
   storage::FileSystemOperationRunner* fs_op_runner = operation_runner();
   if (!fs_op_runner) {

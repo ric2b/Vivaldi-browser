@@ -9,7 +9,6 @@
 #import "ios/web/common/url_scheme_util.h"
 #import "ios/web/public/annotations/annotations_text_observer.h"
 #import "ios/web/public/js_messaging/web_frame.h"
-#import "ios/web/public/js_messaging/web_frame_util.h"
 #import "ios/web/public/navigation/navigation_context.h"
 #import "ios/web/public/web_state.h"
 
@@ -82,7 +81,10 @@ void AnnotationsTextManagerImpl::PageLoaded(
     web::PageLoadCompletionStatus load_completion_status) {
   DCHECK_EQ(web_state_, web_state);
   if (load_completion_status == web::PageLoadCompletionStatus::SUCCESS) {
-    StartExtractingText();
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&AnnotationsTextManagerImpl::StartExtractingText,
+                       weak_factory_.GetWeakPtr()));
   }
 }
 

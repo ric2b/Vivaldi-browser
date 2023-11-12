@@ -19,14 +19,15 @@
 #import "components/signin/public/identity_manager/account_info.h"
 #import "components/signin/public/identity_manager/device_accounts_synchronizer.h"
 #import "components/signin/public/identity_manager/primary_account_mutator.h"
-#import "components/sync/driver/sync_service.h"
-#import "components/sync/driver/sync_user_settings.h"
+#import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_user_settings.h"
 #import "google_apis/gaia/gaia_auth_util.h"
-#import "ios/chrome/browser/application_context/application_context.h"
+#import "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #import "ios/chrome/browser/crash_report/crash_keys_helper.h"
-#import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/signin/authentication_service_delegate.h"
 #import "ios/chrome/browser/signin/authentication_service_observer.h"
 #import "ios/chrome/browser/signin/refresh_access_token_error.h"
@@ -233,7 +234,7 @@ AuthenticationService::ServiceStatus AuthenticationService::GetServiceStatus() {
 
 void AuthenticationService::OnApplicationWillEnterForeground() {
   if (HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
-    bool can_sync_start = sync_setup_service_->CanSyncFeatureStart();
+    bool can_sync_start = sync_setup_service_->IsSyncFeatureEnabled();
     LoginMethodAndSyncState loginMethodAndSyncState =
         can_sync_start ? SHARED_AUTHENTICATION_SYNC_ON
                        : SHARED_AUTHENTICATION_SYNC_OFF;
@@ -322,7 +323,8 @@ id<SystemIdentity> AuthenticationService::GetPrimaryIdentity(
   return account_manager_service_->GetIdentityWithGaiaID(authenticated_gaia_id);
 }
 
-void AuthenticationService::SignIn(id<SystemIdentity> identity) {
+void AuthenticationService::SignIn(id<SystemIdentity> identity,
+                                   signin_metrics::AccessPoint access_point) {
   ServiceStatus status = GetServiceStatus();
   CHECK(status == ServiceStatus::SigninAllowed ||
         status == ServiceStatus::SigninForcedByPolicy)
@@ -332,6 +334,10 @@ void AuthenticationService::SignIn(id<SystemIdentity> identity) {
   primary_account_was_restricted_ = false;
 
   ResetReauthPromptForSignInAndSync();
+
+  // TODO(crbug.com/1442202): Move this reset to a place more consistent with
+  // bookmarks.
+  ResetLastUsedBookmarkFolder(pref_service_);
 
   // Load all credentials from SSO library. This must load the credentials
   // for the primary account too.
@@ -361,7 +367,7 @@ void AuthenticationService::SignIn(id<SystemIdentity> identity) {
     // `GrantSyncConsent`.
     signin::PrimaryAccountMutator::PrimaryAccountError error =
         identity_manager_->GetPrimaryAccountMutator()->SetPrimaryAccount(
-            account_id, signin::ConsentLevel::kSignin);
+            account_id, signin::ConsentLevel::kSignin, access_point);
     CHECK_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::kNoError,
              error);
   }
@@ -377,7 +383,9 @@ void AuthenticationService::SignIn(id<SystemIdentity> identity) {
   crash_keys::SetCurrentlySignedIn(true);
 }
 
-void AuthenticationService::GrantSyncConsent(id<SystemIdentity> identity) {
+void AuthenticationService::GrantSyncConsent(
+    id<SystemIdentity> identity,
+    signin_metrics::AccessPoint access_point) {
   DCHECK(account_manager_service_->IsValidIdentity(identity));
   DCHECK(identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSignin));
 
@@ -396,7 +404,7 @@ void AuthenticationService::GrantSyncConsent(id<SystemIdentity> identity) {
   if (!HasPrimaryIdentity(signin::ConsentLevel::kSync)) {
     const signin::PrimaryAccountMutator::PrimaryAccountError error =
         identity_manager_->GetPrimaryAccountMutator()->SetPrimaryAccount(
-            account_id, signin::ConsentLevel::kSync);
+            account_id, signin::ConsentLevel::kSync, access_point);
     CHECK_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::kNoError,
              error)
         << "SetPrimaryAccount error: " << static_cast<int>(error);
@@ -427,11 +435,15 @@ void AuthenticationService::SignOut(
     return;
   }
 
+  // TODO(crbug.com/1442202): Move this reset to a place more consistent with
+  // bookmarks.
+  ResetLastUsedBookmarkFolder(pref_service_);
+
   const bool is_managed =
       HasPrimaryIdentityManaged(signin::ConsentLevel::kSignin);
   // Get first setup complete value before to stop the sync service.
-  const bool is_first_setup_complete =
-      sync_setup_service_->IsFirstSetupComplete();
+  const bool is_initial_sync_feature_setup_complete =
+      sync_setup_service_->IsInitialSyncFeatureSetupComplete();
 
   auto* account_mutator = identity_manager_->GetPrimaryAccountMutator();
   // GetPrimaryAccountMutator() returns nullptr on ChromeOS only.
@@ -444,7 +456,8 @@ void AuthenticationService::SignOut(
 
   // Browsing data for managed account needs to be cleared only if sync has
   // started at least once.
-  if (force_clear_browsing_data || (is_managed && is_first_setup_complete)) {
+  if (force_clear_browsing_data ||
+      (is_managed && is_initial_sync_feature_setup_complete)) {
     delegate_->ClearBrowsingData(completion);
   } else if (completion) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -506,6 +519,10 @@ void AuthenticationService::OnPrimaryAccountChanged(
       break;
     case signin::PrimaryAccountChangeEvent::Type::kNone:
       break;
+  }
+
+  for (auto& observer : observer_list_) {
+    observer.OnPrimaryIdentityChanged();
   }
 }
 

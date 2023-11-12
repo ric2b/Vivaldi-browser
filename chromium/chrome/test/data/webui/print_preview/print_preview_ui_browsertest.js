@@ -510,6 +510,12 @@ TEST_F('PrintPreviewLinkContainerTest', 'SystemDialogLinkClick', function() {
   this.runMochaTest(link_container_test.TestNames.SystemDialogLinkClick);
 });
 
+TEST_F(
+    'PrintPreviewLinkContainerTest', 'SystemDialogLinkProperties', function() {
+      this.runMochaTest(
+          link_container_test.TestNames.SystemDialogLinkProperties);
+    });
+
 TEST_F('PrintPreviewLinkContainerTest', 'InvalidState', function() {
   this.runMochaTest(link_container_test.TestNames.InvalidState);
 });
@@ -996,6 +1002,12 @@ TEST_F('PrintPreviewButtonStripTest', 'ButtonOrder', function() {
 TEST_F('PrintPreviewButtonStripTest', 'ButtonStripFiresEvents', function() {
   this.runMochaTest(button_strip_test.TestNames.ButtonStripFiresEvents);
 });
+
+GEN('#if BUILDFLAG(IS_CHROMEOS)');
+TEST_F('PrintPreviewButtonStripTest', 'InvalidPinDisablesPrint', function() {
+  this.runMochaTest(button_strip_test.TestNames.InvalidPinDisablesPrint);
+});
+GEN('#endif');
 
 var PrintPreviewDestinationItemTest = class extends PrintPreviewTest {
   /** @override */

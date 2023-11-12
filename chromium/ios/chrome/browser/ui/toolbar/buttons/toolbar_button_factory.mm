@@ -26,6 +26,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
+#import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
@@ -64,9 +65,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
   if (IsVivaldiRunning())
     backImage = [UIImage imageNamed:@"toolbar_back"]; // End Vivaldi
 
-  ToolbarButton* backButton = [ToolbarButton
-      toolbarButtonWithImage:[backImage
-                                 imageFlippedForRightToLeftLayoutDirection]];
+  ToolbarButton* backButton = [[ToolbarButton alloc]
+      initWithImage:[backImage imageFlippedForRightToLeftLayoutDirection]];
   [self configureButton:backButton width:kAdaptiveToolbarButtonWidth];
   backButton.accessibilityLabel = l10n_util::GetNSString(IDS_ACCNAME_BACK);
   [backButton addTarget:self.actionHandler
@@ -84,9 +84,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
   if (IsVivaldiRunning())
     forwardImage = [UIImage imageNamed:@"toolbar_forward"]; // End Vivaldi
 
-  ToolbarButton* forwardButton = [ToolbarButton
-      toolbarButtonWithImage:[forwardImage
-                                 imageFlippedForRightToLeftLayoutDirection]];
+  ToolbarButton* forwardButton = [[ToolbarButton alloc]
+      initWithImage:[forwardImage imageFlippedForRightToLeftLayoutDirection]];
   [self configureButton:forwardButton width:kAdaptiveToolbarButtonWidth];
   forwardButton.visibilityMask =
       self.visibilityConfiguration.forwardButtonVisibility;
@@ -106,7 +105,7 @@ const CGFloat kSymbolToolbarPointSize = 24;
     tabGridImage = [UIImage imageNamed:@"toolbar_switcher"]; // End Vivaldi
 
   ToolbarTabGridButton* tabGridButton =
-      [ToolbarTabGridButton toolbarButtonWithImage:tabGridImage];
+      [[ToolbarTabGridButton alloc] initWithImage:tabGridImage];
   [self configureButton:tabGridButton width:kAdaptiveToolbarButtonWidth];
   SetA11yLabelAndUiAutomationName(tabGridButton, IDS_IOS_TOOLBAR_SHOW_TABS,
                                   kToolbarStackButtonIdentifier);
@@ -122,13 +121,13 @@ const CGFloat kSymbolToolbarPointSize = 24;
 }
 
 - (ToolbarButton*)toolsMenuButton {
-  ToolbarButton* toolsMenuButton = [ToolbarButton
-      toolbarButtonWithImage:DefaultSymbolWithPointSize(
-                                 kMenuSymbol, kSymbolToolbarPointSize)];
+  ToolbarButton* toolsMenuButton = [[ToolbarButton alloc]
+      initWithImage:DefaultSymbolWithPointSize(kMenuSymbol,
+                                               kSymbolToolbarPointSize)];
 
   if (IsVivaldiRunning()) {
     UIImage* menuImage = [UIImage imageNamed:@"toolbar_menu"];
-    toolsMenuButton = [ToolbarButton toolbarButtonWithImage:menuImage];
+    toolsMenuButton = [[ToolbarButton alloc] initWithImage:menuImage];
   } // End Vivaldi
 
   SetA11yLabelAndUiAutomationName(toolsMenuButton, IDS_IOS_TOOLBAR_SETTINGS,
@@ -152,8 +151,7 @@ const CGFloat kSymbolToolbarPointSize = 24;
   if (IsVivaldiRunning())
     shareImage = [UIImage imageNamed:@"toolbar_share"]; // End Vivaldi
 
-  ToolbarButton* shareButton =
-      [ToolbarButton toolbarButtonWithImage:shareImage];
+  ToolbarButton* shareButton = [[ToolbarButton alloc] initWithImage:shareImage];
   [self configureButton:shareButton width:kAdaptiveToolbarButtonWidth];
   SetA11yLabelAndUiAutomationName(shareButton, IDS_IOS_TOOLS_MENU_SHARE,
                                   kToolbarShareButtonIdentifier);
@@ -173,9 +171,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
   if (IsVivaldiRunning())
     reloadImage = [UIImage imageNamed:@"toolbar_reload"]; // End Vivaldi
 
-  ToolbarButton* reloadButton = [ToolbarButton
-      toolbarButtonWithImage:[reloadImage
-                                 imageFlippedForRightToLeftLayoutDirection]];
+  ToolbarButton* reloadButton = [[ToolbarButton alloc]
+      initWithImage:[reloadImage imageFlippedForRightToLeftLayoutDirection]];
   [self configureButton:reloadButton width:kAdaptiveToolbarButtonWidth];
   reloadButton.accessibilityLabel =
       l10n_util::GetNSString(IDS_IOS_ACCNAME_RELOAD);
@@ -194,7 +191,7 @@ const CGFloat kSymbolToolbarPointSize = 24;
   if (IsVivaldiRunning())
     stopImage = [UIImage imageNamed:@"toolbar_stop"]; // End Vivaldi
 
-  ToolbarButton* stopButton = [ToolbarButton toolbarButtonWithImage:stopImage];
+  ToolbarButton* stopButton = [[ToolbarButton alloc] initWithImage:stopImage];
   [self configureButton:stopButton width:kAdaptiveToolbarButtonWidth];
   stopButton.accessibilityLabel = l10n_util::GetNSString(IDS_IOS_ACCNAME_STOP);
   [stopButton addTarget:self.actionHandler
@@ -208,27 +205,32 @@ const CGFloat kSymbolToolbarPointSize = 24;
   ToolbarButton* newTabButton;
 
   if (IsVivaldiRunning()) {
-    newTabButton = [ToolbarButton
-        toolbarButtonWithImage:
-            [[UIImage imageNamed:@"toolbar_new_tab_page"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal]];
+    UIImage* newTabButtonImage =
+      [[UIImage imageNamed:@"toolbar_new_tab_page"]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    newTabButton =
+      [[ToolbarButton alloc]
+          initWithImage:[newTabButtonImage
+                        imageFlippedForRightToLeftLayoutDirection]];
   } else {
-  if (@available(iOS 15, *)) {
-    NSString* symbolName = base::FeatureList::IsEnabled(kSFSymbolsFollowUp)
-                               ? kPlusCircleFillSymbol
-                               : kLegacyPlusCircleFillSymbol;
-    UIImage* image = SymbolWithPalette(
-        CustomSymbolWithPointSize(symbolName, kSymbolToolbarPointSize), @[
-          [UIColor colorNamed:kGrey600Color],
-          [self.toolbarConfiguration locationBarBackgroundColorWithVisibility:1]
-        ]);
-    newTabButton = [ToolbarButton toolbarButtonWithImage:image];
-  } else {
-    newTabButton = [ToolbarButton
-        toolbarButtonWithImage:
-            [[UIImage imageNamed:@"plus_circle_fill_ios14"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal]];
-  }
+  NSString* symbolName = base::FeatureList::IsEnabled(kSFSymbolsFollowUp)
+                             ? kPlusCircleFillSymbol
+                             : kLegacyPlusCircleFillSymbol;
+  UIImage* image = SymbolWithPalette(
+      CustomSymbolWithPointSize(symbolName, kSymbolToolbarPointSize), @[
+        [UIColor colorNamed:kGrey600Color],
+        [self.toolbarConfiguration locationBarBackgroundColorWithVisibility:1]
+      ]);
+  UIImage* IPHHighlightedImage = SymbolWithPalette(
+      CustomSymbolWithPointSize(symbolName, kSymbolToolbarPointSize), @[
+        // The color of the 'plus'.
+        _toolbarConfiguration.buttonsTintColorIPHHighlighted,
+        // The filling color of the circle.
+        _toolbarConfiguration.buttonsIPHHighlightColor
+      ]);
+  newTabButton =
+      [[ToolbarButton alloc] initWithImage:image
+                       IPHHighlightedImage:IPHHighlightedImage];
   } // End Vivaldi
 
   [newTabButton addTarget:self.actionHandler
@@ -290,25 +292,27 @@ const CGFloat kSymbolToolbarPointSize = 24;
 #pragma mark: - VIVALDI
 - (ToolbarButton*)panelButton {
   UIImage* panelImage = [UIImage imageNamed:vToolbarPanelButtonIcon];
-  ToolbarButton* panelButton = [ToolbarButton
-      toolbarButtonWithImage:[panelImage
-                                 imageFlippedForRightToLeftLayoutDirection]];
+  ToolbarButton* panelButton =
+    [[ToolbarButton alloc]
+        initWithImage:[panelImage
+                      imageFlippedForRightToLeftLayoutDirection]];
   [self configureButton:panelButton width:kAdaptiveToolbarButtonWidth];
   panelButton.accessibilityLabel = GetNSString(IDS_ACCNAME_PANEL);
   [panelButton addTarget:self.actionHandler
                  action:@selector(panelAction)
        forControlEvents:UIControlEventTouchUpInside];
   panelButton.visibilityMask =
-      self.visibilityConfiguration.toolsMenuButtonVisibility;
+      self.visibilityConfiguration.newTabButtonVisibility;
   return panelButton;
 }
 
 // Vivaldi search button -> Visible only on new tab page.
 - (ToolbarButton*)vivaldiSearchButton {
   UIImage* searchImage = [UIImage imageNamed:@"toolbar_search"];
-  ToolbarButton* searchButton = [ToolbarButton
-      toolbarButtonWithImage:[searchImage
-                                 imageFlippedForRightToLeftLayoutDirection]];
+  ToolbarButton* searchButton =
+    [[ToolbarButton alloc]
+        initWithImage:[searchImage
+                      imageFlippedForRightToLeftLayoutDirection]];
   [self configureButton:searchButton width:kAdaptiveToolbarButtonWidth];
   searchButton.accessibilityLabel = GetNSString(IDS_ACCNAME_SEARCH);
   [searchButton addTarget:self.actionHandler
@@ -320,11 +324,11 @@ const CGFloat kSymbolToolbarPointSize = 24;
 }
 
 - (ToolbarButton*)shieldButton {
-  UIImage* shieldImage = [UIImage imageNamed:vATBShield];
+  UIImage* shieldImage = [UIImage imageNamed:vATBShieldTrackers];
   ToolbarButton* shieldButton =
-    [ToolbarButton
-      toolbarButtonWithImage:[shieldImage
-                              imageFlippedForRightToLeftLayoutDirection]];
+    [[ToolbarButton alloc]
+        initWithImage:[shieldImage
+                      imageFlippedForRightToLeftLayoutDirection]];
   [self configureButton:shieldButton width:kAdaptiveToolbarButtonWidth];
   shieldButton.accessibilityLabel = GetNSString(IDS_ACCNAME_ATB);
   [shieldButton addTarget:self.actionHandler
@@ -332,7 +336,7 @@ const CGFloat kSymbolToolbarPointSize = 24;
          forControlEvents:UIControlEventTouchUpInside];
   shieldButton.visibilityMask =
     self.visibilityConfiguration.toolsMenuButtonVisibility;
-  shieldButton.tintColor = UIColor.labelColor;
+  shieldButton.tintColor = UIColor.vTopToolbarTintColor;
   return shieldButton;
 }
 
@@ -340,9 +344,9 @@ const CGFloat kSymbolToolbarPointSize = 24;
 - (ToolbarButton*)vivaldiMoreButton {
   UIImage* moreImage = [UIImage imageNamed:@"toolbar_more"];
   ToolbarButton* moreButton =
-    [ToolbarButton
-      toolbarButtonWithImage:[moreImage
-                              imageFlippedForRightToLeftLayoutDirection]];
+    [[ToolbarButton alloc]
+        initWithImage:[moreImage
+                      imageFlippedForRightToLeftLayoutDirection]];
   [self configureButton:moreButton width:kAdaptiveToolbarButtonWidth];
   moreButton.accessibilityLabel = GetNSString(IDS_ACCNAME_MORE);
   moreButton.visibilityMask =
@@ -359,7 +363,7 @@ const CGFloat kSymbolToolbarPointSize = 24;
       GetNSString(IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER);
   UIAction* atbAction =
       [UIAction actionWithTitle:atbTitle
-                          image:[UIImage imageNamed:vATBShield]
+                          image:[UIImage imageNamed:vATBShieldTrackers]
                      identifier:nil
                         handler:^(__kindof UIAction*_Nonnull
                                   action) {

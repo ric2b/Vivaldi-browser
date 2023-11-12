@@ -4,11 +4,10 @@
 
 #include "ash/accelerators/accelerator_commands.h"
 
-#include "accelerator_notifications.h"
+#include "ash/accelerators/accelerator_notifications.h"
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/accessibility/magnifier/docked_magnifier_controller.h"
 #include "ash/accessibility/magnifier/fullscreen_magnifier_controller.h"
-#include "ash/ambient/ambient_controller.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/assistant/assistant_controller_impl.h"
 #include "ash/capture_mode/capture_mode_camera_controller.h"
@@ -26,7 +25,6 @@
 #include "ash/ime/ime_controller_impl.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/media/media_controller_impl.h"
-#include "ash/public/cpp/ambient/ambient_client.h"
 #include "ash/public/cpp/app_types_util.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/new_window_delegate.h"
@@ -63,7 +61,9 @@
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_session.h"
 #include "ash/wm/screen_pinning_controller.h"
-#include "ash/wm/tablet_mode/tablet_mode_multitask_menu_event_handler.h"
+#include "ash/wm/snap_group/snap_group.h"
+#include "ash/wm/snap_group/snap_group_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_multitask_menu_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_window_manager.h"
 #include "ash/wm/window_cycle/window_cycle_controller.h"
 #include "ash/wm/window_state.h"
@@ -74,6 +74,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/ranges/algorithm.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
+#include "chromeos/ash/components/dbus/biod/fake_biod_client.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_enums.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/ui/base/display_util.h"
@@ -415,6 +416,23 @@ aura::Window* GetTargetWindow() {
   return window->IsVisible() ? window : nullptr;
 }
 
+// Returns the window pair that is eligle to form a snap group.
+aura::Window::Windows GetTargetWindowPairForSnapGroup() {
+  aura::Window::Windows window_pair;
+  MruWindowTracker::WindowList windows =
+      Shell::Get()->mru_window_tracker()->BuildAppWindowList(kActiveDesk);
+  auto* overview_controller = Shell::Get()->overview_controller();
+  OverviewSession* overview_session = overview_controller->overview_session();
+  if (!overview_session && windows.size() >= 2) {
+    aura::Window* window1 = windows[0];
+    aura::Window* window2 = windows[1];
+    window_pair.push_back(window2);
+    window_pair.push_back(window1);
+  }
+
+  return window_pair;
+}
+
 }  // namespace
 
 bool CanActivateTouchHud() {
@@ -474,6 +492,76 @@ bool CanLock() {
   return Shell::Get()->session_controller()->CanLockScreen();
 }
 
+bool CanGroupOrUngroupWindows() {
+  aura::Window::Windows window_pair = GetTargetWindowPairForSnapGroup();
+  if (!Shell::Get()->snap_group_controller() || window_pair.size() != 2) {
+    return false;
+  }
+
+  aura::Window* window1 = window_pair[0];
+  aura::Window* window2 = window_pair[1];
+  WindowStateType window1_state_type =
+      WindowState::Get(window1)->GetStateType();
+  WindowStateType window2_state_type =
+      WindowState::Get(window2)->GetStateType();
+  return (window1_state_type == WindowStateType::kPrimarySnapped &&
+          window2_state_type == WindowStateType::kSecondarySnapped) ||
+         (window1_state_type == WindowStateType::kSecondarySnapped &&
+          window2_state_type == WindowStateType::kPrimarySnapped);
+}
+
+void GroupOrUngroupWindowsInSnapGroup() {
+  SnapGroupController* snap_group_controller =
+      Shell::Get()->snap_group_controller();
+  CHECK(snap_group_controller);
+  aura::Window::Windows window_pair = GetTargetWindowPairForSnapGroup();
+  if (window_pair.size() != 2) {
+    return;
+  }
+
+  aura::Window* window1 = window_pair[0];
+  aura::Window* window2 = window_pair[1];
+  WindowStateType window1_state_type =
+      WindowState::Get(window1)->GetStateType();
+  WindowStateType window2_state_type =
+      WindowState::Get(window2)->GetStateType();
+  CHECK((window1_state_type == WindowStateType::kPrimarySnapped &&
+         window2_state_type == WindowStateType::kSecondarySnapped) ||
+        (window1_state_type == WindowStateType::kSecondarySnapped &&
+         window2_state_type == WindowStateType::kPrimarySnapped));
+
+  // TODO(michelefan): Trigger a11y alert if there are no eligible windows.
+
+  if (!snap_group_controller->AreWindowsInSnapGroup(window1, window2)) {
+    snap_group_controller->AddSnapGroup(window1, window2);
+    CHECK(snap_group_controller->AreWindowsInSnapGroup(window1, window2));
+  } else {
+    snap_group_controller->RemoveSnapGroupContainingWindow(window1);
+    CHECK(!snap_group_controller->AreWindowsInSnapGroup(window1, window2));
+  }
+}
+
+bool CanMinimizeSnapGroupWindows() {
+  return Shell::Get()->snap_group_controller();
+}
+
+void MinimizeWindowsInSnapGroup() {
+  aura::Window* top_window = GetTargetWindow();
+  SnapGroupController* snap_group_controller =
+      Shell::Get()->snap_group_controller();
+  if (!top_window || !snap_group_controller) {
+    return;
+  }
+
+  SnapGroup* snap_group =
+      snap_group_controller->GetSnapGroupForGivenWindow(top_window);
+  if (!snap_group) {
+    return;
+  }
+
+  snap_group->MinimizeWindows();
+}
+
 bool CanMinimizeTopWindowOnBack() {
   return window_util::ShouldMinimizeTopWindowOnBack();
 }
@@ -488,7 +576,8 @@ bool CanPerformMagnifierZoom() {
 }
 
 bool CanScreenshot(bool take_screenshot) {
-  // |TAKE_SCREENSHOT| is allowed when user session is blocked.
+  // |AcceleratorAction::kTakeScreenshot| is allowed when user session is
+  // blocked.
   return take_screenshot ||
          !Shell::Get()->session_controller()->IsUserSessionBlocked();
 }
@@ -497,8 +586,8 @@ bool CanShowStylusTools() {
   return GetPaletteTray()->ShouldShowPalette();
 }
 
-bool CanStartAmbientMode() {
-  return AmbientClient::Get() && AmbientClient::Get()->IsAmbientModeAllowed();
+bool CanStopScreenRecording() {
+  return CaptureModeController::Get()->is_recording_in_progress();
 }
 
 bool CanSwapPrimaryDisplay() {
@@ -521,7 +610,7 @@ bool CanToggleGameDashboard() {
     return false;
   }
   aura::Window* window = GetTargetWindow();
-  return window && GameDashboardController::Get()->IsSupported(window);
+  return window && GameDashboardController::IsGameWindow(window);
 }
 
 bool CanToggleMultitaskMenu() {
@@ -612,9 +701,9 @@ void ActivateDesk(bool activate_left) {
 }
 
 void ActivateDeskAtIndex(AcceleratorAction action) {
-  DCHECK_GE(action, DESKS_ACTIVATE_0);
-  DCHECK_LE(action, DESKS_ACTIVATE_7);
-  const size_t target_index = action - DESKS_ACTIVATE_0;
+  DCHECK_GE(action, AcceleratorAction::kDesksActivate0);
+  DCHECK_LE(action, AcceleratorAction::kDesksActivate7);
+  const size_t target_index = action - AcceleratorAction::kDesksActivate0;
   auto* desks_controller = DesksController::Get();
   // Only 1 desk animation can occur at a time so ignore this action if there's
   // an ongoing desk animation.
@@ -1056,6 +1145,12 @@ void ShowTaskManager() {
   NewWindowDelegate::GetInstance()->ShowTaskManager();
 }
 
+void StopScreenRecording() {
+  CaptureModeController* controller = CaptureModeController::Get();
+  CHECK(controller->is_recording_in_progress());
+  controller->EndVideoRecording(EndRecordingReason::kKeyboardShortcut);
+}
+
 void Suspend() {
   chromeos::PowerManagerClient::Get()->RequestSuspend();
 }
@@ -1085,10 +1180,6 @@ void TakeScreenshot(bool from_snapshot_key) {
     return;
   }
   capture_mode_controller->CaptureScreenshotsOfAllDisplays();
-}
-
-void ToggleAmbientMode() {
-  Shell::Get()->ambient_controller()->ToggleInSessionUi();
 }
 
 void ToggleAssignToAllDesk() {
@@ -1338,7 +1429,10 @@ void ToggleGameDashboard() {
   DCHECK(features::IsGameDashboardEnabled());
   aura::Window* window = GetTargetWindow();
   DCHECK(window);
-  // TODO(phshah): Connect to Game Dashboard.
+  if (auto* context =
+          GameDashboardController::Get()->GetGameDashboardContext(window)) {
+    context->ToggleMainMenu();
+  }
 }
 
 void ToggleHighContrast() {
@@ -1496,11 +1590,11 @@ void ToggleMultitaskMenu() {
   DCHECK(window);
   if (auto* tablet_mode_controller = Shell::Get()->tablet_mode_controller();
       tablet_mode_controller->InTabletMode()) {
-    auto* tablet_mode_event_handler =
+    auto* multitask_menu_controller =
         tablet_mode_controller->tablet_mode_window_manager()
-            ->tablet_mode_multitask_menu_event_handler();
+            ->tablet_mode_multitask_menu_controller();
     // Does nothing if the menu is already shown.
-    tablet_mode_event_handler->ShowMultitaskMenu(window);
+    multitask_menu_controller->ShowMultitaskMenu(window);
     return;
   }
   auto* frame_view = NonClientFrameViewAsh::Get(window);
@@ -1622,7 +1716,7 @@ void WindowSnap(AcceleratorAction action) {
   Shell* shell = Shell::Get();
   const bool in_tablet = shell->tablet_mode_controller()->InTabletMode();
   const bool in_overview = shell->overview_controller()->InOverviewSession();
-  if (action == WINDOW_CYCLE_SNAP_LEFT) {
+  if (action == AcceleratorAction::kWindowCycleSnapLeft) {
     if (in_tablet) {
       RecordWindowSnapAcceleratorAction(
           WindowSnapAcceleratorAction::kCycleLeftSnapInTablet);
@@ -1645,17 +1739,15 @@ void WindowSnap(AcceleratorAction action) {
           WindowSnapAcceleratorAction::kCycleRightSnapInClamshellNoOverview);
     }
   }
-
-  const WMEvent event(action == WINDOW_CYCLE_SNAP_LEFT
-                          ? WM_EVENT_CYCLE_SNAP_PRIMARY
-                          : WM_EVENT_CYCLE_SNAP_SECONDARY);
+  const WindowSnapWMEvent event(
+      action == AcceleratorAction::kWindowCycleSnapLeft
+          ? WM_EVENT_CYCLE_SNAP_PRIMARY
+          : WM_EVENT_CYCLE_SNAP_SECONDARY,
+      WindowSnapActionSource::kKeyboardShortcutToSnap);
   aura::Window* window = GetTargetWindow();
   DCHECK(window);
 
-  auto* window_state = WindowState::Get(window);
-  window_state->set_snap_action_source(
-      WindowSnapActionSource::kKeyboardShortcutToSnap);
-  window_state->OnWMEvent(&event);
+  WindowState::Get(window)->OnWMEvent(&event);
 }
 
 bool ZoomDisplay(bool up) {
@@ -1670,6 +1762,19 @@ bool ZoomDisplay(bool up) {
   display::Display display =
       display::Screen::GetScreen()->GetDisplayNearestPoint(point);
   return display_manager->ZoomDisplay(display.id(), up);
+}
+
+void TouchFingerprintSensor(int finger_id) {
+  // This function only called with [1,3]. If the range is changed in
+  // the caller AcceleratorControllerImpl::PerformAction function then
+  // this should be changed accordingly.
+  DCHECK(1 <= finger_id && finger_id <= 3);
+  FakeBiodClient* client = FakeBiodClient::Get();
+  if (!client) {
+    LOG(ERROR) << "FakeBiod is not initialized.";
+    return;
+  }
+  client->TouchFingerprintSensor(finger_id);
 }
 
 }  // namespace accelerators

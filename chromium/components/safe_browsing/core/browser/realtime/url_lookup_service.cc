@@ -54,7 +54,8 @@ RealTimeUrlLookupService::RealTimeUrlLookupService(
     : RealTimeUrlLookupServiceBase(url_loader_factory,
                                    cache_manager,
                                    get_user_population_callback,
-                                   referrer_chain_provider),
+                                   referrer_chain_provider,
+                                   pref_service),
       pref_service_(pref_service),
       token_fetcher_(std::move(token_fetcher)),
       client_token_config_callback_(client_token_config_callback),
@@ -139,7 +140,8 @@ bool RealTimeUrlLookupService::CanSendPageLoadToken() const {
 }
 
 bool RealTimeUrlLookupService::CanCheckSubresourceURL() const {
-  return IsEnhancedProtectionEnabled(*pref_service_);
+  return IsEnhancedProtectionEnabled(*pref_service_) &&
+         CanPerformFullURLLookup();
 }
 
 bool RealTimeUrlLookupService::CanCheckSafeBrowsingDb() const {

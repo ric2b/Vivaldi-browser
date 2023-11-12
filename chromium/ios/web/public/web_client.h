@@ -16,7 +16,7 @@
 #include "ios/web/common/user_agent.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "ui/base/layout.h"
+#include "ui/base/resource/resource_scale_factor.h"
 
 namespace base {
 class RefCountedMemory;
@@ -27,6 +27,8 @@ class GURL;
 @protocol CRWFindSession;
 @protocol UITraitEnvironment;
 @class NSString;
+@class NSData;
+@class UIView;
 
 namespace net {
 class SSLInfo;
@@ -83,9 +85,6 @@ class WebClient {
   // true for every custom app specific schema it supports. For example Chromium
   // browser would return true for "chrome://about" URL.
   virtual bool IsAppSpecificURL(const GURL& url) const;
-
-  // Returns text to be displayed for an unsupported plugin.
-  virtual std::u16string GetPluginNotSupportedText() const;
 
   // Returns the user agent string for the specified type.
   virtual std::string GetUserAgent(UserAgentType type) const;
@@ -167,9 +166,7 @@ class WebClient {
   virtual bool EnableLongPressUIContextMenu() const;
 
   // Allows WKWebViews to be inspected using Safari's Web Inspector.
-  // TODO(crbug.com/1418431): Remove this method when Web Inspector is enabled
-  // unconditionally.
-  virtual bool EnableWebInspector() const;
+  virtual bool EnableWebInspector(web::BrowserState* browser_state) const;
 
   // Returns the UserAgentType that should be used by default for the web
   // content, based on the `web_state`.
@@ -181,8 +178,9 @@ class WebClient {
   virtual void LogDefaultUserAgent(web::WebState* web_state,
                                    const GURL& url) const;
 
-  // Returns true if URL was restored via session restoration cache.
-  virtual bool RestoreSessionFromCache(web::WebState* web_state) const;
+  // Fetches the session data blob from cache for `web_state`. Returns nil if
+  // the blob could not be loaded (missing, feature disabled, ...).
+  virtual NSData* FetchSessionFromCache(web::WebState* web_state) const;
 
   // Correct missing NTP and reading list virtualURLs and titles. Native session
   // restoration may not properly restore these items.
@@ -215,6 +213,11 @@ class WebClient {
   // Returns true if browser lockdown mode is enabled. Default return value is
   // false.
   virtual bool IsBrowserLockdownModeEnabled(web::BrowserState* browser_state);
+
+  // Sets OS lockdown mode preference value. By default, no preference value is
+  // set.
+  virtual void SetOSLockdownModeEnabled(web::BrowserState* browser_state,
+                                        bool enabled);
 };
 
 }  // namespace web

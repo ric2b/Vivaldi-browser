@@ -10,6 +10,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
+#include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_contents/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/web_contents/web_app_icon_downloader.h"
 #include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
@@ -44,6 +45,8 @@ bool EqualsWithComparison(const GURL& a,
 }
 }  // namespace
 
+// TODO(http://b/262606416): Replace FakeWebAppUrlLoader with this by redoing
+// how the web contents dependency is wrapped.
 class FakeWebContentsManager::FakeUrlLoader : public WebAppUrlLoader {
  public:
   explicit FakeUrlLoader(base::WeakPtr<FakeWebContentsManager> manager)
@@ -96,6 +99,91 @@ class FakeWebContentsManager::FakeUrlLoader : public WebAppUrlLoader {
   SEQUENCE_CHECKER(sequence_checker_);
 };
 
+class FakeWebContentsManager::FakeWebAppIconDownloader
+    : public WebAppIconDownloader {
+ public:
+  explicit FakeWebAppIconDownloader(
+      base::WeakPtr<FakeWebContentsManager> web_contents_manager)
+      : manager_(std::move(web_contents_manager)) {}
+  ~FakeWebAppIconDownloader() override = default;
+
+  void Start(content::WebContents* web_contents,
+             const base::flat_set<GURL>& extra_icon_urls,
+             WebAppIconDownloaderCallback callback,
+             IconDownloaderOptions options) override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    CHECK(manager_);
+    IconsMap icons_map;
+    DownloadedIconsHttpResults per_icon_results;
+    for (const GURL& icon_url : extra_icon_urls) {
+      auto icons_it = manager_->icon_state_.find(icon_url);
+      if (icons_it == manager_->icon_state_.end()) {
+        per_icon_results[icon_url] = 404;
+        continue;
+      }
+      FakeWebContentsManager::FakeIconState& icon = icons_it->second;
+      // The real implementation includes these CHECK statements, so this does
+      // too.
+      CHECK_LE(100, icon.http_status_code);
+      CHECK_GT(600, icon.http_status_code);
+      if (icon.trigger_primary_page_changed_if_fetched) {
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE,
+            base::BindOnce(std::move(callback),
+                           IconsDownloadedResult::kPrimaryPageChanged,
+                           IconsMap{}, DownloadedIconsHttpResults{}));
+        return;
+      }
+      icons_map[icon_url] = icon.bitmaps;
+      per_icon_results[icon_url] = icon.http_status_code;
+      if (icon.bitmaps.empty() && options.fail_all_if_any_fail) {
+        // TODO: Test this codepath when migrating the
+        // ManifestUpdateCheckCommand to use WebContentsManager.
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE,
+            base::BindOnce(std::move(callback),
+                           IconsDownloadedResult::kAbortedDueToFailure,
+                           IconsMap{}, std::move(per_icon_results)));
+        return;
+      }
+    }
+
+    // Add favicon if requested & available.
+    if (!options.skip_page_favicons) {
+      GURL url = manager_->loaded_urls_[web_contents];
+      CHECK(url.is_valid() || url.is_empty())
+          << "No url has been loaded on this web contents. " << url.spec();
+      auto page_it = manager_->page_state_.find(url);
+      if (page_it != manager_->page_state_.end()) {
+        FakeWebContentsManager::FakePageState& page = page_it->second;
+        if (!page.favicon_url.is_empty()) {
+          icons_map[page.favicon_url] = page.favicon;
+          per_icon_results[page.favicon_url] = page.favicon.empty() ? 404 : 200;
+          if (page.favicon.empty() && options.fail_all_if_any_fail) {
+            base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+                FROM_HERE,
+                base::BindOnce(std::move(callback),
+                               IconsDownloadedResult::kAbortedDueToFailure,
+                               IconsMap{}, std::move(per_icon_results)));
+            return;
+          }
+        }
+      }
+    }
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback), IconsDownloadedResult::kCompleted,
+                       std::move(icons_map), std::move(per_icon_results)));
+  }
+
+ private:
+  base::WeakPtr<FakeWebContentsManager> manager_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
+};
+
+// TODO(http://b/262606416): Replace FakeDataRetriever with this by redoing
+// how the web contents dependency is wrapped.
 class FakeWebContentsManager::FakeWebAppDataRetriever
     : public WebAppDataRetriever {
  public:
@@ -146,6 +234,11 @@ class FakeWebContentsManager::FakeWebAppDataRetriever
       return;
     }
     FakeWebContentsManager::FakePageState& page = page_it->second;
+
+    if (page.on_manifest_fetch) {
+      std::move(page.on_manifest_fetch).Run();
+    }
+
     if (!bypass_service_worker_check && !page.has_service_worker) {
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
@@ -163,54 +256,20 @@ class FakeWebContentsManager::FakeWebAppDataRetriever
   }
 
   void GetIcons(content::WebContents* web_contents,
-                base::flat_set<GURL> icon_urls,
+                const base::flat_set<GURL>& extra_favicon_urls,
                 bool skip_page_favicons,
                 GetIconsCallback callback) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     CHECK(manager_);
-    IconsMap icons_map;
-    DownloadedIconsHttpResults per_icon_results;
-    for (const GURL& icon_url : icon_urls) {
-      auto icons_it = manager_->icon_state_.find(icon_url);
-      if (icons_it == manager_->icon_state_.end()) {
-        per_icon_results[icon_url] = 404;
-        continue;
-      }
-      FakeWebContentsManager::FakeIconState& icon = icons_it->second;
-      // The real implementation includes these CHECK statements, so this does
-      // too.
-      CHECK_LE(100, icon.http_status_code);
-      CHECK_GT(600, icon.http_status_code);
-      if (icon.trigger_primary_page_changed_if_fetched) {
-        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-            FROM_HERE,
-            base::BindOnce(std::move(callback),
-                           IconsDownloadedResult::kPrimaryPageChanged,
-                           IconsMap{}, DownloadedIconsHttpResults{}));
-        return;
-      }
-      icons_map[icon_url] = icon.bitmaps;
-      per_icon_results[icon_url] = icon.http_status_code;
-    }
-
-    // Add favicon if requested & available.
-    if (!skip_page_favicons) {
-      GURL url = manager_->loaded_urls_[web_contents];
-      CHECK(url.is_valid() || url.is_empty())
-          << "No url has been loaded on this web contents. " << url.spec();
-      auto page_it = manager_->page_state_.find(url);
-      if (page_it != manager_->page_state_.end()) {
-        FakeWebContentsManager::FakePageState& page = page_it->second;
-        if (!page.favicon_url.is_empty()) {
-          icons_map[page.favicon_url] = page.favicon;
-          per_icon_results[page.favicon_url] = page.favicon.empty() ? 404 : 200;
-        }
-      }
-    }
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback), IconsDownloadedResult::kCompleted,
-                       std::move(icons_map), std::move(per_icon_results)));
+    std::unique_ptr<FakeWebAppIconDownloader> fake_downloader =
+        std::make_unique<FakeWebAppIconDownloader>(manager_);
+    FakeWebAppIconDownloader* downloader_ptr = fake_downloader.get();
+    base::OnceClosure owning_callback =
+        base::DoNothingWithBoundArgs(std::move(fake_downloader));
+    downloader_ptr->Start(web_contents, extra_favicon_urls,
+                          std::move(callback).Then(std::move(owning_callback)),
+                          {.skip_page_favicons = skip_page_favicons,
+                           .fail_all_if_any_fail = false});
   }
 
  private:
@@ -229,6 +288,11 @@ FakeWebContentsManager::FakeIconState::~FakeIconState() = default;
 FakeWebContentsManager::FakeWebContentsManager() = default;
 FakeWebContentsManager::~FakeWebContentsManager() = default;
 
+void FakeWebContentsManager::SetUrlLoaded(content::WebContents* web_contents,
+                                          const GURL& url) {
+  loaded_urls_[web_contents] = url;
+}
+
 std::unique_ptr<WebAppUrlLoader> FakeWebContentsManager::CreateUrlLoader() {
   return std::make_unique<FakeUrlLoader>(weak_factory_.GetWeakPtr());
 }
@@ -238,17 +302,49 @@ FakeWebContentsManager::CreateDataRetriever() {
   return std::make_unique<FakeWebAppDataRetriever>(weak_factory_.GetWeakPtr());
 }
 
+std::unique_ptr<WebAppIconDownloader>
+FakeWebContentsManager::CreateIconDownloader() {
+  return std::make_unique<FakeWebAppIconDownloader>(weak_factory_.GetWeakPtr());
+}
+
 void FakeWebContentsManager::SetIconState(
-    const GURL& gurl,
+    const GURL& icon_url,
     const FakeWebContentsManager::FakeIconState& icon_state) {
-  icon_state_[gurl] = icon_state;
+  icon_state_[icon_url] = icon_state;
 }
 FakeWebContentsManager::FakeIconState&
-FakeWebContentsManager::GetOrCreateIconState(const GURL& gurl) {
-  return icon_state_[gurl];
+FakeWebContentsManager::GetOrCreateIconState(const GURL& icon_url) {
+  return icon_state_[icon_url];
 }
-void FakeWebContentsManager::DeleteIconState(const GURL& gurl) {
-  icon_state_.erase(gurl);
+void FakeWebContentsManager::DeleteIconState(const GURL& icon_url) {
+  icon_state_.erase(icon_url);
+}
+
+AppId FakeWebContentsManager::CreateBasicInstallPageState(
+    const GURL& install_url,
+    const GURL& manifest_url,
+    const GURL& start_url,
+    base::StringPiece16 name) {
+  FakePageState& install_page_state = GetOrCreatePageState(install_url);
+  install_page_state.url_load_result = WebAppUrlLoaderResult::kUrlLoaded;
+  install_page_state.redirection_url = absl::nullopt;
+
+  install_page_state.page_install_info = std::make_unique<WebAppInstallInfo>();
+  install_page_state.page_install_info->title = name;
+
+  install_page_state.manifest_url = manifest_url;
+  install_page_state.valid_manifest_for_web_app = true;
+
+  install_page_state.opt_manifest = blink::mojom::Manifest::New();
+  install_page_state.opt_manifest->scope =
+      url::Origin::Create(start_url).GetURL();
+  install_page_state.opt_manifest->start_url = start_url;
+  install_page_state.opt_manifest->id = start_url;
+  install_page_state.opt_manifest->display =
+      blink::mojom::DisplayMode::kStandalone;
+  install_page_state.opt_manifest->short_name = name;
+
+  return GenerateAppId(/*manifest_id_path=*/absl::nullopt, start_url);
 }
 
 void FakeWebContentsManager::SetPageState(

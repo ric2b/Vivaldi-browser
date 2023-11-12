@@ -31,7 +31,6 @@
 #include "components/services/patch/content/patch_service.h"
 #include "components/services/unzip/content/unzip_service.h"
 #include "components/update_client/activity_data_service.h"
-#include "components/update_client/buildflags.h"
 #include "components/update_client/crx_downloader_factory.h"
 #include "components/update_client/net/network_chromium.h"
 #include "components/update_client/patch/patch_impl.h"
@@ -87,15 +86,13 @@ class ChromeConfigurator : public update_client::Configurator {
   GetProtocolHandlerFactory() const override;
   absl::optional<bool> IsMachineExternallyManaged() const override;
   update_client::UpdaterStateProvider GetUpdaterStateProvider() const override;
-#if BUILDFLAG(ENABLE_PUFFIN_PATCHES)
   absl::optional<base::FilePath> GetCrxCachePath() const override;
-#endif
 
  private:
   friend class base::RefCountedThreadSafe<ChromeConfigurator>;
 
   ConfiguratorImpl configurator_impl_;
-  raw_ptr<PrefService>
+  raw_ptr<PrefService, LeakedDanglingUntriaged>
       pref_service_;  // This member is not owned by this class.
   scoped_refptr<update_client::NetworkFetcherFactory> network_fetcher_factory_;
   scoped_refptr<update_client::CrxDownloaderFactory> crx_downloader_factory_;
@@ -263,7 +260,6 @@ ChromeConfigurator::GetUpdaterStateProvider() const {
 #endif
 }
 
-#if BUILDFLAG(ENABLE_PUFFIN_PATCHES)
 absl::optional<base::FilePath> ChromeConfigurator::GetCrxCachePath() const {
   base::FilePath path;
   bool result = base::PathService::Get(chrome::DIR_USER_DATA, &path);
@@ -271,7 +267,6 @@ absl::optional<base::FilePath> ChromeConfigurator::GetCrxCachePath() const {
                       path.AppendASCII("component_crx_cache"))
                 : absl::nullopt;
 }
-#endif
 
 }  // namespace
 

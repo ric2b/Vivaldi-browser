@@ -24,20 +24,26 @@ MediaRouterUIService* MediaRouterUIServiceFactory::GetForBrowserContext(
 
 // static
 MediaRouterUIServiceFactory* MediaRouterUIServiceFactory::GetInstance() {
-  return base::Singleton<MediaRouterUIServiceFactory>::get();
+  static base::NoDestructor<MediaRouterUIServiceFactory> instance;
+  return instance.get();
 }
 
 MediaRouterUIServiceFactory::MediaRouterUIServiceFactory()
     : ProfileKeyedServiceFactory(
           "MediaRouterUIService",
-          ProfileSelections::BuildForRegularAndIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {
   DependsOn(ChromeMediaRouterFactory::GetInstance());
   // MediaRouterUIService owns a MediaRouterActionController that depends on
   // ToolbarActionsModel.
   DependsOn(ToolbarActionsModelFactory::GetInstance());
 }
 
-MediaRouterUIServiceFactory::~MediaRouterUIServiceFactory() {}
+MediaRouterUIServiceFactory::~MediaRouterUIServiceFactory() = default;
 
 KeyedService* MediaRouterUIServiceFactory::BuildServiceInstanceFor(
     BrowserContext* context) const {

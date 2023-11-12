@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Premi il pulsante Ricarica per inviare di nuovo i dati necessari per caricare la pagina.</translation>
 <translation id="3234666976984236645">Rileva sempre contenuti importanti su questo sito</translation>
 <translation id="3308738399950580893">annunci</translation>
+<translation id="3384522979010096022">La tua organizzazione non ti consente di vedere questo sito</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> non è attualmente raggiungibile.</translation>
 <translation id="3427092606871434483">Consenti (predefinita)</translation>
 <translation id="3447661539832366887">Il proprietario del dispositivo ha disattivato il gioco dei dinosauri.</translation>
@@ -193,7 +194,6 @@
 <translation id="8150722005171944719">Il file all'indirizzo <ph name="URL" /> non è leggibile. Potrebbe essere stato rimosso, spostato oppure delle autorizzazioni del file potrebbero impedire l'accesso.</translation>
 <translation id="8184538546369750125">Usa predefinita globale (Consenti)</translation>
 <translation id="8211406090763984747">La connessione è sicura</translation>
-<translation id="8225771182978767009">La persona che ha configurato il computer ha deciso di bloccare questo sito.</translation>
 <translation id="8241707690549784388">La pagina che stai cercando utilizza informazioni già inserite. Tornare a quella pagina potrebbe far sì che ogni azione già effettuata venga ripetuta. Vuoi continuare?</translation>
 <translation id="8241712895048303527">Blocca su questo sito</translation>
 <translation id="8286036467436129157">Accedi</translation>
@@ -214,7 +214,6 @@
 <translation id="9062620674789239642">Potrebbe essere stato spostato, modificato o eliminato.</translation>
 <translation id="9069693763241529744">Bloccata da un'estensione</translation>
 <translation id="9073799351042754113">Hai scelto di disattivare gli avvisi di sicurezza per questo sito.</translation>
-<translation id="910924428752220542">Password di Vivaldi</translation>
 <translation id="9169664750068251925">Blocca sempre su questo sito</translation>
 <translation id="9180553614777056266">Blocco annunci</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utilizza un protocollo non supportato.</translation>

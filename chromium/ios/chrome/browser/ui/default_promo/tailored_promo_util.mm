@@ -32,6 +32,7 @@ void SetUpTailoredConsumerWithType(id<TailoredPromoConsumer> consumer,
   UIImage* image;
 
   switch (type) {
+    case DefaultPromoTypeVideo:
     case DefaultPromoTypeGeneral:
       NOTREACHED();  // This type is not supported.
       break;

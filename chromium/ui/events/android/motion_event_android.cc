@@ -162,18 +162,8 @@ int ToEventFlags(int meta_state, int button_state) {
 }
 
 base::TimeTicks FromAndroidTime(base::TimeTicks time) {
-  base::TimeTicks timestamp;
-  // TODO(b/269238283): remove this Finch experiment as soon as we verify that
-  // this change doesn't break anything. Because checking the Finch flag is
-  // expensive.
-  if (base::FeatureList::IsEnabled(features::kUseNanosecondsForMotionEvent)) {
-    timestamp = time;
-  } else {
-    // Rounding down to milliseconds.
-    timestamp = base::TimeTicks::FromUptimeMillis(time.ToUptimeMillis());
-  }
-  ValidateEventTimeClock(&timestamp);
-  return timestamp;
+  ValidateEventTimeClock(&time);
+  return time;
 }
 
 float ToValidFloat(float x) {
@@ -540,6 +530,11 @@ float MotionEventAndroid::GetHistoricalY(size_t pointer_index,
                                          size_t historical_index) const {
   return ToDips(JNI_MotionEvent::Java_MotionEvent_getHistoricalYF_I_I(
       AttachCurrentThread(), event_, pointer_index, historical_index));
+}
+
+int MotionEventAndroid::GetSourceDeviceId(size_t pointer_index) const {
+  // Source device id is not supported.
+  return -1;
 }
 
 ui::MotionEvent::ToolType MotionEventAndroid::GetToolType(

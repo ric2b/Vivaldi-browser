@@ -58,7 +58,7 @@ class EnrollmentFwmpHelper {
       absl::optional<user_data_auth::GetFirmwareManagementParametersReply>
           reply);
 
-  base::raw_ptr<ash::InstallAttributesClient> install_attributes_client_;
+  raw_ptr<ash::InstallAttributesClient> install_attributes_client_;
   base::WeakPtrFactory<EnrollmentFwmpHelper> weak_ptr_factory_{this};
 };
 
@@ -85,7 +85,8 @@ class AutoEnrollmentController {
     kSynchronized
   };
 
-  AutoEnrollmentController();
+  explicit AutoEnrollmentController(
+      scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory);
 
   AutoEnrollmentController(const AutoEnrollmentController&) = delete;
   AutoEnrollmentController& operator=(const AutoEnrollmentController&) = delete;
@@ -249,6 +250,10 @@ class AutoEnrollmentController {
   // `AutoEnrollmentClient`.
   AutoEnrollmentTypeChecker::CheckType auto_enrollment_check_type_ =
       AutoEnrollmentTypeChecker::CheckType::kNone;
+  bool auto_enrollment_check_type_init_started_ = false;
+
+  // Shared factory for outgoing network requests.
+  scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
 
   // Utility for waiting until the system clock has been synchronized.
   std::unique_ptr<ash::SystemClockSyncObservation>

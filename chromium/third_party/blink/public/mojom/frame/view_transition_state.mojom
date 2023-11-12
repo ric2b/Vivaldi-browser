@@ -17,6 +17,7 @@ struct ViewTransitionElement {
   viz.mojom.ViewTransitionElementResourceId snapshot_id;
   int32 paint_order;
   bool is_root;
+  gfx.mojom.RectF? captured_rect_in_layout_space;
 
   // TODO(khushalsagar): Add writing mode.
 };
@@ -25,5 +26,6 @@ struct ViewTransitionState {
   array<ViewTransitionElement> elements;
   mojo_base.mojom.UnguessableToken navigation_id;
   gfx.mojom.Size snapshot_root_size_at_capture;
+  float device_pixel_ratio;
   // TODO(khushalsagar): Add opaque blob from old Document.
 };

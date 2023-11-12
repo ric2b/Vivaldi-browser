@@ -99,6 +99,7 @@ class MockDownloadBubbleUpdateService : public DownloadBubbleUpdateService {
 
   bool GetAllModelsToDisplay(
       std::vector<DownloadUIModelPtr>& models,
+      const web_app::AppId* web_app_id,
       bool force_backfill_download_items = true) override {
     models.clear();
     int download_item_index = 0, offline_item_index = 0;
@@ -128,7 +129,7 @@ class MockDownloadBubbleUpdateService : public DownloadBubbleUpdateService {
 
   MOCK_METHOD(DownloadDisplayController::ProgressInfo,
               GetProgressInfo,
-              (),
+              (const web_app::AppId*),
               (const override));
 
  private:
@@ -342,7 +343,7 @@ class DownloadBubbleUIControllerTest : public testing::Test {
       second_display_controller_;
   std::vector<std::unique_ptr<StrictMockDownloadItem>> items_;
   OfflineItemList offline_items_;
-  raw_ptr<NiceMock<content::MockDownloadManager>> manager_;
+  raw_ptr<NiceMock<content::MockDownloadManager>, DanglingUntriaged> manager_;
   TestingProfileManager testing_profile_manager_;
   std::unique_ptr<
       NiceMock<offline_items_collection::MockOfflineContentProvider>>

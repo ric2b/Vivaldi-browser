@@ -54,6 +54,12 @@ if (vivaldi_net_oauth_client_id != "") {
   ]
 }
 
+if (vivaldi_fastmail_oauth_client_id != "") {
+  defines += [
+    "VIVALDI_FASTMAIL_OAUTH_CLIENT_ID=\"$vivaldi_fastmail_oauth_client_id\""
+  ]
+}
+
 static_library("apis") {
   public_deps = [
     "//chrome/common:mojo_bindings",
@@ -243,4 +249,6 @@ static_library("apis") {
       "window/window_private_api_win.cc",
     ]
   }
+
+  configs += [ "//vivaldi/proxy:relayproxy_config" ]
 }

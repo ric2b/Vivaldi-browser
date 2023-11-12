@@ -75,8 +75,6 @@ HttpResponseInfo::ConnectionInfo QuicHttpStream::ConnectionInfoFromQuicVersion(
   switch (quic_version.transport_version) {
     case quic::QUIC_VERSION_UNSUPPORTED:
       return HttpResponseInfo::CONNECTION_INFO_QUIC_UNKNOWN_VERSION;
-    case quic::QUIC_VERSION_43:
-      return HttpResponseInfo::CONNECTION_INFO_QUIC_43;
     case quic::QUIC_VERSION_46:
       return HttpResponseInfo::CONNECTION_INFO_QUIC_46;
     case quic::QUIC_VERSION_50:
@@ -91,7 +89,7 @@ HttpResponseInfo::ConnectionInfo QuicHttpStream::ConnectionInfoFromQuicVersion(
       return HttpResponseInfo::CONNECTION_INFO_QUIC_RFC_V1;
     case quic::QUIC_VERSION_RESERVED_FOR_NEGOTIATION:
       return HttpResponseInfo::CONNECTION_INFO_QUIC_999;
-    case quic::QUIC_VERSION_IETF_2_DRAFT_08:
+    case quic::QUIC_VERSION_IETF_RFC_V2:
       DCHECK(quic_version.UsesTls());
       return HttpResponseInfo::CONNECTION_INFO_QUIC_2_DRAFT_8;
   }

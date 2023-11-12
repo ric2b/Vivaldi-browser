@@ -46,6 +46,7 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.Robolectric;
+import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadows.ShadowLog;
@@ -68,13 +69,14 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.xsurface.FeedUserInteractionReliabilityLogger.ClosedReason;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler.OpenMode;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler.OpenUrlOptions;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler.WebFeedFollowUpdate;
-import org.chromium.chrome.browser.xsurface.SurfaceScope;
 import org.chromium.chrome.browser.xsurface.feed.FeedActionsHandler;
+import org.chromium.chrome.browser.xsurface.feed.FeedSurfaceScope;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.feed.proto.FeedUiProto;
@@ -102,6 +104,7 @@ public class FeedStreamTest {
     private static final String HEADER_PREFIX = "header";
     private static final OpenUrlOptions DEFAULT_OPEN_URL_OPTIONS = new OpenUrlOptions() {};
 
+    private ActivityController<Activity> mActivityController;
     private Activity mActivity;
     private RecyclerView mRecyclerView;
     private FakeLinearLayoutManager mLayoutManager;
@@ -137,7 +140,7 @@ public class FeedStreamTest {
     @Mock
     private HybridListRenderer mRenderer;
     @Mock
-    private SurfaceScope mSurfaceScope;
+    private FeedSurfaceScope mSurfaceScope;
     @Mock
     private RecyclerView.Adapter mAdapter;
     @Mock
@@ -177,7 +180,8 @@ public class FeedStreamTest {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        mActivity = Robolectric.buildActivity(Activity.class).get();
+        mActivityController = Robolectric.buildActivity(Activity.class);
+        mActivity = mActivityController.get();
 
         mocker.mock(FeedStreamJni.TEST_HOOKS, mFeedStreamJniMock);
         mocker.mock(FeedServiceBridge.getTestHooksForTesting(), mFeedServiceBridgeJniMock);
@@ -192,8 +196,7 @@ public class FeedStreamTest {
                 .thenReturn(LOAD_MORE_TRIGGER_SCROLL_DISTANCE_DP);
         mFeedStream = new FeedStream(mActivity, mSnackbarManager, mBottomSheetController,
                 /* isPlaceholderShown= */ false, mWindowAndroid, mShareDelegateSupplier,
-                /* isInterestFeed= */ StreamKind.FOR_YOU,
-                /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
+                /* isInterestFeed= */ StreamKind.FOR_YOU, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null, mFeedContentFirstLoadWatcher, mStreamsMediator,
                 /*SingleWebFeedHelper=*/null);
         mFeedStream.mMakeGURL = url -> JUnitTestGURLs.getGURL(url);
@@ -225,7 +228,7 @@ public class FeedStreamTest {
                         .build();
         mFeedStream.onStreamUpdated(update.toByteArray());
 
-        mFeedStream.unbind(false);
+        mFeedStream.unbind(false, false);
         assertEquals(3, mContentManager.getItemCount());
         assertEquals(HEADER_PREFIX + "0", mContentManager.getContent(0).getKey());
         assertEquals(HEADER_PREFIX + "1", mContentManager.getContent(1).getKey());
@@ -251,7 +254,7 @@ public class FeedStreamTest {
         createHeaderContent(2);
         mFeedStream.notifyNewHeaderCount(5);
 
-        mFeedStream.unbind(false);
+        mFeedStream.unbind(false, false);
 
         assertEquals(5, mContentManager.getItemCount());
         assertEquals(HEADER_PREFIX + "0", mContentManager.getContent(0).getKey());
@@ -274,7 +277,7 @@ public class FeedStreamTest {
                         .build();
         mFeedStream.onStreamUpdated(update.toByteArray());
 
-        mFeedStream.unbind(true);
+        mFeedStream.unbind(true, false);
 
         assertEquals(2, mContentManager.getItemCount());
         assertEquals(HEADER_PREFIX + "0", mContentManager.getContent(0).getKey());
@@ -294,7 +297,7 @@ public class FeedStreamTest {
                         .addUpdatedSlices(createSliceUpdateForNewXSurfaceSlice("a"))
                         .build();
         mFeedStream.onStreamUpdated(update.toByteArray());
-        mFeedStream.unbind(true);
+        mFeedStream.unbind(true, false);
 
         // Bind again with correct headercount.
         mFeedStream.bind(mRecyclerView, mContentManager, null, mSurfaceScope, mRenderer,
@@ -327,11 +330,36 @@ public class FeedStreamTest {
     @Test
     public void testUnbind() {
         bindToView();
-        mFeedStream.unbind(false);
+        mFeedStream.unbind(false, /*switchingStream=*/false);
         verify(mFeedStreamJniMock).surfaceClosed(anyLong(), any(FeedStream.class));
         // Unset handlers in contentmanager.
         assertEquals(0, mContentManager.getContextValues(0).size());
-        verify(mReliabilityLogger).onUnbindStream();
+        verify(mReliabilityLogger).onUnbindStream(eq(ClosedReason.LEAVE_FEED));
+    }
+
+    @Test
+    public void testUnbind_ClosedReasonForSwitchStream() {
+        bindToView();
+        mFeedStream.unbind(false, /*switchingStream=*/true);
+        verify(mReliabilityLogger).onUnbindStream(eq(ClosedReason.SWITCH_STREAM));
+
+        bindToView();
+        mFeedStream.unbind(false, /*switchingStream=*/false);
+        verify(mReliabilityLogger).onUnbindStream(eq(ClosedReason.LEAVE_FEED));
+    }
+
+    @Test
+    public void testUnbind_ClosedReasonForSuspendApp() {
+        bindToView();
+        mActivityController.create();
+        mActivityController.stop();
+        mFeedStream.unbind(false, /*switchingStream=*/false);
+        verify(mReliabilityLogger).onUnbindStream(eq(ClosedReason.SUSPEND_APP));
+
+        bindToView();
+        mActivityController.start();
+        mFeedStream.unbind(false, /*switchingStream=*/false);
+        verify(mReliabilityLogger).onUnbindStream(eq(ClosedReason.LEAVE_FEED));
     }
 
     @Test
@@ -345,7 +373,7 @@ public class FeedStreamTest {
         handler.showSnackbar(
                 "message", "Undo", FeedActionsHandler.SnackbarDuration.SHORT, mSnackbarController);
         verify(mSnackbarManager).showSnackbar(any());
-        mFeedStream.unbind(false);
+        mFeedStream.unbind(false, false);
         verify(mSnackbarManager, times(1)).dismissSnackbars(any());
     }
 
@@ -457,7 +485,7 @@ public class FeedStreamTest {
 
         // loadMore triggered again after hide&show.
         mFeedStream.checkScrollingForLoadMore(-triggerDistance);
-        mFeedStream.unbind(false);
+        mFeedStream.unbind(false, false);
         bindToView();
 
         mLayoutManager.setLastVisiblePosition(itemCount - LOAD_MORE_TRIGGER_LOOKAHEAD + 1);
@@ -999,7 +1027,7 @@ public class FeedStreamTest {
         // RecyclerView prevents scrolling if there's no content to scroll. We hack
         // the scroll listener directly.
         mFeedStream.getScrollListenerForTest().onScrolled(mRecyclerView, 0, 100);
-        mFeedStream.unbind(false);
+        mFeedStream.unbind(false, false);
 
         verify(mFeedStreamJniMock).reportStreamScrollStart(anyLong(), any(FeedStream.class));
         verify(mFeedStreamJniMock).reportStreamScrolled(anyLong(), any(FeedStream.class), eq(100));
@@ -1059,8 +1087,7 @@ public class FeedStreamTest {
     public void testUnreadContentObserver_nullInterestFeed() {
         FeedStream stream = new FeedStream(mActivity, mSnackbarManager, mBottomSheetController,
                 /* isPlaceholderShown= */ false, mWindowAndroid, mShareDelegateSupplier,
-                /* isInterestFeed= */ StreamKind.FOR_YOU,
-                /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
+                /* isInterestFeed= */ StreamKind.FOR_YOU, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
                 /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null,
                 /*SingleWebFeedHelper=*/null);
@@ -1075,8 +1102,7 @@ public class FeedStreamTest {
         FeatureList.setTestFeatures(features);
         FeedStream stream = new FeedStream(mActivity, mSnackbarManager, mBottomSheetController,
                 /* isPlaceholderShown= */ false, mWindowAndroid, mShareDelegateSupplier,
-                /* isInterestFeed= */ StreamKind.FOLLOWING,
-                /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
+                /* isInterestFeed= */ StreamKind.FOLLOWING, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
                 /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null,
                 /*SingleWebFeedHelper=*/null);
@@ -1092,8 +1118,7 @@ public class FeedStreamTest {
         FeatureList.setTestFeatures(features);
         FeedStream stream = new FeedStream(mActivity, mSnackbarManager, mBottomSheetController,
                 /* isPlaceholderShown= */ false, mWindowAndroid, mShareDelegateSupplier,
-                StreamKind.FOLLOWING,
-                /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
+                StreamKind.FOLLOWING, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
                 /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null,
                 /*SingleWebFeedHelper=*/null);
@@ -1109,8 +1134,7 @@ public class FeedStreamTest {
         FeatureList.setTestFeatures(features);
         FeedStream stream = new FeedStream(mActivity, mSnackbarManager, mBottomSheetController,
                 /* isPlaceholderShown= */ false, mWindowAndroid, mShareDelegateSupplier,
-                StreamKind.FOR_YOU,
-                /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
+                StreamKind.FOR_YOU, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
                 /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null,
                 /*SingleWebFeedHelper=*/null);
@@ -1125,8 +1149,7 @@ public class FeedStreamTest {
         FeatureList.setTestFeatures(features);
         FeedStream stream = new FeedStream(mActivity, mSnackbarManager, mBottomSheetController,
                 /* isPlaceholderShown= */ false, mWindowAndroid, mShareDelegateSupplier,
-                StreamKind.FOR_YOU,
-                /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
+                StreamKind.FOR_YOU, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
                 /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null,
                 /*SingleWebFeedHelper=*/null);
@@ -1141,8 +1164,7 @@ public class FeedStreamTest {
         FeatureList.setTestFeatures(features);
         FeedStream stream = new FeedStream(mActivity, mSnackbarManager, mBottomSheetController,
                 /* isPlaceholderShown= */ false, mWindowAndroid, mShareDelegateSupplier,
-                StreamKind.FOLLOWING,
-                /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
+                StreamKind.FOLLOWING, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
                 /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null,
                 /*SingleWebFeedHelper=*/null);
@@ -1157,12 +1179,23 @@ public class FeedStreamTest {
         FeatureList.setTestFeatures(features);
         FeedStream stream = new FeedStream(mActivity, mSnackbarManager, mBottomSheetController,
                 /* isPlaceholderShown= */ false, mWindowAndroid, mShareDelegateSupplier,
-                StreamKind.FOLLOWING,
-                /* FeedAutoplaySettingsDelegate= */ null, mActionDelegate,
+                StreamKind.FOLLOWING, mActionDelegate,
                 /*helpAndFeedbackLauncher=*/null,
                 /*FeedContentFirstLoadWatcher=*/null, /*Stream.StreamsMediator*/ null,
                 /*SingleWebFeedHelper=*/null);
         assertTrue(stream.supportsOptions());
+    }
+
+    @Test
+    @SmallTest
+    public void testTriggerManualRefresh() {
+        bindToView();
+        FeedStream.FeedActionsHandlerImpl handler =
+                (FeedStream.FeedActionsHandlerImpl) mContentManager.getContextValues(0).get(
+                        FeedActionsHandler.KEY);
+
+        handler.triggerManualRefresh();
+        verify(mStreamsMediator).refreshStream();
     }
 
     private int getLoadMoreTriggerScrollDistance() {

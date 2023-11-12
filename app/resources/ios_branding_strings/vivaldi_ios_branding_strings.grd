@@ -119,6 +119,18 @@ locale.  The strings in this file are specific to iOS.
   </translations>
   <release seq="1">
     <messages fallback_to_english="true">
+      <message name="IDS_IOS_INCOGNITO_REAUTH_SET_UP_SYSTEM_DIALOG_REASON" desc="Text for system biometric authentication dialog to explain why authentication is required when the user attempts to enable the setting to protect Incognito tabs with biometric auth. [iOS only]">
+       Let Vivaldi lock your Private tabs.
+      </message>
+      <message name="IDS_IOS_INCOGNITO_REAUTH_SETTING_NAME" desc="Name of the Setting to protect Incognito tabs with biometric authentication, e.g. Face ID or Touch ID. [iOS only]">
+       Lock Private Tabs When You Close Vivaldi
+      </message>
+      <message name="IDS_IOS_ABOUT_VERSION_COMPANY_NAME" desc="Company name on the about pages">
+        Vivaldi Technologies AS.
+      </message>
+      <message name="IDS_IOS_ABOUT_VERSION_COPYRIGHT" desc="Copyright information on the about pages">
+        Copyright <ph name="YEAR">$1</ph> Vivaldi Technologies AS. All rights reserved.
+      </message>
     </messages>
   </release>
 </grit>

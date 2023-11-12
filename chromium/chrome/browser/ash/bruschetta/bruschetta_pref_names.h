@@ -18,13 +18,13 @@ extern const char kPolicyNameKey[];
 extern const char kPolicyEnabledKey[];
 extern const char kPolicyImageKey[];
 extern const char kPolicyPflashKey[];
-extern const char kPolicyUefiKey[];
 extern const char kPolicyURLKey[];
 extern const char kPolicyHashKey[];
 extern const char kPolicyVTPMKey[];
 extern const char kPolicyVTPMEnabledKey[];
 extern const char kPolicyVTPMUpdateActionKey[];
 extern const char kPolicyOEMStringsKey[];
+extern const char kPolicyDisplayOrderKey[];
 
 enum class PolicyEnabledState {
   BLOCKED = 0,

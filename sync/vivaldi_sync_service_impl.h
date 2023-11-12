@@ -7,7 +7,7 @@
 #include <string>
 
 #include "base/observer_list.h"
-#include "components/sync/driver/sync_service_impl.h"
+#include "components/sync/service/sync_service_impl.h"
 #include "net/http/http_response_headers.h"
 #include "sync/vivaldi_sync_ui_helper.h"
 

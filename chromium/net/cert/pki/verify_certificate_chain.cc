@@ -22,7 +22,8 @@ namespace net {
 
 namespace {
 
-bool IsHandledCriticalExtension(const ParsedExtension& extension) {
+bool IsHandledCriticalExtension(const ParsedExtension& extension,
+                                const ParsedCertificate& cert) {
   if (extension.oid == der::Input(kBasicConstraintsOid))
     return true;
   // Key Usage is NOT processed for end-entity certificates (this is the
@@ -60,6 +61,13 @@ bool IsHandledCriticalExtension(const ParsedExtension& extension) {
     return true;
   if (extension.oid == der::Input(kInhibitAnyPolicyOid))
     return true;
+  if (extension.oid == der::Input(kMSApplicationPoliciesOid)) {
+    // Per https://crbug.com/1439638 and
+    // https://learn.microsoft.com/en-us/windows/win32/seccertenroll/supported-extensions#msapplicationpolicies
+    // The MSApplicationPolicies extension may be ignored if the
+    // extendedKeyUsage extension is also present.
+    return cert.has_extended_key_usage();
+  }
 
   return false;
 }
@@ -70,7 +78,7 @@ void VerifyNoUnconsumedCriticalExtensions(const ParsedCertificate& cert,
                                           CertErrors* errors) {
   for (const auto& it : cert.extensions()) {
     const ParsedExtension& extension = it.second;
-    if (extension.critical && !IsHandledCriticalExtension(extension)) {
+    if (extension.critical && !IsHandledCriticalExtension(extension, cert)) {
       errors->AddError(cert_errors::kUnconsumedCriticalExtension,
                        CreateCertErrorParams2Der("oid", extension.oid, "value",
                                                  extension.value));
@@ -500,6 +508,9 @@ class ValidPolicyGraph {
     // parent. However, we must limit to those which are reachable from the
     // end-entity certificate because we defer some pruning steps.
     for (auto& [policy, node] : levels_.back()) {
+      // GCC before 8.1 tracks individual unused bindings and does not support
+      // marking them [[maybe_unused]].
+      (void)policy;
       node.reachable = true;
     }
     std::set<der::Input> policy_set;
@@ -602,6 +613,9 @@ class ValidPolicyGraph {
     assert(policy != der::Input(kAnyPolicyOid));
     auto [iter, inserted] = levels_.back().insert(
         std::pair{policy, Node{std::move(parent_policies)}});
+    // GCC before 8.1 tracks individual unused bindings and does not support
+    // marking them [[maybe_unused]].
+    (void)inserted;
     assert(inserted);
     return iter;
   }

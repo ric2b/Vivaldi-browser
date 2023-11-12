@@ -105,10 +105,11 @@ class MediaEngagementAutoplayBrowserTest
   }
 
   void LoadSubFrame(const std::string& page) {
-    EXPECT_TRUE(content::ExecuteScriptWithoutUserGesture(
-        GetWebContents(), "document.getElementsByName('subframe')[0].src = \"" +
-                              http_server_origin2_.GetURL("/" + page).spec() +
-                              "\""));
+    EXPECT_TRUE(content::ExecJs(
+        GetWebContents(),
+        "document.getElementsByName('subframe')[0].src = \"" +
+            http_server_origin2_.GetURL("/" + page).spec() + "\"",
+        content::EXECUTE_SCRIPT_NO_USER_GESTURE));
   }
 
   void SetScores(const url::Origin& origin, int visits, int media_playbacks) {
@@ -161,8 +162,7 @@ class MediaEngagementAutoplayBrowserTest
 
     // Get the generated root. The protobuf-generated files are in here.
     base::FilePath gen_root;
-    EXPECT_TRUE(
-        base::PathService::Get(base::DIR_GEN_TEST_DATA_ROOT, &gen_root));
+    EXPECT_TRUE(base::PathService::Get(base::DIR_ASSETS, &gen_root));
 
     // Launch the generator and wait for it to finish.
     base::CommandLine cmd(GetPythonPath());

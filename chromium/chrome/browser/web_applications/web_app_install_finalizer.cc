@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/barrier_callback.h"
+#include "base/check_is_test.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
@@ -28,11 +29,15 @@
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_shortcuts_menu.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
+#include "chrome/browser/web_applications/uninstall/remove_install_source_job.h"
+#include "chrome/browser/web_applications/uninstall/remove_install_url_job.h"
+#include "chrome/browser/web_applications/uninstall/remove_web_app_job.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
+#include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
@@ -49,6 +54,7 @@
 #include "components/webapps/browser/uninstall_result_code.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "url/origin.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/system_web_apps/types/system_web_app_data.h"
@@ -74,6 +80,7 @@ bool ShouldInstallOverwriteUserDisplayMode(
     case InstallSource::RICH_INSTALL_UI_WEBLAYER:
     case InstallSource::ARC:
     case InstallSource::CHROME_SERVICE:
+    case InstallSource::ML_PROMOTION:
     case InstallSource::OMNIBOX_INSTALL_ICON:
     case InstallSource::MENU_CREATE_SHORTCUT:
     case InstallSource::PROFILE_MENU:
@@ -94,6 +101,25 @@ bool ShouldInstallOverwriteUserDisplayMode(
       return false;
     case InstallSource::COUNT:
       NOTREACHED();
+      return false;
+  }
+}
+
+bool IsExternalInstallSource(WebAppManagement::Type install_source) {
+  switch (install_source) {
+    case WebAppManagement::Type::kSystem:
+    case WebAppManagement::Type::kKiosk:
+    case WebAppManagement::Type::kPolicy:
+    case WebAppManagement::Type::kSubApp:
+    case WebAppManagement::Type::kWebAppStore:
+    case WebAppManagement::Type::kDefault:
+      return true;
+    case WebAppManagement::Type::kSync:
+    // TODO(crbug.com/1427340): These are classified incorrectly, this check
+    // isn't really useful and should be removed.
+    case WebAppManagement::Type::kOneDriveIntegration:
+    case WebAppManagement::Type::kCommandLine:
+    case WebAppManagement::Type::kOem:
       return false;
   }
 }
@@ -130,23 +156,31 @@ void WebAppInstallFinalizer::FinalizeInstall(
     return;
   }
 
-  AppId app_id =
-      GenerateAppId(web_app_info.manifest_id, web_app_info.start_url);
-  std::string app_id_unhashed =
-      GenerateAppIdUnhashed(web_app_info.manifest_id, web_app_info.start_url);
+  ManifestId manifest_id = web_app_info.manifest_id;
+  if (manifest_id.is_valid()) {
+    CHECK(url::Origin::Create(manifest_id)
+              .IsSameOriginWith(url::Origin::Create(web_app_info.start_url)));
+  } else {
+    // TODO(b/280862254): After the manifest id constructor is required, this
+    // can be removed.
+    manifest_id = GenerateManifestIdFromStartUrlOnly(web_app_info.start_url);
+  }
+
+  AppId app_id = GenerateAppIdFromManifestId(manifest_id);
   OnDidGetWebAppOriginAssociations origin_association_validated_callback =
       base::BindOnce(&WebAppInstallFinalizer::OnOriginAssociationValidated,
                      weak_ptr_factory_.GetWeakPtr(), web_app_info.Clone(),
                      options, std::move(callback), app_id);
 
   if (options.skip_origin_association_validation ||
-      web_app_info.scope_extensions.empty()) {
+      web_app_info.scope_extensions.empty() ||
+      web_app_info.validated_scope_extensions.has_value()) {
     std::move(origin_association_validated_callback).Run(ScopeExtensions());
     return;
   }
 
   origin_association_manager_->GetWebAppOriginAssociations(
-      GURL(app_id_unhashed), web_app_info.scope_extensions,
+      manifest_id, web_app_info.scope_extensions,
       std::move(origin_association_validated_callback));
 }
 
@@ -224,8 +258,10 @@ void WebAppInstallFinalizer::OnOriginAssociationValidated(
 #endif
 
   if (options.isolated_web_app_location.has_value()) {
+    CHECK(web_app_info.isolated_web_app_version.IsValid());
     web_app->SetIsolationData(
-        WebApp::IsolationData(*options.isolated_web_app_location));
+        WebApp::IsolationData(*options.isolated_web_app_location,
+                              web_app_info.isolated_web_app_version));
   }
 
   web_app->SetParentAppId(web_app_info.parent_app_id);
@@ -265,13 +301,7 @@ void WebAppInstallFinalizer::UninstallExternalWebApp(
     webapps::WebappUninstallSource uninstall_source,
     UninstallWebAppCallback callback) {
   DCHECK(started_);
-
-  DCHECK(external_install_source == WebAppManagement::Type::kSystem ||
-         external_install_source == WebAppManagement::Type::kKiosk ||
-         external_install_source == WebAppManagement::Type::kPolicy ||
-         external_install_source == WebAppManagement::Type::kSubApp ||
-         external_install_source == WebAppManagement::Type::kWebAppStore ||
-         external_install_source == WebAppManagement::Type::kDefault);
+  DCHECK(IsExternalInstallSource(external_install_source));
 
   ScheduleUninstallCommand(app_id, external_install_source, uninstall_source,
                            std::move(callback));
@@ -282,27 +312,12 @@ void WebAppInstallFinalizer::UninstallExternalWebAppByUrl(
     WebAppManagement::Type external_install_source,
     webapps::WebappUninstallSource uninstall_source,
     UninstallWebAppCallback callback) {
-  absl::optional<AppId> app_id =
-      GetWebAppRegistrar().LookupExternalAppId(app_url);
-  if (!app_id.has_value()) {
-    LOG(WARNING) << "Couldn't uninstall web app with url " << app_url
-                 << "; No corresponding web app for url.";
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback),
-                       webapps::UninstallResultCode::kNoAppToUninstall));
-    return;
-  }
-
-  UninstallExternalWebApp(app_id.value(), external_install_source,
-                          uninstall_source, std::move(callback));
-}
-
-bool WebAppInstallFinalizer::CanUserUninstallWebApp(const AppId& app_id) const {
-  DCHECK(started_);
-
-  const WebApp* app = GetWebAppRegistrar().GetAppById(app_id);
-  return app ? app->CanUserUninstallWebApp() : false;
+  DCHECK(IsExternalInstallSource(external_install_source));
+  command_manager_->ScheduleCommand(std::make_unique<WebAppUninstallCommand>(
+      std::make_unique<RemoveInstallUrlJob>(uninstall_source, *profile_,
+                                            /*app_id=*/absl::nullopt,
+                                            external_install_source, app_url),
+      std::move(callback)));
 }
 
 void WebAppInstallFinalizer::UninstallWebApp(
@@ -341,9 +356,20 @@ void WebAppInstallFinalizer::FinalizeUpdate(
     const WebAppInstallInfo& web_app_info,
     InstallFinalizedCallback callback) {
   CHECK(started_);
+  CHECK(web_app_info.start_url.is_valid());
+  ManifestId manifest_id = web_app_info.manifest_id;
+  if (manifest_id.is_valid()) {
+    CHECK(url::Origin::Create(manifest_id)
+              .IsSameOriginWith(url::Origin::Create(web_app_info.start_url)));
+  } else {
+    // TODO(b/280862254): After the manifest id constructor is required, this
+    // can be removed.
+    CHECK_IS_TEST();
+    manifest_id = GenerateManifestIdFromStartUrlOnly(web_app_info.start_url);
+  }
+  CHECK(manifest_id.is_valid());
 
-  const AppId app_id =
-      GenerateAppId(web_app_info.manifest_id, web_app_info.start_url);
+  const AppId app_id = GenerateAppIdFromManifestId(manifest_id);
   const WebApp* existing_web_app = GetWebAppRegistrar().GetAppById(app_id);
 
   if (!existing_web_app ||
@@ -379,11 +405,6 @@ void WebAppInstallFinalizer::Start() {
 
 void WebAppInstallFinalizer::Shutdown() {
   started_ = false;
-}
-
-void WebAppInstallFinalizer::SetRemoveManagementTypeCallbackForTesting(
-    base::RepeatingCallback<void(const AppId&)> callback) {
-  management_type_removed_callback_for_testing_ = std::move(callback);
 }
 
 void WebAppInstallFinalizer::SetSubsystems(
@@ -679,37 +700,40 @@ void WebAppInstallFinalizer::WriteExternalConfigMapInfo(
     WebAppManagement::Type source,
     bool is_placeholder,
     GURL install_url,
-    const std::vector<std::string>& additional_policy_ids) {
+    std::vector<std::string> additional_policy_ids) {
   DCHECK(!(source == WebAppManagement::Type::kSync && is_placeholder));
   if (source != WebAppManagement::Type::kSync) {
     web_app.AddPlaceholderInfoToManagementExternalConfigMap(source,
                                                             is_placeholder);
     if (install_url.is_valid()) {
-      web_app.AddInstallURLToManagementExternalConfigMap(source, install_url);
+      web_app.AddInstallURLToManagementExternalConfigMap(
+          source, std::move(install_url));
     }
-    if (!additional_policy_ids.empty()) {
-      for (const auto& policy_id : additional_policy_ids) {
-        web_app.AddPolicyIdToManagementExternalConfigMap(source, policy_id);
-      }
+    for (const auto& policy_id : additional_policy_ids) {
+      web_app.AddPolicyIdToManagementExternalConfigMap(source,
+                                                       std::move(policy_id));
     }
   }
 }
 
+// TODO(crbug.com/1427340): Remove this interface in favour of calling into the
+// WebAppCommandScheduler directly.
 void WebAppInstallFinalizer::ScheduleUninstallCommand(
     const AppId& app_id,
     absl::optional<WebAppManagement::Type> external_install_source,
     webapps::WebappUninstallSource uninstall_source,
     UninstallWebAppCallback callback) {
-  auto uninstall_command = std::make_unique<WebAppUninstallCommand>(
-      app_id, external_install_source, uninstall_source, std::move(callback),
-      profile_);
-
-  if (management_type_removed_callback_for_testing_) {
-    uninstall_command->SetRemoveManagementTypeCallbackForTesting(  // IN-TEST
-        management_type_removed_callback_for_testing_);
+  std::unique_ptr<UninstallJob> job;
+  if (external_install_source.has_value()) {
+    job = std::make_unique<RemoveInstallSourceJob>(
+        uninstall_source, *profile_, app_id, external_install_source.value());
+  } else {
+    job =
+        std::make_unique<RemoveWebAppJob>(uninstall_source, *profile_, app_id);
   }
 
-  command_manager_->ScheduleCommand(std::move(uninstall_command));
+  command_manager_->ScheduleCommand(std::make_unique<WebAppUninstallCommand>(
+      std::move(job), std::move(callback)));
 }
 
 FileHandlerUpdateAction WebAppInstallFinalizer::GetFileHandlerUpdateAction(

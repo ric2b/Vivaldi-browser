@@ -7,7 +7,7 @@
 #include <set>
 #include <vector>
 
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/notification_observer.h"
 #include "importer/imported_notes_entry.h"
@@ -94,18 +94,18 @@ class NotesModel : public KeyedService {
   }
 
   // Adds a new folder node at the specified position with the given
-  // |creation_time| and |guid|. If no GUID is provided (i.e. nullopt), then a
-  // random one will be generated. If a GUID is provided, it must be valid.
+  // |creation_time| and |uuid|. If no UUID is provided (i.e. nullopt), then a
+  // random one will be generated. If a UUID is provided, it must be valid.
   const NoteNode* AddFolder(
       const NoteNode* parent,
       size_t index,
       const std::u16string& name,
       absl::optional<base::Time> creation_time = absl::nullopt,
-      absl::optional<base::GUID> guid = absl::nullopt);
+      absl::optional<base::Uuid> uuid = absl::nullopt);
 
   // Adds a note at the specified position with the given |creation_time| and
-  // |guid|. If no GUID is provided (i.e. nullopt), then a random one will be
-  // generated. If a GUID is provided, it must be valid.
+  // |uuid|. If no UUID is provided (i.e. nullopt), then a random one will be
+  // generated. If a UUID is provided, it must be valid.
   const NoteNode* AddNote(
       const NoteNode* parent,
       size_t index,
@@ -113,21 +113,21 @@ class NotesModel : public KeyedService {
       const GURL& url,
       const std::u16string& content,
       absl::optional<base::Time> creation_time = absl::nullopt,
-      absl::optional<base::GUID> guid = absl::nullopt);
+      absl::optional<base::Uuid> uuid = absl::nullopt);
 
   // Adds a separator at the specified position with the given |creation_time|
-  // and |guid|. If no GUID is provided (i.e. nullopt), then a random one will
-  // be generated. If a GUID is provided, it must be valid.
+  // and |uuid|. If no UUID is provided (i.e. nullopt), then a random one will
+  // be generated. If a UUID is provided, it must be valid.
   const NoteNode* AddSeparator(
       const NoteNode* parent,
       size_t index,
       absl::optional<std::u16string> name = absl::nullopt,
       absl::optional<base::Time> creation_time = absl::nullopt,
-      absl::optional<base::GUID> guid = absl::nullopt);
+      absl::optional<base::Uuid> uuid = absl::nullopt);
 
   // Adds an attachment for which only the |checksum| is known at the specified
-  // position with the given |creation_time| and |guid|. If no GUID is provided
-  // (i.e. nullopt), then a random one will be generated. If a GUID is provided,
+  // position with the given |creation_time| and |uuid|. If no UUID is provided
+  // (i.e. nullopt), then a random one will be generated. If a UUID is provided,
   // it must be valid.
   const NoteNode* AddAttachmentFromChecksum(
       const NoteNode* parent,
@@ -136,11 +136,11 @@ class NotesModel : public KeyedService {
       const GURL& url,
       const std::string& checksum,
       absl::optional<base::Time> creation_time = absl::nullopt,
-      absl::optional<base::GUID> guid = absl::nullopt);
+      absl::optional<base::Uuid> uuid = absl::nullopt);
 
   // Adds an attachment at the specified position with the given |creation_time|
-  // and |guid|. If no GUID is provided (i.e. nullopt), then a random one will
-  // be generated. If a GUID is provided, it must be valid.
+  // and |uuid|. If no UUID is provided (i.e. nullopt), then a random one will
+  // be generated. If a UUID is provided, it must be valid.
   const NoteNode* AddAttachment(
       const NoteNode* parent,
       size_t index,
@@ -148,7 +148,7 @@ class NotesModel : public KeyedService {
       const GURL& url,
       std::vector<uint8_t> content,
       absl::optional<base::Time> creation_time = absl::nullopt,
-      absl::optional<base::GUID> guid = absl::nullopt);
+      absl::optional<base::Uuid> uuid = absl::nullopt);
 
   const NoteNode* ImportNote(const NoteNode* parent,
                              size_t index,
@@ -224,6 +224,11 @@ class NotesModel : public KeyedService {
   void GetNotesMatching(const std::u16string& text,
                         size_t max_count,
                         std::vector<std::pair<int, NoteNode::Type>>* matches);
+
+  void GetNotesFoldersMatching(
+      const std::u16string& text,
+      size_t max_count,
+      std::vector<std::pair<int, NoteNode::Type>>* matches);
 
   const NoteNode* GetNoteNodeByID(int64_t id) const;
 

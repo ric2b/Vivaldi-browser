@@ -8,6 +8,8 @@
 #include "ash/public/cpp/input_device_settings_controller.h"
 #include "base/memory/raw_ptr.h"
 #include "ui/events/ash/event_rewriter_ash.h"
+#include "ui/events/ash/mojom/simulate_right_click_modifier.mojom-shared.h"
+#include "ui/events/ash/mojom/six_pack_shortcut_modifier.mojom-shared.h"
 #include "ui/wm/public/activation_client.h"
 
 class PrefService;
@@ -30,7 +32,7 @@ class EventRewriterDelegateImpl : public ui::EventRewriterAsh::Delegate {
 
   ~EventRewriterDelegateImpl() override;
 
-  void set_pref_service_for_testing(const PrefService* pref_service) {
+  void set_pref_service_for_testing(PrefService* pref_service) {
     pref_service_for_testing_ = pref_service;
   }
 
@@ -49,11 +51,19 @@ class EventRewriterDelegateImpl : public ui::EventRewriterAsh::Delegate {
   bool NotifyDeprecatedSixPackKeyRewrite(ui::KeyboardCode key_code) override;
   void SuppressModifierKeyRewrites(bool should_suppress) override;
   void SuppressMetaTopRowKeyComboRewrites(bool should_suppress) override;
+  void RecordEventRemappedToRightClick(bool alt_based_right_click) override;
+  void RecordSixPackEventRewrite(ui::KeyboardCode key_code,
+                                 bool alt_based) override;
+  absl::optional<ui::mojom::SimulateRightClickModifier>
+  GetRemapRightClickModifier(int device_id) override;
+  absl::optional<ui::mojom::SixPackShortcutModifier>
+  GetShortcutModifierForSixPackKey(int device_id,
+                                   ui::KeyboardCode key_code) override;
 
  private:
-  const PrefService* GetPrefService() const;
+  PrefService* GetPrefService() const;
 
-  raw_ptr<const PrefService, ExperimentalAsh> pref_service_for_testing_;
+  raw_ptr<PrefService, ExperimentalAsh> pref_service_for_testing_;
 
   raw_ptr<wm::ActivationClient, DanglingUntriaged | ExperimentalAsh>
       activation_client_;

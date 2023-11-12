@@ -111,7 +111,7 @@ class GLTextureIOSurfaceRepresentation
   GLenum mode_ = 0;
 };
 
-// Skia representation for both GLTextureImageBackingHelper.
+// Skia Ganesh representation for both GLTextureImageBackingHelper.
 class SkiaIOSurfaceRepresentation : public SkiaGaneshImageRepresentation {
  public:
   SkiaIOSurfaceRepresentation(
@@ -119,7 +119,7 @@ class SkiaIOSurfaceRepresentation : public SkiaGaneshImageRepresentation {
       SharedImageBacking* backing,
       scoped_refptr<IOSurfaceBackingEGLState> egl_state,
       scoped_refptr<SharedContextState> context_state,
-      std::vector<sk_sp<SkPromiseImageTexture>> promise_textures,
+      std::vector<sk_sp<GrPromiseImageTexture>> promise_textures,
       MemoryTypeTracker* tracker);
   ~SkiaIOSurfaceRepresentation() override;
 
@@ -127,7 +127,7 @@ class SkiaIOSurfaceRepresentation : public SkiaGaneshImageRepresentation {
       base::RepeatingClosure begin_read_access_callback);
 
  private:
-  // SkiaImageRepresentation:
+  // SkiaGaneshImageRepresentation:
   std::vector<sk_sp<SkSurface>> BeginWriteAccess(
       int final_msaa_count,
       const SkSurfaceProps& surface_props,
@@ -135,12 +135,12 @@ class SkiaIOSurfaceRepresentation : public SkiaGaneshImageRepresentation {
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override;
-  std::vector<sk_sp<SkPromiseImageTexture>> BeginWriteAccess(
+  std::vector<sk_sp<GrPromiseImageTexture>> BeginWriteAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphore,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override;
   void EndWriteAccess() override;
-  std::vector<sk_sp<SkPromiseImageTexture>> BeginReadAccess(
+  std::vector<sk_sp<GrPromiseImageTexture>> BeginReadAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override;
@@ -151,7 +151,7 @@ class SkiaIOSurfaceRepresentation : public SkiaGaneshImageRepresentation {
 
   scoped_refptr<IOSurfaceBackingEGLState> egl_state_;
   scoped_refptr<SharedContextState> context_state_;
-  std::vector<sk_sp<SkPromiseImageTexture>> promise_textures_;
+  std::vector<sk_sp<GrPromiseImageTexture>> promise_textures_;
   std::vector<sk_sp<SkSurface>> write_surfaces_;
 #if DCHECK_IS_ON()
   raw_ptr<gl::GLContext> context_ = nullptr;
@@ -184,7 +184,8 @@ class DawnIOSurfaceRepresentation : public DawnImageRepresentation {
                               SharedImageBacking* backing,
                               MemoryTypeTracker* tracker,
                               WGPUDevice device,
-                              base::ScopedCFTypeRef<IOSurfaceRef> io_surface,
+                              gfx::ScopedIOSurface io_surface,
+                              const gfx::Size& io_surface_size,
                               WGPUTextureFormat wgpu_format,
                               std::vector<WGPUTextureFormat> view_formats);
   ~DawnIOSurfaceRepresentation() override;
@@ -193,11 +194,13 @@ class DawnIOSurfaceRepresentation : public DawnImageRepresentation {
   void EndAccess() final;
 
  private:
-  base::ScopedCFTypeRef<IOSurfaceRef> io_surface_;
-  WGPUDevice device_;
+  const WGPUDevice device_;
+  const gfx::ScopedIOSurface io_surface_;
+  const gfx::Size io_surface_size_;
+  const WGPUTextureFormat wgpu_format_;
+  const std::vector<WGPUTextureFormat> view_formats_;
+
   WGPUTexture texture_ = nullptr;
-  WGPUTextureFormat wgpu_format_;
-  std::vector<WGPUTextureFormat> view_formats_;
 
   // TODO(cwallez@chromium.org): Load procs only once when the factory is
   // created and pass a pointer to them around?
@@ -244,7 +247,8 @@ class GPU_GLES2_EXPORT IOSurfaceImageBacking
                         uint32_t usage,
                         GLenum gl_target,
                         bool framebuffer_attachment_angle,
-                        bool is_cleared);
+                        bool is_cleared,
+                        bool retain_gl_texture);
   IOSurfaceImageBacking(const IOSurfaceImageBacking& other) = delete;
   IOSurfaceImageBacking& operator=(const IOSurfaceImageBacking& other) = delete;
   ~IOSurfaceImageBacking() override;
@@ -258,6 +262,8 @@ class GPU_GLES2_EXPORT IOSurfaceImageBacking
   std::vector<std::unique_ptr<SharedEventAndSignalValue>> TakeSharedEvents();
 
  private:
+  class SkiaGraphiteIOSurfaceRepresentation;
+
   // SharedImageBacking:
   base::trace_event::MemoryAllocatorDump* OnMemoryDump(
       const std::string& dump_name,
@@ -286,6 +292,10 @@ class GPU_GLES2_EXPORT IOSurfaceImageBacking
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,
       scoped_refptr<SharedContextState> context_state) override;
+  std::unique_ptr<SkiaGraphiteImageRepresentation> ProduceSkiaGraphite(
+      SharedImageManager* manager,
+      MemoryTypeTracker* tracker,
+      scoped_refptr<SharedContextState> context_state) override;
   void SetPurgeable(bool purgeable) override;
   bool IsPurgeable() const override;
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override;
@@ -301,10 +311,18 @@ class GPU_GLES2_EXPORT IOSurfaceImageBacking
       IOSurfaceBackingEGLState* egl_state,
       bool have_context) override;
 
+  // Updates the read and write accesses tracker variables on BeginAccess and
+  // waits on `release_fence_` if fence is not null.
+  bool HandleBeginAccessSync(bool readonly);
+  // Updates the read and write accesses tracker variables on EndAccess.
+  void HandleEndAccessSync(bool readonly);
+
   bool IsPassthrough() const { return true; }
 
-  gfx::ScopedIOSurface io_surface_;
+  const gfx::ScopedIOSurface io_surface_;
   const uint32_t io_surface_plane_;
+  const gfx::Size io_surface_size_;
+  const uint32_t io_surface_format_;
   const gfx::GenericSharedMemoryId io_surface_id_;
 
   const GLenum gl_target_;

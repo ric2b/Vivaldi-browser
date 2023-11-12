@@ -111,12 +111,14 @@ base::Value OrganizeRules(
   base::Value::List all_cosmetic_allow_and_generic_allow_rules;
   all_cosmetic_allow_and_generic_allow_rules.reserve(kMaxGenericAllowRules);
 
-  base::Value::Dict lists_info;
+  base::Value::Dict metadata;
+  metadata.Set(rules_json::kVersion, GetOrganizedRulesVersionNumber());
 
   for (const auto& [id, compiled_rules] : all_compiled_rules) {
     // Record this to ensure we can find out if the organized rules set still
     // matches the original compiled rules lists-
-    lists_info.Set(base::NumberToString(id), compiled_rules->checksum());
+    metadata.EnsureDict(rules_json::kListChecksums)
+        ->Set(base::NumberToString(id), compiled_rules->checksum());
 
     DCHECK(compiled_rules->rules().is_dict());
     const base::Value::Dict& rules = compiled_rules->rules().GetDict();
@@ -175,8 +177,8 @@ base::Value OrganizeRules(
     if (!JSONStringValueSerializer(&serialized_exception)
              .Serialize(exception_rule))
       NOTREACHED();
-    lists_info.Set(rules_json::kExceptionRule,
-                   CalculateBufferChecksum(serialized_exception));
+    metadata.Set(rules_json::kExceptionRule,
+                 CalculateBufferChecksum(serialized_exception));
   }
 
   BlockListListMaker network_specific_block_lists_maker(
@@ -318,9 +320,8 @@ base::Value OrganizeRules(
   }
 
   base::Value::Dict result;
-  result.Set(rules_json::kListsInfo, std::move(lists_info));
+  result.Set(rules_json::kMetadata, std::move(metadata));
   result.Set(rules_json::kOrganizedRules, std::move(organized_rules));
-  result.Set(rules_json::kVersion, GetOrganizedRulesVersionNumber());
 
   return base::Value(std::move(result));
 }

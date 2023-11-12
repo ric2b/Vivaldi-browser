@@ -29,16 +29,11 @@ bool IsFedCmMultipleIdentityProvidersEnabled() {
       features::kFedCmMultipleIdentityProviders);
 }
 
-FedCmIdpSigninStatusMode GetFedCmIdpSigninStatusMode() {
-  if (GetFieldTrialParamByFeatureAsBool(
-          features::kFedCm, features::kFedCmIdpSigninStatusFieldTrialParamName,
-          false)) {
+FedCmIdpSigninStatusMode GetFedCmIdpSigninStatusFlag() {
+  if (base::FeatureList::IsEnabled(features::kFedCmIdpSigninStatusEnabled)) {
     return FedCmIdpSigninStatusMode::ENABLED;
   }
-  if (GetFieldTrialParamByFeatureAsBool(
-          features::kFedCm,
-          features::kFedCmIdpSigninStatusMetricsOnlyFieldTrialParamName,
-          true)) {
+  if (base::FeatureList::IsEnabled(features::kFedCmIdpSigninStatusMetrics)) {
     return FedCmIdpSigninStatusMode::METRICS_ONLY;
   }
   return FedCmIdpSigninStatusMode::DISABLED;

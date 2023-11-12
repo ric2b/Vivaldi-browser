@@ -46,13 +46,17 @@ class ChromeBrowsingDataModelDelegate : public BrowsingDataModel::Delegate {
   void RemoveDataKey(BrowsingDataModel::DataKey data_key,
                      BrowsingDataModel::StorageTypeSet storage_types,
                      base::OnceClosure callback) override;
+  absl::optional<BrowsingDataModel::DataOwner> GetDataOwner(
+      BrowsingDataModel::DataKey data_key,
+      BrowsingDataModel::StorageType storage_type) const override;
 
  private:
   ChromeBrowsingDataModelDelegate(Profile* profile,
                                   content::StoragePartition* storage_partition);
 
-  const raw_ptr<Profile> profile_;
-  const raw_ptr<content::StoragePartition> storage_partition_;
+  const raw_ptr<Profile, DanglingUntriaged> profile_;
+  const raw_ptr<content::StoragePartition, DanglingUntriaged>
+      storage_partition_;
 };
 
 #endif  // CHROME_BROWSER_BROWSING_DATA_CHROME_BROWSING_DATA_MODEL_DELEGATE_H_

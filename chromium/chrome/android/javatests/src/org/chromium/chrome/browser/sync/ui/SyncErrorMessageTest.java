@@ -42,7 +42,6 @@ import org.chromium.chrome.browser.sync.ui.SyncErrorMessage.MessageType;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -119,7 +118,8 @@ public class SyncErrorMessageTest {
 
         // Resolving the error should dismiss the current message.
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            mFakeSyncServiceImpl.setFirstSetupComplete(SyncFirstSetupCompleteSource.BASIC_FLOW);
+            mFakeSyncServiceImpl.setInitialSyncFeatureSetupComplete(
+                    SyncFirstSetupCompleteSource.BASIC_FLOW);
         });
         verifyHasDismissedMessage();
     }
@@ -190,7 +190,8 @@ public class SyncErrorMessageTest {
 
         @SyncError
         int syncError = TestThreadUtils.runOnUiThreadBlockingNoException(() -> {
-            mFakeSyncServiceImpl.setFirstSetupComplete(SyncFirstSetupCompleteSource.BASIC_FLOW);
+            mFakeSyncServiceImpl.setInitialSyncFeatureSetupComplete(
+                    SyncFirstSetupCompleteSource.BASIC_FLOW);
             return SyncSettingsUtils.getSyncError();
         });
 
@@ -202,22 +203,6 @@ public class SyncErrorMessageTest {
     @Test
     @LargeTest
     @Feature("RenderTest")
-    @DisableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ERROR_MESSAGES})
-    public void testSyncErrorMessageForAuthErrorView() throws IOException {
-        SyncErrorMessage.setMessageDispatcherForTesting(null);
-        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
-        mFakeSyncServiceImpl.setAuthError(GoogleServiceAuthError.State.INVALID_GAIA_CREDENTIALS);
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
-        ViewGroup view = mSyncTestRule.getActivity().findViewById(R.id.message_container);
-        // Wait until the message ui is shown.
-        CriteriaHelper.pollUiThread(() -> Criteria.checkThat(view.getChildCount(), Matchers.is(1)));
-        mRenderTestRule.render(view, "sync_error_message_auth_error");
-    }
-
-    @Test
-    @LargeTest
-    @Feature("RenderTest")
-    @EnableFeatures({ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ERROR_MESSAGES})
     public void testSyncErrorMessageForAuthErrorViewModern() throws IOException {
         SyncErrorMessage.setMessageDispatcherForTesting(null);
         mSyncTestRule.setUpAccountAndEnableSyncForTesting();

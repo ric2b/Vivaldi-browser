@@ -5,6 +5,7 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 
 #import <Foundation/Foundation.h>
+#import <WebKit/WebKit.h>
 
 #import "base/format_macros.h"
 #import "base/json/json_string_value_serializer.h"
@@ -14,6 +15,7 @@
 #import "base/test/ios/wait_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_app_interface.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
+#import "ios/chrome/test/earl_grey/chrome_test_case_app_interface.h"
 #import "ios/chrome/test/scoped_eg_synchronization_disabler.h"
 #import "ios/testing/earl_grey/app_launch_configuration.h"
 #import "ios/testing/earl_grey/app_launch_manager.h"
@@ -172,6 +174,10 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   GREYWaitForAppToIdle(@"App failed to idle");
 }
 
+- (void)killWebKitNetworkProcess {
+  [ChromeEarlGreyAppInterface killWebKitNetworkProcess];
+}
+
 - (NSInteger)browsingHistoryEntryCount {
   NSError* error = nil;
   NSInteger result =
@@ -248,6 +254,10 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
 
 - (NSUInteger)mainTabCount {
   return [ChromeEarlGreyAppInterface mainTabCount];
+}
+
+- (NSUInteger)inactiveTabCount {
+  return [ChromeEarlGreyAppInterface inactiveTabCount];
 }
 
 - (NSUInteger)incognitoTabCount {
@@ -595,6 +605,25 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
       stringWithFormat:@"Failed waiting for main tab count to become %" PRIuNS
                         "; actual count: %" PRIuNS,
                        count, actualCount];
+  EG_TEST_HELPER_ASSERT_TRUE(tabCountEqual, errorString);
+}
+
+- (void)waitForInactiveTabCount:(NSUInteger)count {
+  NSString* errorString = [NSString
+      stringWithFormat:
+          @"Failed waiting for inactive tab count to become %" PRIuNS, count];
+
+  // Allow the UI to become idle, in case any tabs are being opened or closed.
+  GREYWaitForAppToIdle(@"App failed to idle");
+
+  GREYCondition* tabCountCheck = [GREYCondition
+      conditionWithName:errorString
+                  block:^{
+                    return
+                        [ChromeEarlGreyAppInterface inactiveTabCount] == count;
+                  }];
+  bool tabCountEqual =
+      [tabCountCheck waitWithTimeout:kWaitForUIElementTimeout.InSecondsF()];
   EG_TEST_HELPER_ASSERT_TRUE(tabCountEqual, errorString);
 }
 
@@ -1204,9 +1233,25 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
 
 #pragma mark - SignIn Utilities (EG2)
 
-- (void)signOutAndClearIdentities {
-  [ChromeEarlGreyAppInterface signOutAndClearIdentities];
+- (void)signOutAndClearIdentitiesAndWaitForCompletion {
+  __block BOOL isSignoutFinished = NO;
+  [ChromeEarlGreyAppInterface signOutAndClearIdentitiesWithCompletion:^{
+    isSignoutFinished = YES;
+  }];
 
+  GREYCondition* signOutFinished = [GREYCondition
+      conditionWithName:@"Sign-out done, and identities & browsing data cleared"
+                  block:^{
+                    return isSignoutFinished;
+                  }];
+  bool success =
+      [signOutFinished waitWithTimeout:kWaitForActionTimeout.InSecondsF()];
+  EG_TEST_HELPER_ASSERT_TRUE(
+      success, @"Failed waiting for sign-out & cleaning completion");
+}
+
+- (void)signOutAndClearIdentities {
+  [ChromeEarlGreyAppInterface signOutAndClearIdentitiesWithCompletion:nil];
   GREYCondition* allIdentitiesCleared = [GREYCondition
       conditionWithName:@"All Chrome identities were cleared"
                   block:^{
@@ -1349,6 +1394,10 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
 
 - (BOOL)isUIButtonConfigurationEnabled {
   return [ChromeEarlGreyAppInterface isUIButtonConfigurationEnabled];
+}
+
+- (BOOL)isSortingTabsByRecency {
+  return [ChromeEarlGreyAppInterface isSortingTabsByRecency];
 }
 
 #pragma mark - ContentSettings

@@ -12,7 +12,7 @@
 #include "chrome/common/extensions/api/notifications/notification_style.h"
 #include "extensions/renderer/script_context.h"
 #include "gin/data_object_builder.h"
-#include "ui/base/layout.h"
+#include "ui/base/resource/resource_scale_factor.h"
 
 namespace extensions {
 
@@ -31,8 +31,7 @@ void NotificationsNativeHandler::GetNotificationImageSizes(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   NotificationBitmapSizes bitmap_sizes = GetNotificationBitmapSizes();
 
-  const float scale_factor = ui::GetScaleForResourceScaleFactor(
-      ui::GetMaxSupportedResourceScaleFactor());
+  const float scale_factor = ui::GetScaleForMaxSupportedResourceScaleFactor();
 
   v8::Isolate* isolate = GetIsolate();
   v8::HandleScope handle_scope(isolate);

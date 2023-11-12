@@ -52,10 +52,12 @@ import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.Promise;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.BackPressHelper;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.back_press.BackPressHelper;
+import org.chromium.chrome.browser.back_press.SecondaryActivityBackPressUma.SecondaryActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.history_clusters.HistoryClustersBridge;
 import org.chromium.chrome.browser.history_clusters.HistoryClustersCoordinator;
@@ -95,8 +97,8 @@ import java.util.Date;
  * Tests the History UI.
  */
 @RunWith(BaseRobolectricTestRunner.class)
-@DisableFeatures(
-        {ChromeFeatureList.HISTORY_JOURNEYS, ChromeFeatureList.BACK_GESTURE_REFACTOR_ACTIVITY})
+@DisableFeatures({ChromeFeatureList.HISTORY_JOURNEYS,
+        ChromeFeatureList.BACK_GESTURE_REFACTOR_ACTIVITY, ChromeFeatureList.EMPTY_STATES})
 public class HistoryUITest {
     private static final int PAGE_INCREMENT = 2;
     private static final String HISTORY_SEARCH_QUERY = "some page";
@@ -203,10 +205,11 @@ public class HistoryUITest {
         // Some individual tests may override to enable this feature which is disabled by
         // the class by default.
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.BACK_GESTURE_REFACTOR_ACTIVITY)) {
-            BackPressHelper.create(mLifecycleOwner, mOnBackPressedDispatcher, mHistoryManager);
+            BackPressHelper.create(mLifecycleOwner, mOnBackPressedDispatcher, mHistoryManager,
+                    SecondaryActivity.HISTORY);
         } else {
-            BackPressHelper.create(
-                    mLifecycleOwner, mOnBackPressedDispatcher, mHistoryManager::onBackPressed);
+            BackPressHelper.create(mLifecycleOwner, mOnBackPressedDispatcher,
+                    mHistoryManager::onBackPressed, SecondaryActivity.HISTORY);
         }
     }
 
@@ -228,7 +231,43 @@ public class HistoryUITest {
 
     @Test
     @SmallTest
+    @EnableFeatures({ChromeFeatureList.EMPTY_STATES})
+    public void testRemove_SingleItem_EmptyState() throws Exception {
+        final HistoryItemView itemView = (HistoryItemView) getItemView(2);
+
+        itemView.getRemoveButtonForTests().performClick();
+
+        // Check that one item was removed.
+        ShadowLooper.idleMainLooper();
+        Assert.assertEquals(1, mHistoryProvider.markItemForRemovalCallback.getCallCount());
+        Assert.assertEquals(1, mHistoryProvider.removeItemsCallback.getCallCount());
+        Assert.assertEquals(3, mAdapter.getItemCount());
+        Assert.assertEquals(View.VISIBLE, mRecyclerView.getVisibility());
+        Assert.assertEquals(View.GONE, mHistoryManager.getEmptyViewForTests().getVisibility());
+    }
+
+    @Test
+    @SmallTest
     public void testRemove_AllItems() throws Exception {
+        toggleItemSelection(2);
+        toggleItemSelection(3);
+
+        performMenuAction(R.id.selection_mode_delete_menu_id);
+
+        // Check that all items were removed. The onChangedCallback should be called three times -
+        // once for each item that is being removed and once for the removal of the header.
+        Assert.assertEquals(0, mAdapter.getItemCount());
+        Assert.assertEquals(2, mHistoryProvider.markItemForRemovalCallback.getCallCount());
+        Assert.assertEquals(1, mHistoryProvider.removeItemsCallback.getCallCount());
+        Assert.assertFalse(mHistoryManager.getSelectionDelegateForTests().isSelectionEnabled());
+        Assert.assertEquals(View.GONE, mRecyclerView.getVisibility());
+        Assert.assertEquals(View.VISIBLE, mHistoryManager.getEmptyViewForTests().getVisibility());
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures({ChromeFeatureList.EMPTY_STATES})
+    public void testRemove_AllItems_EmptyState() throws Exception {
         toggleItemSelection(2);
         toggleItemSelection(3);
 
@@ -442,6 +481,7 @@ public class HistoryUITest {
 
     @Test
     @SmallTest
+    @DisableFeatures({ChromeFeatureList.BACK_GESTURE_REFACTOR_ACTIVITY})
     public void testSearchViewDismissedByBackPress() {
         final HistoryManagerToolbar toolbar = mHistoryManager.getToolbarForTests();
         View toolbarShadow = mHistoryManager.getSelectableListLayout().getToolbarShadowForTests();
@@ -458,17 +498,23 @@ public class HistoryUITest {
         Assert.assertEquals(View.GONE, toolbarSearchView.getVisibility());
 
         // Press back press to unselect item and the search view is showing again.
+        var backPressRecorder = HistogramWatcher.newSingleRecordWatcher(
+                "Android.BackPress.SecondaryActivity", SecondaryActivity.HISTORY);
         Assert.assertTrue(mHistoryManager.getHandleBackPressChangedSupplier().get());
         TestThreadUtils.runOnUiThreadBlocking(mOnBackPressedDispatcher::onBackPressed);
         Assert.assertFalse(mHistoryManager.getSelectionDelegateForTests().isSelectionEnabled());
         Assert.assertEquals(View.GONE, toolbarShadow.getVisibility());
         Assert.assertEquals(View.VISIBLE, toolbarSearchView.getVisibility());
+        backPressRecorder.assertExpected();
 
         // Press back to close the search view.
+        var backPressRecorder2 = HistogramWatcher.newSingleRecordWatcher(
+                "Android.BackPress.SecondaryActivity", SecondaryActivity.HISTORY);
         Assert.assertTrue(mHistoryManager.getHandleBackPressChangedSupplier().get());
         TestThreadUtils.runOnUiThreadBlocking(mOnBackPressedDispatcher::onBackPressed);
         Assert.assertEquals(View.GONE, toolbarShadow.getVisibility());
         Assert.assertEquals(View.GONE, toolbarSearchView.getVisibility());
+        backPressRecorder2.assertExpected();
     }
 
     @Test

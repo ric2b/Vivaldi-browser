@@ -294,14 +294,7 @@ unsigned int GetStartIndexForBookmarks(views::MenuItemView* menu, int64_t id) {
   if (menu->HasSubmenu()) {
     for (const ::vivaldi::BookmarkMenuContainerEntry& e : Container->siblings) {
       if (e.id == id) {
-        // Sub menus are always created with an "(empty)" entry which is removed
-        // after population has finished. We must adjust for that and since the
-        // menu index is set up from the menu model which has no empty entry.
-        unsigned int index =
-            e.menu_index + (menu->GetSubmenu()->HasEmptyMenuItemView() ? 1 : 0);
-        if (menu->GetSubmenu()->children().size() >= index /*e.menu_index*/) {
-          menu_index = index;
-        }
+        menu_index = e.menu_index;
         break;
       }
     }

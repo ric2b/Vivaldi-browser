@@ -175,7 +175,9 @@ CGFloat ToolbarHeight() {
       [[ToolbarButtonFactory alloc] initWithStyle:ToolbarStyle::kNormal];
   self.fakeToolbar = [[UIView alloc] init];
   self.fakeToolbar.backgroundColor =
-      buttonFactory.toolbarConfiguration.backgroundColor;
+      IsMagicStackEnabled()
+          ? [UIColor clearColor]
+          : buttonFactory.toolbarConfiguration.backgroundColor;
   [searchField insertSubview:self.fakeToolbar atIndex:0];
   self.fakeToolbar.translatesAutoresizingMaskIntoConstraints = NO;
 
@@ -361,18 +363,7 @@ CGFloat ToolbarHeight() {
 - (CGFloat)searchFieldProgressForOffset:(CGFloat)offset
                          safeAreaInsets:(UIEdgeInsets)safeAreaInsets {
   // The scroll offset at which point searchField's frame should stop growing.
-  CGFloat maxScaleOffset = self.frame.size.height - ToolbarHeight() -
-                           ntp_header::kFakeOmniboxScrolledToTopMargin -
-                           safeAreaInsets.top;
-  // If the Shrunk logo for the Start Surface is being shown, the searchField
-  // expansion should start later so that its background does not cut off the
-  // logo. This mainly impacts notched devices that have a large top Safe Area
-  // inset. Instead of ensuring the expansion finishes by the time the omnibox
-  // reaches the bottom of the toolbar, wait until the logo is in the safe area
-  // before expanding so it is out of view.
-  if (ShouldShrinkLogoForStartSurface()) {
-    maxScaleOffset += safeAreaInsets.top;
-  }
+  CGFloat maxScaleOffset = [self offsetToBeginFakeOmniboxExpansionForSplitMode];
   // If it is not in SplitMode the search field should scroll under the toolbar.
   if (!IsSplitToolbarMode(self)) {
     maxScaleOffset += ToolbarHeight();
@@ -388,6 +379,11 @@ CGFloat ToolbarHeight() {
         animatingOffset / ntp_header::kAnimationDistance, 0, 1);
   }
   return percent;
+}
+
+- (CGFloat)offsetToBeginFakeOmniboxExpansionForSplitMode {
+  return self.frame.size.height - ToolbarHeight() -
+         ntp_header::kFakeOmniboxScrolledToTopMargin;
 }
 
 - (void)updateSearchFieldWidth:(NSLayoutConstraint*)widthConstraint
@@ -407,6 +403,14 @@ CGFloat ToolbarHeight() {
 
   CGFloat percent = [self searchFieldProgressForOffset:offset
                                         safeAreaInsets:safeAreaInsets];
+  if (IsMagicStackEnabled()) {
+    // Update background color of fake toolbar if stuck to top of NTP so that it
+    // has a non-clear background that matches the NTP background. Otherwise,
+    // return to clear background.
+    self.fakeToolbar.backgroundColor =
+        percent == 1.0f ? [UIColor colorNamed:@"ntp_background_color"]
+                        : [UIColor clearColor];
+  }
 
   // Offset the hint label constraints with half of the change in width
   // from the original scale, since constraints are calculated before
@@ -558,7 +562,9 @@ CGFloat ToolbarHeight() {
     _fakeLocationBar.userInteractionEnabled = NO;
     _fakeLocationBar.clipsToBounds = YES;
     _fakeLocationBar.backgroundColor =
-        [UIColor colorNamed:kTextfieldBackgroundColor];
+        IsMagicStackEnabled()
+            ? [UIColor colorNamed:@"fake_omnibox_background_color"]
+            : [UIColor colorNamed:kTextfieldBackgroundColor];
     _fakeLocationBar.translatesAutoresizingMaskIntoConstraints = NO;
     _fakeLocationBarHighlightView = [[UIView alloc] init];
     _fakeLocationBarHighlightView.userInteractionEnabled = NO;

@@ -14,10 +14,15 @@ namespace content {
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 //
-// If you change this, please follow the process in
+// If you change this, please follow the processes below:
+//
 // go/preloading-dashboard-updates to update the mapping reflected in
 // dashboard, or if you are not a Googler, please file an FYI bug on
 // https://crbug.new with component Internals>Preload.
+//
+// https://docs.google.com/document/d/1PnrfowsZMt62PX1EvvTp2Nqs3ji1zrklrAEe1JYbkTk
+// to ensure failure reasons are correctly shown in the DevTools
+// frontend.
 enum class PrerenderFinalStatus {
   kActivated = 0,
   kDestroyed = 1,
@@ -49,7 +54,9 @@ enum class PrerenderFinalStatus {
   kLoginAuthRequested = 26,
   kUaChangeRequiresReload = 27,
   kBlockedByClient = 28,
-  kAudioOutputDeviceRequested = 29,
+  // Deprecate in favor of newly defined behavior to support Web Audio while
+  // prerendering. See https://github.com/WICG/nav-speculation/issues/165.
+  // kAudioOutputDeviceRequested = 29,
   kMixedContent = 30,
   kTriggerBackgrounded = 31,
   // Break down into kEmbedderTriggeredAndSameOriginRedirected and
@@ -114,7 +121,14 @@ enum class PrerenderFinalStatus {
   kMemoryPressureOnTrigger = 67,
   kMemoryPressureAfterTriggered = 68,
 
-  kMaxValue = kMemoryPressureAfterTriggered,
+  kPrerenderingDisabledByDevTools = 69,
+
+  // Different from kBlockedByClient, which tracks the failure caused by main
+  // frame navigation, this status indicates that clients block some resource
+  // loading.
+  kResourceLoadBlockedByClient = 70,
+
+  kMaxValue = kResourceLoadBlockedByClient,
 };
 
 // Helper method to convert PrerenderFinalStatus to PreloadingFailureReason.

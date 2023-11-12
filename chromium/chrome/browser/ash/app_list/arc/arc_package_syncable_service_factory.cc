@@ -23,7 +23,8 @@ ArcPackageSyncableServiceFactory::GetForBrowserContext(
 // static
 ArcPackageSyncableServiceFactory*
 ArcPackageSyncableServiceFactory::GetInstance() {
-  return base::Singleton<ArcPackageSyncableServiceFactory>::get();
+  static base::NoDestructor<ArcPackageSyncableServiceFactory> instance;
+  return instance.get();
 }
 
 ArcPackageSyncableServiceFactory::ArcPackageSyncableServiceFactory()
@@ -31,11 +32,16 @@ ArcPackageSyncableServiceFactory::ArcPackageSyncableServiceFactory()
           "ArcPackageSyncableService",
           // This matches the logic in ExtensionSyncServiceFactory, which uses
           // the original browser context.
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   DependsOn(ArcAppListPrefsFactory::GetInstance());
 }
 
-ArcPackageSyncableServiceFactory::~ArcPackageSyncableServiceFactory() {}
+ArcPackageSyncableServiceFactory::~ArcPackageSyncableServiceFactory() = default;
 
 KeyedService* ArcPackageSyncableServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {

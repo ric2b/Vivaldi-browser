@@ -23,6 +23,28 @@
 
 namespace drivefs {
 
+struct FakeMetadata {
+  FakeMetadata();
+  ~FakeMetadata();
+
+  FakeMetadata(FakeMetadata&& other);
+  FakeMetadata& operator=(FakeMetadata&& other);
+
+  base::FilePath path;
+  std::string mime_type;
+  std::string original_name;
+  bool pinned = false;
+  bool available_offline = false;
+  bool shared = false;
+  mojom::Capabilities capabilities = {};
+  mojom::FolderFeature folder_feature = {};
+  std::string doc_id;
+  std::string alternate_url;
+  bool shortcut = false;
+  bool can_pin = true;
+  base::FilePath shortcut_target_path;
+};
+
 class FakeDriveFsBootstrapListener : public DriveFsBootstrapListener {
  public:
   explicit FakeDriveFsBootstrapListener(
@@ -56,16 +78,7 @@ class FakeDriveFs : public drivefs::mojom::DriveFs,
 
   std::unique_ptr<drivefs::DriveFsBootstrapListener> CreateMojoListener();
 
-  void SetMetadata(const base::FilePath& path,
-                   const std::string& mime_type,
-                   const std::string& original_name,
-                   bool pinned,
-                   bool available_offline,
-                   bool shared,
-                   const mojom::Capabilities& capabilities,
-                   const mojom::FolderFeature& folder_feature,
-                   const std::string& doc_id,
-                   const std::string& alternate_url);
+  void SetMetadata(const FakeMetadata& metadata);
 
   void DisplayConfirmDialog(
       drivefs::mojom::DialogReasonPtr reason,
@@ -92,9 +105,29 @@ class FakeDriveFs : public drivefs::mojom::DriveFs,
       (drivefs::mojom::DriveFs::GetOfflineFilesSpaceUsageCallback callback),
       (override));
 
+  MOCK_METHOD(void,
+              ImmediatelyUpload,
+              (const base::FilePath& path,
+               drivefs::mojom::DriveFs::ImmediatelyUploadCallback callback),
+              (override));
+
+  MOCK_METHOD(void,
+              UpdateFromPairedDoc,
+              (const base::FilePath& path,
+               drivefs::mojom::DriveFs::UpdateFromPairedDocCallback callback),
+              (override));
+
+  MOCK_METHOD(void,
+              GetItemFromCloudStore,
+              (const base::FilePath& path,
+               drivefs::mojom::DriveFs::GetItemFromCloudStoreCallback callback),
+              (override));
+
   const base::FilePath& mount_path() { return mount_path_; }
 
   absl::optional<bool> IsItemPinned(const std::string& path);
+
+  bool SetCanPin(const std::string& path, bool can_pin);
 
   struct FileMetadata {
     FileMetadata();
@@ -113,6 +146,8 @@ class FakeDriveFs : public drivefs::mojom::DriveFs,
     std::string doc_id;
     int64_t stable_id = 0;
     std::string alternate_url;
+    absl::optional<mojom::ShortcutDetails> shortcut_details;
+    bool can_pin = true;
   };
 
   absl::optional<FakeDriveFs::FileMetadata> GetItemMetadata(
@@ -212,6 +247,9 @@ class FakeDriveFs : public drivefs::mojom::DriveFs,
 
   void ClearOfflineFiles(
       drivefs::mojom::DriveFs::ClearOfflineFilesCallback) override;
+
+  void GetDocsOfflineStats(
+      drivefs::mojom::DriveFs::GetDocsOfflineStatsCallback) override;
 
   const base::FilePath mount_path_;
   int64_t next_stable_id_ = 1;

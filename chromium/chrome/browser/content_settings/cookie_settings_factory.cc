@@ -35,7 +35,8 @@ CookieSettingsFactory::GetForProfile(Profile* profile) {
 
 // static
 CookieSettingsFactory* CookieSettingsFactory::GetInstance() {
-  return base::Singleton<CookieSettingsFactory>::get();
+  static base::NoDestructor<CookieSettingsFactory> instance;
+  return instance.get();
 }
 
 CookieSettingsFactory::CookieSettingsFactory()
@@ -43,7 +44,12 @@ CookieSettingsFactory::CookieSettingsFactory()
           "CookieSettings",
           // The incognito profile has its own content settings map. Therefore,
           // it should get its own CookieSettings.
-          ProfileSelections::BuildForRegularAndIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {
   DependsOn(HostContentSettingsMapFactory::GetInstance());
 }
 

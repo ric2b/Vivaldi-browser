@@ -4,6 +4,8 @@
 
 #include "ash/system/input_device_settings/input_device_settings_metrics_manager.h"
 
+#include <cstdint>
+
 #include "ash/public/mojom/input_device_settings.mojom-forward.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -24,16 +26,63 @@ enum class PointerSensitivity {
   kMaxValue = kHighest,
 };
 
-constexpr auto kModifierNames =
-    base::MakeFixedFlatMap<ui::mojom::ModifierKey, const char*>({
-        {ui::mojom::ModifierKey::kMeta, "Meta"},
-        {ui::mojom::ModifierKey::kControl, "Control"},
-        {ui::mojom::ModifierKey::kAlt, "Alt"},
-        {ui::mojom::ModifierKey::kCapsLock, "CapsLock"},
-        {ui::mojom::ModifierKey::kEscape, "Escape"},
-        {ui::mojom::ModifierKey::kBackspace, "Backspace"},
-        {ui::mojom::ModifierKey::kAssistant, "Assistant"},
-    });
+// Do not change ordering of this list as the ordering is used to compute
+// modifier hash in `RecordModifierRemappingHash()`.
+static constexpr struct {
+  const char* key_name;
+  ui::mojom::ModifierKey modifier_key;
+} kModifierNames[] = {
+    {"Meta", ui::mojom::ModifierKey::kMeta},
+    {"Control", ui::mojom::ModifierKey::kControl},
+    {"Alt", ui::mojom::ModifierKey::kAlt},
+    {"CapsLock", ui::mojom::ModifierKey::kCapsLock},
+    {"Escape", ui::mojom::ModifierKey::kEscape},
+    {"Backspace", ui::mojom::ModifierKey::kBackspace},
+    {"Assistant", ui::mojom::ModifierKey::kAssistant},
+};
+
+// The modifier hash is made up of `kNumModifiers` blocks of
+// `kModifierHashWidth` bits. Each modifier is assigned a `kModifierHashWidth`
+// width block to track its user configured setting. These user configured
+// settings are contained within [0, `kMaxModifierValue`] and are assigned in
+// /ash/public/input_device_settings.mojom in the `mojom::ModifierKey` struct.
+
+// To decode, break up the hash into `kModifierHashWidth` bit integers.
+// For example, if `kModifierHashWidth` is 4, use the following bit ranges to
+// extract the value of the remapped modifier:
+
+// | index | ModifierKey             | Bit Range |
+// | 0     | kMeta                   | [0, 3]    |
+// | 1     | kControl                | [4, 7]    |
+// | 2     | kAlt                    | [8, 11]   |
+// | 3     | kCapsLock               | [12, 15]  |
+// | 4     | kEscape                 | [16, 19]  |
+// | 5     | kBackspace              | [20, 23]  |
+// | 6     | kAssistant              | [24, 27]  |
+
+// Each modifier key will have 9 actions which requires 4 bits to encode.
+constexpr int kModifierHashWidth = 4;
+constexpr int kMaxModifierValue = (1 << kModifierHashWidth) - 1;
+constexpr int kNumModifiers = std::size(kModifierNames);
+
+// Verify that the number of modifiers we are trying to hash together into a
+// 32-bit int will fit without any overflow or UB.
+// Modifier hash is limited to 32 bits as metrics can only handle 32 bit ints.
+static_assert((sizeof(int32_t) * 8) >= (kModifierHashWidth * kNumModifiers));
+static_assert(static_cast<int>(ui::mojom::ModifierKey::kMaxValue) <=
+              kMaxModifierValue);
+
+// Precomputes the value of the modifier hash when all prefs are configured to
+// their default value.
+constexpr int32_t PrecalculateDefaultModifierHash() {
+  uint32_t hash = 0;
+  for (ssize_t i = kNumModifiers - 1u; i >= 0; i--) {
+    hash <<= kModifierHashWidth;
+    hash += static_cast<int>(kModifierNames[i].modifier_key);
+  }
+  return hash;
+}
+constexpr int32_t kDefaultModifierHash = PrecalculateDefaultModifierHash();
 
 std::string GetKeyboardMetricsPrefix(const mojom::Keyboard& keyboard) {
   if (!keyboard.is_external) {
@@ -54,6 +103,46 @@ ui::mojom::ModifierKey GetModifierRemappingTo(
     return iter->second;
   }
   return modifier_key;
+}
+
+absl::optional<std::string> GetModifierKeyName(
+    ui::mojom::ModifierKey modifier_key) {
+  for (ssize_t i = kNumModifiers - 1; i >= 0; i--) {
+    if (kModifierNames[i].modifier_key == modifier_key) {
+      return absl::make_optional<std::string>(kModifierNames[i].key_name);
+    }
+  }
+  return absl::nullopt;
+}
+
+int GetNumberOfNonDefaultRemappings(
+    const mojom::KeyboardSettings& settings,
+    const base::flat_map<ui::mojom::ModifierKey, ui::mojom::ModifierKey>&
+        default_remappings) {
+  int num_keys_changed = 0;
+  const auto& remappings = settings.modifier_remappings;
+
+  // Count the number of different pairs in the current remapping that is not
+  // default. For defaults on apple keyboard, it would be a flat_map:
+  // {{ModifierKey.Meta => ModifierKey.Control},
+  //  {ModifierKey.Control => ModifierKey.Meta}},
+  // For others, it's an empty flat_map.
+  // A remapping pair [remapped_from, remapped_to] in current remapping is
+  // considered to be non-default if:
+  //   1. remapped_from does not exist in the default remapping.
+  //   2. remapped_from is mapped to any key other than its default mapping.
+  for (const auto& [remapped_from, remapped_to] : remappings) {
+    const auto& iter = default_remappings.find(remapped_from);
+    if (iter == default_remappings.end() || iter->second != remapped_to) {
+      ++num_keys_changed;
+    }
+  }
+  for (const auto& [remapped_from, remapped_to] : default_remappings) {
+    if (!remappings.contains(remapped_from)) {
+      ++num_keys_changed;
+    }
+  }
+  return num_keys_changed;
 }
 
 }  // namespace
@@ -91,15 +180,37 @@ void InputDeviceSettingsMetricsManager::RecordKeyboardInitialMetrics(
 
   // Record metrics for modifier remappings.
   for (const auto modifier_key : keyboard.modifier_keys) {
-    auto* modifier_name_iter = kModifierNames.find(modifier_key);
-    DCHECK(modifier_name_iter != kModifierNames.end());
+    const auto modifier_name = GetModifierKeyName(modifier_key);
+    CHECK(modifier_name.has_value());
     const auto key_remapped_to =
         GetModifierRemappingTo(*keyboard.settings, modifier_key);
     const std::string modifier_remapping_metrics =
-        base::StrCat({keyboard_metrics_prefix, "Modifiers.",
-                      modifier_name_iter->second, "RemappedTo.Initial"});
+        base::StrCat({keyboard_metrics_prefix, "Modifiers.", *modifier_name,
+                      "RemappedTo.Initial"});
     base::UmaHistogramEnumeration(modifier_remapping_metrics, key_remapped_to);
   }
+
+  // Record remapping metrics when keyboard is initialized.
+  RecordModifierRemappingHash(keyboard);
+  RecordKeyboardNumberOfKeysRemapped(keyboard);
+}
+
+void InputDeviceSettingsMetricsManager::RecordKeyboardNumberOfKeysRemapped(
+    const mojom::Keyboard& keyboard) {
+  base::flat_map<ui::mojom::ModifierKey, ui::mojom::ModifierKey>
+      default_remappings;
+  if (keyboard.meta_key == mojom::MetaKey::kCommand) {
+    default_remappings[ui::mojom::ModifierKey::kControl] =
+        ui::mojom::ModifierKey::kMeta;
+    default_remappings[ui::mojom::ModifierKey::kMeta] =
+        ui::mojom::ModifierKey::kControl;
+  }
+  const int num_keys_remapped = GetNumberOfNonDefaultRemappings(
+      *keyboard.settings, std::move(default_remappings));
+  const std::string keyboard_metrics =
+      base::StrCat({GetKeyboardMetricsPrefix(keyboard),
+                    "Modifiers.NumberOfRemappedKeysOnStart"});
+  base::UmaHistogramCounts100(keyboard_metrics, num_keys_remapped);
 }
 
 void InputDeviceSettingsMetricsManager::RecordKeyboardChangedMetrics(
@@ -124,19 +235,33 @@ void InputDeviceSettingsMetricsManager::RecordKeyboardChangedMetrics(
 
   // Record metrics for modifier remappings.
   for (const auto modifier_key : keyboard.modifier_keys) {
-    auto* modifier_name_iter = kModifierNames.find(modifier_key);
-    DCHECK(modifier_name_iter != kModifierNames.end());
+    const auto modifier_name = GetModifierKeyName(modifier_key);
+    CHECK(modifier_name.has_value());
     const auto key_remapped_to_before =
         GetModifierRemappingTo(old_settings, modifier_key);
     const auto key_remapped_to =
         GetModifierRemappingTo(*keyboard.settings, modifier_key);
+    // Only emit the metric if the modifier remapping is changed.
     if (key_remapped_to_before != key_remapped_to) {
       const std::string modifier_remapping_metrics =
-          base::StrCat({keyboard_metrics_prefix, "Modifiers.",
-                        modifier_name_iter->second, "RemappedTo.Changed"});
+          base::StrCat({keyboard_metrics_prefix, "Modifiers.", *modifier_name,
+                        "RemappedTo.Changed"});
       base::UmaHistogramEnumeration(modifier_remapping_metrics,
                                     key_remapped_to);
     }
+  }
+}
+
+void InputDeviceSettingsMetricsManager::RecordKeyboardNumberOfKeysReset(
+    const mojom::Keyboard& keyboard,
+    const mojom::KeyboardSettings& default_settings) {
+  const int num_keys_reset = GetNumberOfNonDefaultRemappings(
+      *keyboard.settings, default_settings.modifier_remappings);
+
+  if (num_keys_reset != 0) {
+    const std::string keyboard_metrics = base::StrCat(
+        {GetKeyboardMetricsPrefix(keyboard), "Modifiers.NumberOfKeysReset"});
+    base::UmaHistogramCounts100(keyboard_metrics, num_keys_reset);
   }
 }
 
@@ -189,6 +314,15 @@ void InputDeviceSettingsMetricsManager::RecordMouseChangedMetrics(
         static_cast<PointerSensitivity>(mouse.settings->sensitivity);
     base::UmaHistogramEnumeration(
         "ChromeOS.Settings.Device.Mouse.Sensitivity.Changed", sensitivity);
+    const int speed_difference =
+        mouse.settings->sensitivity - old_settings.sensitivity;
+    const std::string delta_sensitivity_metric =
+        speed_difference > 0
+            ? "ChromeOS.Settings.Device.Mouse.Sensitivity.Increase"
+            : "ChromeOS.Settings.Device.Mouse.Sensitivity.Decrease";
+    base::UmaHistogramEnumeration(
+        delta_sensitivity_metric,
+        static_cast<PointerSensitivity>(abs(speed_difference)));
   }
   if (mouse.settings->swap_right != old_settings.swap_right) {
     base::UmaHistogramBoolean(
@@ -240,6 +374,15 @@ void InputDeviceSettingsMetricsManager::RecordPointingStickChangedMetrics(
     base::UmaHistogramEnumeration(
         "ChromeOS.Settings.Device.PointingStick.Sensitivity.Changed",
         sensitivity);
+    const int speed_difference =
+        pointing_stick.settings->sensitivity - old_settings.sensitivity;
+    const std::string delta_sensitivity_metric =
+        speed_difference > 0
+            ? "ChromeOS.Settings.Device.PointingStick.Sensitivity.Increase"
+            : "ChromeOS.Settings.Device.PointingStick.Sensitivity.Decrease";
+    base::UmaHistogramEnumeration(
+        delta_sensitivity_metric,
+        static_cast<PointerSensitivity>(abs(speed_difference)));
   }
   if (pointing_stick.settings->swap_right != old_settings.swap_right) {
     base::UmaHistogramBoolean(
@@ -279,7 +422,16 @@ void InputDeviceSettingsMetricsManager::RecordTouchpadInitialMetrics(
                             touchpad.settings->tap_dragging_enabled);
   base::UmaHistogramBoolean(touchpad_metrics_prefix + "TapToClick.Initial",
                             touchpad.settings->tap_to_click_enabled);
-  // TODO(yyhyyh@): Add haptic settings metrics.
+
+  if (touchpad.is_haptic) {
+    PointerSensitivity haptic_sensitivity =
+        static_cast<PointerSensitivity>(touchpad.settings->haptic_sensitivity);
+    base::UmaHistogramBoolean(touchpad_metrics_prefix + "HapticEnabled.Initial",
+                              touchpad.settings->haptic_enabled);
+    base::UmaHistogramEnumeration(
+        touchpad_metrics_prefix + "HapticSensitivity.Initial",
+        haptic_sensitivity);
+  }
 }
 
 void InputDeviceSettingsMetricsManager::RecordTouchpadChangedMetrics(
@@ -304,6 +456,13 @@ void InputDeviceSettingsMetricsManager::RecordTouchpadChangedMetrics(
         static_cast<PointerSensitivity>(touchpad.settings->sensitivity);
     base::UmaHistogramEnumeration(
         touchpad_metrics_prefix + "Sensitivity.Changed", sensitivity);
+    const int speed_difference =
+        touchpad.settings->sensitivity - old_settings.sensitivity;
+    const std::string delta_metric_suffix =
+        speed_difference > 0 ? "Sensitivity.Increase" : "Sensitivity.Decrease";
+    base::UmaHistogramEnumeration(
+        base::StrCat({touchpad_metrics_prefix, delta_metric_suffix}),
+        static_cast<PointerSensitivity>(abs(speed_difference)));
   }
   if (touchpad.settings->tap_dragging_enabled !=
       old_settings.tap_dragging_enabled) {
@@ -315,7 +474,59 @@ void InputDeviceSettingsMetricsManager::RecordTouchpadChangedMetrics(
     base::UmaHistogramBoolean(touchpad_metrics_prefix + "TapToClick.Changed",
                               touchpad.settings->tap_to_click_enabled);
   }
-  // TODO(yyhyyh@): Add haptic settings metrics.
+  if (touchpad.is_haptic) {
+    if (touchpad.settings->haptic_enabled != old_settings.haptic_enabled) {
+      bool haptic_enabled = touchpad.settings->haptic_enabled;
+      base::UmaHistogramBoolean(
+          touchpad_metrics_prefix + "HapticEnabled.Changed", haptic_enabled);
+    }
+    if (touchpad.settings->haptic_sensitivity !=
+        old_settings.haptic_sensitivity) {
+      PointerSensitivity haptic_sensitivity = static_cast<PointerSensitivity>(
+          touchpad.settings->haptic_sensitivity);
+      base::UmaHistogramEnumeration(
+          touchpad_metrics_prefix + "HapticSensitivity.Changed",
+          haptic_sensitivity);
+      const int speed_difference = touchpad.settings->haptic_sensitivity -
+                                   old_settings.haptic_sensitivity;
+      const std::string delta_metric_suffix =
+          speed_difference > 0 ? "HapticSensitivity.Increase"
+                               : "HapticSensitivity.Decrease";
+      base::UmaHistogramEnumeration(
+          base::StrCat({touchpad_metrics_prefix, delta_metric_suffix}),
+          static_cast<PointerSensitivity>(abs(speed_difference)));
+    }
+  }
+}
+
+void InputDeviceSettingsMetricsManager::RecordModifierRemappingHash(
+    const mojom::Keyboard& keyboard) {
+  // Compute hash by left-shifting by `kModifierHashWidth` and then inserting
+  // the modifier value from prefs at into the lowest `kModifierHashWidth` bits.
+  uint32_t hash = 0;
+  for (ssize_t i = kNumModifiers - 1u; i >= 0; i--) {
+    const auto modifier_key = kModifierNames[i].modifier_key;
+    auto iter = keyboard.settings->modifier_remappings.find(modifier_key);
+    const auto remapped_key_value =
+        iter == keyboard.settings->modifier_remappings.end()
+            ? static_cast<uint32_t>(modifier_key)
+            : static_cast<uint32_t>(iter->second);
+
+    // Check that shifting and adding value will not overflow `hash`.
+    DCHECK(remapped_key_value <= kMaxModifierValue && remapped_key_value >= 0);
+    DCHECK(hash < (1u << ((sizeof(uint32_t) * 8u) - kModifierHashWidth)));
+
+    hash <<= kModifierHashWidth;
+    hash += static_cast<uint32_t>(remapped_key_value);
+  }
+
+  // If the computed hash matches the hash when settings are in a default state,
+  // the metric should not be published.
+  if (hash != kDefaultModifierHash) {
+    const std::string metrics =
+        base::StrCat({GetKeyboardMetricsPrefix(keyboard), "Modifiers.Hash"});
+    base::UmaHistogramSparse(metrics, static_cast<int>(hash));
+  }
 }
 
 }  // namespace ash

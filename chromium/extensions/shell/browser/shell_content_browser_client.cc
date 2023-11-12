@@ -10,6 +10,8 @@
 
 #include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/guest_view/common/guest_view.mojom.h"
 #include "components/nacl/common/buildflags.h"
 #include "content/public/browser/browser_main_runner.h"
@@ -163,26 +165,7 @@ void ShellContentBrowserClient::SiteInstanceGotProcess(
     return;
 
   ProcessMap::Get(browser_main_parts_->browser_context())
-      ->Insert(extension->id(),
-               site_instance->GetProcess()->GetID(),
-               site_instance->GetId());
-}
-
-void ShellContentBrowserClient::SiteInstanceDeleting(
-    content::SiteInstance* site_instance) {
-  // Don't do anything if we're shutting down.
-  if (content::BrowserMainRunner::ExitedMainMessageLoop())
-    return;
-
-  // If this isn't an extension renderer there's nothing to do.
-  const Extension* extension = GetExtension(site_instance);
-  if (!extension)
-    return;
-
-  ProcessMap::Get(browser_main_parts_->browser_context())
-      ->Remove(extension->id(),
-               site_instance->GetProcess()->GetID(),
-               site_instance->GetId());
+      ->Insert(extension->id(), site_instance->GetProcess()->GetID());
 }
 
 void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
@@ -341,13 +324,15 @@ bool ShellContentBrowserClient::WillCreateURLLoaderFactory(
         header_client,
     bool* bypass_redirect_checks,
     bool* disable_secure_dns,
-    network::mojom::URLLoaderFactoryOverridePtr* factory_override) {
+    network::mojom::URLLoaderFactoryOverridePtr* factory_override,
+    scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner) {
   auto* web_request_api =
       extensions::BrowserContextKeyedAPIFactory<extensions::WebRequestAPI>::Get(
           browser_context);
   bool use_proxy = web_request_api->MaybeProxyURLLoaderFactory(
       browser_context, frame, render_process_id, type, std::move(navigation_id),
-      ukm_source_id, factory_receiver, header_client);
+      ukm_source_id, factory_receiver, header_client,
+      std::move(navigation_response_task_runner));
   if (bypass_redirect_checks)
     *bypass_redirect_checks = use_proxy;
   return use_proxy;

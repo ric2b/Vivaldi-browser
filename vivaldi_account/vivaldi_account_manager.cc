@@ -3,7 +3,6 @@
 #include "vivaldi_account/vivaldi_account_manager.h"
 
 #include "base/base64.h"
-#include "base/guid.h"
 #include "base/i18n/case_conversion.h"
 #include "base/json/json_reader.h"
 #include "base/rand_util.h"
@@ -11,6 +10,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
 #include "components/os_crypt/sync/os_crypt.h"
 #include "components/prefs/pref_service.h"
@@ -228,7 +228,7 @@ void VivaldiAccountManager::Login(const std::string& untrimmed_username,
 
   account_info_.username = username;
   prefs_->SetString(vivaldiprefs::kVivaldiAccountUsername, username);
-  device_id_ = base::GenerateGUID();
+  device_id_ = base::Uuid::GenerateRandomV4().AsLowercaseString();
   prefs_->SetString(vivaldiprefs::kVivaldiAccountDeviceId, device_id_);
 
   NotifyAccountUpdated();

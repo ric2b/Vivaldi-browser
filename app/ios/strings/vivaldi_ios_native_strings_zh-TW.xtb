@@ -1,6 +1,27 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
+<translation id="1116694919640316211">關於</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> 個項目</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />使用條款 ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />隱私權政策 ➔<ph name="END_LINK2" /></translation>
+<translation id="1751280147639351837">廣告及追蹤器攔截器</translation>
+<translation id="2148384276939959392">同步已選取的項目</translation>
+<translation id="2386793615875593361">已選取 1 個項目</translation>
+<translation id="2392369802118427583">啟用</translation>
+<translation id="2434910957904013691">同步全部</translation>
+<translation id="2677862276555105603">已封鎖的
+廣告</translation>
 <translation id="4032606071208172574">（預設值）</translation>
+<translation id="5871497086027727873">已移動 1 個項目</translation>
+<translation id="614539368862754027">已移動 <ph name="NUMBER_OF_SELECTED_NOTES" /> 個項目</translation>
+<translation id="6406506848690869874">資料同步</translation>
+<translation id="6438416544409849235">選取 <ph name="NUMBER_OF_SELECTED_NOTES" /> 個項目</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />匯入<ph name="END_LINK" /></translation>
+<translation id="6757792528048321576">廣告及追蹤器攔截器</translation>
+<translation id="6887143077297974801">啟動資料同步失敗。</translation>
 <translation id="750493650310597496">已選擇 0 個</translation>
+<translation id="8458397775385147834">已刪除 1 個項目</translation>
+<translation id="8517852590337319813">啟用您的帳號</translation>
+<translation id="8740815429790728127">已刪除 <ph name="NUMBER_OF_SELECTED_NOTES" /> 個項目</translation>
+<translation id="9083392325882095631">1 個項目</translation>
 </translationbundle>

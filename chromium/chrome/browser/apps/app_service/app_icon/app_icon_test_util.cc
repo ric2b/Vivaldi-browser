@@ -9,7 +9,7 @@
 #include "chrome/browser/apps/app_service/app_icon/app_icon_factory.h"
 #include "extensions/grit/extensions_browser_resources.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/layout.h"
+#include "ui/base/resource/resource_scale_factor.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/image/image_unittest_util.h"
@@ -32,8 +32,9 @@ void EnsureRepresentationsLoaded(gfx::ImageSkia& output_image_skia) {
 void LoadDefaultIcon(gfx::ImageSkia& output_image_skia, int resource_id) {
   base::RunLoop run_loop;
   apps::LoadIconFromResource(
+      /*profile=*/nullptr, /*app_id=*/absl::nullopt,
       apps::IconType::kUncompressed, kSizeInDip, resource_id,
-      false /* is_placeholder_icon */, apps::IconEffects::kNone,
+      /*is_placeholder_icon=*/false, apps::IconEffects::kNone,
       base::BindOnce(
           [](gfx::ImageSkia* image, base::OnceClosure load_app_icon_callback,
              apps::IconValuePtr icon) {

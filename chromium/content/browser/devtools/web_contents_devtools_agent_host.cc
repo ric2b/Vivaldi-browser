@@ -7,6 +7,7 @@
 #include "base/unguessable_token.h"
 #include "content/browser/devtools/protocol/target_auto_attacher.h"
 #include "content/browser/devtools/protocol/target_handler.h"
+#include "content/browser/devtools/protocol/tracing_handler.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/portal/portal.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
@@ -158,7 +159,16 @@ WebContentsDevToolsAgentHost::WebContentsDevToolsAgentHost(WebContents* wc)
 
 void WebContentsDevToolsAgentHost::InnerAttach(WebContents* wc) {
   CHECK(!web_contents());
-  bool inserted =
+  // With ConnectWebContents(), we may be attaching to a WC that has
+  // a different host created.
+  // TODO(caseq): find a better solution. See also a similar comment in
+  // RenderFrameDevToolsAgentHost::SetFrameTreeNode();
+  auto prev_entry = g_agent_host_instances.Get().find(wc);
+  if (prev_entry != g_agent_host_instances.Get().end()) {
+    CHECK_NE(prev_entry->second, this);
+    prev_entry->second->InnerDetach();
+  }
+  const bool inserted =
       g_agent_host_instances.Get().insert(std::make_pair(wc, this)).second;
   CHECK(inserted);
   auto_attacher_->SetWebContents(wc);
@@ -195,6 +205,9 @@ void WebContentsDevToolsAgentHost::PortalActivated(const Portal& portal) {
 
 void WebContentsDevToolsAgentHost::WillInitiatePrerender(FrameTreeNode* ftn) {
   auto_attacher_->WillInitiatePrerender(ftn);
+  for (auto* tracing : protocol::TracingHandler::ForAgentHost(this)) {
+    tracing->WillInitiatePrerender(ftn);
+  }
 }
 
 void WebContentsDevToolsAgentHost::UpdateChildFrameTrees(
@@ -355,6 +368,21 @@ void WebContentsDevToolsAgentHost::RenderFrameHostChanged(
   }
 }
 
+void WebContentsDevToolsAgentHost::ReadyToCommitNavigation(
+    NavigationHandle* navigation_handle) {
+  CHECK(web_contents());
+  NavigationRequest* request = NavigationRequest::From(navigation_handle);
+  for (auto* tracing : protocol::TracingHandler::ForAgentHost(this)) {
+    tracing->ReadyToCommitNavigation(request);
+  }
+}
+
+void WebContentsDevToolsAgentHost::FrameDeleted(int frame_tree_node_id) {
+  for (auto* tracing : protocol::TracingHandler::ForAgentHost(this)) {
+    tracing->FrameDeleted(frame_tree_node_id);
+  }
+}
+
 // DevToolsAgentHostImpl overrides.
 DevToolsSession::Mode WebContentsDevToolsAgentHost::GetSessionMode() {
   return DevToolsSession::Mode::kSupportsTabTarget;
@@ -373,6 +401,10 @@ bool WebContentsDevToolsAgentHost::AttachSession(DevToolsSession* session,
           ? protocol::TargetHandler::AccessMode::kRegular
           : protocol::TargetHandler::AccessMode::kAutoAttachOnly,
       GetId(), auto_attacher_.get(), session);
+  DevToolsSession* root_session = session->GetRootSession();
+  CHECK(root_session);
+  session->CreateAndAddHandler<protocol::TracingHandler>(this, GetIOContext(),
+                                                         root_session);
   return true;
 }
 

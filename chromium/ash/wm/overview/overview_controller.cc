@@ -17,10 +17,10 @@
 #include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_item.h"
-#include "ash/wm/overview/overview_session.h"
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/overview/overview_wallpaper_controller.h"
 #include "ash/wm/screen_pinning_controller.h"
+#include "ash/wm/snap_group/snap_group_controller.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
@@ -33,7 +33,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "ui/views/widget/widget.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -471,12 +470,20 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
 }
 
 bool OverviewController::CanEnterOverview() {
-  // Prevent entering overview while the divider is dragged or animated.
-  if (IsSplitViewDividerDraggedOrAnimated())
+  if (!DesksController::Get()->CanEnterOverview()) {
     return false;
+  }
 
-  if (!DesksController::Get()->CanEnterOverview())
+  if (SnapGroupController* snap_group_controller =
+          Shell::Get()->snap_group_controller();
+      snap_group_controller && !snap_group_controller->CanEnterOverview()) {
     return false;
+  }
+
+  // Prevent entering overview while the divider is dragged or animated.
+  if (IsSplitViewDividerDraggedOrAnimated()) {
+    return false;
+  }
 
   // Don't allow a window overview if the user session is not active (e.g.
   // locked or in user-adding screen) or a modal dialog is open or running in
@@ -486,8 +493,7 @@ bool OverviewController::CanEnterOverview() {
   return session_controller->GetSessionState() ==
              session_manager::SessionState::ACTIVE &&
          !Shell::IsSystemModalWindowOpen() &&
-         !Shell::Get()->screen_pinning_controller()->IsPinned() &&
-         !session_controller->IsRunningInAppMode();
+         !Shell::Get()->screen_pinning_controller()->IsPinned();
 }
 
 bool OverviewController::CanEndOverview(OverviewEnterExitType type) {
@@ -542,11 +548,14 @@ void OverviewController::OnEndingAnimationComplete(bool canceled) {
 
   // Unblur when animation is completed (or right away if there was no
   // delayed animation) unless it's canceled, in which case, we should keep
-  // the blur. Also resume the activation frame state. No need to unblur the
-  // wallpaper if the feature `kJellyroll` is enabled, since it's not blurred
-  // on overview started.
+  // the blur. No need to unblur the wallpaper if the feature `kJellyroll` is
+  // enabled, since it's not blurred on overview started.
   if (!canceled && !chromeos::features::IsJellyrollEnabled()) {
     overview_wallpaper_controller_->Unblur();
+  }
+
+  // Resume the activation frame state.
+  if (!canceled) {
     paint_as_active_lock_.reset();
   }
 

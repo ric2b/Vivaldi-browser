@@ -8,6 +8,9 @@
 #include <string>
 
 #include "ash/ash_export.h"
+#include "components/user_education/common/help_bubble_params.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/base/interaction/element_tracker.h"
 
 class AccountId;
 
@@ -21,14 +24,42 @@ class View;
 
 namespace ash {
 
+enum class HelpBubbleId;
+enum class HelpBubbleStyle;
 enum class TutorialId;
 struct UserSession;
 
 namespace user_education_util {
 
+// Returns extended properties for a help bubble having set `help_bubble_id`.
+ASH_EXPORT user_education::HelpBubbleParams::ExtendedProperties
+CreateExtendedProperties(HelpBubbleId help_bubble_id);
+
+// Returns extended properties for a help bubble having set `help_bubble_style`.
+ASH_EXPORT user_education::HelpBubbleParams::ExtendedProperties
+CreateExtendedProperties(HelpBubbleStyle help_bubble_style);
+
 // Returns the `AccountId` for the specified `user_session`. If the specified
 // `user_session` is `nullptr`, `EmptyAccountId()` is returned.
 ASH_EXPORT const AccountId& GetAccountId(const UserSession* user_session);
+
+// Returns the custom event type for help bubble anchor bounds changed events.
+// TODO(http://b/287129131): Remove this utility after exporting
+//  `user_education::kHelpBubbleAnchorBoundsChangedEvent`.
+ASH_EXPORT ui::CustomElementEventType
+GetHelpBubbleAnchorBoundsChangedEventType();
+
+// Returns help bubble ID from the specified `extended_properties`.
+ASH_EXPORT HelpBubbleId GetHelpBubbleId(
+    const user_education::HelpBubbleParams::ExtendedProperties&
+        extended_properties);
+
+// Returns help bubble style from the specified `extended_properties`. If the
+// specified `extended_properties` does not contain help bubble style, an
+// absent value is returned.
+ASH_EXPORT absl::optional<HelpBubbleStyle> GetHelpBubbleStyle(
+    const user_education::HelpBubbleParams::ExtendedProperties&
+        extended_properties);
 
 // Returns a matching view for the specified `element_id` in the root window
 // associated with the specified `display_id`, or `nullptr` if no match is

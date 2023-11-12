@@ -7,6 +7,7 @@ module blink.mojom;
 import "third_party/blink/public/mojom/fenced_frame/fenced_frame_config.mojom";
 import "third_party/blink/public/mojom/parakeet/ad_request.mojom";
 import "third_party/blink/public/mojom/interest_group/interest_group_types.mojom";
+import "mojo/public/mojom/base/big_buffer.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
@@ -203,4 +204,11 @@ interface AdAuctionService {
   // showing FLEDGE ads in iframes.
   DeprecatedReplaceInURN(url.mojom.Url uuid_url,
                          array<AdKeywordReplacement> replacements) => ();
+
+  // Gets the ad auction data for running an external auction on a bidding and
+  // auction server.
+  // `request_id` is an RFC 4122 UUID encoded using only lowercase hexadecimal
+  // digits, like "f81d4fae-7dec-11d0-a765-00a0c91e6bf6".
+  GetInterestGroupAdAuctionData(url.mojom.Origin seller)
+      => (mojo_base.mojom.BigBuffer request, string request_id);
 };

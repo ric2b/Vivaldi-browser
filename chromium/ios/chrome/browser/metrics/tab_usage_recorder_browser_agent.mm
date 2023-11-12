@@ -9,12 +9,12 @@
 #import "base/metrics/histogram_macros.h"
 #import "components/previous_session_info/previous_session_info.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/prerender/prerender_service.h"
 #import "ios/chrome/browser/prerender/prerender_service_factory.h"
 #import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/components/webui/web_ui_url_constants.h"
 #import "ios/web/public/navigation/navigation_context.h"
 #import "ios/web/public/navigation/navigation_item.h"
@@ -179,8 +179,9 @@ void TabUsageRecorderBrowserAgent::RecordTabSwitched(
 }
 
 void TabUsageRecorderBrowserAgent::RecordPrimaryBrowserChange(
-    bool primary_browser,
-    web::WebState* active_web_state) {
+    bool primary_browser) {
+  web::WebState* active_web_state =
+      web_state_list_ ? web_state_list_->GetActiveWebState() : nullptr;
   if (primary_browser) {
     // User just came back to this tab model, so record a tab selection even
     // though the current tab was reselected.
@@ -479,6 +480,8 @@ bool TabUsageRecorderBrowserAgent::ShouldRecordPageLoadStartForNavigation(
   return false;
 }
 
+#pragma mark - WebStateObserver
+
 void TabUsageRecorderBrowserAgent::DidStartNavigation(
     web::WebState* web_state,
     web::NavigationContext* navigation_context) {
@@ -520,33 +523,46 @@ void TabUsageRecorderBrowserAgent::WebStateDestroyed(web::WebState* web_state) {
   NOTREACHED();
 }
 
-void TabUsageRecorderBrowserAgent::WebStateInsertedAt(
+#pragma mark - WebStateListObserver
+
+void TabUsageRecorderBrowserAgent::WebStateListChanged(
     WebStateList* web_state_list,
-    web::WebState* web_state,
-    int index,
-    bool activating) {
-  if (activating)
-    web_state_created_selected_ = web_state;
+    const WebStateListChange& change,
+    const WebStateSelection& selection) {
+  switch (change.type()) {
+    case WebStateListChange::Type::kSelectionOnly:
+      // TODO(crbug.com/1442546): Move the implementation from
+      // WebStateActivatedAt() to here. Note that here is reachable only when
+      // `reason` == ActiveWebStateChangeReason::Activated.
+      break;
+    case WebStateListChange::Type::kDetach: {
+      const WebStateListChangeDetach& detach_change =
+          change.As<WebStateListChangeDetach>();
+      OnWebStateDestroyed(detach_change.detached_web_state());
+      break;
+    }
+    case WebStateListChange::Type::kMove:
+      // Do nothing when a WebState is moved.
+      break;
+    case WebStateListChange::Type::kReplace: {
+      const WebStateListChangeReplace& replace_change =
+          change.As<WebStateListChangeReplace>();
+      OnWebStateDestroyed(replace_change.replaced_web_state());
+      replace_change.inserted_web_state()->AddObserver(this);
+      break;
+    }
+    case WebStateListChange::Type::kInsert: {
+      const WebStateListChangeInsert& insert_change =
+          change.As<WebStateListChangeInsert>();
+      web::WebState* inserted_web_state = insert_change.inserted_web_state();
+      if (selection.activating) {
+        web_state_created_selected_ = inserted_web_state;
+      }
 
-  web_state->AddObserver(this);
-}
-
-void TabUsageRecorderBrowserAgent::WebStateReplacedAt(
-    WebStateList* web_state_list,
-    web::WebState* old_web_state,
-    web::WebState* new_web_state,
-    int index) {
-  OnWebStateDestroyed(old_web_state);
-
-  if (new_web_state)
-    new_web_state->AddObserver(this);
-}
-
-void TabUsageRecorderBrowserAgent::WebStateDetachedAt(
-    WebStateList* web_state_list,
-    web::WebState* web_state,
-    int index) {
-  OnWebStateDestroyed(web_state);
+      inserted_web_state->AddObserver(this);
+      break;
+    }
+  }
 }
 
 void TabUsageRecorderBrowserAgent::WebStateActivatedAt(

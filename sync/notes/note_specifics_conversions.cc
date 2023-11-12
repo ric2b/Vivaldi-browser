@@ -11,7 +11,7 @@
 
 #include "base/containers/contains.h"
 #include "base/containers/span.h"
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "base/hash/sha1.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -45,8 +45,8 @@ std::string ComputeGuidFromBytes(base::span<const uint8_t> bytes) {
 
   // This implementation is based on the equivalent logic in base/guid.cc.
 
-  // Set the GUID to version 4 as described in RFC 4122, section 4.4.
-  // The format of GUID version 4 must be xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx,
+  // Set the UUID to version 4 as described in RFC 4122, section 4.4.
+  // The format of UUID version 4 must be xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx,
   // where y is one of [8, 9, A, B].
 
   // Clear the version bits and set the version to 4:
@@ -68,23 +68,23 @@ std::string ComputeGuidFromBytes(base::span<const uint8_t> bytes) {
 // ModelTypeWorker. The reason why this is non-trivial today is that some users
 // are known to contain corrupt data in the sense that several different
 // entities (identified by their server-provided ID) use the same client tag
-// (and GUID). Currently NoteModelMerger has logic to prefer folders over
-// regular URLs and reassign GUIDs.
+// (and UUID). Currently NoteModelMerger has logic to prefer folders over
+// regular URLs and reassign UUIDs.
 std::string InferGuidForLegacyNote(
     const std::string& originator_cache_guid,
     const std::string& originator_client_item_id) {
   DCHECK(
-      !base::GUID::ParseCaseInsensitive(originator_client_item_id).is_valid());
+      !base::Uuid::ParseCaseInsensitive(originator_client_item_id).is_valid());
 
   const std::string unique_tag =
       base::StrCat({originator_cache_guid, originator_client_item_id});
   const base::SHA1Digest hash =
       base::SHA1HashSpan(base::as_bytes(base::make_span(unique_tag)));
 
-  static_assert(base::kSHA1Length >= 16, "16 bytes needed to infer GUID");
+  static_assert(base::kSHA1Length >= 16, "16 bytes needed to infer Uuid");
 
   const std::string guid = ComputeGuidFromBytes(base::make_span(hash));
-  DCHECK(base::GUID::ParseLowercase(guid).is_valid());
+  DCHECK(base::Uuid::ParseLowercase(guid).is_valid());
   return guid;
 }
 
@@ -181,12 +181,12 @@ sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
     notes_specifics->set_content(base::UTF16ToUTF8(node->GetContent()));
   }
 
-  DCHECK(node->guid().is_valid()) << "Actual: " << node->guid();
-  notes_specifics->set_guid(node->guid().AsLowercaseString());
+  DCHECK(node->uuid().is_valid()) << "Actual: " << node->uuid();
+  notes_specifics->set_guid(node->uuid().AsLowercaseString());
 
-  DCHECK(node->parent()->guid().is_valid())
-      << "Actual: " << node->parent()->guid();
-  notes_specifics->set_parent_guid(node->parent()->guid().AsLowercaseString());
+  DCHECK(node->parent()->uuid().is_valid())
+      << "Actual: " << node->parent()->uuid();
+  notes_specifics->set_parent_guid(node->parent()->uuid().AsLowercaseString());
 
   const std::string node_title = base::UTF16ToUTF8(node->GetTitle());
   notes_specifics->set_legacy_canonicalized_title(
@@ -208,13 +208,13 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
   DCHECK(model);
   DCHECK(IsValidNotesSpecifics(specifics));
 
-  const base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
+  const base::Uuid guid = base::Uuid::ParseLowercase(specifics.guid());
   DCHECK(guid.is_valid());
 
-  const base::GUID parent_guid =
-      base::GUID::ParseLowercase(specifics.parent_guid());
+  const base::Uuid parent_guid =
+      base::Uuid::ParseLowercase(specifics.parent_guid());
   DCHECK(parent_guid.is_valid());
-  DCHECK_EQ(parent_guid, parent->guid());
+  DCHECK_EQ(parent_guid, parent->uuid());
 
   const int64_t creation_time_us = specifics.creation_time_us();
   const base::Time creation_time = base::Time::FromDeltaSinceWindowsEpoch(
@@ -253,10 +253,10 @@ void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
   DCHECK(node);
   DCHECK(model);
   // We shouldn't try to update the properties of the NoteNode before
-  // resolving any conflict in GUID. Either GUIDs are the same, or the GUID in
+  // resolving any conflict in UUID. Either UUIDs are the same, or the UUID in
   // specifics is invalid, and hence we can ignore it.
-  base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
-  DCHECK(!guid.is_valid() || guid == node->guid());
+  base::Uuid guid = base::Uuid::ParseLowercase(specifics.guid());
+  DCHECK(!guid.is_valid() || guid == node->uuid());
 
   if (!node->is_folder() && !node->is_separator()) {
     model->SetURL(node, GURL(specifics.url()));
@@ -289,12 +289,12 @@ sync_pb::NotesSpecifics::VivaldiSpecialNotesType GetProtoTypeFromNoteNode(
   }
 }
 
-const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
-                                             const base::GUID& guid,
+const vivaldi::NoteNode* ReplaceNoteNodeUuid(const vivaldi::NoteNode* node,
+                                             const base::Uuid& guid,
                                              vivaldi::NotesModel* model) {
   DCHECK(guid.is_valid());
 
-  if (node->guid() == guid) {
+  if (node->uuid() == guid) {
     // Nothing to do.
     return node;
   }
@@ -332,20 +332,20 @@ bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics) {
     DLOG(ERROR) << "Invalid note: empty specifics.";
     is_valid = false;
   }
-  const base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
+  const base::Uuid guid = base::Uuid::ParseLowercase(specifics.guid());
 
   if (!guid.is_valid()) {
-    DLOG(ERROR) << "Invalid note: invalid GUID in the specifics.";
+    DLOG(ERROR) << "Invalid note: invalid Uuid in the specifics.";
     is_valid = false;
   } else if (guid.AsLowercaseString() ==
-             vivaldi::NoteNode::kBannedGuidDueToPastSyncBug) {
-    DLOG(ERROR) << "Invalid note: banned GUID in specifics.";
+             vivaldi::NoteNode::kBannedUuidDueToPastSyncBug) {
+    DLOG(ERROR) << "Invalid note: banned Uuid in specifics.";
     is_valid = false;
   }
-  const base::GUID parent_guid =
-      base::GUID::ParseLowercase(specifics.parent_guid());
+  const base::Uuid parent_guid =
+      base::Uuid::ParseLowercase(specifics.parent_guid());
   if (!parent_guid.is_valid()) {
-    DLOG(ERROR) << "Invalid note: invalid parent GUID in specifics.";
+    DLOG(ERROR) << "Invalid note: invalid parent Uuid in specifics.";
     is_valid = false;
   }
 
@@ -359,17 +359,17 @@ bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics) {
   return is_valid;
 }
 
-base::GUID InferGuidFromLegacyOriginatorId(
+base::Uuid InferGuidFromLegacyOriginatorId(
     const std::string& originator_cache_guid,
     const std::string& originator_client_item_id) {
-  // notes created around 2016, between [M44..M52) use an uppercase GUID
+  // notes created around 2016, between [M44..M52) use an uppercase UUID
   // as originator client item ID, so it requires case-insensitive parsing.
-  base::GUID guid = base::GUID::ParseCaseInsensitive(originator_client_item_id);
+  base::Uuid guid = base::Uuid::ParseCaseInsensitive(originator_client_item_id);
   if (guid.is_valid()) {
     return guid;
   }
 
-  return base::GUID::ParseLowercase(
+  return base::Uuid::ParseLowercase(
       InferGuidForLegacyNote(originator_cache_guid, originator_client_item_id));
 }
 
@@ -377,7 +377,7 @@ bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
                          const syncer::ClientTagHash& client_tag_hash,
                          const std::string& originator_cache_guid,
                          const std::string& originator_client_item_id) {
-  DCHECK(base::GUID::ParseLowercase(specifics.guid()).is_valid());
+  DCHECK(base::Uuid::ParseLowercase(specifics.guid()).is_valid());
 
   if (!client_tag_hash.value().empty()) {
     // Earlier vivaldi versions were mistakenly using the BOOKMARKS type here,
@@ -389,20 +389,14 @@ bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
                syncer::BOOKMARKS, specifics.guid()) == client_tag_hash;
   }
 
-  // Guard against returning true for cases where the GUID cannot be inferred.
+  // Guard against returning true for cases where the UUID cannot be inferred.
   if (originator_cache_guid.empty() && originator_client_item_id.empty()) {
     return false;
   }
 
-  if (base::GUID::ParseCaseInsensitive(originator_client_item_id).is_valid()) {
-    // Notes created around 2016, between [M44..M52) use an uppercase GUID
-    // as originator client item ID, so it needs to be lowercased to adhere to
-    // the invariant that GUIDs in specifics are canonicalized.
-    return specifics.guid() == base::ToLowerASCII(originator_client_item_id);
-  }
-
-  return specifics.guid() == InferGuidForLegacyNote(originator_cache_guid,
-                                                    originator_client_item_id);
+  return base::Uuid::ParseLowercase(specifics.guid()) ==
+         InferGuidFromLegacyOriginatorId(originator_cache_guid,
+                                         originator_client_item_id);
 }
 
 }  // namespace sync_notes

@@ -21,23 +21,10 @@ DiagnosticsManager::DiagnosticsManager(SessionLogHandler* session_log_handler,
     : webui_(webui) {
   // Configure providers with logs from DiagnosticsLogController when flag
   // enabled.
-  if (features::IsLogControllerForDiagnosticsAppEnabled() &&
-      DiagnosticsLogController::IsInitialized()) {
-    system_data_provider_ = std::make_unique<SystemDataProvider>(
-        DiagnosticsLogController::Get()->GetTelemetryLog());
-    system_routine_controller_ = std::make_unique<SystemRoutineController>(
-        DiagnosticsLogController::Get()->GetRoutineLog());
-    network_health_provider_ = std::make_unique<NetworkHealthProvider>(
-        DiagnosticsLogController::Get()->GetNetworkingLog());
-  } else {
-    // TODO(b/226574520): Remove else block as part of DiagnosticsLogController
-    // flag clean up.
-    system_data_provider_ = std::make_unique<SystemDataProvider>(
-        session_log_handler->GetTelemetryLog());
-    system_routine_controller_ = std::make_unique<SystemRoutineController>(
-        session_log_handler->GetRoutineLog());
-    network_health_provider_ = std::make_unique<NetworkHealthProvider>(
-        session_log_handler->GetNetworkingLog());
+  if (DiagnosticsLogController::IsInitialized()) {
+    system_data_provider_ = std::make_unique<SystemDataProvider>();
+    system_routine_controller_ = std::make_unique<SystemRoutineController>();
+    network_health_provider_ = std::make_unique<NetworkHealthProvider>();
   }
 }
 
@@ -60,10 +47,9 @@ InputDataProvider* DiagnosticsManager::GetInputDataProvider() {
   // Do not construct the InputDataProvider until it is requested;
   // performing this in the constructor is too early, and the native
   // window will not be available.
-  if (features::IsInputInDiagnosticsAppEnabled() && !input_data_provider_) {
+  if (!input_data_provider_) {
     input_data_provider_ = std::make_unique<InputDataProvider>(
-        webui_->GetWebContents()->GetTopLevelNativeWindow(),
-        DiagnosticsLogController::Get()->GetKeyboardInputLog());
+        webui_->GetWebContents()->GetTopLevelNativeWindow());
   }
   return input_data_provider_.get();
 }

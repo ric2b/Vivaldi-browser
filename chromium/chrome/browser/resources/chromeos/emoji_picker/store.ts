@@ -46,7 +46,7 @@ export class RecentlyUsedStore {
    * returns True if any preferences are updated and false
    *    otherwise.
    */
-  savePreferredVariant(baseEmoji: string, variant: string) {
+  savePreferredVariant(variant: string, baseEmoji?: string) {
     if (!baseEmoji) {
       return false;
     }
@@ -72,6 +72,20 @@ export class RecentlyUsedStore {
 
   clearRecents() {
     this.data.history = [];
+    save(this.storeName, this.data);
+  }
+
+  clearItem(category: CategoryEnum, item: EmojiVariants) {
+    if (category === CategoryEnum.GIF) {
+      this.data.history = this.data.history.filter(
+        x =>
+          (x.base.visualContent &&
+            x.base.visualContent.id !== item.base.visualContent?.id));
+    } else {
+      this.data.history = this.data.history.filter(
+        x =>
+          (x.base.string && x.base.string !== item.base.string));
+    }
     save(this.storeName, this.data);
   }
 

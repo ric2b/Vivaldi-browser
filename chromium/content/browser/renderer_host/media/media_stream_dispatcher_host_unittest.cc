@@ -314,8 +314,7 @@ class MediaStreamDispatcherHostTest : public testing::Test {
         origin_(url::Origin::Create(GURL("https://test.com"))) {
     scoped_feature_list_
         .InitFromCommandLine(/*enable_features=*/
-                             "UserMediaCaptureOnFocus,GetDisplayMediaSet,"
-                             "GetDisplayMediaSetAutoSelectAllScreens",
+                             "UserMediaCaptureOnFocus,GetAllScreensMedia",
                              /*disable_features=*/"");
     audio_manager_ = std::make_unique<media::MockAudioManager>(
         std::make_unique<media::TestAudioThread>());
@@ -336,7 +335,7 @@ class MediaStreamDispatcherHostTest : public testing::Test {
     background_ = false;
     host_ = std::make_unique<MockMediaStreamDispatcherHost>(
         kProcessId, kRenderId, media_stream_manager_.get());
-    host_->set_salt_and_origin_callback_for_testing(
+    host_->set_get_salt_and_origin_cb_for_testing(
         base::BindRepeating(&MediaStreamDispatcherHostTest::GetSaltAndOrigin,
                             base::Unretained(this)));
     host_->SetMediaStreamDeviceObserverForTesting(
@@ -395,11 +394,11 @@ class MediaStreamDispatcherHostTest : public testing::Test {
     host_.reset();
   }
 
-  MediaDeviceSaltAndOrigin GetSaltAndOrigin(int /* process_id */,
-                                            int /* frame_id */) {
-    return MediaDeviceSaltAndOrigin(browser_context_->GetMediaDeviceIDSalt(),
-                                    "fake_group_id_salt", origin_, focus_,
-                                    background_);
+  void GetSaltAndOrigin(GlobalRenderFrameHostId /*render_frame_host_id*/,
+                        MediaDeviceSaltAndOriginCallback callback) {
+    std::move(callback).Run(MediaDeviceSaltAndOrigin(
+        browser_context_->GetMediaDeviceIDSalt(), "fake_group_id_salt", origin_,
+        focus_, background_));
   }
 
   MOCK_METHOD2(MockOnBadMessage, void(int, bad_message::BadMessageReason));
@@ -810,7 +809,7 @@ TEST_F(MediaStreamDispatcherHostTest, GenerateStreamsDifferentRenderId) {
   // Generate second stream from another render frame.
   host_ = std::make_unique<MockMediaStreamDispatcherHost>(
       kProcessId, kRenderId + 1, media_stream_manager_.get());
-  host_->set_salt_and_origin_callback_for_testing(
+  host_->set_get_salt_and_origin_cb_for_testing(
       base::BindRepeating(&MediaStreamDispatcherHostTest::GetSaltAndOrigin,
                           base::Unretained(this)));
   host_->SetMediaStreamDeviceObserverForTesting(
@@ -836,7 +835,7 @@ TEST_F(MediaStreamDispatcherHostTest, WebContentsNotFocused) {
   blink::StreamControls controls(true, false);
 
   focus_ = false;
-  host_->set_salt_and_origin_callback_for_testing(
+  host_->set_get_salt_and_origin_cb_for_testing(
       base::BindRepeating(&MediaStreamDispatcherHostTest::GetSaltAndOrigin,
                           base::Unretained(this)));
 
@@ -857,7 +856,7 @@ TEST_F(MediaStreamDispatcherHostTest, WebContentsNotFocusedInBackgroundPage) {
 
   focus_ = false;
   background_ = true;
-  host_->set_salt_and_origin_callback_for_testing(
+  host_->set_get_salt_and_origin_cb_for_testing(
       base::BindRepeating(&MediaStreamDispatcherHostTest::GetSaltAndOrigin,
                           base::Unretained(this)));
 
@@ -892,7 +891,7 @@ TEST_F(MediaStreamDispatcherHostTest, WebContentsFocused) {
   SetupFakeUI(true);
 
   focus_ = false;
-  host_->set_salt_and_origin_callback_for_testing(
+  host_->set_get_salt_and_origin_cb_for_testing(
       base::BindRepeating(&MediaStreamDispatcherHostTest::GetSaltAndOrigin,
                           base::Unretained(this)));
 
@@ -918,7 +917,7 @@ TEST_F(MediaStreamDispatcherHostTest, WebContentsFocused) {
       .Times(1);
 
   focus_ = true;
-  host_->set_salt_and_origin_callback_for_testing(
+  host_->set_get_salt_and_origin_cb_for_testing(
       base::BindRepeating(&MediaStreamDispatcherHostTest::GetSaltAndOrigin,
                           base::Unretained(this)));
   host_->OnWebContentsFocused();
@@ -1298,8 +1297,7 @@ TEST_F(MediaStreamDispatcherHostTest, GetOpenDeviceSucceeds) {
   scoped_feature_list_.Reset();
   scoped_feature_list_
       .InitFromCommandLine(/*enable_features=*/
-                           "UserMediaCaptureOnFocus,GetDisplayMediaSet,"
-                           "GetDisplayMediaSetAutoSelectAllScreens,"
+                           "UserMediaCaptureOnFocus,GetAllScreensMedia,"
                            "MediaStreamTrackTransfer",
                            /*disable_features=*/"");
   base::RunLoop loop;
@@ -1426,7 +1424,7 @@ INSTANTIATE_TEST_SUITE_P(
 class MockContentBrowserClient : public ContentBrowserClient {
  public:
   MOCK_METHOD(bool,
-              IsGetDisplayMediaSetSelectAllScreensAllowed,
+              IsGetAllScreensMediaAllowed,
               (content::BrowserContext * context, const url::Origin& origin),
               (override));
 };
@@ -1477,8 +1475,7 @@ TEST_F(MediaStreamDispatcherHostMultiCaptureTest,
   GlobalRenderFrameHostId main_rfh_global_id = global_rfh_id();
   int main_render_process_id = main_rfh_global_id.child_id;
   int render_frame_id = main_rfh_global_id.frame_routing_id;
-  EXPECT_CALL(content_browser_client_,
-              IsGetDisplayMediaSetSelectAllScreensAllowed(_, _))
+  EXPECT_CALL(content_browser_client_, IsGetAllScreensMediaAllowed(_, _))
       .WillOnce(Return(true));
 
   EXPECT_TRUE(MediaStreamDispatcherHost::CheckRequestAllScreensAllowed(

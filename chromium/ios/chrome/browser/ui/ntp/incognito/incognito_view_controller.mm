@@ -7,7 +7,7 @@
 #import <string>
 
 #import "components/content_settings/core/common/features.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/ntp/incognito/incognito_view.h"
@@ -20,8 +20,9 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_private_mode_view.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/ui/ntp/vivaldi_private_mode_view.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -57,9 +58,17 @@ using vivaldi::IsVivaldiRunning;
   self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
 
   if (IsVivaldiRunning()) {
+    UIImageView* bgView = [UIImageView new];
+    bgView.contentMode = UIViewContentModeScaleAspectFill;
+    bgView.image = [UIImage imageNamed:vNTPPrivateTabBG];
+    bgView.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:bgView];
+    [bgView fillSuperview];
+
     VivaldiPrivateModeView* privateView = [VivaldiPrivateModeView new];
     [self.view addSubview:privateView];
     [privateView fillSuperview];
+    privateView.URLLoaderDelegate = self;
   } else {
   if (base::FeatureList::IsEnabled(kIncognitoNtpRevamp)) {
     RevampedIncognitoView* view =

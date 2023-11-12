@@ -46,8 +46,6 @@ NSURL* rel_notes_url_;
   if (self.invocationBlock != nil) {
     self.invocationBlock = nil;
   }
-  [feedURL_ release];
-  [super dealloc];
 }
 
 - (void)updater:(SPUUpdater*)updater didFindValidUpdate:(SUAppcastItem*)item {

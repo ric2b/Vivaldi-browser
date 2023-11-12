@@ -6,7 +6,7 @@ package org.chromium.chrome.browser.customtabs.content;
 
 import static org.junit.Assert.assertEquals;
 
-import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.MediumTest;
 
 import org.junit.Rule;
@@ -15,7 +15,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.customtabs.CustomTabsIntentTestUtils;
@@ -63,7 +62,6 @@ public class TabObserverRegistrarTest {
      */
     @Test
     @MediumTest
-    @DisabledTest(message = "crbug.com/1269017")
     public void testObserveActiveTab() throws Throwable {
         EmbeddedTestServer testServer = mCustomTabActivityTestRule.getTestServer();
         final String windowOpenUrl =
@@ -73,7 +71,7 @@ public class TabObserverRegistrarTest {
 
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
                 CustomTabsIntentTestUtils.createMinimalCustomTabIntent(
-                        InstrumentationRegistry.getTargetContext(), windowOpenUrl));
+                        ApplicationProvider.getApplicationContext(), windowOpenUrl));
 
         // Register TabObserver via TabObserverRegistrar#registerActiveTabObserver()
         CustomTabActivity customTabActivity = mCustomTabActivityTestRule.getActivity();

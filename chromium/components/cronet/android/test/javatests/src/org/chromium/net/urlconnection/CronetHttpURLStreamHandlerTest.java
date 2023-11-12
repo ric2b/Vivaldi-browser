@@ -4,12 +4,9 @@
 
 package org.chromium.net.urlconnection;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static com.google.common.truth.Truth.assertThat;
 
-import static org.chromium.net.CronetTestRule.getContext;
+import static org.junit.Assert.assertThrows;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
@@ -20,8 +17,9 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.test.util.Batch;
 import org.chromium.net.CronetTestRule;
-import org.chromium.net.CronetTestRule.CronetTestFramework;
+import org.chromium.net.CronetTestRule.OnlyRunNativeCronet;
 import org.chromium.net.NativeTestServer;
 
 import java.net.HttpURLConnection;
@@ -32,17 +30,18 @@ import java.net.URL;
 /**
  * Tests for CronetHttpURLStreamHandler class.
  */
+@Batch(Batch.UNIT_TESTS)
+@OnlyRunNativeCronet
 @RunWith(AndroidJUnit4.class)
 public class CronetHttpURLStreamHandlerTest {
     @Rule
-    public final CronetTestRule mTestRule = new CronetTestRule();
-
-    private CronetTestFramework mTestFramework;
+    public final CronetTestRule mTestRule = CronetTestRule.withAutomaticEngineStartup();
 
     @Before
     public void setUp() throws Exception {
-        mTestFramework = mTestRule.startCronetTestFramework();
-        assertTrue(NativeTestServer.startNativeTestServer(getContext()));
+        assertThat(
+                NativeTestServer.startNativeTestServer(mTestRule.getTestFramework().getContext()))
+                .isTrue();
     }
 
     @After
@@ -55,12 +54,11 @@ public class CronetHttpURLStreamHandlerTest {
     public void testOpenConnectionHttp() throws Exception {
         URL url = new URL(NativeTestServer.getEchoMethodURL());
         CronetHttpURLStreamHandler streamHandler =
-                new CronetHttpURLStreamHandler(mTestFramework.mCronetEngine);
-        HttpURLConnection connection =
-                (HttpURLConnection) streamHandler.openConnection(url);
-        assertEquals(200, connection.getResponseCode());
-        assertEquals("OK", connection.getResponseMessage());
-        assertEquals("GET", TestUtil.getResponseAsString(connection));
+                new CronetHttpURLStreamHandler(mTestRule.getTestFramework().getEngine());
+        HttpURLConnection connection = (HttpURLConnection) streamHandler.openConnection(url);
+        assertThat(connection.getResponseCode()).isEqualTo(200);
+        assertThat(connection.getResponseMessage()).isEqualTo("OK");
+        assertThat(TestUtil.getResponseAsString(connection)).isEqualTo("GET");
         connection.disconnect();
     }
 
@@ -69,10 +67,9 @@ public class CronetHttpURLStreamHandlerTest {
     public void testOpenConnectionHttps() throws Exception {
         URL url = new URL("https://example.com");
         CronetHttpURLStreamHandler streamHandler =
-                new CronetHttpURLStreamHandler(mTestFramework.mCronetEngine);
-        HttpURLConnection connection =
-                (HttpURLConnection) streamHandler.openConnection(url);
-        assertNotNull(connection);
+                new CronetHttpURLStreamHandler(mTestRule.getTestFramework().getEngine());
+        HttpURLConnection connection = (HttpURLConnection) streamHandler.openConnection(url);
+        assertThat(connection).isNotNull();
     }
 
     @Test
@@ -80,13 +77,10 @@ public class CronetHttpURLStreamHandlerTest {
     public void testOpenConnectionProtocolNotSupported() throws Exception {
         URL url = new URL("ftp://example.com");
         CronetHttpURLStreamHandler streamHandler =
-                new CronetHttpURLStreamHandler(mTestFramework.mCronetEngine);
-        try {
-            streamHandler.openConnection(url);
-            fail();
-        } catch (UnsupportedOperationException e) {
-            assertEquals("Unexpected protocol:ftp", e.getMessage());
-        }
+                new CronetHttpURLStreamHandler(mTestRule.getTestFramework().getEngine());
+        UnsupportedOperationException e = assertThrows(
+                UnsupportedOperationException.class, () -> streamHandler.openConnection(url));
+        assertThat(e).hasMessageThat().isEqualTo("Unexpected protocol:ftp");
     }
 
     @Test
@@ -94,14 +88,9 @@ public class CronetHttpURLStreamHandlerTest {
     public void testOpenConnectionWithProxy() throws Exception {
         URL url = new URL(NativeTestServer.getEchoMethodURL());
         CronetHttpURLStreamHandler streamHandler =
-                new CronetHttpURLStreamHandler(mTestFramework.mCronetEngine);
-        Proxy proxy = new Proxy(Proxy.Type.HTTP,
-                new InetSocketAddress("127.0.0.1", 8080));
-        try {
-            streamHandler.openConnection(url, proxy);
-            fail();
-        } catch (UnsupportedOperationException e) {
-            // Expected.
-        }
+                new CronetHttpURLStreamHandler(mTestRule.getTestFramework().getEngine());
+        Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress("127.0.0.1", 8080));
+        assertThrows(UnsupportedOperationException.class,
+                () -> streamHandler.openConnection(url, proxy));
     }
 }

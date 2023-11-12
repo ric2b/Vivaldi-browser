@@ -134,6 +134,8 @@ class SafeBrowsingBlockingPage : public BaseBlockingPage {
 
   // The threat source that triggers the blocking page.
   ThreatSource threat_source_;
+  // Whether the blocking page is triggered by subresource.
+  bool is_subresource_;
 
  private:
   raw_ptr<history::HistoryService> history_service_ = nullptr;
@@ -141,6 +143,8 @@ class SafeBrowsingBlockingPage : public BaseBlockingPage {
       nullptr;
   raw_ptr<SafeBrowsingMetricsCollector> metrics_collector_ = nullptr;
   raw_ptr<TriggerManager> trigger_manager_ = nullptr;
+  std::unique_ptr<security_interstitials::InterstitialInteractionMap>
+      interstitial_interactions_;
 };
 
 }  // namespace safe_browsing

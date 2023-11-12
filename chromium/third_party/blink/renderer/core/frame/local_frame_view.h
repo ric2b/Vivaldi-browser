@@ -44,7 +44,6 @@
 #include "third_party/blink/renderer/core/frame/layout_subtree_root_list.h"
 #include "third_party/blink/renderer/core/frame/overlay_interstitial_ad_detector.h"
 #include "third_party/blink/renderer/core/frame/sticky_ad_detector.h"
-#include "third_party/blink/renderer/core/layout/depth_ordered_layout_object_list.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/paint/layout_object_counter.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_request_forward.h"
@@ -118,7 +117,6 @@ struct PhysicalOffset;
 struct PhysicalRect;
 
 enum class PaintBenchmarkMode;
-enum class PaintArtifactCompositorUpdateReason;
 
 typedef uint64_t DOMTimeStamp;
 using LayerTreeFlags = unsigned;
@@ -183,12 +181,6 @@ class CORE_EXPORT LocalFrameView final
   void DidFinishForcedLayout(DocumentUpdateReason);
 
   void ClearLayoutSubtreeRoot(const LayoutObject&);
-  void AddOrthogonalWritingModeRoot(LayoutBox&);
-  void RemoveOrthogonalWritingModeRoot(LayoutBox&);
-  bool HasOrthogonalWritingModeRoots() const;
-  void LayoutOrthogonalWritingModeRoots();
-  void ScheduleOrthogonalWritingModeRootsForLayout();
-  void MarkOrthogonalWritingModeRootsForLayout();
 
   // Returns true if commits will be deferred for first contentful paint.
   bool WillDoPaintHoldingForFCP() const;
@@ -234,6 +226,7 @@ class CORE_EXPORT LocalFrameView final
   // Sets the internal IntersectionObservationState to the max of the
   // current value and the provided one.
   void SetIntersectionObservationState(IntersectionObservationState);
+  void UpdateIntersectionObservationStateOnScroll(gfx::Vector2dF scroll_delta);
   IntersectionObservationState GetIntersectionObservationStateForTesting()
       const {
     return intersection_observation_state_;
@@ -245,8 +238,11 @@ class CORE_EXPORT LocalFrameView final
 
   void ForceUpdateViewportIntersections();
 
-  void SetPaintArtifactCompositorNeedsUpdate(
-      PaintArtifactCompositorUpdateReason);
+  gfx::Vector2dF MinScrollDeltaToUpdateIntersectionForTesting() const {
+    return min_scroll_delta_to_update_intersection_;
+  }
+
+  void SetPaintArtifactCompositorNeedsUpdate();
 
   // Methods for getting/setting the size Blink should use to layout the
   // contents.
@@ -403,6 +399,7 @@ class CORE_EXPORT LocalFrameView final
   void RunPostLifecycleSteps();
   bool InPostLifecycleSteps() const;
 
+  void ScheduleVisualUpdateForVisualOverflowIfNeeded();
   void ScheduleVisualUpdateForPaintInvalidationIfNeeded();
 
   // Perform a hit test on the frame with throttling allowed. Normally, a hit
@@ -422,7 +419,7 @@ class CORE_EXPORT LocalFrameView final
   void DisableAutoSizeMode();
 
   void ForceLayoutForPagination(const gfx::SizeF& page_size,
-                                const gfx::SizeF& original_page_size,
+                                const gfx::SizeF& aspect_ratio,
                                 float maximum_shrink_factor);
 
   // Updates the fragment anchor element based on URL's fragment identifier.
@@ -1033,7 +1030,6 @@ class CORE_EXPORT LocalFrameView final
 
   bool has_pending_layout_;
   LayoutSubtreeRootList layout_subtree_root_list_;
-  DepthOrderedLayoutObjectList orthogonal_writing_mode_root_list_;
 
   bool layout_scheduling_enabled_;
   unsigned layout_count_for_testing_;
@@ -1121,7 +1117,10 @@ class CORE_EXPORT LocalFrameView final
   // phases past layout to ensure that phases after layout don't dirty layout.
   bool allows_layout_invalidation_after_layout_clean_ = true;
 #endif
+
   IntersectionObservationState intersection_observation_state_;
+  gfx::Vector2dF min_scroll_delta_to_update_intersection_;
+  gfx::Vector2dF accumulated_scroll_delta_since_last_intersection_update_;
 
   bool needs_focus_on_fragment_;
 

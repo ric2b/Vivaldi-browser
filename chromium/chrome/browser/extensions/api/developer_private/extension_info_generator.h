@@ -12,13 +12,16 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/extensions/cws_info_service.h"
 #include "chrome/common/extensions/api/developer_private.h"
 #include "components/supervised_user/core/common/buildflags.h"
 #include "extensions/common/url_pattern.h"
 #include "extensions/common/url_pattern_set.h"
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+namespace supervised_user {
 class SupervisedUserService;
+}  // namespace supervised_user
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 namespace content {
@@ -77,6 +80,11 @@ class ExtensionInfoGenerator {
   void CreateExtensionInfoHelper(const Extension& extension,
                                  api::developer_private::ExtensionState state);
 
+  // Construct the needed strings for the safety check on the
+  // extensions page.
+  static api::developer_private::SafetyCheckStrings
+  CreateSafetyCheckDisplayString(CWSInfoService::CWSInfo& cws_info);
+
   // Callback for the asynchronous image loading.
   void OnImageLoaded(
       std::unique_ptr<api::developer_private::ExtensionInfo> info,
@@ -91,6 +99,7 @@ class ExtensionInfoGenerator {
   // Various systems, cached for convenience.
   raw_ptr<content::BrowserContext> browser_context_;
   raw_ptr<CommandService> command_service_;
+  raw_ptr<CWSInfoService> cws_info_service_;
   raw_ptr<ExtensionSystem> extension_system_;
   raw_ptr<ExtensionPrefs> extension_prefs_;
   raw_ptr<ExtensionActionAPI> extension_action_api_;
@@ -98,7 +107,7 @@ class ExtensionInfoGenerator {
   raw_ptr<ErrorConsole> error_console_;
   raw_ptr<ImageLoader> image_loader_;
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  raw_ptr<SupervisedUserService> supervised_user_service_;
+  raw_ptr<supervised_user::SupervisedUserService> supervised_user_service_;
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
   // The number of pending image loads.
@@ -111,6 +120,8 @@ class ExtensionInfoGenerator {
   ExtensionInfosCallback callback_;
 
   base::WeakPtrFactory<ExtensionInfoGenerator> weak_factory_{this};
+
+  friend class ExtensionInfoGeneratorUnitTest;
 };
 
 }  // namespace extensions

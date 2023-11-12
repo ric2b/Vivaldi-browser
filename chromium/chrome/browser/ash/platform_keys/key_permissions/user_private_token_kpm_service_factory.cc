@@ -56,18 +56,18 @@ UserPrivateTokenKeyPermissionsManagerServiceFactory::GetForBrowserContext(
 // static
 UserPrivateTokenKeyPermissionsManagerServiceFactory*
 UserPrivateTokenKeyPermissionsManagerServiceFactory::GetInstance() {
-  return base::Singleton<
-      UserPrivateTokenKeyPermissionsManagerServiceFactory>::get();
+  static base::NoDestructor<UserPrivateTokenKeyPermissionsManagerServiceFactory>
+      instance;
+  return instance.get();
 }
 
 UserPrivateTokenKeyPermissionsManagerServiceFactory::
     UserPrivateTokenKeyPermissionsManagerServiceFactory()
-    : ProfileKeyedServiceFactory(
-          "UserPrivateTokenKeyPermissionsManagerService",
-          ProfileSelections::Builder()
-              .WithGuest(ProfileSelections::kRegularProfileDefault)
-              .WithAshInternals(ProfileSelection::kNone)
-              .Build()) {
+    : ProfileKeyedServiceFactory("UserPrivateTokenKeyPermissionsManagerService",
+                                 ProfileSelections::Builder()
+                                     .WithGuest(ProfileSelection::kOriginalOnly)
+                                     .WithAshInternals(ProfileSelection::kNone)
+                                     .Build()) {
   DependsOn(PlatformKeysServiceFactory::GetInstance());
 }
 

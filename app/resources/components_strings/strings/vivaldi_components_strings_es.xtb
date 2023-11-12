@@ -35,10 +35,10 @@
 <translation id="2491414235131909199">Esta página ha sido bloqueada por una extensión</translation>
 <translation id="2501278716633472235">Volver atrás</translation>
 <translation id="2539524384386349900">Detectar</translation>
-<translation id="255002559098805027">El sitio <ph name="HOST_NAME" /> envió una respuesta inválida.</translation>
+<translation id="255002559098805027">El sitio <ph name="HOST_NAME" /> ha enviado una respuesta no válida.</translation>
 <translation id="2634124572758952069">No se ha podido encontrar la dirección IP del servidor de <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
-<translation id="2650446666397867134">Se denegó el acceso al archivo</translation>
+<translation id="2650446666397867134">Se le ha denegado el acceso al archivo</translation>
 <translation id="2705137772291741111">La copia guardada (almacenada en caché) de este sitio no se puede leer.</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Ejecutar el diagnóstico de conectividad<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">La conexión se ha restablecido.</translation>
@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Pulsa el botón de recargar la página para reenviar los datos necesarios para cargar la página.</translation>
 <translation id="3234666976984236645">Detectar siempre contenido importante en este sitio</translation>
 <translation id="3308738399950580893">anuncios</translation>
+<translation id="3384522979010096022">Tu organización no te permite ver este sitio</translation>
 <translation id="3422472998109090673">No se puede acceder a <ph name="HOST_NAME" /> en este momento.</translation>
 <translation id="3427092606871434483">Permitir (por defecto)</translation>
 <translation id="3447661539832366887">El propietario de este dispositivo desactivó el juego del dinosaurio.</translation>
@@ -115,7 +116,7 @@
 <translation id="5355557959165512791">Ahora mismo no puedes acceder a <ph name="SITE" /> porque su certificado ha sido revocado. Los ataques y errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="5386426401304769735">La cadena de certificados de este sitio contiene un certificado firmado con SHA-1.</translation>
 <translation id="5452270690849572955">No se puede encontrar el sitio (<ph name="HOST_NAME" />)</translation>
-<translation id="5457113250005438886">Inválido</translation>
+<translation id="5457113250005438886">No válido</translation>
 <translation id="5492298309214877701">Este sitio en la intranet de la empresa, organización o centro educativo tiene la misma URL que un sitio web externo.
     <ph name="LINE_BREAK" />
     Prueba a contactar con tu administrador del sistema.</translation>
@@ -193,14 +194,13 @@
 <translation id="8150722005171944719">El archivo que se encuentra en <ph name="URL" /> no se puede leer. Es posible que haya sido eliminado, trasladado o que los permisos del archivo impidan acceder a él.</translation>
 <translation id="8184538546369750125">Usar valor por defecto global (permitir)</translation>
 <translation id="8211406090763984747">La conexión es segura</translation>
-<translation id="8225771182978767009">La persona que configuró este equipo ha elegido bloquear este sitio.</translation>
-<translation id="8241707690549784388">La página que estás buscando ha usado información que has introducido. Volver a esa página podría hacer que se repita cualquier acción que hayas realizado. ¿Quieres continuar?</translation>
+<translation id="8241707690549784388">La página que quieres visitar ha usado información que has introducido con anterioridad. Volver a esa página podría hacer que se repita cualquier acción que hayas realizado. ¿Quieres continuar?</translation>
 <translation id="8241712895048303527">Bloquear en este sitio</translation>
 <translation id="8286036467436129157">Iniciar sesión</translation>
 <translation id="8288807391153049143">Mostrar certificado</translation>
 <translation id="8289355894181816810">Si tienes alguna duda, contacta con tu administrador de red.</translation>
-<translation id="8332188693563227489">Se denegó el acceso a <ph name="HOST_NAME" /></translation>
-<translation id="8498891568109133222">El sitio <ph name="HOST_NAME" /> tardó demasiado tiempo en responder.</translation>
+<translation id="8332188693563227489">Se le ha denegado el acceso a <ph name="HOST_NAME" /></translation>
+<translation id="8498891568109133222"><ph name="HOST_NAME" /> ha tardado demasiado tiempo en responder.</translation>
 <translation id="8503813439785031346">Nombre de usuario</translation>
 <translation id="8703575177326907206">Tu conexión con <ph name="DOMAIN" /> no está cifrada.</translation>
 <translation id="8740359287975076522">No se ha podido encontrar la &lt;abbr id="dnsDefinition"&gt;dirección DNS&lt;/abbr&gt; de <ph name="HOST_NAME" />. Se está diagnosticando el problema.</translation>
@@ -209,12 +209,11 @@
 <translation id="8963117664422609631">Ir a los ajustes del sitio</translation>
 <translation id="9001074447101275817">El proxy <ph name="DOMAIN" /> requiere un nombre de usuario y contraseña.</translation>
 <translation id="9008201768610948239">Ignorar</translation>
-<translation id="9025348182339809926">(Inválido)</translation>
+<translation id="9025348182339809926">(No válido)</translation>
 <translation id="9039213469156557790">Además, esta página incluye otros recursos no seguros. Terceras personas pueden ver estos recursos cuando están de camino y los puede modificar un atacante para cambiar el comportamiento de la página.</translation>
 <translation id="9062620674789239642">Es posible que haya sido trasladado, editado o eliminado.</translation>
 <translation id="9069693763241529744">Bloqueado por una extensión</translation>
 <translation id="9073799351042754113">Has elegido desactivar las advertencias de seguridad para este sitio.</translation>
-<translation id="910924428752220542">Contraseñas de Vivaldi</translation>
 <translation id="9169664750068251925">Bloquear siempre en este sitio</translation>
 <translation id="9180553614777056266">Bloqueador de anuncios</translation>
 <translation id="9183425211371246419">El sitio <ph name="HOST_NAME" /> usa un protocolo no admitido.</translation>

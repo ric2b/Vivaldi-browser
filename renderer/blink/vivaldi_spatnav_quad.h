@@ -48,6 +48,8 @@ class Quad : public base::RefCountedThreadSafe<Quad> {
   // Returns null if element is destroyed during navigation.
   blink::Element* GetElement();
 
+  blink::WebElement GetWebElement();
+
   gfx::Rect GetRect();
 
   bool IsContainedIn(QuadPtr q);

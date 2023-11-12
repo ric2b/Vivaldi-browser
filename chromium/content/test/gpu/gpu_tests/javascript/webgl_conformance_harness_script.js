@@ -10,7 +10,6 @@ class WebSocketWrapper {
     this.throttle_timer = null;
     this.last_heartbeat = null;
     this.socket = null;
-    this.eat_messages = false;
 
     this._sendDelayedHeartbeat = this._sendDelayedHeartbeat.bind(this);
   }
@@ -23,14 +22,7 @@ class WebSocketWrapper {
     }
   }
 
-  eatWebsocketMessages() {
-    this.eat_messages = true;
-  }
-
   _sendMessage(message) {
-    if (this.eat_messages) {
-      return;
-    }
     if (this.socket === null) {
       this.queued_messages.push(message);
     } else {
@@ -112,14 +104,13 @@ function connectWebsocket(port) {
   });
 }
 
-// TODO(crbug.com/1432592): Remove this once Android is back to using the
-// heartbeat mechanism.
-function eatWebsocketMessages() {
-  wrapper.eatWebsocketMessages();
-}
-
 function wrapFunctionInHeartbeat(prototype, key) {
   const old = prototype[key];
+  // Some functions are specific to a WebGL version, so don't try to wrap
+  // functions that don't exist in the current version's context prototype.
+  if (old === undefined) {
+    return;
+  }
   prototype[key] = function (...args) {
     wrapper.sendHeartbeatThrottled();
     return old.call(this, ...args);
@@ -127,11 +118,23 @@ function wrapFunctionInHeartbeat(prototype, key) {
 }
 
 if (inIframe) {
-  // getUniform* is to ensure we send heartbeats during the long-running
-  // conformance/uniforms/no-over-optimization-on-uniform-array-* tests.
-  wrapFunctionInHeartbeat(WebGLRenderingContext.prototype, 'getUniform');
-  wrapFunctionInHeartbeat(
-      WebGLRenderingContext.prototype, 'getUniformLocation');
+  // Wrap a subset of GL calls in heartbeats to ensure that longer-running tests
+  // still send them regularly.
+  const wrappedFunctions = [
+      // conformance/uniforms/no-over-optimization-on-uniform-array-*
+      'getUniform',
+      'getUniformLocation',
+      // conformance/uniforms/uniform-samplers-test.html
+      'uniform1i',
+      'uniform1iv',
+      // conformance2/sync/sync-webgl-specific.html
+      'clientWaitSync',
+      'getSyncParameter',
+  ];
+  for (const funcName of wrappedFunctions) {
+    wrapFunctionInHeartbeat(WebGLRenderingContext.prototype, funcName);
+    wrapFunctionInHeartbeat(WebGL2RenderingContext.prototype, funcName);
+  }
 }
 
 if (!inIframe) {

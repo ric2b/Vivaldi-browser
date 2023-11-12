@@ -5,10 +5,13 @@ declare_args() {
   is_vivaldi_lynkco = false
   is_vivaldi_mercedes = false
   is_vivaldi_volvo = false
+  # GAS = Google Automotive Services - is_vivaldi_gas is set to true for the generic AAOS build
+  is_vivaldi_gas = false
 }
 
 declare_args() {
-  is_vivaldi_automotive = is_vivaldi_polestar || is_vivaldi_renault || is_vivaldi_lynkco || is_vivaldi_mercedes || is_vivaldi_volvo
+  # is_vivaldi_automotive is true for all OEM builds
+  is_vivaldi_automotive = is_vivaldi_polestar || is_vivaldi_renault || is_vivaldi_lynkco || is_vivaldi_mercedes || is_vivaldi_volvo || is_vivaldi_gas
   is_vivaldi_preloaded = is_vivaldi_mercedes
 }
 
@@ -22,6 +25,7 @@ declare_args() {
   vivaldi_signing_key = ""
   vivaldi_notarize_account = ""
   vivaldi_notarize_password = ""
+  vivaldi_notarytool_password = ""
 }
 
 if (is_win) {

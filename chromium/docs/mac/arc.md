@@ -123,6 +123,17 @@ boilerplate. As for case 1, if the header file has Objective-C constructs (e.g.
 `#import` or an `@` keyword) unguarded by `__OBJC__`, it would not compile in
 C++ and therefore is not included by C++ code.
 
+## Warning! Dangers! {#dangers}
+
+There are some bits of AppKit that are incompatible with ARC. Apple has not
+updated the documentation to call this out, so a heads-up:
+
+When creating an `NSWindow`, you _must_ set the `.releasedWhenClosed` property
+to `NO`. It's recommended that you do so immediately after creating it with
+`alloc`/`init`. If you fail to do so, then closing the window will cause it to
+release itself, and then when the owning pointer releases it, it will be a
+double-release.
+
 ## Examples of conversion from non-ARC to ARC {#examples}
 
 ### Objective-C Classes {#examples-objc-classes}
@@ -341,7 +352,7 @@ particular order:
   ownership management as Objective-C object pointers.
 - `CFToNSCast` and `NSToCFCast`: These do not handle ARC ownership; switch to
   `CFToNSPtrCast`, `CFToNSOwnershipCast`, `NSToCFPtrCast`, and
-  `NSToCFOwnershipCast` from `base/mac/bridging.h`.
+  `NSToCFOwnershipCast` from `base/apple/bridging.h`.
 
 ## Further reading {#references}
 

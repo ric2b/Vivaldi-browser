@@ -27,13 +27,24 @@
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/db/mail_client/mail_client_service_factory.h"
 #include "components/favicon/core/favicon_service.h"
+#include "components/page_actions/page_actions_service_factory.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
+#include "components/request_filter/request_filter_manager_factory.h"
+#include "components/request_filter/request_filter_proxying_url_loader_factory.h"
+#include "components/request_filter/request_filter_proxying_websocket.h"
 #include "components/translate/core/browser/translate_language_list.h"
 #include "content/public/browser/web_ui_controller_factory.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/api/content_settings/content_settings_helpers.h"
 #include "extensions/buildflags/buildflags.h"
 #include "media/base/media_switches.h"
+#include "menus/context_menu_service_factory.h"
+#include "menus/main_menu_service_factory.h"
+#include "sessions/index_service_factory.h"
+#include "translate_history/th_service_factory.h"
+#include "sync/invalidation/vivaldi_invalidation_service_factory.h"
 #include "ui/lazy_load_service_factory.h"
 #include "ui/window_registry_service_factory.h"
 
@@ -59,6 +70,7 @@
 #include "extensions/api/history/history_private_api.h"
 #include "extensions/api/import_data/import_data_api.h"
 #include "extensions/api/menu_content/menu_content_api.h"
+#include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/api/notes/notes_api.h"
 #include "extensions/api/page_actions/page_actions_api.h"
 #include "extensions/api/prefs/prefs_api.h"
@@ -115,8 +127,21 @@ void VivaldiBrowserMainExtraParts::
   vivaldi::NotesModelFactory::GetInstance();
   calendar::CalendarServiceFactory::GetInstance();
   contact::ContactServiceFactory::GetInstance();
+  mail_client::MailClientServiceFactory::GetInstance();
+  menus::MainMenuServiceFactory::GetInstance();
+  menus::ContextMenuServiceFactory::GetInstance();
+  sessions::IndexServiceFactory::GetInstance();
   vivaldi_runtime_feature::Init();
 #endif
+  page_actions::ServiceFactory::GetInstance();
+  adblock_filter::RuleServiceFactory::GetInstance();
+  translate_history::TH_ServiceFactory::GetInstance();
+  vivaldi::RequestFilterManagerFactory::GetInstance();
+  vivaldi::RequestFilterProxyingURLLoaderFactory::
+      EnsureAssociatedFactoryBuilt();
+  vivaldi::RequestFilterProxyingWebSocket::EnsureAssociatedFactoryBuilt();
+  vivaldi::VivaldiInvalidationServiceFactory::GetInstance();
+  vivaldi::NotesModelFactory::GetInstance();
   VivaldiImageStore::InitFactory();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::AutoUpdateAPI::Init();
@@ -131,6 +156,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::ImportDataAPI::GetFactoryInstance();
   extensions::NotesAPI::GetFactoryInstance();
   extensions::MenuContentAPI::GetFactoryInstance();
+  extensions::MenubarMenuAPI::GetFactoryInstance();
   extensions::TabsPrivateAPI::Init();
   extensions::ThemePrivateAPI::GetFactoryInstance();
   extensions::SearchEnginesAPI::GetFactoryInstance();
@@ -151,7 +177,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::VivaldiRootDocumentHandlerFactory::GetInstance();
   vivaldi::WindowRegistryServiceFactory::GetInstance();
 
-#endif // ENABLE_EXTENSIONS
+#endif  // ENABLE_EXTENSIONS
   VivaldiAdverseAdFilterListFactory::GetFactoryInstance();
 
 #if !BUILDFLAG(IS_ANDROID)

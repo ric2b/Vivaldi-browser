@@ -146,7 +146,6 @@ missing_new_fields,chrome/browser/sharing/web_push/web_push_sender.cc
 missing_new_fields,chrome/browser/spellchecker/spellcheck_hunspell_dictionary.cc
 missing_new_fields,chrome/browser/ssl/certificate_error_reporter.cc
 missing_new_fields,chrome/browser/ssl/sct_reporting_service.cc
-missing_new_fields,chrome/browser/supervised_user/child_accounts/family_info_fetcher.cc
 missing_new_fields,chrome/browser/supervised_user/child_accounts/permission_request_creator_apiary.cc
 missing_new_fields,chrome/browser/supervised_user/chromeos/supervised_user_favicon_request_handler.cc
 missing_new_fields,chrome/browser/supervised_user/supervised_user_service.cc
@@ -171,7 +170,6 @@ missing_new_fields,chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.cc
 missing_new_fields,chrome/browser/ui/webui/sanitized_image_source.cc
 missing_new_fields,chrome/browser/ui/webui/signin/ash/user_cloud_signin_restriction_policy_fetcher.cc
 missing_new_fields,chrome/browser/ui/webui/whats_new/whats_new_util.cc
-missing_new_fields,chrome/browser/video_tutorials/internal/tutorial_fetcher.cc
 missing_new_fields,chrome/services/sharing/nearby/platform/webrtc.cc
 missing_new_fields,chrome/services/sharing/nearby/platform/wifi_lan_medium.cc
 missing_new_fields,chromeos/ash/components/device_activity/device_activity_client.cc
@@ -245,7 +243,7 @@ missing_new_fields,components/security_interstitials/content/common_name_mismatc
 missing_new_fields,components/signin/internal/identity_manager/account_fetcher_service.cc
 missing_new_fields,components/signin/internal/identity_manager/gaia_cookie_manager_service.cc
 missing_new_fields,components/spellcheck/browser/spelling_service_client.cc
-missing_new_fields,components/sync/driver/sync_stopped_reporter.cc
+missing_new_fields,components/sync/service/sync_stopped_reporter.cc
 missing_new_fields,components/sync/engine/net/http_bridge.cc
 missing_new_fields,components/translate/core/browser/translate_url_fetcher.cc
 missing_new_fields,components/trusted_vault/trusted_vault_request.cc
@@ -286,7 +284,6 @@ missing_new_fields,content/browser/web_package/web_bundle_utils.cc
 missing_new_fields,content/browser/webid/idp_network_request_manager.cc
 missing_new_fields,content/browser/websockets/websocket_connector_impl.cc
 missing_new_fields,content/browser/worker_host/worker_script_fetcher.cc
-missing_new_fields,content/services/auction_worklet/auction_downloader.cc
 missing_new_fields,content/services/shared_storage_worklet/module_script_downloader.cc
 missing_new_fields,content/shell/browser/shell_devtools_bindings.cc
 missing_new_fields,device/bluetooth/bluetooth_socket_net.cc
@@ -355,7 +352,6 @@ missing_new_fields,chrome/browser/browser_switcher/browser_switcher_service.cc
 missing_new_fields,chrome/browser/enterprise/connectors/device_trust/key_management/core/network/mojo_key_network_delegate.cc
 missing_new_fields,chrome/browser/safe_browsing/chrome_cleaner/chrome_cleaner_fetcher_win.cc
 missing_new_fields,chrome/browser/error_reporting/chrome_js_error_report_processor_nonchromeos.cc
-missing_new_fields,chrome/browser/search/background/ntp_background_service.cc
 missing_new_fields,chrome/browser/ui/sharing_hub/sharing_hub_bubble_controller_desktop_impl.cc
 missing_new_fields,chrome/browser/ui/webui/welcome/ntp_background_fetcher.cc
 missing_new_fields,components/live_caption/live_translate_controller.cc

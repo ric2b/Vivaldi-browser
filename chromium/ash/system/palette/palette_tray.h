@@ -91,12 +91,14 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
   // ShellObserver:
   void OnLockStateChanged(bool locked) override;
   void OnShellInitialized() override;
+  void OnShellDestroying() override;
 
   // WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanged() override;
 
   // TrayBackgroundView:
   void ClickedOutsideBubble() override;
+  void UpdateTrayItemColor(bool is_active) override;
   void OnThemeChanged() override;
   std::u16string GetAccessibleNameForTray() override;
   void HandleLocaleChange() override;

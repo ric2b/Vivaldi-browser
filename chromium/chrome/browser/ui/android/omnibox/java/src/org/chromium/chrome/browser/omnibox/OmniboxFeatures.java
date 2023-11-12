@@ -6,9 +6,13 @@ package org.chromium.chrome.browser.omnibox;
 
 import android.content.Context;
 
+import org.chromium.base.BaseSwitches;
+import org.chromium.base.CommandLine;
+import org.chromium.base.SysUtils;
 import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.MutableFlagWithSafeDefault;
+import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 
 /**
@@ -16,6 +20,16 @@ import org.chromium.ui.base.DeviceFormFactor;
  *   List of Omnibox features and parameters.
  */
 public class OmniboxFeatures {
+    // Threshold for low RAM devices. We won't be showing suggestion images
+    // on devices that have less RAM than this to avoid bloat and reduce user-visible
+    // slowdown while spinning up an image decompression process.
+    // We set the threshold to 1.5GB to reduce number of users affected by this restriction.
+    private static final int LOW_MEMORY_THRESHOLD_KB =
+            (int) (1.5 * ConversionUtils.KILOBYTES_PER_GIGABYTE);
+
+    /// Holds the information whether logic should focus on preserving memory on this device.
+    private static Boolean sIsLowMemoryDevice;
+
     public static final BooleanCachedFieldTrialParameter ENABLE_MODERNIZE_VISUAL_UPDATE_ON_TABLET =
             new BooleanCachedFieldTrialParameter(ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
                     "enable_modernize_visual_update_on_tablet", false);
@@ -43,18 +57,15 @@ public class OmniboxFeatures {
                     ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
                     "modernize_visual_update_merge_clipboard_on_ntp", false);
 
-    public static final String TAB_STRIP_REDESIGN_DISABLE_TOOLBAR_REORDERING_PARAM =
-            "disable_toolbar_reordering";
-    public static final BooleanCachedFieldTrialParameter
-            TAB_STRIP_REDESIGN_DISABLE_TOOLBAR_REORDERING =
-                    new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_STRIP_REDESIGN,
-                            TAB_STRIP_REDESIGN_DISABLE_TOOLBAR_REORDERING_PARAM, false);
-
     private static final MutableFlagWithSafeDefault sOmniboxConsumesImeInsets =
             new MutableFlagWithSafeDefault(ChromeFeatureList.OMNIBOX_CONSUMERS_IME_INSETS, false);
     private static final MutableFlagWithSafeDefault sShouldAdaptToNarrowTabletWindows =
             new MutableFlagWithSafeDefault(
                     ChromeFeatureList.OMNIBOX_ADAPT_NARROW_TABLET_WINDOWS, false);
+
+    private static final MutableFlagWithSafeDefault sJourneysActionChipFlag =
+            new MutableFlagWithSafeDefault(
+                    ChromeFeatureList.OMNIBOX_HISTORY_CLUSTER_ACTION_CHIP, false);
     private static final MutableFlagWithSafeDefault sJourneysRowUiFlag =
             new MutableFlagWithSafeDefault(
                     ChromeFeatureList.OMNIBOX_HISTORY_CLUSTER_PROVIDER, false);
@@ -72,13 +83,6 @@ public class OmniboxFeatures {
     private static final MutableFlagWithSafeDefault sWarmRecycledViewPoolFlag =
             new MutableFlagWithSafeDefault(
                     ChromeFeatureList.OMNIBOX_WARM_RECYCLED_VIEW_POOL, false);
-
-    /**
-     * @return Whether Toolbar reordering for tab strip redesign is disabled.
-     */
-    public static boolean isTabStripToolbarReorderingDisabled() {
-        return TAB_STRIP_REDESIGN_DISABLE_TOOLBAR_REORDERING.getValue();
-    }
 
     /**
      * @param context The activity context.
@@ -115,24 +119,18 @@ public class OmniboxFeatures {
     /**
      * Returns whether smaller vertical and horizontal margins should be used in the visual update.
      */
-    public static boolean shouldShowSmallerMargins() {
-        return MODERNIZE_VISUAL_UPDATE_SMALLER_MARGINS.getValue();
+    public static boolean shouldShowSmallerMargins(Context context) {
+        return shouldShowModernizeVisualUpdate(context)
+                && MODERNIZE_VISUAL_UPDATE_SMALLER_MARGINS.getValue();
     }
 
     /**
      * Returns whether even smaller vertical and horizontal margins should be used in the visual
      * update.
      */
-    public static boolean shouldShowSmallestMargins() {
-        return MODERNIZE_VISUAL_UPDATE_SMALLEST_MARGINS.getValue();
-    }
-
-    /**
-     * Returns whether the clipboard suggestion should be grouped with other zero suggest items on
-     * the NTP or start surface in the visual update.
-     * */
-    public static boolean shouldMergeClipboardOnNtp() {
-        return MODERNIZE_VISUAL_UPDATE_MERGE_CLIPBOARD_ON_NTP.getValue();
+    public static boolean shouldShowSmallestMargins(Context context) {
+        return shouldShowModernizeVisualUpdate(context)
+                && MODERNIZE_VISUAL_UPDATE_SMALLEST_MARGINS.getValue();
     }
 
     /** Returns whether the omnibox should directly consume IME (keyboard) insets. */
@@ -169,6 +167,11 @@ public class OmniboxFeatures {
         return ChromeFeatureList.sOmniboxMostVisitedTilesAddRecycledViewPool.isEnabled();
     }
 
+    /** Whether Journeys suggestions should be shown as an action chip. */
+    public static boolean isJourneysActionChipEnabled() {
+        return sJourneysActionChipFlag.isEnabled();
+    }
+
     /** Whether Journeys suggestions should be shown in a dedicated row. */
     public static boolean isJourneysRowUiEnabled() {
         return sJourneysRowUiFlag.isEnabled();
@@ -195,5 +198,17 @@ public class OmniboxFeatures {
      */
     public static boolean shouldPreWarmRecyclerViewPool() {
         return sWarmRecycledViewPoolFlag.isEnabled();
+    }
+
+    /**
+     * Returns whether the device is to be considered low-end for any memory intensive operations.
+     */
+    public static boolean isLowMemoryDevice() {
+        if (sIsLowMemoryDevice == null) {
+            sIsLowMemoryDevice = (SysUtils.amountOfPhysicalMemoryKB() < LOW_MEMORY_THRESHOLD_KB
+                    && !CommandLine.getInstance().hasSwitch(
+                            BaseSwitches.DISABLE_LOW_END_DEVICE_MODE));
+        }
+        return sIsLowMemoryDevice;
     }
 }

@@ -101,11 +101,6 @@ class GPU_EXPORT CommandBufferProxyImpl : public gpu::CommandBuffer,
 
   void OnDisconnect();
 
-  // Asks the GPU side to bind an associated interface which will share message
-  // ordering with this command buffer. Used by media clients for interfaces not
-  // defined at the GPU layer.
-  void BindMediaReceiver(mojo::GenericPendingAssociatedReceiver receiver);
-
   // CommandBuffer implementation:
   State GetLastState() override;
   void Flush(int32_t put_offset) override;
@@ -118,6 +113,7 @@ class GPU_EXPORT CommandBufferProxyImpl : public gpu::CommandBuffer,
   scoped_refptr<gpu::Buffer> CreateTransferBuffer(
       uint32_t size,
       int32_t* id,
+      uint32_t alignment = 0,
       TransferBufferAllocationOption option =
           TransferBufferAllocationOption::kLoseContextOnOOM) override;
   void DestroyTransferBuffer(int32_t id) override;
@@ -143,10 +139,6 @@ class GPU_EXPORT CommandBufferProxyImpl : public gpu::CommandBuffer,
                        base::OnceClosure callback) override;
   void WaitSyncToken(const gpu::SyncToken& sync_token) override;
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override;
-  void TakeFrontBuffer(const gpu::Mailbox& mailbox);
-  void ReturnFrontBuffer(const gpu::Mailbox& mailbox,
-                         const gpu::SyncToken& sync_token,
-                         bool is_lost);
   void SetDefaultFramebufferSharedImage(const gpu::Mailbox& mailbox,
                                         const gpu::SyncToken& sync_token,
                                         int samples_count,
@@ -267,7 +259,8 @@ class GPU_EXPORT CommandBufferProxyImpl : public gpu::CommandBuffer,
   base::ObserverList<DeletionObserver>::Unchecked deletion_observers_;
 
   scoped_refptr<GpuChannelHost> channel_;
-  raw_ptr<GpuMemoryBufferManager> gpu_memory_buffer_manager_;
+  raw_ptr<GpuMemoryBufferManager, LeakedDanglingUntriaged>
+      gpu_memory_buffer_manager_;
   bool disconnected_ = false;
   const int channel_id_;
   const int32_t route_id_;

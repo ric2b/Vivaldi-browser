@@ -28,6 +28,8 @@ export class SvgWrapper extends LitElement {
     svg {
       display: block;
       fill: currentColor;
+      stroke: currentColor;
+      stroke-width: 0;
     }
   `;
 
@@ -35,7 +37,7 @@ export class SvgWrapper extends LitElement {
     name: {type: String},
   };
 
-  name = null;
+  name: string|null = null;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -71,7 +73,9 @@ export function loadSvgImages(): void {
     const imageName = assertExists(el.dataset['svg']);
     const svg = document.createElement('svg-wrapper');
     svg.setAttribute('name', imageName);
-    el.appendChild(svg);
+    // Prepend the svg so it's on the bottom-most layer and won't be covering
+    // other possible children (e.g. inkdrop effect).
+    el.prepend(svg);
   }
 
   // This needs to be called after svg are loaded, so the SvgWrapper will

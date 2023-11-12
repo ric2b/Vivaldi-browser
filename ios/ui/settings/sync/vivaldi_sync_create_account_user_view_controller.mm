@@ -233,6 +233,12 @@ BOOL emailIsValid;
            forControlEvents:UIControlEventEditingChanged];
       break;
     }
+    case ItemTypeConfirmRecoveryEmail: {
+      VivaldiTableViewTextEditCell* editCell =
+          base::mac::ObjCCast<VivaldiTableViewTextEditCell>(cell);
+      editCell.textField.delegate = self;
+      break;
+    }
     case ItemTypeTitle: {
       VivaldiTableViewIllustratedCell* titleCell =
           base::mac::ObjCCast<VivaldiTableViewIllustratedCell>(cell);
@@ -255,6 +261,13 @@ BOOL emailIsValid;
   [self.delegate logInLinkPressed];
 
   // Returns NO as the app is handling the opening of the URL.
+  return NO;
+}
+
+#pragma mark - UITextFieldDelegate
+
+- (BOOL)textFieldShouldReturn:(UITextField*)textField {
+  [self nextButtonPressed:nil];
   return NO;
 }
 

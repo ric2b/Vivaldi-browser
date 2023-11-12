@@ -12,6 +12,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/commerce/core/pref_names.h"
 #include "components/commerce/core/price_tracking_utils.h"
+#include "components/commerce/core/shopping_service.h"
 #include "components/commerce/core/subscriptions/commerce_subscription.h"
 #include "components/power_bookmarks/core/power_bookmark_utils.h"
 #include "components/power_bookmarks/core/proto/power_bookmark_meta.pb.h"
@@ -32,7 +33,8 @@ const bookmarks::BookmarkNode* AddProductBookmark(
     const std::string& currency_code,
     const absl::optional<int64_t>& last_subscription_change_time) {
   const bookmarks::BookmarkNode* node =
-      bookmark_model->AddURL(bookmark_model->other_node(), 0, title, url);
+      bookmark_model->AddURL(bookmark_model->other_node(), 0, title, url,
+                             nullptr, absl::nullopt, absl::nullopt, true);
   std::unique_ptr<power_bookmarks::PowerBookmarkMeta> meta =
       std::make_unique<power_bookmarks::PowerBookmarkMeta>();
   power_bookmarks::ShoppingSpecifics* specifics =
@@ -62,6 +64,42 @@ CommerceSubscription CreateUserTrackedSubscription(uint64_t cluster_id) {
 
 void SetShoppingListEnterprisePolicyPref(PrefService* prefs, bool enabled) {
   prefs->SetBoolean(kShoppingListEnabledPrefName, enabled);
+}
+
+absl::optional<PriceInsightsInfo> CreateValidPriceInsightsInfo(
+    bool has_price_range_data,
+    bool has_price_history_data,
+    PriceBucket price_bucket) {
+  assert(has_price_history_data || has_price_range_data);
+
+  absl::optional<PriceInsightsInfo> info;
+  info.emplace();
+  if (has_price_range_data) {
+    info->typical_low_price_micros.emplace(kTypicalLowPriceMicros);
+    info->typical_high_price_micros.emplace(kTypicalHighPriceMicros);
+  }
+  if (has_price_history_data) {
+    int64_t price;
+    switch (price_bucket) {
+      case PriceBucket::kLowPrice:
+        price = kTypicalLowPriceMicros;
+        break;
+      case PriceBucket::kTypicalPrice:
+        price = kTypicalPriceMicros;
+        break;
+      case PriceBucket::kHighPrice:
+        price = kTypicalHighPriceMicros;
+        break;
+      default:
+        price = kTypicalPriceMicros;
+    }
+    std::vector<std::tuple<std::string, int64_t>> history_prices{
+        std::tuple<std::string, int64_t>{kDate, price}};
+    info->catalog_history_prices = history_prices;
+  }
+  info->price_bucket = price_bucket;
+
+  return info;
 }
 
 }  // namespace commerce

@@ -14,6 +14,7 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
+#include "chrome/browser/ui/tabs/tab_style.h"
 #include "chrome/browser/ui/tabs/tab_types.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/views/tabs/alert_indicator_button.h"
@@ -276,8 +277,8 @@ class AlertIndicatorButtonTest : public ChromeViewsTestBase {
   }
 
   // Owned by TabStrip.
-  raw_ptr<FakeBaseTabStripController> controller_ = nullptr;
-  raw_ptr<TabStrip> tab_strip_ = nullptr;
+  raw_ptr<FakeBaseTabStripController, DanglingUntriaged> controller_ = nullptr;
+  raw_ptr<TabStrip, DanglingUntriaged> tab_strip_ = nullptr;
   std::unique_ptr<views::Widget> widget_;
 };
 
@@ -323,7 +324,8 @@ TEST_F(TabTest, LayoutAndVisibilityOfElements) {
   SkBitmap bitmap;
   bitmap.allocN32Pixels(16, 16);
   TabRendererData data;
-  data.favicon = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
+  data.favicon =
+      ui::ImageModel::FromImageSkia(gfx::ImageSkia::CreateFrom1xBitmap(bitmap));
 
   // Perform layout over all possible combinations, checking for correct
   // results.
@@ -353,8 +355,8 @@ TEST_F(TabTest, LayoutAndVisibilityOfElements) {
         } else {
           width = tab->tab_style()->GetStandardWidth();
           min_width = is_active_tab
-                          ? tab->tab_style_views()->GetMinimumActiveWidth()
-                          : tab->tab_style_views()->GetMinimumInactiveWidth();
+                          ? TabStyle::Get()->GetMinimumActiveWidth()
+                          : TabStyle::Get()->GetMinimumInactiveWidth();
         }
         const int height = GetLayoutConstant(TAB_HEIGHT);
         for (; width >= min_width; --width) {

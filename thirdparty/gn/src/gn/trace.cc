@@ -211,10 +211,14 @@ std::string SummarizeTraces() {
       case TraceItem::TRACE_IMPORT_LOAD:
       case TraceItem::TRACE_IMPORT_BLOCK:
       case TraceItem::TRACE_SETUP:
+      case TraceItem::TRACE_FILE_EXECUTE_TEMPLATE:
       case TraceItem::TRACE_FILE_LOAD:
       case TraceItem::TRACE_FILE_WRITE:
+      case TraceItem::TRACE_FILE_WRITE_GENERATED:
+      case TraceItem::TRACE_FILE_WRITE_NINJA:
       case TraceItem::TRACE_DEFINE_TARGET:
       case TraceItem::TRACE_ON_RESOLVED:
+      case TraceItem::TRACE_WALK_METADATA:
         break;  // Ignore these for the summary.
     }
   }
@@ -293,8 +297,17 @@ void SaveTraces(const base::FilePath& file_name) {
       case TraceItem::TRACE_FILE_EXECUTE:
         out << "\"file_exec\"";
         break;
+      case TraceItem::TRACE_FILE_EXECUTE_TEMPLATE:
+        out << "\"file_exec_template\"";
+        break;
       case TraceItem::TRACE_FILE_WRITE:
         out << "\"file_write\"";
+        break;
+      case TraceItem::TRACE_FILE_WRITE_GENERATED:
+        out << "\"file_write_generated\"";
+        break;
+      case TraceItem::TRACE_FILE_WRITE_NINJA:
+        out << "\"file_write_ninja\"";
         break;
       case TraceItem::TRACE_IMPORT_LOAD:
         out << "\"import_load\"";
@@ -316,6 +329,9 @@ void SaveTraces(const base::FilePath& file_name) {
         break;
       case TraceItem::TRACE_CHECK_HEADERS:
         out << "\"header_check\"";
+        break;
+      case TraceItem::TRACE_WALK_METADATA:
+        out << "\"walk_metadata\"";
         break;
     }
 

@@ -267,8 +267,10 @@ void StyleAdjuster::AdjustStyleForTextCombine(ComputedStyleBuilder& builder) {
   const auto line_height = builder.FontHeight();
   const auto size =
       LengthSize(Length::Fixed(line_height), Length::Fixed(one_em));
-  builder.SetContainIntrinsicWidth(StyleIntrinsicLength(false, size.Width()));
-  builder.SetContainIntrinsicHeight(StyleIntrinsicLength(false, size.Height()));
+  builder.SetContainIntrinsicWidth(
+      StyleIntrinsicLength(false, size.Width().Value()));
+  builder.SetContainIntrinsicHeight(
+      StyleIntrinsicLength(false, size.Height().Value()));
   builder.SetHeight(size.Height());
   builder.SetLineHeight(size.Height());
   builder.SetMaxHeight(size.Height());
@@ -584,8 +586,7 @@ static void AdjustStyleForDisplay(ComputedStyleBuilder& builder,
   }
 
   // Blockify the child boxes of media elements. crbug.com/1379779.
-  if (RuntimeEnabledFeatures::LayoutMediaNoInlineChildrenEnabled() &&
-      IsAtMediaUAShadowBoundary(element)) {
+  if (IsAtMediaUAShadowBoundary(element)) {
     builder.SetDisplay(EquivalentBlockDisplay(builder.Display()));
   }
 }
@@ -769,7 +770,9 @@ void StyleAdjuster::AdjustForForcedColorsMode(ComputedStyleBuilder& builder) {
 
   builder.SetTextShadow(ComputedStyleInitialValues::InitialTextShadow());
   builder.SetBoxShadow(ComputedStyleInitialValues::InitialBoxShadow());
-  builder.SetColorScheme({"light", "dark"});
+  builder.SetColorScheme({AtomicString("light"), AtomicString("dark")});
+  builder.SetScrollbarColor(
+      ComputedStyleInitialValues::InitialScrollbarColor());
   if (builder.ShouldForceColor(builder.AccentColor())) {
     builder.SetAccentColor(ComputedStyleInitialValues::InitialAccentColor());
   }
@@ -826,8 +829,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     }
 
     if (!RuntimeEnabledFeatures::CSSTopLayerForTransitionsEnabled()) {
-      if ((element && element->IsInTopLayer()) ||
-          builder.StyleType() == kPseudoIdBackdrop) {
+      if (element && element->IsInTopLayer()) {
         builder.SetOverlay(EOverlay::kAuto);
       }
     }
@@ -839,7 +841,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     // be left alone because the fullscreen.css doesn't apply any style to
     // them.
     if ((builder.Overlay() == EOverlay::kAuto && !is_document_element) ||
-        builder.StyleType() == kPseudoIdViewTransition) {
+        builder.StyleType() == kPseudoIdBackdrop) {
       if (builder.GetPosition() == EPosition::kStatic ||
           builder.GetPosition() == EPosition::kRelative) {
         builder.SetPosition(EPosition::kAbsolute);
@@ -916,6 +918,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
   }
 
   if (builder.Overlay() == EOverlay::kAuto ||
+      builder.StyleType() == kPseudoIdBackdrop ||
       builder.StyleType() == kPseudoIdViewTransition) {
     builder.SetForcesStackingContext(true);
   }

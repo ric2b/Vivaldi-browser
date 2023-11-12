@@ -102,8 +102,8 @@ void CallStackProfileBuilder::ApplyMetadataRetrospectively(
     base::TimeTicks period_start,
     base::TimeTicks period_end,
     const base::MetadataRecorder::Item& item) {
-  DCHECK_LE(period_start, period_end);
-  DCHECK_LE(period_end, base::TimeTicks::Now());
+  CHECK_LE(period_start, period_end);
+  CHECK_LE(period_end, base::TimeTicks::Now());
 
   // We don't set metadata if the period extends before the start of the
   // sampling, to avoid biasing against the unobserved execution. This will
@@ -117,7 +117,7 @@ void CallStackProfileBuilder::ApplyMetadataRetrospectively(
   google::protobuf::RepeatedPtrField<CallStackProfile::StackSample>* samples =
       call_stack_profile->mutable_stack_sample();
 
-  DCHECK_EQ(sample_timestamps_.size(), static_cast<size_t>(samples->size()));
+  CHECK_EQ(sample_timestamps_.size(), static_cast<size_t>(samples->size()));
 
   const ptrdiff_t start_offset =
       std::lower_bound(sample_timestamps_.begin(), sample_timestamps_.end(),
@@ -250,9 +250,17 @@ void CallStackProfileBuilder::OnProfileCompleted(
     module_id->set_name_md5_prefix(
         HashModuleFilename(module->GetDebugBasename()));
   }
+  // sampled_profile_ cannot be reused after it is cleared by this function.
+  // Check we still have the information from the constructor.
+  CHECK(sampled_profile_.has_process());
+  CHECK(sampled_profile_.has_thread());
+  CHECK(sampled_profile_.has_trigger_event());
 
   PassProfilesToMetricsProvider(profile_start_time_,
                                 std::move(sampled_profile_));
+  // Protobuffers are in an uncertain state after moving from; clear to get
+  // back to known state.
+  sampled_profile_.Clear();
 
   // Run the completed callback if there is one.
   if (!completed_callback_.is_null())
@@ -262,6 +270,7 @@ void CallStackProfileBuilder::OnProfileCompleted(
   stack_index_.clear();
   module_index_.clear();
   modules_.clear();
+  sample_timestamps_.clear();
 }
 
 // static

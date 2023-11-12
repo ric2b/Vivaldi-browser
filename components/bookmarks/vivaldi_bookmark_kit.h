@@ -6,8 +6,8 @@
 #include <string>
 
 #include "base/functional/callback.h"
-#include "base/guid.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 
@@ -50,7 +50,7 @@ class CustomMetaInfo {
   void SetBookmarkbar(bool bookmarkbar);
   void SetNickname(const std::string& nickname);
   void SetDescription(const std::string& description);
-  void SetPartner(const base::GUID& partner);
+  void SetPartner(const base::Uuid& partner);
   void SetThumbnail(const std::string& thumbnail);
 
  private:
@@ -61,8 +61,8 @@ bool GetSpeeddial(const BookmarkNode* node);
 bool GetBookmarkbar(const BookmarkNode* node);
 const std::string& GetNickname(const BookmarkNode* node);
 const std::string& GetDescription(const BookmarkNode* node);
-const base::GUID GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map);
-const base::GUID GetPartner(const BookmarkNode* node);
+const base::Uuid GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map);
+const base::Uuid GetPartner(const BookmarkNode* node);
 const std::string& GetThumbnail(const BookmarkNode* node);
 const std::string& GetThumbnail(const BookmarkNode::MetaInfoMap& meta_info_map);
 

@@ -18,6 +18,7 @@
 #include "base/trace_event/trace_event.h"
 #include "content/common/fetch/fetch_request_type_converters.h"
 #include "content/common/service_worker/race_network_request_url_loader_client.h"
+#include "content/common/service_worker/service_worker_router_evaluator.h"
 #include "content/public/common/content_features.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "content/renderer/service_worker/controller_service_worker_connector.h"
@@ -25,6 +26,7 @@
 #include "net/base/net_errors.h"
 #include "net/url_request/redirect_util.h"
 #include "net/url_request/url_request.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/record_ontransfersizeupdate_utils.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -211,8 +213,18 @@ bool ServiceWorkerSubresourceLoader::MaybeStartRaceNetworkRequest() {
   }
 
   DCHECK(!race_network_request_loader_client_);
-  race_network_request_loader_client_.emplace(resource_request_,
-                                              weak_factory_.GetWeakPtr());
+  race_network_request_loader_client_.emplace(
+      resource_request_, weak_factory_.GetWeakPtr(), absl::nullopt,
+      network::features::GetDataPipeDefaultAllocationSize(
+          network::features::DataPipeAllocationSize::kLargerSizeIfPossible));
+
+  // If the initial state is not kWaitForBody, that means creating data pipes
+  // failed. Do not start RaceNetworkRequest this case.
+  if (race_network_request_loader_client_->state() !=
+      ServiceWorkerRaceNetworkRequestURLLoaderClient::State::kWaitForBody) {
+    return false;
+  }
+
   mojo::PendingRemote<network::mojom::URLLoaderClient> client_to_pass;
   race_network_request_loader_client_->Bind(&client_to_pass);
 
@@ -220,6 +232,7 @@ bool ServiceWorkerSubresourceLoader::MaybeStartRaceNetworkRequest() {
       network::SharedURLLoaderFactory::Create(fallback_factory_->Clone());
   mojo::PendingRemote<network::mojom::URLLoader> url_loader;
 
+  CHECK_EQ(commit_responsibility(), FetchResponseFrom::kNoResponseYet);
   factory->CreateLoaderAndStart(
       url_loader.InitWithNewPipeAndPassReceiver(), request_id_,
       network::mojom::kURLLoadOptionNone, resource_request_,
@@ -295,7 +308,7 @@ void ServiceWorkerSubresourceLoader::StartRequest(
                           TRACE_ID_LOCAL(request_id_)),
       TRACE_EVENT_FLAG_FLOW_OUT, "url", resource_request.url.spec());
   TransitionToStatus(Status::kStarted);
-
+  CHECK_EQ(commit_responsibility(), FetchResponseFrom::kNoResponseYet);
   DCHECK(!controller_connector_observation_.IsObserving());
   controller_connector_observation_.Observe(controller_connector_.get());
   fetch_request_restarted_ = false;
@@ -357,6 +370,26 @@ void ServiceWorkerSubresourceLoader::DispatchFetchEvent() {
               &ServiceWorkerSubresourceLoader::DispatchFetchEventForSubresource,
               weak_factory_.GetWeakPtr()));
       return;
+    }
+  }
+
+  auto* router_evaluator = controller_connector_->router_evaluator();
+  if (router_evaluator) {
+    CHECK(router_evaluator->IsValid());
+    auto sources = router_evaluator->Evaluate(resource_request_);
+    if (!sources.empty()) {  // matched the rule.
+      // TODO(crbug.com/1371756): support other sources in the full form.
+      // https://github.com/yoshisatoyanagisawa/service-worker-static-routing-api/blob/main/final-form.md
+      if (sources[0].type ==
+          blink::ServiceWorkerRouterSource::SourceType::kNetwork) {
+        // Network fallback is requested.
+        fallback_factory_->CreateLoaderAndStart(
+            url_loader_receiver_.Unbind(), request_id_, options_,
+            resource_request_, url_loader_client_.Unbind(),
+            traffic_annotation_);
+        delete this;
+        return;
+      }
     }
   }
 
@@ -439,14 +472,16 @@ void ServiceWorkerSubresourceLoader::OnConnectionClosed() {
   if (fetch_request_restarted_) {
     SettleFetchEventDispatch(
         blink::ServiceWorkerStatusCode::kErrorStartWorkerFailed);
-    // If the fetch request is already handled by RaceNetworkRequest, no need to
-    // call CommitCompleted here.
-    if (fetch_response_from() == FetchResponseFrom::kWithoutServiceWorker) {
-      return;
+    switch (commit_responsibility()) {
+      case FetchResponseFrom::kNoResponseYet:
+      case FetchResponseFrom::kServiceWorker:
+        CommitCompleted(net::ERR_FAILED, "Disconnected before completed");
+        return;
+      case FetchResponseFrom::kWithoutServiceWorker:
+        // If the fetch request is already handled by RaceNetworkRequest, no
+        // need to call CommitCompleted here.
+        return;
     }
-    SetFetchResponseFrom(FetchResponseFrom::kServiceWorker);
-    CommitCompleted(net::ERR_FAILED, "Disconnected before completed");
-    return;
   }
   fetch_request_restarted_ = true;
   task_runner_->PostTask(
@@ -511,15 +546,29 @@ void ServiceWorkerSubresourceLoader::OnFallback(
                           TRACE_ID_LOCAL(request_id_)),
       TRACE_EVENT_FLAG_FLOW_IN);
 
-  // If the fetch response is handled by RaceNetworkRequest, the new fallback
-  // request is not dispatched. OnFallback doesn't delete the instance and flip
-  // the status. Those are handled in the process of RaceNetworkRequest
-  // handling.
-  // TODO(crbug.com/1432075) Fallback response shoudld be handled as a fallback.
-  // The response from RaceNetworkRequest is currently handled by the code path
-  // for the non-fallback case.
-  if (fetch_response_from() == FetchResponseFrom::kWithoutServiceWorker) {
-    return;
+  switch (commit_responsibility()) {
+    case FetchResponseFrom::kNoResponseYet:
+      // If the RaceNetworkRequest is triggered but the response is not handled
+      // yet, ask its URLLoaderClient to handle the response regardless of the
+      // response status not to dispatch additional network request for
+      // fallback.
+      if (did_start_race_network_request_) {
+        SetCommitResponsibility(FetchResponseFrom::kWithoutServiceWorker);
+        return;
+      }
+      SetCommitResponsibility(FetchResponseFrom::kServiceWorker);
+      break;
+    case FetchResponseFrom::kServiceWorker:
+      break;
+    case FetchResponseFrom::kWithoutServiceWorker:
+      // If the fetch response is handled by RaceNetworkRequest, the new
+      // fallback request is not dispatched. OnFallback doesn't delete the
+      // instance and flip the status. Those are handled in the process of
+      // RaceNetworkRequest handling.
+      // TODO(crbug.com/1432075) Fallback response should be handled as a
+      // fallback. The response from RaceNetworkRequest is currently handled by
+      // the code path for the non-fallback case.
+      return;
   }
 
   // Hand over to the network loader.
@@ -570,11 +619,17 @@ void ServiceWorkerSubresourceLoader::UpdateResponseTiming(
 void ServiceWorkerSubresourceLoader::StartResponse(
     blink::mojom::FetchAPIResponsePtr response,
     blink::mojom::ServiceWorkerStreamHandlePtr body_as_stream) {
-  // If the response already came from RaceNetworkRequest, do nothing.
-  if (fetch_response_from() == FetchResponseFrom::kWithoutServiceWorker) {
-    return;
+  switch (commit_responsibility()) {
+    case FetchResponseFrom::kNoResponseYet:
+      SetCommitResponsibility(FetchResponseFrom::kServiceWorker);
+      break;
+    case FetchResponseFrom::kServiceWorker:
+      break;
+    case FetchResponseFrom::kWithoutServiceWorker:
+      // If the response already came from RaceNetworkRequest, do nothing.
+      return;
   }
-  SetFetchResponseFrom(FetchResponseFrom::kServiceWorker);
+
   race_network_request_loader_client_.reset();
 
   // A response with status code 0 is Blink telling us to respond with network
@@ -716,7 +771,7 @@ void ServiceWorkerSubresourceLoader::CommitCompleted(int error_code,
 
   TransitionToStatus(Status::kCompleted);
   if (error_code == net::OK) {
-    switch (fetch_response_from()) {
+    switch (commit_responsibility()) {
       case FetchResponseFrom::kNoResponseYet:
         NOTREACHED();
         break;
@@ -747,9 +802,9 @@ void ServiceWorkerSubresourceLoader::HandleRedirect(
     const network::mojom::URLResponseHeadPtr& response_head) {
   // If the fetch response is not from the fetch handler, call
   // SettleFetchEventDispatch here explicitly because the loader is going to
-  // handle the response with RaceNetworkRequest, and the in-flight fetch event
-  // by the fetch handler may not be settled yet.
-  if (fetch_response_from() == FetchResponseFrom::kWithoutServiceWorker) {
+  // handle the response with RaceNetworkRequest, and the in-flight fetch
+  // event by the fetch handler may not be settled yet.
+  if (commit_responsibility() == FetchResponseFrom::kWithoutServiceWorker) {
     SettleFetchEventDispatch(absl::nullopt);
   }
   redirect_info_ = std::move(redirect_info);
@@ -974,7 +1029,7 @@ void ServiceWorkerSubresourceLoader::FollowRedirect(
   TransitionToStatus(Status::kNotStarted);
   redirect_info_.reset();
   response_callback_receiver_.reset();
-  reset_fetch_response_from();
+  reset_commit_responsibility();
   race_network_request_loader_client_.reset();
   race_network_request_url_loader_.reset();
   race_network_request_url_loader_factory_.reset();

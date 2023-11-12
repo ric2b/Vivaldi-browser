@@ -126,8 +126,9 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
     return nullptr;
   }
   const BookmarkNode* parent = bookmarks::GetBookmarkNodeByID(model, parent_id);
-  if (!CanBeModified(parent, error))
+  if (!CanBeModified(parent, error) || !parent->is_folder()) {
     return nullptr;
+  }
 
   size_t index;
   if (!details.index) {  // Optional (defaults to end).
@@ -188,8 +189,8 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
     vivaldi_meta.SetThumbnail(*details.thumbnail);
   }
   if (details.partner) {
-    base::GUID vivaldi_partner =
-        base::GUID::ParseCaseInsensitive(*details.partner);
+    base::Uuid vivaldi_partner =
+      base::Uuid::ParseCaseInsensitive(*details.partner);
     if (!vivaldi_partner.is_valid()) {
       *error = "Partner id string is not a valid GUID - " + *details.partner;
       return nullptr;
@@ -791,10 +792,10 @@ ExtensionFunction::ResponseValue BookmarksUpdateFunction::RunOnReady() {
     return Error(vivaldi::kNicknameExists);
   }
 
-  base::GUID vivaldi_partner;
+  base::Uuid vivaldi_partner;
   if (params->changes.partner) {
     vivaldi_partner =
-        base::GUID::ParseCaseInsensitive(*params->changes.partner);
+        base::Uuid::ParseCaseInsensitive(*params->changes.partner);
     if (!vivaldi_partner.is_valid()) {
       return Error("partner is not a valid GUID" + *params->changes.partner);
     }

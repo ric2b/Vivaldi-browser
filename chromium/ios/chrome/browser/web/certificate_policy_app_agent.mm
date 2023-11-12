@@ -7,11 +7,11 @@
 #import "base/task/cancelable_task_tracker.h"
 #import "base/task/single_thread_task_runner.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/main/browser_list.h"
-#import "ios/chrome/browser/main/browser_list_factory.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/web/public/security/certificate_policy_cache.h"
 #import "ios/web/public/session/session_certificate_policy_cache.h"
 #import "ios/web/public/thread/web_task_traits.h"
@@ -24,11 +24,9 @@
 
 namespace {
 
-// Updates `policy_cache` by adding entries from the session policy cache in
-// `web_state`.
-void UpdateCertificatePolicyCacheFromWebState(
-    const scoped_refptr<web::CertificatePolicyCache>& policy_cache,
-    const web::WebState* web_state) {
+// Updates the BrowserState's policy cache from the `web_state` session policy
+// cache.
+void UpdateCertificatePolicyCacheFromWebState(const web::WebState* web_state) {
   DCHECK(web_state);
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
 
@@ -37,8 +35,7 @@ void UpdateCertificatePolicyCacheFromWebState(
   if (!web_state->IsRealized())
     return;
 
-  web_state->GetSessionCertificatePolicyCache()->UpdateCertificatePolicyCache(
-      policy_cache);
+  web_state->GetSessionCertificatePolicyCache()->UpdateCertificatePolicyCache();
 }
 
 // Populates the certificate policy cache based on all of the WebStates in
@@ -46,7 +43,6 @@ void UpdateCertificatePolicyCacheFromWebState(
 // asynchronously, it needs to be resilient to shutdown having happened before
 // it is invoked.
 void RestoreCertificatePolicyCacheFromBrowsers(
-    const scoped_refptr<web::CertificatePolicyCache>& policy_cache,
     base::WeakPtr<ChromeBrowserState> weak_browser_state,
     bool incognito) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
@@ -66,7 +62,7 @@ void RestoreCertificatePolicyCacheFromBrowsers(
     WebStateList* web_state_list = browser->GetWebStateList();
     for (int index = 0; index < web_state_list->count(); ++index) {
       UpdateCertificatePolicyCacheFromWebState(
-          policy_cache, web_state_list->GetWebStateAt(index));
+          web_state_list->GetWebStateAt(index));
     }
   }
 }
@@ -87,7 +83,7 @@ void CleanCertificatePolicyCache(
       task_runner.get(), FROM_HERE,
       base::BindOnce(&web::CertificatePolicyCache::ClearCertificatePolicies,
                      policy_cache),
-      base::BindOnce(&RestoreCertificatePolicyCacheFromBrowsers, policy_cache,
+      base::BindOnce(&RestoreCertificatePolicyCacheFromBrowsers,
                      std::move(weak_browser_state), incognito));
 }
 

@@ -171,6 +171,7 @@ SaveAddressProfileView::SaveAddressProfileView(
       &SaveUpdateAddressProfileBubbleController::OnUserDecision,
       base::Unretained(controller_), controller_->GetCancelCallbackValue()));
 
+  SetProperty(views::kElementIdentifierKey, kTopViewId);
   SetTitle(controller_->GetWindowTitle());
   SetButtonLabel(ui::DIALOG_BUTTON_OK, controller_->GetOkButtonLabel());
   SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
@@ -227,6 +228,7 @@ SaveAddressProfileView::SaveAddressProfileView(
       details_section->AddChildView(CreateEditButton(base::BindRepeating(
           &SaveUpdateAddressProfileBubbleController::OnEditButtonClicked,
           base::Unretained(controller_))));
+  edit_button_->SetProperty(views::kElementIdentifierKey, kEditButtonViewId);
 
   std::u16string address = controller_->GetAddressSummary();
   if (!address.empty()) {
@@ -364,5 +366,9 @@ void SaveAddressProfileView::AlignIcons() {
                               gfx::Insets::VH(-height_difference, 0));
   }
 }
+
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SaveAddressProfileView, kTopViewId);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(SaveAddressProfileView,
+                                      kEditButtonViewId);
 
 }  // namespace autofill

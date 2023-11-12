@@ -34,17 +34,23 @@
 #include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 #include "ui/platform_window/wm/wm_move_loop_handler.h"
-#include "ui/views/corewm/tooltip_aura.h"
 #include "ui/views/corewm/tooltip_controller.h"
 #include "ui/views/widget/desktop_aura/desktop_drag_drop_client_ozone.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/widget_aura_utils.h"
 #include "ui/views/window/native_frame_view.h"
+#include "ui/wm/core/window_properties.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/window_move_client.h"
 
 #if BUILDFLAG(IS_LINUX)
 #include "ui/views/widget/desktop_aura/desktop_drag_drop_client_ozone_linux.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "ui/views/corewm/tooltip_lacros.h"
+#else
+#include "ui/views/corewm/tooltip_aura.h"
 #endif
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(views::DesktopWindowTreeHostPlatform*)
@@ -268,6 +274,11 @@ void DesktopWindowTreeHostPlatform::Init(const Widget::InitParams& params) {
                                               requires_accelerated_widget);
   AddAdditionalInitProperties(params, &properties);
 
+#if BUILDFLAG(IS_CHROMEOS)
+  // Set persistable based on whether or not the content window is persistable.
+  properties.persistable = GetContentWindow()->GetProperty(wm::kPersistableKey);
+#endif
+
   // If we have a parent, record the parent/child relationship. We use this
   // data during destruction to make sure that when we try to close a parent
   // window, we also destroy all child windows.
@@ -323,7 +334,11 @@ void DesktopWindowTreeHostPlatform::OnActiveWindowChanged(bool active) {}
 
 std::unique_ptr<corewm::Tooltip>
 DesktopWindowTreeHostPlatform::CreateTooltip() {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  return std::make_unique<corewm::TooltipLacros>();
+#else
   return std::make_unique<corewm::TooltipAura>();
+#endif
 }
 
 std::unique_ptr<aura::client::DragDropClient>
@@ -881,6 +896,13 @@ void DesktopWindowTreeHostPlatform::OnWillDestroyAcceleratedWidget() {
   desktop_native_widget_aura_->OnHostWillClose();
 }
 
+bool DesktopWindowTreeHostPlatform::OnRotateFocus(
+    ui::PlatformWindowDelegate::RotateDirection direction,
+    bool reset) {
+  return DesktopWindowTreeHostPlatform::RotateFocusForWidget(*GetWidget(),
+                                                             direction, reset);
+}
+
 void DesktopWindowTreeHostPlatform::OnActivationChanged(bool active) {
   if (active) {
     auto widget = GetAcceleratedWidget();
@@ -1027,6 +1049,23 @@ display::Display DesktopWindowTreeHostPlatform::GetDisplayNearestRootWindow()
   // TODO(sky): GetDisplayNearestWindow() should take a const aura::Window*.
   return display::Screen::GetScreen()->GetDisplayNearestWindow(
       const_cast<aura::Window*>(window()));
+}
+
+bool DesktopWindowTreeHostPlatform::RotateFocusForWidget(
+    Widget& widget,
+    ui::PlatformWindowDelegate::RotateDirection direction,
+    bool reset) {
+  if (reset) {
+    widget.GetFocusManager()->ClearFocus();
+  }
+  auto focus_manager_direction =
+      direction == RotateDirection::kForward
+          ? views::FocusManager::Direction::kForward
+          : views::FocusManager::Direction::kBackward;
+  auto wrapping = reset ? views::FocusManager::FocusCycleWrapping::kEnabled
+                        : views::FocusManager::FocusCycleWrapping::kDisabled;
+  return widget.GetFocusManager()->RotatePaneFocus(focus_manager_direction,
+                                                   wrapping);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

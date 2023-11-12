@@ -9,10 +9,12 @@
 #include <string>
 
 #include "ash/ash_export.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list_types.h"
 #include "chromeos/crosapi/mojom/video_conference.mojom-forward.h"
+#include "ui/compositor/throughput_tracker.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/animation/animation_delegate_views.h"
 #include "ui/views/controls/button/button.h"
@@ -28,6 +30,7 @@ class LinearAnimation;
 }  // namespace gfx
 
 namespace views {
+class FlexLayout;
 class ImageView;
 class Label;
 class View;
@@ -61,7 +64,8 @@ class ASH_EXPORT ReturnToAppButton : public views::Button {
                     bool is_capturing_camera,
                     bool is_capturing_microphone,
                     bool is_capturing_screen,
-                    const std::u16string& display_text);
+                    const std::u16string& display_text,
+                    crosapi::mojom::VideoConferenceAppType app_type);
 
   ReturnToAppButton(const ReturnToAppButton&) = delete;
   ReturnToAppButton& operator=(const ReturnToAppButton&) = delete;
@@ -86,7 +90,12 @@ class ASH_EXPORT ReturnToAppButton : public views::Button {
   FRIEND_TEST_ALL_PREFIXES(ReturnToAppPanelTest, ExpandCollapse);
 
   // Callback for the button.
-  void OnButtonClicked(const base::UnguessableToken& id);
+  void OnButtonClicked(const base::UnguessableToken& id,
+                       crosapi::mojom::VideoConferenceAppType app_type);
+
+  // Get the text regarding the peripherals part of the return to app button
+  // accessible name.
+  std::u16string GetPeripheralsAccessibleName();
 
   // Indicates if the running app is using camera, microphone, or screen
   // sharing.
@@ -155,6 +164,9 @@ class ASH_EXPORT ReturnToAppPanel : public views::View,
     // Starts the expand/collapse animation.
     void StartExpandCollapseAnimation();
 
+    // We use different layout padding for expand and collapse state.
+    void AdjustLayoutForExpandCollapseState(bool expanded);
+
     gfx::LinearAnimation* animation() { return animation_.get(); }
 
     void set_height_before_animation(int height_before_animation) {
@@ -176,6 +188,9 @@ class ASH_EXPORT ReturnToAppPanel : public views::View,
     // views::View:
     gfx::Size CalculatePreferredSize() const override;
 
+    // Layout manager of this view. Owned by the views hierarchy.
+    raw_ptr<views::FlexLayout> layout_manager_ = nullptr;
+
     // Animation used for the expand/collapse animation.
     std::unique_ptr<gfx::LinearAnimation> animation_;
 
@@ -185,6 +200,9 @@ class ASH_EXPORT ReturnToAppPanel : public views::View,
 
     // Target expand state of the panel after the animation is completed.
     bool expanded_target_ = false;
+
+    // Measure animation smoothness metrics for all the animations.
+    absl::optional<ui::ThroughputTracker> throughput_tracker_;
   };
 
   // ReturnToAppButton::Observer:

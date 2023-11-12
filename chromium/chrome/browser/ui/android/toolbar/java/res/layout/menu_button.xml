@@ -32,6 +32,17 @@ found in the LICENSE file.
            android:layout_gravity="center"
            android:visibility="invisible" />
 
+       <!-- Vivaldi - Attention Badge -->
+       <ImageView
+           android:id="@+id/menu_badge1"
+           style="@style/ToolbarMenuButton"
+           android:paddingBottom="29dp"
+           android:paddingStart="29dp"
+           android:src="@drawable/vivaldi_attention_badge"
+           tools:ignore="ContentDescription"
+           android:importantForAccessibility="no"
+           android:visibility="gone"/>
+
        <!-- Vivaldi - Adding dummy button to handle long click event on + button in tab strip  -->
        <org.chromium.chrome.browser.toolbar.TabSwitcherButtonView
            android:id="@+id/tab_switcher_menu_helper_button"

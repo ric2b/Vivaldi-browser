@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Shtypni butonin Freskoj për të parashtruar edhe një herë të dhënat që nevojiten për hapjen e faqes.</translation>
 <translation id="3234666976984236645">Gjithmonë diktoj materialet e rëndësishme te ky uebsajti</translation>
 <translation id="3308738399950580893">reklamat</translation>
+<translation id="3384522979010096022">Organizata juaj nuk ju lejon ta shihni uebsajtin</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> është e paarritshme për momentin.</translation>
 <translation id="3427092606871434483">Lejoj (standarde)</translation>
 <translation id="3447661539832366887">Zotëruesi i këtij aparati e ka çaktivizuar lojën me dinozaur.</translation>
@@ -171,7 +172,7 @@
 <translation id="7445762425076701745">Identiteti i këtij serveri nuk mund të vërtetohet plotësisht. Serveri përdor një emër të vlefshëm vetëm brenda rrjetit tuaj kompjuterik dhe autoritetet e jashtme certifikuese nuk e vërtetojnë dot se kujt i përket. Autoritetet certifikuese ndonjëherë lëshojnë dëshmi edhe për emra të tillë, prandaj nuk ka garanci që jeni lidhur me uebsajtin e kërkuar apo me një pirat interneti.</translation>
 <translation id="7455133967321480974">Përdor standardin e përgjithshëm (Bllokoj)</translation>
 <translation id="7518003948725431193">Nuk ka faqe me adresën: <ph name="URL" /></translation>
-<translation id="7549584377607005141">Faqja e internetit kërkon të dhënat e plotësuara më parë që të paraqitet në rregull. Të dhënat mund t'i dërgoni prapë, por pastaj do ju duhet të përsëritni veprimet e mëparshme.</translation>
+<translation id="7549584377607005141">Faqja kërkon të dhënat e plotësuara më parë që të paraqitet në rregull. Të dhënat mund t'i dërgoni prapë, por ju duhet të përsëritni veprimet e mëparshme.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> nuk e shqyrton dot kërkesën për momentin.</translation>
 <translation id="7662298039739062396">Parametri kontrollohet nga një shtesë</translation>
 <translation id="7663736086183791259">Certifikata <ph name="CERTIFICATE_VALIDITY" /></translation>
@@ -193,8 +194,7 @@
 <translation id="8150722005171944719">Është i palexueshëm skedari në <ph name="URL" />. Mund të jetë fshirë, zhvendosur ose aksesi po pengohet nga autorizimet e skedarit.</translation>
 <translation id="8184538546369750125">Përdor standardin e përgjithshëm (Lejoj)</translation>
 <translation id="8211406090763984747">Linja është e sigurt</translation>
-<translation id="8225771182978767009">Uebsajti është bllokuar nga personi që konfiguroi kompjuterin.</translation>
-<translation id="8241707690549784388">Faqja që kërkoni përdor informacionet tuaja të vjetra. Nëse ktheheni pas do ju duhet të përsëritni çdo veprim të mëparshëm. Doni të vijoni?</translation>
+<translation id="8241707690549784388">Faqja që kërkoni përdor informacionet tuaja të vjetra. Nëse ktheheni pas do ju duhet të përsëritni veprimet e mëparshme. Doni të vijoni?</translation>
 <translation id="8241712895048303527">Bllokoj te ky uebsajti</translation>
 <translation id="8286036467436129157">Identifikohem</translation>
 <translation id="8288807391153049143">Tregoj certifikatën</translation>
@@ -214,7 +214,6 @@
 <translation id="9062620674789239642">Mund të jetë zhvendosur, modifikuar ose fshirë.</translation>
 <translation id="9069693763241529744">Është bllokuar nga shtesa</translation>
 <translation id="9073799351042754113">Keni zgjedhur të çaktivizoni vërejtjet për sigurinë e këtij uebsajti.</translation>
-<translation id="910924428752220542">Fjalëkalimet e Vivaldit</translation>
 <translation id="9169664750068251925">Gjithmonë bllokoj te ky uebsajti</translation>
 <translation id="9180553614777056266">Bllokuesi i reklamave</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> përdor protokoll jofunksional.</translation>

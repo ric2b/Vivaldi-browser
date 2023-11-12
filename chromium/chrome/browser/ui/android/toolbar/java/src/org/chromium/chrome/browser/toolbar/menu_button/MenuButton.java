@@ -33,9 +33,13 @@ import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuButtonHelper;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
-import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.components.browser_ui.widget.highlight.PulseDrawable;
-import org.chromium.ui.interpolators.BakedBezierInterpolator;
+import org.chromium.ui.interpolators.Interpolators;
+
+// Vivaldi
+import android.app.Activity;
+import org.vivaldi.browser.common.VivaldiDefaultBrowserUtils;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * The overflow menu button.
@@ -62,6 +66,9 @@ public class MenuButton extends FrameLayout implements TintObserver {
     private BitmapDrawable mUpdateBadgeAnimationDrawable;
 
     private Supplier<MenuButtonState> mStateSupplier;
+
+    // Vivaldi
+    private ImageView mAttentionBadge;
 
     public MenuButton(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -109,6 +116,14 @@ public class MenuButton extends FrameLayout implements TintObserver {
         super.onLayout(changed, left, top, right, bottom);
         if (changed) {
             updateImageResources();
+        }
+
+        // Vivaldi
+        mAttentionBadge =findViewById(R.id.menu_badge1);
+        if (mAttentionBadge != null) {
+            if (shouldShowAttentionBadge(getContext()))
+                mAttentionBadge.setVisibility(VISIBLE);
+            else mAttentionBadge.setVisibility(GONE);
         }
     }
 
@@ -345,13 +360,13 @@ public class MenuButton extends FrameLayout implements TintObserver {
             final View menuButton, final View menuBadge) {
         // Create badge ObjectAnimators.
         ObjectAnimator badgeFadeAnimator = ObjectAnimator.ofFloat(menuBadge, View.ALPHA, 1.f);
-        badgeFadeAnimator.setInterpolator(BakedBezierInterpolator.FADE_IN_CURVE);
+        badgeFadeAnimator.setInterpolator(Interpolators.LINEAR_OUT_SLOW_IN_INTERPOLATOR);
 
         int pixelTranslation =
                 menuBadge.getResources().getDimensionPixelSize(R.dimen.menu_badge_translation_y);
         ObjectAnimator badgeTranslateYAnimator =
                 ObjectAnimator.ofFloat(menuBadge, View.TRANSLATION_Y, pixelTranslation, 0.f);
-        badgeTranslateYAnimator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
+        badgeTranslateYAnimator.setInterpolator(Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR);
 
         // Create menu button ObjectAnimator.
         ObjectAnimator menuButtonFadeAnimator = ObjectAnimator.ofFloat(menuButton, View.ALPHA, 0.f);
@@ -392,11 +407,11 @@ public class MenuButton extends FrameLayout implements TintObserver {
             final View menuButton, final View menuBadge) {
         // Create badge ObjectAnimator.
         ObjectAnimator badgeFadeAnimator = ObjectAnimator.ofFloat(menuBadge, View.ALPHA, 0.f);
-        badgeFadeAnimator.setInterpolator(BakedBezierInterpolator.FADE_OUT_CURVE);
+        badgeFadeAnimator.setInterpolator(Interpolators.FAST_OUT_LINEAR_IN_INTERPOLATOR);
 
         // Create menu button ObjectAnimator.
         ObjectAnimator menuButtonFadeAnimator = ObjectAnimator.ofFloat(menuButton, View.ALPHA, 1.f);
-        menuButtonFadeAnimator.setInterpolator(BakedBezierInterpolator.FADE_IN_CURVE);
+        menuButtonFadeAnimator.setInterpolator(Interpolators.LINEAR_OUT_SLOW_IN_INTERPOLATOR);
 
         // Create AnimatorSet and listeners.
         AnimatorSet set = new AnimatorSet();
@@ -424,4 +439,21 @@ public class MenuButton extends FrameLayout implements TintObserver {
         mOriginalBackground = background;
         setBackground(mOriginalBackground);
     }
+
+    // Vivaldi
+    public static boolean shouldShowAttentionBadge(Context context) {
+        // Check if any menu needs to be highlighted
+        if (context instanceof Activity
+                && VivaldiDefaultBrowserUtils.checkIfVivaldiDefaultBrowser((Activity) context))
+            return false;
+        return VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                VivaldiPreferences.SET_AS_DEFAULT_MENU_HIGHLIGHT, true);
+    }
+
+    void removeVivaldiAttentionBadge() {
+        if (mAttentionBadge == null) return;
+        if (mAttentionBadge.getVisibility() != VISIBLE) return;
+        mAttentionBadge.setVisibility(GONE);
+    }
+
 }

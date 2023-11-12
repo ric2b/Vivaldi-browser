@@ -30,6 +30,7 @@
 #include "components/sync/protocol/note_entity.pb.h"
 #include "components/sync/protocol/os_preference_specifics.pb.h"
 #include "components/sync/protocol/os_priority_preference_specifics.pb.h"
+#include "components/sync/protocol/password_sharing_invitation_specifics.pb.h"
 #include "components/sync/protocol/password_specifics.pb.h"
 #include "components/sync/protocol/persisted_entity_data.pb.h"
 #include "components/sync/protocol/power_bookmark_specifics.pb.h"
@@ -193,7 +194,7 @@ VISIT_PROTO_FIELDS(
 
 VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT(guid);
-  VISIT(origin);
+  VISIT(deprecated_origin);
   VISIT(use_count);
   VISIT(use_date);
   VISIT(profile_label);
@@ -226,6 +227,9 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT(address_home_state);
   VISIT(address_home_zip);
   VISIT(address_home_country);
+  VISIT(address_home_landmark);
+  VISIT(address_home_between_streets);
+  VISIT(address_home_admin_level_2);
   VISIT(address_home_street_address);
   VISIT(address_home_sorting_code);
   VISIT(address_home_dependent_locality);
@@ -239,6 +243,9 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT_ENUM(address_home_state_status);
   VISIT_ENUM(address_home_zip_status);
   VISIT_ENUM(address_home_country_status);
+  VISIT_ENUM(address_home_landmark_status);
+  VISIT_ENUM(address_home_between_streets_status);
+  VISIT_ENUM(address_home_admin_level_2_status);
   VISIT_ENUM(address_home_street_address_status);
   VISIT_ENUM(address_home_sorting_code_status);
   VISIT_ENUM(address_home_dependent_locality_status);
@@ -251,7 +258,6 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT(address_home_language_code);
   VISIT_REP(phone_home_whole_number);
   VISIT(validity_state_bitfield);
-  VISIT(disallow_settings_visible_updates);
 
   VISIT(birthdate_day);
   VISIT(birthdate_month);
@@ -343,6 +349,9 @@ VISIT_PROTO_FIELDS(const sync_pb::ContactInfoSpecifics& proto) {
   VISIT(address_subpremise_name);
   VISIT(address_apt_num);
   VISIT(address_floor);
+  VISIT(address_landmark);
+  VISIT(address_between_streets);
+  VISIT(address_admin_level_2);
   VISIT(phone_home_whole_number);
   VISIT(birthdate_day);
   VISIT(birthdate_month);
@@ -554,7 +563,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntityMetadata& proto) {
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
-  static_assert(46 + 1 /* notes */ == GetNumModelTypes(),
+  static_assert(48 + 1 /* notes */ == GetNumModelTypes(),
                 "When adding a new protocol type, you will likely need to add "
                 "it here as well.");
   VISIT(encrypted);
@@ -575,10 +584,12 @@ VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
   VISIT(extension_setting);
   VISIT(history);
   VISIT(history_delete_directive);
+  VISIT(incoming_password_sharing_invitation);
   VISIT(managed_user_setting);
   VISIT(nigori);
   VISIT(os_preference);
   VISIT(os_priority_preference);
+  VISIT(outgoing_password_sharing_invitation);
   VISIT(password);
   VISIT(power_bookmark);
   VISIT(preference);
@@ -644,7 +655,6 @@ VISIT_PROTO_FIELDS(const sync_pb::GetUpdatesMessage& proto) {
   VISIT_REP(from_progress_marker);
   VISIT(streaming);
   VISIT(need_encryption_key);
-  VISIT(create_mobile_bookmarks_folder);
   VISIT_ENUM(get_updates_origin);
   VISIT(is_retry);
   VISIT_REP(client_contexts);
@@ -667,6 +677,16 @@ VISIT_PROTO_FIELDS(const sync_pb::HistoryDeleteDirectiveSpecifics& proto) {
   VISIT(global_id_directive);
   VISIT(time_range_directive);
   VISIT(url_directive);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::IncomingPasswordSharingInvitationSpecifics& proto) {
+  VISIT(guid);
+  VISIT(sender_info);
+  VISIT(encrypted_password_sharing_invitation_data);
+  VISIT(client_only_unencrypted_data);
+  VISIT(encrypted_key_for_recipient);
+  VISIT(recipient_key_version);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::InvalidationSpecificFields& proto) {
@@ -701,8 +721,7 @@ VISIT_PROTO_FIELDS(const sync_pb::ModelTypeState& proto) {
   VISIT(notes_enabled_before_initial_sync_for_passwords);
 }
 
-VISIT_PROTO_FIELDS(
-    const sync_pb::ModelTypeState::Invalidation& proto) {
+VISIT_PROTO_FIELDS(const sync_pb::ModelTypeState::Invalidation& proto) {
   VISIT(hint);
   VISIT(version);
 }
@@ -720,6 +739,11 @@ VISIT_PROTO_FIELDS(const sync_pb::ReplacedNavigation& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::CryptographerData& proto) {
   VISIT(key_bag);
   VISIT(default_key_name);
+  VISIT(cross_user_sharing_keys);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::CrossUserSharingKeys& proto) {
+  VISIT_REP(private_key);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::CustomPassphraseKeyDerivationParams& proto) {
@@ -741,12 +765,23 @@ VISIT_PROTO_FIELDS(const sync_pb::NigoriModel& proto) {
   VISIT(pending_keystore_decryptor_token);
   VISIT(last_default_trusted_vault_key_name);
   VISIT(trusted_vault_debug_info);
+  VISIT(cross_user_sharing_public_key);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::NigoriLocalData& proto) {
   VISIT(model_type_state);
   VISIT(entity_metadata);
   VISIT(nigori_model);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::CrossUserSharingPublicKey& proto) {
+  VISIT(version);
+  VISIT_BYTES(x25519_public_key);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::CrossUserSharingPrivateKey& proto) {
+  VISIT(version);
+  VISIT(x25519_private_key);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::NigoriSpecifics& proto) {
@@ -778,6 +813,7 @@ VISIT_PROTO_FIELDS(const sync_pb::NigoriSpecifics& proto) {
   VISIT(custom_passphrase_key_derivation_method);
   VISIT(custom_passphrase_key_derivation_salt);
   VISIT(trusted_vault_debug_info);
+  VISIT(cross_user_sharing_public_key);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WebauthnCredentialSpecifics& proto) {
@@ -848,6 +884,34 @@ VISIT_PROTO_FIELDS(const sync_pb::OsPreferenceSpecifics& proto) {
 
 VISIT_PROTO_FIELDS(const sync_pb::OsPriorityPreferenceSpecifics& proto) {
   VISIT(preference);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::OutgoingPasswordSharingInvitationSpecifics& proto) {
+  VISIT(guid);
+  VISIT(recipient_user_id);
+  VISIT(encrypted_password_sharing_invitation_data);
+  VISIT(client_only_unencrypted_data);
+  VISIT(encrypted_key_for_recipient);
+  VISIT(recipient_key_version);
+  VISIT(sender_key_version);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::PasswordSharingInvitationData& proto) {
+  VISIT(password_data);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::PasswordSharingInvitationData::PasswordData& proto) {
+  VISIT(password_value);
+  VISIT(scheme);
+  VISIT(signon_realm);
+  VISIT(origin);
+  VISIT(username_element);
+  VISIT(username_value);
+  VISIT(password_element);
+  VISIT(display_name);
+  VISIT(avatar_url);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecifics& proto) {
@@ -1128,6 +1192,10 @@ VISIT_PROTO_FIELDS(
   VISIT_BYTES(server);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::SharingSymmetricKey& proto) {
+  VISIT_BYTES(key_value);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::SyncCycleCompletedEventInfo& proto) {
   VISIT(num_encryption_conflicts);
   VISIT(num_hierarchy_conflicts);
@@ -1207,6 +1275,18 @@ VISIT_PROTO_FIELDS(
 // TODO(markusheintz): Remove.
 VISIT_PROTO_FIELDS(const sync_pb::GaiaPasswordReuse::PasswordCaptured& proto) {
   VISIT_ENUM(event_trigger);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::UserDisplayInfo& proto) {
+  VISIT(email);
+  VISIT(display_name);
+  VISIT(profile_image_url);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::UserInfo& proto) {
+  VISIT(user_id);
+  VISIT(user_display_info);
+  VISIT(cross_user_sharing_public_key);
 }
 
 VISIT_PROTO_FIELDS(
@@ -1440,6 +1520,7 @@ VISIT_PROTO_FIELDS(const sync_pb::WebApkSpecifics& proto) {
   VISIT(theme_color);
   VISIT(scope);
   VISIT_REP(icon_infos);
+  VISIT(last_used_time_windows_epoch_micros);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WebAppIconInfo& proto) {
@@ -1457,7 +1538,7 @@ VISIT_PROTO_FIELDS(const sync_pb::WebAppSpecifics& proto) {
   VISIT_REP(icon_infos);
   VISIT(user_page_ordinal);
   VISIT(user_launch_ordinal);
-  VISIT(manifest_id);
+  VISIT(relative_manifest_id);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WifiConfigurationSpecifics::
@@ -1496,6 +1577,8 @@ VISIT_PROTO_FIELDS(const sync_pb::WorkspaceDeskSpecifics& proto) {
   VISIT(updated_time_windows_epoch_micros);
   VISIT(desk);
   VISIT_ENUM(desk_type);
+  VISIT(client_cache_guid);
+  VISIT_ENUM(device_form_factor);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WorkspaceDeskSpecifics::App& proto) {

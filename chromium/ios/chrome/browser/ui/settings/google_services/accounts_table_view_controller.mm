@@ -12,16 +12,19 @@
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/strings/grit/components_strings.h"
-#import "components/sync/driver/sync_service.h"
-#import "components/sync/driver/sync_service_utils.h"
-#import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "components/sync/base/features.h"
+#import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_service_utils.h"
 #import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/settings/sync/utils/account_error_ui_info.h"
 #import "ios/chrome/browser/settings/sync/utils/identity_error_util.h"
+#import "ios/chrome/browser/settings/sync/utils/sync_util.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
@@ -50,13 +53,12 @@
 #import "ios/chrome/browser/ui/authentication/authentication_ui_util.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_account_item.h"
 #import "ios/chrome/browser/ui/authentication/enterprise/enterprise_utils.h"
+#import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
 #import "ios/chrome/browser/ui/authentication/signout_action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_image_detail_text_item.h"
 #import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_root_view_controlling.h"
 #import "ios/chrome/browser/ui/settings/sync/sync_encryption_passphrase_table_view_controller.h"
-#import "ios/chrome/browser/ui/settings/sync/utils/sync_util.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -264,6 +266,10 @@ constexpr CGFloat kErrorSymbolSize = 22.;
       title = authenticatedIdentity.userEmail;
     }
   }
+  if ([self isAccountSignedInNotSyncing]) {
+    title = l10n_util::GetNSString(
+        IDS_IOS_GOOGLE_ACCOUNTS_MANAGEMENT_FROM_ACCOUNT_SETTINGS_TITLE);
+  }
   self.title = title;
 
   [super loadModel];
@@ -296,7 +302,7 @@ constexpr CGFloat kErrorSymbolSize = 22.;
     // TODO(crbug.com/1081274): This re-ordering will be redundant once we
     // apply ordering changes to the account reconciler.
     TableViewItem* item = [self accountItem:identity];
-    if ([identity.userEmail isEqual:authenticatedEmail]) {
+    if ([identity.userEmail isEqualToString:authenticatedEmail]) {
       [model insertItem:item
           inSectionWithIdentifier:SectionIdentifierAccounts
                           atIndex:0];
@@ -423,7 +429,9 @@ constexpr CGFloat kErrorSymbolSize = 22.;
       [[TableViewTextItem alloc] initWithType:ItemTypeSignOut];
   item.text =
       l10n_util::GetNSString(IDS_IOS_DISCONNECT_DIALOG_CONTINUE_BUTTON_MOBILE);
-  item.textColor = [UIColor colorNamed:kRedColor];
+  item.textColor = [self isAccountSignedInNotSyncing]
+                       ? [UIColor colorNamed:kBlueColor]
+                       : [UIColor colorNamed:kRedColor];
   item.accessibilityTraits |= UIAccessibilityTraitButton;
   item.accessibilityIdentifier = kSettingsAccountsTableViewSignoutCellId;
   return item;
@@ -637,7 +645,8 @@ constexpr CGFloat kErrorSymbolSize = 22.;
                identity:nil
             accessPoint:AccessPoint::ACCESS_POINT_SETTINGS
             promoAction:PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO
-               callback:^(BOOL success) {
+               callback:^(SigninCoordinatorResult result) {
+                 BOOL success = result == SigninCoordinatorResultSuccess;
                  [weakSelf handleDidAddAccount:success];
                }];
   [self.applicationCommandsHandler showSignin:command baseViewController:self];
@@ -975,6 +984,16 @@ constexpr CGFloat kErrorSymbolSize = 22.;
       id<ApplicationCommands, BrowserCommands, BrowsingDataCommands>>(
       _browser->GetCommandDispatcher());
   [self.navigationController pushViewController:controllerToPush animated:YES];
+}
+
+#pragma mark - Private methods
+
+// Returns YES if the account is signed in not syncing, NO otherwise.
+- (BOOL)isAccountSignedInNotSyncing {
+  return base::FeatureList::IsEnabled(
+             syncer::kReplaceSyncPromosWithSignInPromos) &&
+         !SyncServiceFactory::GetForBrowserState(_browser->GetBrowserState())
+              ->HasSyncConsent();
 }
 
 @end

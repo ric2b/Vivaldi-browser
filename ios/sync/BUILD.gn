@@ -1,6 +1,10 @@
 # Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
 
 source_set("sync_notes") {
+  configs += [
+    "//third_party/abseil-cpp:absl_include_config",
+  ]
+
   sources = [
     "note_sync_service_factory.cc",
     "note_sync_service_factory.h",
@@ -11,11 +15,16 @@ source_set("sync_notes") {
     "//vivaldi/ios/sync:file_sync",
     "//vivaldi/notes:browser",
     "//vivaldi/sync/notes:sync_notes",
+    "//third_party/boringssl",
   ]
 }
 
 source_set("invalidation") {
-  configs += [ "//build/config/compiler:enable_arc" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//third_party/abseil-cpp:absl_include_config",
+  ]
+
   sources = [
     "vivaldi_invalidation_service_factory.h",
     "vivaldi_invalidation_service_factory.mm",
@@ -24,11 +33,16 @@ source_set("invalidation") {
   deps = [
     "//ios/chrome/browser/browser_state",
     "//vivaldi/sync:invalidation",
+    "//third_party/boringssl",
   ]
 }
 
 source_set("file_sync") {
-  configs += [ "//build/config/compiler:enable_arc" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//third_party/abseil-cpp:absl_include_config",
+  ]
+
   sources = [
     "file_store_factory.h",
     "file_store_factory.mm",
@@ -37,6 +51,7 @@ source_set("file_sync") {
   deps = [
     "//ios/chrome/browser/browser_state",
     "//vivaldi/sync/file_sync",
+    "//third_party/boringssl",
   ]
 }
 
@@ -50,6 +65,7 @@ source_set("sync") {
   ]
 
   deps = [
+    ":sync_notes",
     "//base",
     "//components/autofill/core/browser",
     "//components/browser_sync",
@@ -90,7 +106,6 @@ source_set("sync") {
     "//ios/chrome/browser/sync/glue",
     "//ios/chrome/browser/sync/sessions",
     "//ios/chrome/browser/tabs",
-    "//ios/chrome/browser/undo",
     "//ios/chrome/browser/webdata_services",
     "//ios/chrome/common",
     "//ios/components/webui:url_constants",

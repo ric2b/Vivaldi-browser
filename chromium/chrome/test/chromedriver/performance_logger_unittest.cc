@@ -30,7 +30,7 @@ struct DevToolsCommand {
       : method(in_method) {
     params.reset(in_params);
   }
-  ~DevToolsCommand() {}
+  ~DevToolsCommand() = default;
 
   std::string method;
   std::unique_ptr<base::Value::Dict> params;
@@ -38,9 +38,8 @@ struct DevToolsCommand {
 
 class FakeDevToolsClient : public StubDevToolsClient {
  public:
-  explicit FakeDevToolsClient(const std::string& id)
-      : id_(id), listener_(nullptr), command_index_(0) {}
-  ~FakeDevToolsClient() override {}
+  explicit FakeDevToolsClient(const std::string& id) : id_(id) {}
+  ~FakeDevToolsClient() override = default;
 
   bool PopSentCommand(DevToolsCommand** out_command) {
     if (sent_commands_.size() > command_index_) {
@@ -58,9 +57,6 @@ class FakeDevToolsClient : public StubDevToolsClient {
   Status TriggerEvent(const std::string& method) {
     return TriggerEvent(method, base::Value::Dict());
   }
-
-  // Overridden from DevToolsClient:
-  Status Connect() override { return listener_->OnConnected(this); }
 
   Status SendCommandAndGetResult(const std::string& method,
                                  const base::Value::Dict& params,
@@ -87,9 +83,9 @@ class FakeDevToolsClient : public StubDevToolsClient {
   const std::string id_;  // WebView id.
   std::vector<std::unique_ptr<DevToolsCommand>>
       sent_commands_;                // Commands that were sent.
-  raw_ptr<DevToolsEventListener>
-      listener_;  // The fake allows only one event listener.
-  size_t command_index_;
+  raw_ptr<DevToolsEventListener> listener_ =
+      nullptr;  // The fake allows only one event listener.
+  size_t command_index_ = 0;
 };
 
 struct LogEntry {
@@ -134,20 +130,17 @@ bool FakeLog::Emptied() const {
   return true;
 }
 
-absl::optional<base::Value::Dict> ParseDictionary(const std::string& json) {
+base::expected<base::Value::Dict, std::string> ParseDictionary(
+    const std::string& json) {
   auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(json);
   if (!parsed_json.has_value()) {
-    SCOPED_TRACE(json.c_str());
-    SCOPED_TRACE(parsed_json.error().message.c_str());
-    ADD_FAILURE();
-    return absl::nullopt;
+    return base::unexpected("Couldn't parse " + json +
+                            ", got: " + parsed_json.error().message);
   }
 
   base::Value::Dict* dict = parsed_json->GetIfDict();
   if (!dict) {
-    SCOPED_TRACE("JSON object is not a dictionary");
-    ADD_FAILURE();
-    return absl::nullopt;
+    return base::unexpected("JSON object is not a dictionary");
   }
 
   return std::move(*dict);
@@ -160,8 +153,9 @@ void ValidateLogEntry(const LogEntry* entry,
   EXPECT_EQ(Log::kInfo, entry->level);
   EXPECT_LT(0, entry->timestamp.ToTimeT());
 
-  absl::optional<base::Value::Dict> message = ParseDictionary(entry->message);
-  ASSERT_TRUE(message);
+  base::expected<base::Value::Dict, std::string> message =
+      ParseDictionary(entry->message);
+  ASSERT_TRUE(message.has_value()) << message.error();
   const std::string* webview = message->FindString("webview");
   ASSERT_TRUE(webview);
   EXPECT_EQ(expected_webview, *webview);
@@ -229,7 +223,7 @@ TEST(PerformanceLogger, TwoWebViews) {
   ExpectEnableDomains(&client1);
   ExpectEnableDomains(&client2);
   // OnConnected sends the enable command only to that client, not others.
-  client1.Connect();
+  logger.OnConnected(&client1);
   ExpectEnableDomains(&client1);
   DevToolsCommand* cmd;
   ASSERT_FALSE(client2.PopSentCommand(&cmd));
@@ -269,9 +263,8 @@ namespace {
 class FakeBrowserwideClient : public FakeDevToolsClient {
  public:
   FakeBrowserwideClient()
-      : FakeDevToolsClient(DevToolsClientImpl::kBrowserwideDevToolsClientId),
-        events_handled_(false) {}
-  ~FakeBrowserwideClient() override {}
+      : FakeDevToolsClient(DevToolsClientImpl::kBrowserwideDevToolsClientId) {}
+  ~FakeBrowserwideClient() override = default;
 
   bool events_handled() const {
     return events_handled_;
@@ -286,7 +279,7 @@ class FakeBrowserwideClient : public FakeDevToolsClient {
   }
 
  private:
-  bool events_handled_;
+  bool events_handled_ = false;
 };
 
 }  // namespace
@@ -398,8 +391,9 @@ TEST(PerformanceLogger, WarnWhenTraceBufferFull) {
   LogEntry* entry = log.GetEntries()[0].get();
   EXPECT_EQ(Log::kWarning, entry->level);
   EXPECT_LT(0, entry->timestamp.ToTimeT());
-  absl::optional<base::Value::Dict> message = ParseDictionary(entry->message);
-  ASSERT_TRUE(message);
+  base::expected<base::Value::Dict, std::string> message =
+      ParseDictionary(entry->message);
+  ASSERT_TRUE(message.has_value()) << message.error();
   const std::string* webview = message->FindString("webview");
   ASSERT_TRUE(webview);
   EXPECT_EQ(DevToolsClientImpl::kBrowserwideDevToolsClientId, *webview);

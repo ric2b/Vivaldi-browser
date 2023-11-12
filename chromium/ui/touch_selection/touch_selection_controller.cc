@@ -36,6 +36,8 @@ TouchHandleOrientation ToTouchHandleOrientation(
       return TouchHandleOrientation::RIGHT;
     case gfx::SelectionBound::CENTER:
       return TouchHandleOrientation::CENTER;
+    case gfx::SelectionBound::HIDDEN:
+      return TouchHandleOrientation::UNDEFINED;
     case gfx::SelectionBound::EMPTY:
       return TouchHandleOrientation::UNDEFINED;
   }
@@ -72,9 +74,7 @@ void TouchSelectionController::OnSelectionBoundsChanged(
   if (start == start_ && end_ == end)
     return;
 
-  if (start.type() == gfx::SelectionBound::EMPTY ||
-      end.type() == gfx::SelectionBound::EMPTY ||
-      !show_touch_handles_) {
+  if (!start.HasHandle() || !end.HasHandle() || !show_touch_handles_) {
     HideHandles();
     return;
   }
@@ -200,6 +200,13 @@ void TouchSelectionController::HandleLongPressEvent(
   response_pending_input_event_ = LONG_PRESS;
 }
 
+void TouchSelectionController::HandleDoublePressEvent(
+    base::TimeTicks event_time,
+    const gfx::PointF& location) {
+  longpress_drag_selector_.OnDoublePressEvent(event_time, location);
+  response_pending_input_event_ = LONG_PRESS;
+}
+
 void TouchSelectionController::OnScrollBeginEvent() {
   // When there is an active selection, if the user performs a long-press that
   // does not trigger a new selection (e.g. a long-press on an empty area) and
@@ -247,6 +254,11 @@ bool TouchSelectionController::Animate(base::TimeTicks frame_time) {
   }
 
   return false;
+}
+
+const gfx::SelectionBound& TouchSelectionController::GetFocusBound() const {
+  DCHECK_NE(active_status_, INACTIVE);
+  return anchor_drag_to_selection_start_ ? start_ : end_;
 }
 
 gfx::RectF TouchSelectionController::GetRectBetweenBounds() const {

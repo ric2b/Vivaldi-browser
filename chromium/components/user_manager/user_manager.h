@@ -51,6 +51,15 @@ class USER_MANAGER_EXPORT UserManager {
     // Called when the local state preferences is changed.
     virtual void LocalStateChanged(UserManager* user_manager);
 
+    // Called when the user list is loaded.
+    virtual void OnUserListLoaded();
+
+    // Called when the device local user list is updated.
+    virtual void OnDeviceLocalUserListUpdated();
+
+    // Called when the user is logged in.
+    virtual void OnUserLoggedIn(const User& user);
+
     // Called when the image of the given user is changed.
     virtual void OnUserImageChanged(const User& user);
 
@@ -58,6 +67,9 @@ class USER_MANAGER_EXPORT UserManager {
     virtual void OnUserImageIsEnterpriseManagedChanged(
         const User& user,
         bool is_enterprise_managed);
+
+    // Called when the Profile instance for the user is created.
+    virtual void OnUserProfileCreated(const User& user);
 
     // Called when the profile image download for the given user fails or
     // user has the default profile image or no porfile image at all.
@@ -180,6 +192,12 @@ class USER_MANAGER_EXPORT UserManager {
   // Returns account Id of the owner user. Returns an empty Id if there is
   // no owner for the device.
   virtual const AccountId& GetOwnerAccountId() const = 0;
+
+  // Provides the caller with account Id of the Owner user once it is loaded.
+  // Would provide empty account id if there is no owner on the device (e.g.
+  // if device is enterprise-owned).
+  virtual void GetOwnerAccountIdAsync(
+      base::OnceCallback<void(const AccountId&)> callback) const = 0;
 
   // Returns account Id of the user that was active in the previous session.
   virtual const AccountId& GetLastSessionActiveAccountId() const = 0;
@@ -400,14 +418,13 @@ class USER_MANAGER_EXPORT UserManager {
   // Accepted user types: USER_TYPE_REGULAR, USER_TYPE_GUEST, USER_TYPE_CHILD.
   virtual bool IsUserAllowed(const User& user) const = 0;
 
-  // Returns true if trusted device policies have successfully been retrieved
-  // and `account_id` is ephemeral by policies.
+  // Explicitly non-ephemeral accounts are Owner account (on consumer-owned
+  // devices) and Stub accounts (used in tests).
   //
-  // NOTE: this function does not handle neither device owner account nor
-  // explicitly-ephemeral accounts like MGS separately. This function gives an
-  // answer whether `account_id` is ephemeral by policies.
+  // Explicitly ephemeral accounts are Guest and Managed Guest sessions.
   //
-  // TODO(b:275059758): Add logic to handle owner ID separately.
+  // In all other cases the ephemeral status of account depends on set of
+  // policies.
   virtual bool IsEphemeralAccountId(const AccountId& account_id) const = 0;
 
   // Returns "Local State" PrefService instance.

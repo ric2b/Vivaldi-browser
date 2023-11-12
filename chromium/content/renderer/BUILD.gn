@@ -200,6 +200,10 @@ target(link_target_type, "renderer") {
     ]
   }
 
+  if (is_apple) {
+    configs += [ "//build/config/compiler:enable_arc" ]
+  }
+
   if (is_mac) {
     sources += [
       "renderer_main_platform_delegate_mac.mm",
@@ -251,7 +255,6 @@ target(link_target_type, "renderer") {
     "//components/viz/client",
     "//components/viz/common",
     "//content:content_resources",
-    "//content:dev_ui_content_resources",
     "//content/child",
     "//content/common",
     "//content/common:buildflags",
@@ -272,7 +275,6 @@ target(link_target_type, "renderer") {
     "//media:media_buildflags",
     "//media/capture",
     "//media/gpu",
-    "//media/gpu/ipc/client",
     "//media/gpu/ipc/common",
     "//media/midi",
     "//media/midi:mojo",
@@ -332,12 +334,10 @@ target(link_target_type, "renderer") {
 
   if (is_android) {
     deps += [
-      "//components/power_scheduler",
-
       # Used by Android WebView only.
       "//components/viz/service",
-      "//third_party/android_ndk:cpu_features",
       "//third_party/ashmem",
+      "//third_party/cpu_features:ndk_compat",
       "//third_party/libphonenumber",
     ]
   }
@@ -494,8 +494,6 @@ target(link_target_type, "renderer") {
       "pepper/ppb_proxy_impl.h",
       "pepper/ppb_var_deprecated_impl.cc",
       "pepper/ppb_var_deprecated_impl.h",
-      "pepper/ppb_video_decoder_impl.cc",
-      "pepper/ppb_video_decoder_impl.h",
       "pepper/renderer_ppapi_host_impl.cc",
       "pepper/renderer_ppapi_host_impl.h",
       "pepper/renderer_restrict_dispatch_group.h",

@@ -5,11 +5,14 @@
 #include "chromeos/ash/components/network/policy_util.h"
 
 #include <memory>
+#include <sstream>
 #include <utility>
 
+#include "base/check.h"
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/values.h"
+#include "chromeos/ash/components/network/network_event_log.h"
 #include "chromeos/ash/components/network/network_profile.h"
 #include "chromeos/ash/components/network/network_type_pattern.h"
 #include "chromeos/ash/components/network/network_ui_data.h"
@@ -23,10 +26,14 @@
 #include "components/onc/onc_constants.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace ash::policy_util {
 
 const char kFakeCredential[] = "FAKE_CREDENTIAL_VPaJDV9x";
+
+// This pattern captures the entire activation code except the matching ID.
+const char kActivationCodePattern[] = R"((^LPA\:1\$[a-zA-Z0-9.\-+*\/:%]*\$))";
 
 namespace {
 
@@ -150,6 +157,56 @@ void ApplyGlobalAutoconnectPolicy(NetworkProfile::Type profile_type,
 }
 
 }  // namespace
+
+SmdxActivationCode::SmdxActivationCode(Type type, std::string value)
+    : type_(type), value_(value) {}
+
+SmdxActivationCode::SmdxActivationCode(SmdxActivationCode&& other) {
+  type_ = other.type_;
+  value_ = std::move(other.value_);
+}
+
+SmdxActivationCode& SmdxActivationCode::operator=(SmdxActivationCode&& other) {
+  type_ = other.type_;
+  value_ = std::move(other.value_);
+  return *this;
+}
+
+std::string SmdxActivationCode::ToString() const {
+  return GetString(/*for_error_message=*/false);
+}
+
+std::string SmdxActivationCode::ToErrorString() const {
+  return GetString(/*for_error_message=*/true);
+}
+
+std::string SmdxActivationCode::GetString(bool for_error_message) const {
+  std::stringstream ss;
+  ss << "[type: ";
+
+  switch (type_) {
+    case SmdxActivationCode::Type::SMDP:
+      ss << "SM-DP+";
+      break;
+    case SmdxActivationCode::Type::SMDS:
+      ss << "SM-DS";
+      break;
+  }
+
+  if (for_error_message) {
+    ss << ", value: ";
+
+    std::string sanitized;
+    if (RE2::PartialMatch(value_, kActivationCodePattern, &sanitized)) {
+      ss << sanitized;
+    } else {
+      ss << "<bad format>";
+    }
+  }
+
+  ss << "]";
+  return ss.str();
+}
 
 base::Value::Dict CreateManagedONC(const base::Value::Dict* global_policy,
                                    const base::Value::Dict* network_policy,
@@ -451,6 +508,43 @@ const std::string* GetSMDPAddressFromONC(const base::Value::Dict& onc_config) {
   }
 
   return smdp_address;
+}
+
+absl::optional<SmdxActivationCode> GetSmdxActivationCodeFromONC(
+    const base::Value::Dict& onc_config) {
+  const std::string* type = onc_config.FindString(::onc::network_config::kType);
+  const base::Value::Dict* cellular_dict =
+      onc_config.FindDict(::onc::network_config::kCellular);
+
+  if (!type || (*type != ::onc::network_type::kCellular) || !cellular_dict) {
+    return absl::nullopt;
+  }
+
+  const std::string* const smdp_activation_code =
+      cellular_dict->FindString(::onc::cellular::kSMDPAddress);
+  const std::string* const smds_activation_code =
+      cellular_dict->FindString(::onc::cellular::kSMDSAddress);
+
+  if (smdp_activation_code && smds_activation_code) {
+    NET_LOG(ERROR) << "Failed to get SM-DX activation code from ONC "
+                   << "configuration. Expected either an SM-DP+ activation "
+                   << "code or an SM-DS activation code but got both.";
+    return absl::nullopt;
+  }
+
+  if (smdp_activation_code) {
+    return SmdxActivationCode(SmdxActivationCode::Type::SMDP,
+                              *smdp_activation_code);
+  }
+  if (smds_activation_code) {
+    return SmdxActivationCode(SmdxActivationCode::Type::SMDS,
+                              *smds_activation_code);
+  }
+
+  NET_LOG(ERROR) << "Failed to get SM-DX activation code from ONC "
+                 << "configuration. Expected either an SM-DP+ activation code "
+                 << "or an SM-DS activation code but got neither.";
+  return absl::nullopt;
 }
 
 }  // namespace ash::policy_util

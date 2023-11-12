@@ -8,14 +8,18 @@
 
 #include <tuple>
 
+#include "base/apple/bundle_locations.h"
 #include "base/check.h"
-#include "base/mac/bundle_locations.h"
 #include "base/no_destructor.h"
 #include "base/strings/sys_string_conversions.h"
 #include "build/branding_buildflags.h"
 #include "components/version_info/version_info.h"
 
 #include "app/vivaldi_apptools.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace chrome {
 
@@ -66,7 +70,7 @@ ChannelState ParseChannelId(NSString* channel) {
 ChannelState DetermineChannelState() {
   // Use the main Chrome application bundle and not the framework bundle.
   // Keystone keys don't live in the framework.
-  NSBundle* bundle = base::mac::OuterBundle();
+  NSBundle* bundle = base::apple::OuterBundle();
 
   if (![bundle objectForInfoDictionaryKey:@"KSProductID"]) {
     // This build is not Keystone-enabled; it can't have a channel.
@@ -101,7 +105,7 @@ bool SideBySideCapable() {
   static const bool capable = [] {
     // Use the main Chrome application bundle and not the framework bundle.
     // Keystone keys don't live in the framework.
-    NSBundle* bundle = base::mac::OuterBundle();
+    NSBundle* bundle = base::apple::OuterBundle();
     if (![bundle objectForInfoDictionaryKey:@"KSProductID"]) {
       // This build is not Keystone-enabled, and without a channel assume it is
       // side-by-side capable.

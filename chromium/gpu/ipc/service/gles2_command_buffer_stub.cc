@@ -215,28 +215,6 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
   }
 
   if (offscreen) {
-    // Do we want to create an offscreen rendering context suitable
-    // for directly drawing to a separately supplied surface? In that
-    // case, we must ensure that the surface used for context creation
-    // is compatible with the requested attributes. This is explicitly
-    // opt-in since some context such as for NaCl request custom
-    // attributes but don't expect to get their own surface, and not
-    // all surface factories support custom formats.
-    if (init_params.attribs.own_offscreen_surface) {
-      if (init_params.attribs.depth_size > 0) {
-        surface_format.SetDepthBits(init_params.attribs.depth_size);
-      }
-      if (init_params.attribs.samples > 0) {
-        surface_format.SetSamples(init_params.attribs.samples);
-      }
-      if (init_params.attribs.stencil_size > 0) {
-        surface_format.SetStencilBits(init_params.attribs.stencil_size);
-      }
-      // Currently, we can't separately control alpha channel for surfaces,
-      // it's generally enabled by default except for RGB565 and (on desktop)
-      // smaller-than-32bit formats. If there's a future use case that
-      // requires this, it should use init_params.attribs.alpha_size here.
-    }
     if (!surface_format.IsCompatible(default_surface->GetFormat())) {
       DVLOG(1) << __FUNCTION__ << ": Hit the OwnOffscreenSurface path";
       use_virtualized_gl_context_ = false;
@@ -431,6 +409,23 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
     }
   }
 
+  if (IsWebGLContextType(init_params.attribs.context_type)) {
+    gl::GLDisplayEGL* display_egl = display->GetAs<gl::GLDisplayEGL>();
+    if (display_egl) {
+      UMA_HISTOGRAM_ENUMERATION("GPU.WebGLDisplayType",
+                                display_egl->GetDisplayType(),
+                                gl::DISPLAY_TYPE_MAX);
+
+      constexpr uint64_t kLargeCanvasNumPixels = 128 * 128;
+      uint64_t surface_area = surface_->GetSize().Area64();
+      if (surface_area >= kLargeCanvasNumPixels) {
+        UMA_HISTOGRAM_ENUMERATION("GPU.WebGLDisplayTypeLarge",
+                                  display_egl->GetDisplayType(),
+                                  gl::DISPLAY_TYPE_MAX);
+      }
+    }
+  }
+
   manager->delegate()->DidCreateContextSuccessfully();
   initialized_ = true;
   return gpu::ContextResult::kSuccess;
@@ -466,18 +461,6 @@ MemoryTracker* GLES2CommandBufferStub::GetContextGroupMemoryTracker() const {
 void GLES2CommandBufferStub::OnGpuSwitched(
     gl::GpuPreference active_gpu_heuristic) {
   client().OnGpuSwitched(active_gpu_heuristic);
-}
-
-void GLES2CommandBufferStub::OnTakeFrontBuffer(const Mailbox& mailbox) {
-  TRACE_EVENT0("gpu", "CommandBufferStub::OnTakeFrontBuffer");
-  DCHECK(gles2_decoder_);
-  gles2_decoder_->TakeFrontBuffer(mailbox);
-}
-
-void GLES2CommandBufferStub::OnReturnFrontBuffer(const Mailbox& mailbox,
-                                                 bool is_lost) {
-  // No need to pull texture updates.
-  gles2_decoder_->ReturnFrontBuffer(mailbox, is_lost);
 }
 
 void GLES2CommandBufferStub::OnSetDefaultFramebufferSharedImage(

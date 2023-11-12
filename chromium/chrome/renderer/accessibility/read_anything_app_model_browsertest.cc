@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/threading/platform_thread.h"
 #include "chrome/renderer/accessibility/read_anything_app_model.h"
 
 #include "chrome/test/base/chrome_render_view_test.h"
+#include "ui/accessibility/ax_enums.mojom-shared.h"
 #include "ui/accessibility/ax_serializable_tree.h"
-#include "ui/accessibility/ax_tree_observer.h"
 
 class ReadAnythingAppModelTest : public ChromeRenderViewTest {
  public:
@@ -93,7 +94,7 @@ class ReadAnythingAppModelTest : public ChromeRenderViewTest {
   void AccessibilityEventReceived(
       const ui::AXTreeID& tree_id,
       const std::vector<ui::AXTreeUpdate>& updates) {
-    model_->AccessibilityEventReceived(tree_id, updates, ax_tree_observer);
+    model_->AccessibilityEventReceived(tree_id, updates, {});
   }
 
   void SetActiveTreeId(ui::AXTreeID tree_id) {
@@ -168,13 +169,22 @@ class ReadAnythingAppModelTest : public ChromeRenderViewTest {
     model_->ComputeDisplayNodeIdsForDistilledTree();
   }
 
-  void ProcessSelection() { model_->PostProcessSelection(); }
+  bool ProcessSelection() { return model_->PostProcessSelection(); }
+
+  bool RequiresPostProcessSelection() {
+    return model_->requires_post_process_selection();
+  }
+  void SetRequiresPostProcessSelection(bool requires_post_process_selection) {
+    model_->set_requires_post_process_selection(
+        requires_post_process_selection);
+  }
+  void SetSelectionFromAction(bool selection_from_action) {
+    model_->set_selection_from_action(selection_from_action);
+  }
 
   ui::AXTreeID tree_id_;
 
  private:
-  ui::AXTreeObserver* ax_tree_observer = new ui::AXTreeObserver();
-
   // ReadAnythingAppModel constructor and destructor are private so it's
   // not accessible by std::make_unique.
   ReadAnythingAppModel* model_ = nullptr;
@@ -592,7 +602,8 @@ TEST_F(ReadAnythingAppModelTest, DisplayNodeIdsContains_ContentNodes) {
   EXPECT_TRUE(DisplayNodeIdsContains(6));
 }
 
-TEST_F(ReadAnythingAppModelTest, SelectionNodeIdsContains_Selection) {
+TEST_F(ReadAnythingAppModelTest,
+       SelectionNodeIdsContains_SelectionAndNearbyNodes) {
   ui::AXTreeUpdate update;
   SetUpdateTreeID(&update);
   update.tree_data.sel_anchor_object_id = 2;
@@ -606,10 +617,11 @@ TEST_F(ReadAnythingAppModelTest, SelectionNodeIdsContains_Selection) {
   EXPECT_TRUE(SelectionNodeIdsContains(1));
   EXPECT_TRUE(SelectionNodeIdsContains(2));
   EXPECT_TRUE(SelectionNodeIdsContains(3));
-  EXPECT_FALSE(SelectionNodeIdsContains(4));
+  EXPECT_TRUE(SelectionNodeIdsContains(4));
 }
 
-TEST_F(ReadAnythingAppModelTest, SelectionNodeIdsContains_BackwardSelection) {
+TEST_F(ReadAnythingAppModelTest,
+       SelectionNodeIdsContains_BackwardSelectionAndNearbyNodes) {
   ui::AXTreeUpdate update;
   SetUpdateTreeID(&update);
   update.tree_data.sel_anchor_object_id = 3;
@@ -622,7 +634,7 @@ TEST_F(ReadAnythingAppModelTest, SelectionNodeIdsContains_BackwardSelection) {
   EXPECT_TRUE(SelectionNodeIdsContains(1));
   EXPECT_TRUE(SelectionNodeIdsContains(2));
   EXPECT_TRUE(SelectionNodeIdsContains(3));
-  EXPECT_FALSE(SelectionNodeIdsContains(4));
+  EXPECT_TRUE(SelectionNodeIdsContains(4));
 }
 
 TEST_F(ReadAnythingAppModelTest, SetTheme_LineAndLetterSpacingCorrect) {
@@ -733,8 +745,10 @@ TEST_F(ReadAnythingAppModelTest, PostProcessSelection_SelectionStateCorrect) {
   update.tree_data.sel_focus_offset = 0;
   update.tree_data.sel_is_backward = false;
   AccessibilityEventReceived({update});
+  SetRequiresPostProcessSelection(true);
   ProcessSelection();
 
+  ASSERT_FALSE(RequiresPostProcessSelection());
   ASSERT_TRUE(HasSelection());
 
   ASSERT_TRUE(SelectionNodeIdsContains(1));
@@ -746,4 +760,225 @@ TEST_F(ReadAnythingAppModelTest, PostProcessSelection_SelectionStateCorrect) {
 
   ASSERT_EQ(StartNodeId(), 2);
   ASSERT_EQ(EndNodeId(), 3);
+}
+
+TEST_F(ReadAnythingAppModelTest, PostProcessSelectionFromAction_DoesNotDraw) {
+  // Initial state.
+  ui::AXTreeUpdate update;
+  SetUpdateTreeID(&update);
+  update.tree_data.sel_anchor_object_id = 2;
+  update.tree_data.sel_focus_object_id = 3;
+  update.tree_data.sel_anchor_offset = 0;
+  update.tree_data.sel_focus_offset = 0;
+  update.tree_data.sel_is_backward = false;
+  AccessibilityEventReceived({update});
+  ProcessDisplayNodes({2, 3});
+  SetSelectionFromAction(true);
+
+  ASSERT_FALSE(ProcessSelection());
+}
+
+TEST_F(ReadAnythingAppModelTest,
+       StartAndEndNodesHaveDifferentParents_SelectionStateCorrect) {
+  ui::AXTreeUpdate update;
+  SetUpdateTreeID(&update);
+  update.nodes.resize(6);
+  update.nodes[0].id = 1;
+  update.nodes[1].id = 2;
+  update.nodes[2].id = 3;
+  update.nodes[3].id = 4;
+  update.nodes[4].id = 5;
+  update.nodes[5].id = 6;
+  update.nodes[0].child_ids = {2, 3, 4};
+  update.nodes[3].child_ids = {5, 6};
+  update.nodes[0].role = ax::mojom::Role::kStaticText;
+  update.nodes[1].role = ax::mojom::Role::kStaticText;
+  update.nodes[2].role = ax::mojom::Role::kStaticText;
+  update.nodes[3].role = ax::mojom::Role::kGenericContainer;
+  update.nodes[4].role = ax::mojom::Role::kStaticText;
+  update.nodes[5].role = ax::mojom::Role::kStaticText;
+  AccessibilityEventReceived({update});
+
+  update.tree_data.sel_anchor_object_id = 2;
+  update.tree_data.sel_focus_object_id = 5;
+  update.tree_data.sel_anchor_offset = 0;
+  update.tree_data.sel_focus_offset = 0;
+  update.tree_data.sel_is_backward = false;
+  AccessibilityEventReceived({update});
+  ProcessSelection();
+
+  ASSERT_TRUE(HasSelection());
+  ASSERT_EQ(StartNodeId(), 2);
+  ASSERT_EQ(EndNodeId(), 5);
+
+  // 1 and 3 are ancestors, so they are included as selection nodes..
+  ASSERT_TRUE(SelectionNodeIdsContains(1));
+  ASSERT_TRUE(SelectionNodeIdsContains(3));
+
+  ASSERT_TRUE(SelectionNodeIdsContains(5));
+  ASSERT_TRUE(SelectionNodeIdsContains(6));
+
+  // Even though 3 is a generic container with more than one child, its sibling
+  // nodes are included in the selection because the start node includes it.
+  ASSERT_TRUE(SelectionNodeIdsContains(2));
+  ASSERT_TRUE(SelectionNodeIdsContains(3));
+}
+
+TEST_F(ReadAnythingAppModelTest,
+       SelectionParentIsLinkAndInlineBlock_SelectionStateCorrect) {
+  ui::AXTreeUpdate update;
+  SetUpdateTreeID(&update);
+  update.nodes.resize(4);
+  update.nodes[0].id = 1;
+  update.nodes[1].id = 2;
+  update.nodes[2].id = 3;
+  update.nodes[3].id = 4;
+  update.nodes[0].child_ids = {2, 3};
+  update.nodes[2].child_ids = {4};
+  update.nodes[0].role = ax::mojom::Role::kStaticText;
+  update.nodes[1].role = ax::mojom::Role::kStaticText;
+  update.nodes[2].role = ax::mojom::Role::kLink;
+  update.nodes[2].AddStringAttribute(ax::mojom::StringAttribute::kDisplay,
+                                     "block");
+  update.nodes[3].role = ax::mojom::Role::kStaticText;
+  update.nodes[3].AddStringAttribute(ax::mojom::StringAttribute::kDisplay,
+                                     "inline-block");
+  AccessibilityEventReceived({update});
+
+  update.tree_data.sel_anchor_object_id = 4;
+  update.tree_data.sel_focus_object_id = 4;
+  update.tree_data.sel_anchor_offset = 0;
+  update.tree_data.sel_focus_offset = 1;
+  update.tree_data.sel_is_backward = false;
+  AccessibilityEventReceived({update});
+  ProcessSelection();
+
+  ASSERT_TRUE(HasSelection());
+  ASSERT_EQ(StartNodeId(), 4);
+  ASSERT_EQ(EndNodeId(), 4);
+
+  ASSERT_TRUE(SelectionNodeIdsContains(1));
+  ASSERT_FALSE(SelectionNodeIdsContains(2));
+  ASSERT_TRUE(SelectionNodeIdsContains(3));
+  ASSERT_TRUE(SelectionNodeIdsContains(4));
+}
+
+TEST_F(ReadAnythingAppModelTest,
+       SelectionParentIsListItem_SelectionStateCorrect) {
+  ui::AXTreeUpdate update;
+  SetUpdateTreeID(&update);
+  update.nodes.resize(4);
+  update.nodes[0].id = 1;
+  update.nodes[1].id = 2;
+  update.nodes[2].id = 3;
+  update.nodes[3].id = 4;
+  update.nodes[0].child_ids = {2, 3};
+  update.nodes[2].child_ids = {4};
+  update.nodes[0].role = ax::mojom::Role::kStaticText;
+  update.nodes[1].role = ax::mojom::Role::kStaticText;
+  update.nodes[2].role = ax::mojom::Role::kLink;
+  update.nodes[2].AddStringAttribute(ax::mojom::StringAttribute::kDisplay,
+                                     "block");
+  update.nodes[3].role = ax::mojom::Role::kStaticText;
+  update.nodes[3].AddStringAttribute(ax::mojom::StringAttribute::kDisplay,
+                                     "list-item");
+  AccessibilityEventReceived({update});
+
+  update.tree_data.sel_anchor_object_id = 4;
+  update.tree_data.sel_focus_object_id = 4;
+  update.tree_data.sel_anchor_offset = 0;
+  update.tree_data.sel_focus_offset = 1;
+  update.tree_data.sel_is_backward = false;
+  AccessibilityEventReceived({update});
+  ProcessSelection();
+
+  ASSERT_TRUE(HasSelection());
+  ASSERT_EQ(StartNodeId(), 4);
+  ASSERT_EQ(EndNodeId(), 4);
+
+  ASSERT_TRUE(SelectionNodeIdsContains(1));
+  ASSERT_FALSE(SelectionNodeIdsContains(2));
+  ASSERT_TRUE(SelectionNodeIdsContains(3));
+  ASSERT_TRUE(SelectionNodeIdsContains(4));
+}
+
+TEST_F(ReadAnythingAppModelTest,
+       SelectionParentIsGenericContainerAndInline_SelectionStateCorrect) {
+  ui::AXTreeUpdate update;
+  SetUpdateTreeID(&update);
+  update.nodes.resize(4);
+  update.nodes[0].id = 1;
+  update.nodes[1].id = 2;
+  update.nodes[2].id = 3;
+  update.nodes[3].id = 4;
+  update.nodes[0].child_ids = {2, 3};
+  update.nodes[2].child_ids = {4};
+  update.nodes[0].role = ax::mojom::Role::kStaticText;
+  update.nodes[1].role = ax::mojom::Role::kStaticText;
+  update.nodes[2].role = ax::mojom::Role::kGenericContainer;
+  update.nodes[2].AddStringAttribute(ax::mojom::StringAttribute::kDisplay,
+                                     "block");
+  update.nodes[3].role = ax::mojom::Role::kStaticText;
+  update.nodes[3].AddStringAttribute(ax::mojom::StringAttribute::kDisplay,
+                                     "inline");
+  AccessibilityEventReceived({update});
+
+  update.tree_data.sel_anchor_object_id = 4;
+  update.tree_data.sel_focus_object_id = 4;
+  update.tree_data.sel_anchor_offset = 0;
+  update.tree_data.sel_focus_offset = 1;
+  update.tree_data.sel_is_backward = true;
+  AccessibilityEventReceived({update});
+  ProcessSelection();
+
+  ASSERT_TRUE(HasSelection());
+  ASSERT_EQ(StartNodeId(), 4);
+  ASSERT_EQ(EndNodeId(), 4);
+
+  ASSERT_TRUE(SelectionNodeIdsContains(1));
+  ASSERT_FALSE(SelectionNodeIdsContains(2));
+  ASSERT_TRUE(SelectionNodeIdsContains(3));
+  ASSERT_TRUE(SelectionNodeIdsContains(4));
+}
+TEST_F(
+    ReadAnythingAppModelTest,
+    SelectionParentIsGenericContainerWithMultipleChildren_SelectionStateCorrect) {
+  ui::AXTreeUpdate update;
+  SetUpdateTreeID(&update);
+  update.nodes.resize(5);
+  update.nodes[0].id = 1;
+  update.nodes[1].id = 2;
+  update.nodes[2].id = 3;
+  update.nodes[3].id = 4;
+  update.nodes[4].id = 5;
+  update.nodes[0].child_ids = {2, 3};
+  update.nodes[2].child_ids = {4, 5};
+  update.nodes[0].role = ax::mojom::Role::kStaticText;
+  update.nodes[1].role = ax::mojom::Role::kStaticText;
+  update.nodes[2].role = ax::mojom::Role::kGenericContainer;
+  update.nodes[3].role = ax::mojom::Role::kStaticText;
+  update.nodes[4].role = ax::mojom::Role::kStaticText;
+  AccessibilityEventReceived({update});
+
+  update.tree_data.sel_anchor_object_id = 4;
+  update.tree_data.sel_focus_object_id = 5;
+  update.tree_data.sel_anchor_offset = 0;
+  update.tree_data.sel_focus_offset = 0;
+  update.tree_data.sel_is_backward = false;
+  AccessibilityEventReceived({update});
+  ProcessSelection();
+
+  ASSERT_TRUE(HasSelection());
+  ASSERT_EQ(StartNodeId(), 4);
+  ASSERT_EQ(EndNodeId(), 5);
+
+  // 1 and 3 are ancestors, so they are included as selection nodes..
+  ASSERT_TRUE(SelectionNodeIdsContains(1));
+  ASSERT_TRUE(SelectionNodeIdsContains(3));
+  ASSERT_TRUE(SelectionNodeIdsContains(4));
+  ASSERT_TRUE(SelectionNodeIdsContains(5));
+
+  // Since 3 is a generic container with more than one child, its sibling nodes
+  // are not included, so 2 is ignored.
+  ASSERT_FALSE(SelectionNodeIdsContains(2));
 }

@@ -371,15 +371,14 @@ void FontBuilder::UpdateAdjustedSize(FontDescription& font_description,
   Font font(font_description, font_selector);
 
   const SimpleFontData* font_data = font.PrimaryFont();
-
-  if (!font_data || !font_data->GetFontMetrics().HasXHeight()) {
+  if (!font_data) {
     return;
   }
 
-  const FontSizeAdjust size_adjust = font_description.SizeAdjust();
-  float aspect_value = font_data->GetFontMetrics().XHeight() / computed_size;
-  float adjusted_size = (size_adjust.Value() / aspect_value) * computed_size;
-  font_description.SetAdjustedSize(adjusted_size);
+  if (auto adjusted_size = FontSizeFunctions::MetricsMultiplierAdjustedFontSize(
+          font_data, font_description)) {
+    font_description.SetAdjustedSize(adjusted_size.value());
+  }
 }
 
 void FontBuilder::UpdateComputedSize(FontDescription& font_description,

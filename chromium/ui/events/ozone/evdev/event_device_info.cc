@@ -81,8 +81,8 @@ constexpr auto kKeyboardBlocklist = base::MakeFixedFlatSet<DeviceId>({
     {0x046d, 0xb024},  // Logitech G604 Lightspeed Gaming Mouse (Bluetooth)
     {0x046d, 0xb503},  // Logitech Spotlight Presentation Remote (Bluetooth)
     {0x046d, 0xb505},  // Logitech R500 (Bluetooth)
+    {0x046d, 0xc08b},  // Logitech G502 Hero
     {0x046d, 0xc093},  // Logitech M500s
-    {0x046d, 0xc534},  // Logitech M170
     {0x046d, 0xc53e},  // Logitech Spotlight Presentation Remote (USB dongle)
     {0x04b4, 0x121f},  // SteelSeries Ikari
     {0x056e, 0x0134},  // Elecom Enelo IR LED Mouse 350
@@ -241,6 +241,7 @@ constexpr auto kKeyboardBlocklist = base::MakeFixedFlatSet<DeviceId>({
     {0x12cf, 0x0490},  // Acer Cestus 325
     {0x1532, 0x007a},  // Razer Viper Ultimate (Wired)
     {0x1532, 0x007b},  // Razer Viper Ultimate (Wireless)
+    {0x1532, 0x008a},  // Razer Viper Mini
     {0x1532, 0x009a},  // Razer Pro Click Mini (Dongle)
     {0x1532, 0x009b},  // Razer Pro Click Mini (Bluetooth)
     {0x17ef, 0x60be},  // Lenovo Legion M200 RGB Gaming Mouse

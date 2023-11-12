@@ -62,7 +62,7 @@ class MenuScrollButton : public View {
       : host_(host),
         is_up_(is_up),
         // Make our height the same as that of other MenuItemViews.
-        pref_height_(MenuItemView::pref_menu_height()) {}
+        pref_height_(host_->GetPreferredItemHeight()) {}
   MenuScrollButton(const MenuScrollButton&) = delete;
   MenuScrollButton& operator=(const MenuScrollButton&) = delete;
 
@@ -470,9 +470,7 @@ void MenuScrollViewContainer::CreateBubbleBorder() {
                                menu_controller->rounded_corners().has_value();
   if (use_ash_system_ui_layout_ || border_radius > 0 || has_customized_corner) {
     if (has_customized_corner) {
-      bubble_border->SetRoundedCorners(
-          GetRoundedCorners().upper_left(), GetRoundedCorners().upper_right(),
-          GetRoundedCorners().lower_right(), GetRoundedCorners().lower_left());
+      bubble_border->set_rounded_corners(GetRoundedCorners());
     } else {
       bubble_border->SetCornerRadius(border_radius);
     }

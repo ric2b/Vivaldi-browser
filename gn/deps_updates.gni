@@ -22,6 +22,7 @@ if (!is_ios) {
   import("//vivaldi/menus/deps_updates.gni")
   import("//vivaldi/notes/deps_updates.gni")
   import("//vivaldi/prefs/deps_updates.gni")
+  import("//vivaldi/proxy/deps_updates.gni")
   import("//vivaldi/renderer/deps_updates.gni")
   import("//vivaldi/sessions/deps_updates.gni")
   import("//vivaldi/sync/deps_updates.gni")
@@ -36,6 +37,7 @@ if (!is_ios) {
   }
 
   import("//vivaldi/testing/testing.gni")
+  import("//vivaldi/proxy/proxy_feature.gni")
 
   if (!is_android) {
     update_target("//chrome/browser:test_support_ui") {
@@ -107,6 +109,9 @@ if (!is_ios) {
         "//vivaldi/sync:browser",
         "//vivaldi/translate_history",
       ]
+      if (enable_relay_proxy) {
+        deps += [ "//vivaldi/proxy"]
+      }
     }
   }
 

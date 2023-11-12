@@ -8,8 +8,8 @@
  */
 
 import 'chrome://resources/cr_components/settings_prefs/prefs.js';
-import '../../settings_shared.css.js';
-import '../../controls/settings_toggle_button.js';
+import '../settings_shared.css.js';
+import '/shared/settings/controls/settings_toggle_button.js';
 
 import {getHotspotConfig} from 'chrome://resources/ash/common/hotspot/cros_hotspot_config.js';
 import {HotspotAllowStatus, HotspotInfo, HotspotState, SetHotspotConfigResult} from 'chrome://resources/ash/common/hotspot/cros_hotspot_config.mojom-webui.js';
@@ -21,16 +21,16 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 import {castExists} from '../assert_extras.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route} from '../router.js';
+import {Route, routes} from '../router.js';
 
 import {getTemplate} from './hotspot_subpage.html.js';
 
 const SettingsHotspotSubpageElementBase =
     DeepLinkingMixin(RouteObserverMixin(PrefsMixin(I18nMixin(PolymerElement))));
 
-class SettingsHotspotSubpageElement extends SettingsHotspotSubpageElementBase {
+export class SettingsHotspotSubpageElement extends
+    SettingsHotspotSubpageElementBase {
   static get is() {
     return 'settings-hotspot-subpage' as const;
   }

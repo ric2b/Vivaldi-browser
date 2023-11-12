@@ -72,7 +72,8 @@ Vector<AtomicString> PerformanceObserver::supportedEntryTypes(
         performance_entry_names::kLargestContentfulPaint);
     supportedEntryTypes.push_back(performance_entry_names::kLayoutShift);
 
-    if (RuntimeEnabledFeatures::LongAnimationFrameTimingEnabled()) {
+    if (RuntimeEnabledFeatures::LongAnimationFrameTimingEnabled(
+            execution_context)) {
       supportedEntryTypes.push_back(
           performance_entry_names::kLongAnimationFrame);
     }
@@ -244,6 +245,10 @@ void PerformanceObserver::observe(const PerformanceObserverInit* observer_init,
   if (filter_options_ & PerformanceEntry::kVisibilityState) {
     UseCounter::Count(GetExecutionContext(),
                       WebFeature::kVisibilityStateObserver);
+  }
+  if (filter_options_ & PerformanceEntry::kLongAnimationFrame) {
+    UseCounter::Count(GetExecutionContext(),
+                      WebFeature::kLongAnimationFrameObserver);
   }
 
   requires_dropped_entries_ = true;

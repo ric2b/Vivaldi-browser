@@ -134,8 +134,18 @@ base::Value ToValue(const blink::InterestGroup::Ad& ad) {
   if (ad.size_group) {
     dict.Set("size_group", ad.size_group.value());
   }
+  if (ad.buyer_reporting_id) {
+    dict.Set("buyer_reporting_id", ad.buyer_reporting_id.value());
+  }
+  if (ad.buyer_and_seller_reporting_id) {
+    dict.Set("buyer_and_seller_reporting_id",
+             ad.buyer_and_seller_reporting_id.value());
+  }
   if (ad.metadata)
     dict.Set("metadata", ad.metadata.value());
+  if (ad.ad_render_id) {
+    dict.Set("ad_render_id", ad.ad_render_id.value());
+  }
   return value;
 }
 blink::InterestGroup::Ad FromInterestGroupAdValue(
@@ -148,9 +158,23 @@ blink::InterestGroup::Ad FromInterestGroupAdValue(
   if (maybe_size_group) {
     result.size_group = *maybe_size_group;
   }
+  const std::string* maybe_buyer_reporting_id =
+      dict.FindString("buyer_reporting_id");
+  if (maybe_buyer_reporting_id) {
+    result.buyer_reporting_id = *maybe_buyer_reporting_id;
+  }
+  const std::string* maybe_buyer_and_seller_reporting_id =
+      dict.FindString("buyer_and_seller_reporting_id");
+  if (maybe_buyer_and_seller_reporting_id) {
+    result.buyer_and_seller_reporting_id = *maybe_buyer_and_seller_reporting_id;
+  }
   const std::string* maybe_metadata = dict.FindString("metadata");
   if (maybe_metadata)
     result.metadata = *maybe_metadata;
+  const std::string* maybe_ad_render_id = dict.FindString("ad_render_id");
+  if (maybe_ad_render_id) {
+    result.ad_render_id = *maybe_ad_render_id;
+  }
   return result;
 }
 
@@ -1185,6 +1209,10 @@ bool DoRecordInterestGroupJoin(sql::Database& db,
   // enclose them in a transaction since only one will actually modify the
   // database.
 
+  int64_t join_day = join_time.ToDeltaSinceWindowsEpoch()
+                         .FloorToMultiple(base::Days(1))
+                         .InMicroseconds();
+
   // clang-format off
   sql::Statement insert_join_hist(
       db.GetCachedStatement(SQL_FROM_HERE,
@@ -1197,7 +1225,7 @@ bool DoRecordInterestGroupJoin(sql::Database& db,
   insert_join_hist.Reset(true);
   insert_join_hist.BindString(0, Serialize(owner));
   insert_join_hist.BindString(1, name);
-  insert_join_hist.BindTime(2, join_time);
+  insert_join_hist.BindInt64(2, join_day);
   if (!insert_join_hist.Run())
     return false;
 
@@ -1218,7 +1246,7 @@ bool DoRecordInterestGroupJoin(sql::Database& db,
   update_join_hist.Reset(true);
   update_join_hist.BindString(0, Serialize(owner));
   update_join_hist.BindString(1, name);
-  update_join_hist.BindTime(2, join_time);
+  update_join_hist.BindInt64(2, join_day);
 
   return update_join_hist.Run();
 }
@@ -1427,6 +1455,9 @@ bool DoUpdateInterestGroup(sql::Database& db,
     stored_group.all_sellers_capabilities = *update.all_sellers_capabilities;
   if (update.execution_mode)
     stored_group.execution_mode = *update.execution_mode;
+  if (update.daily_update_url) {
+    stored_group.update_url = std::move(update.daily_update_url);
+  }
   if (update.bidding_url)
     stored_group.bidding_url = std::move(update.bidding_url);
   if (update.bidding_wasm_helper_url) {
@@ -1498,6 +1529,10 @@ bool DoRecordInterestGroupBid(sql::Database& db,
   // enclose them in a transaction since only one will actually modify the
   // database.
 
+  int64_t bid_day = bid_time.ToDeltaSinceWindowsEpoch()
+                        .FloorToMultiple(base::Days(1))
+                        .InMicroseconds();
+
   // clang-format off
   sql::Statement insert_bid_hist(
       db.GetCachedStatement(SQL_FROM_HERE,
@@ -1510,7 +1545,7 @@ bool DoRecordInterestGroupBid(sql::Database& db,
   insert_bid_hist.Reset(true);
   insert_bid_hist.BindString(0, Serialize(group_key.owner));
   insert_bid_hist.BindString(1, group_key.name);
-  insert_bid_hist.BindTime(2, bid_time);
+  insert_bid_hist.BindInt64(2, bid_day);
   if (!insert_bid_hist.Run())
     return false;
 
@@ -1531,7 +1566,7 @@ bool DoRecordInterestGroupBid(sql::Database& db,
   update_bid_hist.Reset(true);
   update_bid_hist.BindString(0, Serialize(group_key.owner));
   update_bid_hist.BindString(1, group_key.name);
-  update_bid_hist.BindTime(2, bid_time);
+  update_bid_hist.BindInt64(2, bid_day);
 
   return update_bid_hist.Run();
 }

@@ -7,17 +7,15 @@
 #import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
-#import "ios/chrome/app/application_delegate/browser_launcher.h"
 #import "ios/chrome/app/application_delegate/fake_startup_information.h"
-#import "ios/chrome/app/main_application_delegate.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/promos_manager/constants.h"
 #import "ios/chrome/browser/promos_manager/features.h"
 #import "ios/chrome/browser/promos_manager/mock_promos_manager.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/coordinator/scene/test/fake_scene_state.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
@@ -49,7 +47,11 @@ void ClearWhatsNewUserData() {
   [[NSUserDefaults standardUserDefaults]
       removeObjectForKey:kWhatsNewPromoRegistrationKey];
   [[NSUserDefaults standardUserDefaults]
+      removeObjectForKey:kWhatsNewM116PromoRegistrationKey];
+  [[NSUserDefaults standardUserDefaults]
       removeObjectForKey:kWhatsNewUsageEntryKey];
+  [[NSUserDefaults standardUserDefaults]
+      removeObjectForKey:kWhatsNewM116UsageEntryKey];
 }
 
 }  // namespace
@@ -61,21 +63,15 @@ class WhatsNewSceneAgentTest : public PlatformTest {
         TestChromeBrowserState::Builder().Build();
     std::unique_ptr<Browser> browser_ =
         std::make_unique<TestBrowser>(browser_state_.get());
-    id browser_launcher_mock_ =
-        [OCMockObject mockForProtocol:@protocol(BrowserLauncher)];
     FakeStartupInformation* startup_information_ =
         [[FakeStartupInformation alloc] init];
-    id main_application_delegate_ =
-        [OCMockObject mockForClass:[MainApplicationDelegate class]];
-    AppState* app_state =
-        [[AppState alloc] initWithBrowserLauncher:browser_launcher_mock_
-                               startupInformation:startup_information_
-                              applicationDelegate:main_application_delegate_];
+    app_state_ =
+        [[AppState alloc] initWithStartupInformation:startup_information_];
     promos_manager_ = std::make_unique<MockPromosManager>();
     agent_ = [[WhatsNewSceneAgent alloc]
         initWithPromosManager:promos_manager_.get()];
     scene_state_ =
-        [[FakeSceneState alloc] initWithAppState:app_state
+        [[FakeSceneState alloc] initWithAppState:app_state_
                                     browserState:browser_state_.get()];
     scene_state_.scene = static_cast<UIWindowScene*>(
         [[[UIApplication sharedApplication] connectedScenes] anyObject]);
@@ -87,6 +83,8 @@ class WhatsNewSceneAgentTest : public PlatformTest {
 
  protected:
   WhatsNewSceneAgent* agent_;
+  // SceneState only weakly holds AppState, so keep it alive here.
+  AppState* app_state_;
   FakeSceneState* scene_state_;
   base::test::TaskEnvironment task_environment_;
   std::unique_ptr<MockPromosManager> promos_manager_;

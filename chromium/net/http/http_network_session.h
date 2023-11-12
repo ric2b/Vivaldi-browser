@@ -80,6 +80,7 @@ const uint32_t kSpdyMaxHeaderTableSize = 64 * 1024;
 const uint32_t kSpdyMaxHeaderListSize = 256 * 1024;
 
 // Specifies the maximum concurrent streams server could send (via push).
+// TODO(https://crbug.com/1426477): Remove.
 const uint32_t kSpdyMaxConcurrentPushedStreams = 1000;
 
 // Self-contained structure with all the simple configuration options
@@ -89,6 +90,7 @@ struct NET_EXPORT HttpNetworkSessionParams {
   HttpNetworkSessionParams(const HttpNetworkSessionParams& other);
   ~HttpNetworkSessionParams();
 
+  // TODO(https://crbug.com/1426477): Remove.
   bool enable_server_push_cancellation = false;
   HostMappingRules host_mapping_rules;
   bool ignore_certificate_errors = false;
@@ -196,7 +198,7 @@ struct NET_EXPORT HttpNetworkSessionContext {
   raw_ptr<TransportSecurityState> transport_security_state;
   raw_ptr<CTPolicyEnforcer> ct_policy_enforcer;
   raw_ptr<SCTAuditingDelegate> sct_auditing_delegate;
-  raw_ptr<ProxyResolutionService> proxy_resolution_service;
+  raw_ptr<ProxyResolutionService, DanglingUntriaged> proxy_resolution_service;
   raw_ptr<ProxyDelegate> proxy_delegate;
   raw_ptr<const HttpUserAgentSettings> http_user_agent_settings;
   raw_ptr<SSLConfigService> ssl_config_service;
@@ -290,6 +292,7 @@ class NET_EXPORT HttpNetworkSession {
   // Returns the original Context used to construct this session.
   const HttpNetworkSessionContext& context() const { return context_; }
 
+  // TODO(https://crbug.com/1426477): Remove.
   void SetServerPushDelegate(std::unique_ptr<ServerPushDelegate> push_delegate);
 
   // Returns protocols to be used with ALPN.
@@ -336,7 +339,8 @@ class NET_EXPORT HttpNetworkSession {
   const raw_ptr<ReportingService> reporting_service_;
   const raw_ptr<NetworkErrorLoggingService> network_error_logging_service_;
 #endif
-  const raw_ptr<ProxyResolutionService> proxy_resolution_service_;
+  const raw_ptr<ProxyResolutionService, DanglingUntriaged>
+      proxy_resolution_service_;
   const raw_ptr<SSLConfigService> ssl_config_service_;
 
   HttpAuthCache http_auth_cache_;
@@ -345,6 +349,7 @@ class NET_EXPORT HttpNetworkSession {
   WebSocketEndpointLockManager websocket_endpoint_lock_manager_;
   std::unique_ptr<ClientSocketPoolManager> normal_socket_pool_manager_;
   std::unique_ptr<ClientSocketPoolManager> websocket_socket_pool_manager_;
+  // TODO(https://crbug.com/1426477): Remove.
   std::unique_ptr<ServerPushDelegate> push_delegate_;
   QuicStreamFactory quic_stream_factory_;
   SpdySessionPool spdy_session_pool_;

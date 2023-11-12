@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grit latest_public_release="0" current_release="1">
+  <release seq="1" allow_pseudo="false">
+    <includes>
+      <include name="IDR_SIGNIN_IMAGES_SHARED_LEFT_BANNER_SVG" file="viv_images/shared_left_banner.svg" resource_path="images/shared_left_banner.svg" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_SIGNIN_IMAGES_SHARED_LEFT_BANNER_DARK_SVG" file="viv_images/shared_left_banner_dark.svg" resource_path="images/shared_left_banner_dark.svg" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_SIGNIN_IMAGES_SHARED_RIGHT_BANNER_SVG" file="viv_images/shared_right_banner.svg" resource_path="images/shared_right_banner.svg" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_SIGNIN_IMAGES_SHARED_RIGHT_BANNER_DARK_SVG" file="viv_images/shared_right_banner_dark.svg" resource_path="images/shared_right_banner_dark.svg" use_base_dir="false" type="BINDATA" />
+    </includes>
+  </release>
+</grit>

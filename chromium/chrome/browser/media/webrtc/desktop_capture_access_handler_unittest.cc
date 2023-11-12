@@ -174,7 +174,7 @@ class DesktopCaptureAccessHandlerTest : public ChromeRenderViewHostTestHarness {
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
  protected:
-  raw_ptr<FakeDesktopMediaPickerFactory> picker_factory_;
+  raw_ptr<FakeDesktopMediaPickerFactory, DanglingUntriaged> picker_factory_;
   std::unique_ptr<DesktopCaptureAccessHandler> access_handler_;
 };
 
@@ -361,7 +361,6 @@ TEST_F(DesktopCaptureAccessHandlerTest, GenerateStreamSuccess) {
           url::Origin::Create(origin),
           content::DesktopMediaID(content::DesktopMediaID::TYPE_SCREEN,
                                   content::DesktopMediaID::kFakeId),
-          /*extension_name=*/"",
           content::DesktopStreamRegistryType::kRegistryStreamTypeDesktop);
 
   ProcessGenerateStreamRequest(id, origin, /*extension=*/nullptr, &result,
@@ -524,7 +523,6 @@ TEST_F(DesktopCaptureAccessHandlerTest, GenerateStreamDlpRestricted) {
           url::Origin::Create(GURL(kOrigin)),
           content::DesktopMediaID(content::DesktopMediaID::TYPE_SCREEN,
                                   content::DesktopMediaID::kFakeId),
-          /*extension_name=*/"",
           content::DesktopStreamRegistryType::kRegistryStreamTypeDesktop);
   blink::mojom::MediaStreamRequestResult result =
       blink::mojom::MediaStreamRequestResult::NOT_SUPPORTED;
@@ -557,7 +555,6 @@ TEST_F(DesktopCaptureAccessHandlerTest, GenerateStreamDlpNotRestricted) {
           url::Origin::Create(GURL(kOrigin)),
           content::DesktopMediaID(content::DesktopMediaID::TYPE_SCREEN,
                                   content::DesktopMediaID::kFakeId),
-          /*extension_name=*/"",
           content::DesktopStreamRegistryType::kRegistryStreamTypeDesktop);
   blink::mojom::MediaStreamRequestResult result =
       blink::mojom::MediaStreamRequestResult::NOT_SUPPORTED;

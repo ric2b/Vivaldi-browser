@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/core/css/style_color.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_sides.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_size.h"
+#include "third_party/blink/renderer/core/layout/geometry/physical_size.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_outline_type.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
@@ -57,6 +58,7 @@
 #include "third_party/blink/renderer/core/style/font_size_style.h"
 #include "third_party/blink/renderer/core/style/style_cached_data.h"
 #include "third_party/blink/renderer/core/style/style_highlight_data.h"
+#include "third_party/blink/renderer/core/style/style_scrollbar_color.h"
 #include "third_party/blink/renderer/core/style/transform_origin.h"
 #include "third_party/blink/renderer/platform/geometry/length.h"
 #include "third_party/blink/renderer/platform/geometry/length_box.h"
@@ -107,6 +109,7 @@ class StyleDifference;
 class StyleImage;
 class StyleInheritedVariables;
 class StyleInitialData;
+class StyleRay;
 class StyleResolver;
 class StyleResolverState;
 class StyleSelfAlignmentData;
@@ -398,11 +401,6 @@ class ComputedStyle : public ComputedStyleBase,
     // The container-name property affects which container is queried by
     // rules matching descedant elements.
     kDescendantAffecting,
-    // Properties which can affect the follow elements changed:
-    // descendants, subsequent siblings, and descendants of subsequent siblings.
-    //
-    // For example, scroll-timeline-* properties.
-    kSiblingDescendantAffecting,
   };
   CORE_EXPORT static Difference ComputeDifference(
       const ComputedStyle* old_style,
@@ -738,7 +736,8 @@ class ComputedStyle : public ComputedStyleBase,
   // ignore non-standard ::-webkit-scrollbar when standard properties are in use
   bool HasCustomScrollbarStyle() const {
     return HasPseudoElementStyle(kPseudoIdScrollbar) &&
-           ScrollbarWidth() == EScrollbarWidth::kAuto;
+           ScrollbarWidth() == EScrollbarWidth::kAuto &&
+           ScrollbarColor() == absl::nullopt;
   }
 
   // shape-outside (aka -webkit-shape-outside)
@@ -831,7 +830,6 @@ class ComputedStyle : public ComputedStyleBase,
   CORE_EXPORT const FontDescription& GetFontDescription() const {
     return GetFont().GetFontDescription();
   }
-  bool HasIdenticalAscentDescentAndLineGap(const ComputedStyle& other) const;
   bool HasFontRelativeUnits() const {
     return HasEmUnits() || HasRootFontRelativeUnits() ||
            HasGlyphRelativeUnits();
@@ -880,6 +878,11 @@ class ComputedStyle : public ComputedStyleBase,
   // font-style
   FontSelectionValue GetFontStyle() const {
     return GetFontDescription().Style();
+  }
+
+  // font-palette
+  blink::FontPalette* FontPalette() const {
+    return GetFontDescription().GetFontPalette();
   }
 
   // Child is aligned to the parent by matching the parent’s dominant baseline
@@ -1006,9 +1009,9 @@ class ComputedStyle : public ComputedStyleBase,
     return !HasAutoColumnCount() || !HasAutoColumnWidth();
   }
   bool ColumnRuleIsTransparent() const {
-    return !ColumnRuleColor()
-                .Resolve(GetCurrentColor(), UsedColorScheme())
-                .Alpha();
+    return ColumnRuleColor()
+        .Resolve(GetCurrentColor(), UsedColorScheme())
+        .IsFullyTransparent();
   }
   bool ColumnRuleEquivalent(const ComputedStyle& other_style) const;
   bool HasColumnRule() const {
@@ -1193,6 +1196,12 @@ class ComputedStyle : public ComputedStyleBase,
   }
   const Length& UsedBottom() const {
     return AdjustLengthForAnchorQueries(Bottom(), Length::Auto());
+  }
+  bool HasAutoAnchorPositioning() const {
+    return UsedLeft().HasAutoAnchorPositioning() ||
+           UsedRight().HasAutoAnchorPositioning() ||
+           UsedTop().HasAutoAnchorPositioning() ||
+           UsedBottom().HasAutoAnchorPositioning();
   }
 
   // Width/height utility functions.
@@ -1765,6 +1774,16 @@ class ComputedStyle : public ComputedStyleBase,
     return IsInlineOrBlockSizeContainer() && StyleType() == kPseudoIdNone;
   }
 
+  bool IsContainerForStickyContainerQueries() const {
+    return IsStickyContainer() && StyleType() == kPseudoIdNone;
+  }
+
+  bool DependsOnContainerQueries() const {
+    return DependsOnSizeContainerQueries() ||
+           DependsOnStyleContainerQueries() ||
+           DependsOnStickyContainerQueries();
+  }
+
   static bool IsContentVisibilityVisible(
       EContentVisibility content_visibility,
       const AtomicString& toggle_visibility) {
@@ -1909,6 +1928,10 @@ class ComputedStyle : public ComputedStyleBase,
   AppliedTextDecorationData() const {
     return IsDecoratingBox() ? EnsureAppliedTextDecorationsCache()
                              : BaseTextDecorationDataInternal().get();
+  }
+  const Vector<AppliedTextDecoration, 1>* BaseAppliedTextDecorations() const {
+    const auto base = BaseTextDecorationDataInternal();
+    return base ? &base->data : nullptr;
   }
 
   // Returns true if this a "decorating box".
@@ -2138,7 +2161,7 @@ class ComputedStyle : public ComputedStyleBase,
   };
   void ApplyTransform(gfx::Transform&,
                       const LayoutBox* box,
-                      const LayoutSize& border_box_data_size,
+                      PhysicalSize border_box_data_size,
                       ApplyTransformOperations,
                       ApplyTransformOrigin,
                       ApplyMotionPath,
@@ -2476,9 +2499,10 @@ class ComputedStyle : public ComputedStyleBase,
     return pseudo == kPseudoIdBefore || pseudo == kPseudoIdAfter;
   }
 
-  // Returns true if the element is a top layer candidate whose overlay property
-  // computes to 'auto'.
-  bool IsInTopLayer(const Element& element) const;
+  // Returns true if the element is rendered in the top layer. That is the case
+  // when the overlay property computes to 'auto', or when the element is a
+  // ::backdrop pseudo.
+  bool IsRenderedInTopLayer(const Element& element) const;
 
   // Load the images of CSS properties that were deferred by LazyLoad.
   void LoadDeferredImages(Document&) const;
@@ -2540,6 +2564,9 @@ class ComputedStyle : public ComputedStyleBase,
   }
   bool IsSizeContainer() const {
     return (ContainerType() & kContainerTypeSize) == kContainerTypeSize;
+  }
+  bool IsStickyContainer() const {
+    return ContainerType() & kContainerTypeSticky;
   }
 
   static bool IsDisplayBlockContainer(EDisplay display) {
@@ -2641,10 +2668,16 @@ class ComputedStyle : public ComputedStyleBase,
                                 const LayoutBox* box,
                                 const gfx::RectF& bounding_box,
                                 gfx::Transform&) const;
+  PointAndTangent CalculatePointAndTangentOnBasicShape(
+      const BasicShape& shape,
+      const gfx::PointF& starting_point,
+      const gfx::SizeF& reference_box_size) const;
   PointAndTangent CalculatePointAndTangentOnRay(
+      const StyleRay& ray,
       const LayoutBox* box,
-      const gfx::RectF& bounding_box) const;
-  PointAndTangent CalculatePointAndTangentOnPath() const;
+      const gfx::PointF& starting_point,
+      const gfx::SizeF& reference_box_size) const;
+  PointAndTangent CalculatePointAndTangentOnPath(const Path& path) const;
 
   bool ScrollAnchorDisablingPropertyChanged(const ComputedStyle& other,
                                             const StyleDifference&) const;

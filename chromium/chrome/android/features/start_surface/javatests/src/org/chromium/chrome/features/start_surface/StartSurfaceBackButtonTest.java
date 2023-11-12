@@ -21,9 +21,9 @@ import static org.chromium.ui.test.util.ViewUtils.waitForView;
 import android.os.Build;
 import android.view.View;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.espresso.contrib.RecyclerViewActions;
 import androidx.test.filters.MediumTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.junit.Assert;
 import org.junit.Assume;
@@ -85,8 +85,6 @@ Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "force-fieldtrials=Study/Group
 public class StartSurfaceBackButtonTest {
     @ParameterAnnotations.ClassParameter
     private static List<ParameterSet> sClassParams = sClassParamsForStartSurfaceTest;
-
-    private static final long MAX_TIMEOUT_MS = 40000L;
 
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();

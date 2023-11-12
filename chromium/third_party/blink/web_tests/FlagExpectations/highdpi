@@ -1,4 +1,4 @@
-# tags: [ Android Fuchsia Linux Mac Mac10.13 Mac11 Mac12 Mac13 Mac13-arm64 Win Win10.20h2 Win11 ]
+# tags: [ Android Fuchsia Linux Mac Mac10.13 Mac11 Mac12 Mac13 Mac13-arm64 Win Win10.20h2 Win11 Win11-arm64 ]
 # tags: [ Release Debug ]
 # results: [ Timeout Crash Pass Failure Slow Skip ]
 
@@ -65,10 +65,6 @@ crbug.com/1117211 css3/filters/composited-layer-promotion-after-outset-overlap-c
 # ref tests that fail in highdpi
 crbug.com/1179572 animations/cross-fade-webkit-mask-box-image.html [ Failure ]
 
-crbug.com/1409713 virtual/view-transition/external/wpt/css/css-view-transitions/content-with-clip-max-texture-size.html [ Failure ]
-crbug.com/1353771 virtual/view-transition/external/wpt/css/css-view-transitions/new-content-with-overflow-zoomed.html [ Failure ]
-crbug.com/1353771 virtual/view-transition/external/wpt/css/css-view-transitions/old-content-with-overflow-zoomed.html [ Failure ]
-crbug.com/1409713 virtual/view-transition-wide-gamut/external/wpt/css/css-view-transitions/content-with-clip-max-texture-size.html [ Failure ]
 crbug.com/1353771 virtual/view-transition/external/wpt/css/css-view-transitions/element-with-overflow.html [ Failure ]
 crbug.com/1412910 virtual/view-transition/external/wpt/css/css-view-transitions/fractional-translation-from-position.html [ Failure ]
 crbug.com/1414855 virtual/view-transition/external/wpt/css/css-view-transitions/new-content-captures-spans.html [ Failure ]
@@ -99,8 +95,6 @@ crbug.com/1179544 compositing/overflow/composited-sticky-element-with-non-intege
 crbug.com/1179544 compositing/overflow/non-reparented-overlay-scrollbars.html [ Failure ]
 crbug.com/1179544 compositing/overflow/overflow-scroll-background-fractional-offset.html [ Failure ]
 crbug.com/1179544 compositing/overflow/overflow-scroll-content-fractional-offset.html [ Failure ]
-crbug.com/1179544 compositing/overflow/reflected-overlay-scrollbars-should-appear-without-compositing.html [ Failure ]
-crbug.com/1179544 compositing/overflow/reflected-overlay-scrollbars-should-respect-ancestor-clip.html [ Failure ]
 crbug.com/1179544 compositing/overflow/reparented-unclipped-overlay-scrollbars-with-offset-from-renderer.html [ Failure ]
 
 crbug.com/1191214 css2.1/20110323/c541-word-sp-001.htm [ Failure ]
@@ -283,7 +277,6 @@ crbug.com/1179570 virtual/off-main-thread-css-paint/http/tests/csspaint/paint2d-
 crbug.com/1179570 virtual/off-main-thread-css-paint/http/tests/csspaint/shadow-scale-with-page-zoom.html [ Failure ]
 crbug.com/1179570 virtual/off-main-thread-css-paint/http/tests/csspaint/transform-with-page-zoom-002.html [ Failure ]
 crbug.com/1179570 virtual/off-main-thread-css-paint/http/tests/csspaint/transform-with-page-zoom-003.html [ Failure ]
-crbug.com/1179570 virtual/stable/media/stable/video-object-fit-stable.html [ Failure ]
 crbug.com/1179570 virtual/text-antialias/ellipsis-stroked.html [ Failure ]
 crbug.com/1179570 virtual/text-antialias/ellipsis-with-self-painting-layer.html [ Failure ]
 crbug.com/1179570 virtual/text-antialias/incorrect-fixed-pitch-font.html [ Failure ]
@@ -407,7 +400,6 @@ crbug.com/1266821 transforms/3d/point-mapping/3d-point-mapping.html [ Failure ]
 # Existing failures. Mark these as [ Pass ] when these tests are fixed.
 crbug.com/626703 external/wpt/acid/acid3/test.html [ Failure ]
 crbug.com/626703 external/wpt/css/css-fill-stroke/paint-order-001.tentative.html [ Failure ]
-crbug.com/240765 external/wpt/css/css-flexbox/intrinsic-size/row-001.html [ Failure ]
 crbug.com/694218 external/wpt/css/css-masking/clip-path/clip-path-viewBox-1b.html [ Failure ]
 crbug.com/1129522 external/wpt/css/css-shapes/shape-outside/shape-box/shape-outside-border-box-border-radius-011.html [ Failure ]
 crbug.com/591099 external/wpt/css/css-text/shaping/shaping-011.html [ Failure ]
@@ -415,7 +407,6 @@ crbug.com/970200 external/wpt/css/css-text/text-indent/text-indent-tab-positions
 crbug.com/1017164 external/wpt/css/css-text/word-break/word-break-normal-tdd-000.html [ Failure ]
 crbug.com/1205953 external/wpt/css/css-will-change/will-change-fixpos-cb-position-1.html [ Failure ]
 crbug.com/1295445 external/wpt/css/filter-effects/filter-function/filter-function-007.html [ Failure ]
-crbug.com/641245 external/wpt/css/motion/offset-path-ray-005.html [ Failure ]
 crbug.com/1012242 external/wpt/webvtt/rendering/cues-with-video/processing-model/regions/basic.html [ Failure ]
 
 # Background attachment not clipped.
@@ -455,8 +446,6 @@ crbug.com/1310040 virtual/gpu-rasterization-disable-yuv/images/yuv-decode-eligib
 
 crbug.com/1324618 external/wpt/css/css-images/object-view-box-fit-fill* [ Pass ]
 
-crbug.com/1430357 [ Mac ] virtual/view-transition/external/wpt/css/css-view-transitions/massive-element-* [ Failure Pass ]
-crbug.com/1430357 [ Mac ] virtual/view-transition-wide-gamut/external/wpt/css/css-view-transitions/massive-element-* [ Failure Pass ]
 
 # crbug.com/1339051: some ref tests generate output with minor differences.
 crbug.com/1339051 fast/forms/suggestion-picker/month-suggestion-picker-appearance-rtl.html [ Failure ]

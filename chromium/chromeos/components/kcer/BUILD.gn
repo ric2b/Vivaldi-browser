@@ -13,7 +13,11 @@ component("kcer") {
     "kcer.h",
     "kcer_impl.cc",
     "kcer_impl.h",
+    "kcer_notifier_net.cc",
+    "kcer_notifier_net.h",
     "kcer_token.h",
+    "token_key_finder.cc",
+    "token_key_finder.h",
     "token_results_merger.h",
   ]
 
@@ -34,7 +38,10 @@ proto_library("key_permissions_proto") {
 source_set("unit_tests") {
   testonly = true
 
-  sources = [ "token_results_merger_unittest.cc" ]
+  sources = [
+    "token_key_finder_unittest.cc",
+    "token_results_merger_unittest.cc",
+  ]
 
   deps = [
     ":kcer",

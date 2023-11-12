@@ -39,7 +39,6 @@ import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.base.test.util.Batch;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ChromeShareExtras.DetailedContentType;
 import org.chromium.chrome.browser.share.ShareContentTypeHelper.ContentType;
@@ -51,6 +50,7 @@ import org.chromium.components.favicon.IconType;
 import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -58,6 +58,7 @@ import org.chromium.ui.test.util.BlankUiTestActivity;
 import org.chromium.url.GURL;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Unit tests {@link ShareSheetBottomSheetContent}.
@@ -85,7 +86,7 @@ public final class ShareSheetBottomSheetContentTest {
     private static final Uri sImageUri = Uri.parse("content://testImage.png");
     private static final String sText = "Text";
     private static final String sTitle = "Title";
-    private static final String sUrl = "https://www.example.com";
+    private static final String sUrl = "https://www.example.com/path?query#hash";
     private String mPreviewUrl;
 
     private Activity mActivity;
@@ -99,7 +100,8 @@ public final class ShareSheetBottomSheetContentTest {
         mActivityTestRule.launchActivity(null);
         mActivity = mActivityTestRule.getActivity();
 
-        mPreviewUrl = UrlFormatter.formatUrlForDisplayOmitSchemeOmitTrivialSubdomains(sUrl);
+        mPreviewUrl = UrlFormatter.formatUrlForSecurityDisplay(
+                sUrl, SchemeDisplay.OMIT_HTTP_AND_HTTPS);
         mShareParams = new ShareParams.Builder(/*window=*/null, sTitle, sUrl)
                                .setText(sText)
                                .setSingleImageUri(sImageUri)
@@ -133,6 +135,30 @@ public final class ShareSheetBottomSheetContentTest {
                 new ShareSheetBottomSheetContent(mActivity, new MockLargeIconBridge(), null,
                         new ShareParams.Builder(/*window=*/null, /*title=*/"", /*url=*/"")
                                 .setSingleImageUri(sImageUri)
+                                .setFileContentType(fileContentType)
+                                .build(),
+                        mFeatureEngagementTracker);
+
+        shareSheetBottomSheetContent.createRecyclerViews(ImmutableList.of(), ImmutableList.of(),
+                ImmutableSet.of(ContentType.IMAGE), fileContentType, DetailedContentType.IMAGE,
+                mShareSheetLinkToggleCoordinator);
+
+        TextView titleView =
+                shareSheetBottomSheetContent.getContentView().findViewById(R.id.title_preview);
+        TextView subtitleView =
+                shareSheetBottomSheetContent.getContentView().findViewById(R.id.subtitle_preview);
+        assertEquals("", titleView.getText());
+        assertEquals("image", subtitleView.getText());
+    }
+
+    @Test
+    @MediumTest
+    public void createRecyclerViews_multipleImageShare() {
+        String fileContentType = "image/jpeg";
+        ShareSheetBottomSheetContent shareSheetBottomSheetContent =
+                new ShareSheetBottomSheetContent(mActivity, new MockLargeIconBridge(), null,
+                        new ShareParams.Builder(/*window=*/null, /*title=*/"", /*url=*/"")
+                                .setFileUris(new ArrayList<>(List.of(sImageUri, sImageUri)))
                                 .setFileContentType(fileContentType)
                                 .build(),
                         mFeatureEngagementTracker);
@@ -283,7 +309,6 @@ public final class ShareSheetBottomSheetContentTest {
 
     @Test
     @MediumTest
-    @Features.DisableFeatures({ChromeFeatureList.ANDROID_SCROLL_OPTIMIZATIONS})
     public void createRecyclerViews_toggleOff_showsIph() {
         String fileContentType = "image/gif";
         ShareSheetBottomSheetContent shareSheetBottomSheetContent =

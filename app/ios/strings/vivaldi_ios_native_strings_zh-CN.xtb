@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">按内容</translation>
 <translation id="2129408066358825297">年龄</translation>
 <translation id="2148384276939959392">同步所选</translation>
+<translation id="21693288559538605">广告和跟踪器拦截器摘要</translation>
 <translation id="2195713384412091023">此操作将删除存储在远程服务器上的所有同步数据、重新设置你的加密密码，并退出登录。</translation>
 <translation id="2243210264130642074">笔记已保存</translation>
 <translation id="2272338747456392228">账号已锁定</translation>
 <translation id="2273327106802955778">更多菜单</translation>
 <translation id="2324160330092901720">验证码已发送至 <ph name="EMAIL_ID" /></translation>
+<translation id="2336309953058658733">清空垃圾桶</translation>
 <translation id="2359808026110333948">继续</translation>
 <translation id="2386793615875593361">已选择 1 项</translation>
 <translation id="2388224692799337242">一旦您开始浏览，您的历史记录就会出现在这里</translation>
@@ -117,6 +119,7 @@
 <translation id="3699026013955941879">该验证码已过期，请获取新的验证码。</translation>
 <translation id="3700829948786686853">欢迎使用 Vivaldi</translation>
 <translation id="3766350025418769949">您可以在 iPad 上的其他应用程序中使用保存到 Vivaldi 密码管理器的密码。</translation>
+<translation id="3845564230651302310">正在应用新的阻止程序设置...</translation>
 <translation id="3858860766373142691">名称</translation>
 <translation id="3866249974567520381">描述</translation>
 <translation id="3872195896030547485">请输入有效的邮件地址。</translation>
@@ -225,6 +228,7 @@
 <translation id="6406506848690869874">同步</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> 个已选择</translation>
 <translation id="6468130661190228905">抱歉，看来您需要再过些时间才能加入我们的社区。我们要求成员至少年满 16 周岁。</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />导入<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">备份加密密钥</translation>
 <translation id="6527303717912515753">分享</translation>
 <translation id="6535988230515403205">波兰语 (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@
 <translation id="7461899062138731833">订阅源</translation>
 <translation id="750493650310597496">已选 0 个</translation>
 <translation id="7525067979554623046">创建</translation>
-<translation id="7541020606126512786">广告和跟踪屏蔽器概述</translation>
 <translation id="7573518470897278603">查看网站的移动版</translation>
 <translation id="7574321014880720413">新增网域</translation>
 <translation id="7587132259180664054">发送邮件成功</translation>

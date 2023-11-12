@@ -29,5 +29,10 @@ extern NSString* vMenuSearchForImage;
 extern NSString* vMenuOpenOfflineVersion;
 extern NSString* vMenuEyeOff;
 extern NSString* vMenuEyeOn;
+extern NSString* vSearch;
+extern NSString* vPrint;
+extern NSString* vClearHistoryAutofill;
+extern NSString* vClearHistoryCache;
+extern NSString* vClearHistoryCookies;
 
 #endif  // IOS_UI_CONTEXT_MENU_VIVALDI_CONTEXT_MENU_CONSTANTS_H_

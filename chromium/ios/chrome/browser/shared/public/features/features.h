@@ -12,6 +12,9 @@
 // Feature flag to enable default browser blue dot promo.
 BASE_DECLARE_FEATURE(kDefaultBrowserBlueDotPromo);
 
+// Feature flag to enable the Payments Bottom Sheet.
+BASE_DECLARE_FEATURE(kIOSPaymentsBottomSheet);
+
 // Enum for blue dot promo user groups (control/experiment) and its param. The
 // reason why we need a custom control group is to disable other independent
 // default browser promos, which are already shipped.
@@ -40,9 +43,6 @@ BASE_DECLARE_FEATURE(kModernTabStrip);
 
 // Feature flag to enable revamped Incognito NTP page.
 BASE_DECLARE_FEATURE(kIncognitoNtpRevamp);
-
-// Feature flag that experiments with the default browser fullscreen promo UI.
-BASE_DECLARE_FEATURE(kDefaultBrowserFullscreenPromoExperiment);
 
 // Feature flag that allows external apps to show default browser settings.
 BASE_DECLARE_FEATURE(kDefaultBrowserIntentsShowSettings);
@@ -95,9 +95,6 @@ BASE_DECLARE_FEATURE(kIOSLocationBarUseNativeContextMenu);
 // Feature flag that swaps the omnibox textfield implementation.
 BASE_DECLARE_FEATURE(kIOSNewOmniboxImplementation);
 
-// Feature flag to enable using Lens to search for images.
-BASE_DECLARE_FEATURE(kUseLensToSearchForImage);
-
 // Feature flag to enable the Lens entrypoint in the home screen widget.
 BASE_DECLARE_FEATURE(kEnableLensInHomeScreenWidget);
 
@@ -126,9 +123,6 @@ BASE_DECLARE_FEATURE(kRemoveExcessNTPs);
 // Chrome.
 BASE_DECLARE_FEATURE(kEnableShortenedPasswordAutoFillInstruction);
 
-// Feature flag to switch images to SFSymbols in the omnibox when enabled.
-BASE_DECLARE_FEATURE(kUseSFSymbolsInOmnibox);
-
 // Feature flag for the follow up of the SF Symbols.
 BASE_DECLARE_FEATURE(kSFSymbolsFollowUp);
 
@@ -152,6 +146,9 @@ BASE_DECLARE_FEATURE(kMultilineFadeTruncatingLabel);
 
 // Flag to enable push notification settings menu item.
 BASE_DECLARE_FEATURE(kNotificationSettingsMenuItem);
+
+// Enables indexing Open tabs items in Spotlight.
+BASE_DECLARE_FEATURE(kSpotlightOpenTabsSource);
 
 // Enables indexing Reading List items in Spotlight.
 BASE_DECLARE_FEATURE(kSpotlightReadingListSource);
@@ -188,8 +185,33 @@ bool IsIndicateSyncErrorInOverflowMenuEnabled();
 // Feature flag to move the steady-state (unfocused) omnibox to the bottom.
 BASE_DECLARE_FEATURE(kBottomOmniboxSteadyState);
 
+// Returns true if `kBottomOmniboxSteadyState` feature flag is enabled and the
+// current device is a phone. This checks that the flag is enabled, not that the
+// omnibox is currently at the bottom.
+bool IsBottomOmniboxSteadyStateEnabled();
+
 // Feature flag to put all clipboard access onto a background thread. Any
 // synchronous clipboard access will always return nil/false.
 BASE_DECLARE_FEATURE(kOnlyAccessClipboardAsync);
+
+// Feature flag to hide the sync promo card in the main settings screen. The
+// "Turn On Sync" row will still be shown when this is enabled.
+BASE_DECLARE_FEATURE(kHideSettingsSyncPromo);
+
+// Feature flag that enables default browser promo to be displayed without
+// matching all the criteria and in depth metrics collection for the displayed
+// promo.
+BASE_DECLARE_FEATURE(kDefaultBrowserTriggerCriteriaExperiment);
+
+// Param for default browser promo trigger criteria experiment representing
+// whether promos should be displayed on omnbibox copy-paste event or on chrome
+// launch by default.
+extern const char kDefaultBrowserTriggerOnOmniboxCopyPaste[];
+
+// Feature flag to try using the page theme color in the toolbar
+BASE_DECLARE_FEATURE(kThemeColorInToolbar);
+
+// Feature flag enabling tab grid refactoring.
+BASE_DECLARE_FEATURE(kTabGridRefactoring);
 
 #endif  // IOS_CHROME_BROWSER_SHARED_PUBLIC_FEATURES_FEATURES_H_

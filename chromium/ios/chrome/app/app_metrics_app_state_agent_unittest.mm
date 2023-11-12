@@ -7,10 +7,10 @@
 #import "base/test/task_environment.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/application_delegate/metrics_mediator.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/metrics/ios_profile_session_durations_service.h"
 #import "ios/chrome/browser/metrics/ios_profile_session_durations_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
@@ -93,9 +93,7 @@ class AppMetricsAppStateAgentTest : public PlatformTest {
         base::BindRepeating(&FakeProfileSessionDurationsService::Create));
     browser_state_ = test_cbs_builder.Build();
 
-    app_state_ = [[FakeAppState alloc] initWithBrowserLauncher:nil
-                                            startupInformation:nil
-                                           applicationDelegate:nil];
+    app_state_ = [[FakeAppState alloc] initWithStartupInformation:nil];
   }
 
   void SetUp() override {

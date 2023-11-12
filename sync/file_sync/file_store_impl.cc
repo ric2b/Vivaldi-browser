@@ -145,33 +145,33 @@ void SyncedFileStoreImpl::OnLoadingDone(SyncedFilesData files_data) {
   on_loaded_callbacks_.clear();
 }
 
-void SyncedFileStoreImpl::DoSetLocalFileRef(base::GUID owner_guid,
+void SyncedFileStoreImpl::DoSetLocalFileRef(base::Uuid owner_uuid,
                                             syncer::ModelType sync_type,
                                             std::string checksum) {
   DCHECK(IsLoaded());
 
   auto existing_mapping =
-      checksums_for_local_owners_[sync_type].find(owner_guid);
+      checksums_for_local_owners_[sync_type].find(owner_uuid);
   if (existing_mapping != checksums_for_local_owners_[sync_type].end()) {
     if (existing_mapping->second == checksum)
       return;
 
-    RemoveLocalRef(owner_guid, sync_type);
+    RemoveLocalRef(owner_uuid, sync_type);
   }
 
-  checksums_for_local_owners_[sync_type][owner_guid] = checksum;
-  files_data_[checksum].local_references[sync_type].insert(owner_guid);
+  checksums_for_local_owners_[sync_type][owner_uuid] = checksum;
+  files_data_[checksum].local_references[sync_type].insert(owner_uuid);
   storage_->ScheduleSave();
 }
 
-void SyncedFileStoreImpl::SetLocalFileRef(base::GUID owner_guid,
+void SyncedFileStoreImpl::SetLocalFileRef(base::Uuid owner_uuid,
                                           syncer::ModelType sync_type,
                                           std::string checksum) {
-  DoSetLocalFileRef(owner_guid, sync_type, checksum);
+  DoSetLocalFileRef(owner_uuid, sync_type, checksum);
   storage_->ScheduleSave();
 }
 
-std::string SyncedFileStoreImpl::SetLocalFile(base::GUID owner_guid,
+std::string SyncedFileStoreImpl::SetLocalFile(base::Uuid owner_uuid,
                                               syncer::ModelType sync_type,
                                               std::vector<uint8_t> content) {
   DCHECK(IsLoaded());
@@ -187,7 +187,7 @@ std::string SyncedFileStoreImpl::SetLocalFile(base::GUID owner_guid,
       base32::Base32EncodePolicy::OMIT_PADDING);
 
   checksum += "." + base::NumberToString(content.size());
-  DoSetLocalFileRef(owner_guid, sync_type, checksum);
+  DoSetLocalFileRef(owner_uuid, sync_type, checksum);
   auto& file_data = files_data_[checksum];
   if (!file_data.content) {
     net::SniffMimeTypeFromLocalData(
@@ -283,17 +283,17 @@ std::string SyncedFileStoreImpl::GetMimeType(std::string checksum) {
   return file_data.mimetype;
 }
 
-void SyncedFileStoreImpl::RemoveLocalRef(base::GUID owner_guid,
+void SyncedFileStoreImpl::RemoveLocalRef(base::Uuid owner_uuid,
                                          syncer::ModelType sync_type) {
   DCHECK(IsLoaded());
   auto checksum_node =
-      checksums_for_local_owners_[sync_type].extract(owner_guid);
+      checksums_for_local_owners_[sync_type].extract(owner_uuid);
   if (!checksum_node)
     return;
 
   auto file_data = files_data_.find(checksum_node.mapped());
   DCHECK(file_data != files_data_.end());
-  file_data->second.local_references[sync_type].erase(owner_guid);
+  file_data->second.local_references[sync_type].erase(owner_uuid);
   if (file_data->second.IsUnreferenced()) {
     if (file_data->second.has_content_locally)
       DeleteLocalContent(*file_data);

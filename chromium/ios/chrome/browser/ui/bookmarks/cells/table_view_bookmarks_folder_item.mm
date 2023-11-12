@@ -17,7 +17,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
-#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 using vivaldi_bookmark_kit::GetSpeeddial;
@@ -78,15 +78,11 @@ const CGFloat kFolderCellHorizonalInset = 17.0;
       folderCell.folderImageView.image =
           [UIImage imageNamed:@"bookmark_blue_new_folder"];
       } // End Vivaldi
-
-      folderCell.accessibilityIdentifier =
-          kBookmarkCreateNewFolderCellIdentifier;
       folderCell.accessibilityTraits |= UIAccessibilityTraitButton;
       break;
     }
     case BookmarksFolderStyleFolderEntry: {
       folderCell.folderTitleTextField.text = self.title;
-      folderCell.accessibilityIdentifier = self.title;
       folderCell.accessibilityTraits |= UIAccessibilityTraitButton;
       if (self.isCurrentFolder) {
         folderCell.bookmarksAccessoryType =
@@ -166,6 +162,9 @@ const CGFloat kFolderCellHorizonalInset = 17.0;
         [[UIImageView alloc] initWithImage:cloudSlashedImage];
     self.cloudSlashedView.tintColor = CloudSlashTintColor();
     self.cloudSlashedView.hidden = YES;
+    [self.cloudSlashedView
+        setContentHuggingPriority:UILayoutPriorityRequired
+                          forAxis:UILayoutConstraintAxisHorizontal];
 
     // Container StackView.
     UIStackView* horizontalStack =

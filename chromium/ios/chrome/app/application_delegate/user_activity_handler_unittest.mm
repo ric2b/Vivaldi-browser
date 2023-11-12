@@ -24,19 +24,19 @@
 #import "ios/chrome/app/main_controller.h"
 #import "ios/chrome/app/spotlight/actions_spotlight_manager.h"
 #import "ios/chrome/app/spotlight/spotlight_util.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/flags/chrome_switches.h"
-#import "ios/chrome/browser/main/browser_list.h"
-#import "ios/chrome/browser/main/browser_list_factory.h"
-#import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/shared/coordinator/scene/connection_information.h"
 #import "ios/chrome/browser/shared/coordinator/scene/test/fake_connection_information.h"
 #import "ios/chrome/browser/shared/coordinator/scene/test/stub_browser_provider_interface.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
+#import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #import "ios/chrome/common/intents/OpenInChromeIncognitoIntent.h"
 #import "ios/chrome/common/intents/OpenInChromeIntent.h"
 #import "ios/testing/scoped_block_swizzler.h"
@@ -91,10 +91,6 @@ class UserActivityHandlerTest : public PlatformTest {
 
   void resetHandleStartupParametersHasBeenCalled() {
     handle_startup_parameters_has_been_called_ = NO;
-  }
-
-  NSString* GetTabIdForWebState(web::WebState* web_state) {
-    return web_state->GetStableIdentifier();
   }
 
   // Mock & stub a NSUserActivity object with an arbitrary `interaction`
@@ -787,7 +783,12 @@ TEST_F(UserActivityHandlerTest,
     @[ @"OpenNewSearch", @NO, @(FOCUS_OMNIBOX) ],
     @[ @"OpenIncognitoSearch", @YES, @(FOCUS_OMNIBOX) ],
     @[ @"OpenVoiceSearch", @NO, @(START_VOICE_SEARCH) ],
-    @[ @"OpenQRScanner", @NO, @(START_QR_CODE_SCANNER) ]
+    @[ @"OpenQRScanner", @NO, @(START_QR_CODE_SCANNER) ],
+    @[
+      @"OpenLensFromAppIconLongPress", @NO,
+      @(START_LENS_FROM_APP_ICON_LONG_PRESS)
+    ],
+    @[ @"OpenLensFromSpotlight", @NO, @(START_LENS_FROM_SPOTLIGHT) ]
   ];
 
   swizzleHandleStartupParameters();

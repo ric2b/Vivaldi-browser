@@ -24,18 +24,24 @@ SpellcheckService* SpellcheckServiceFactory::GetForContext(
 
 // static
 SpellcheckServiceFactory* SpellcheckServiceFactory::GetInstance() {
-  return base::Singleton<SpellcheckServiceFactory>::get();
+  static base::NoDestructor<SpellcheckServiceFactory> instance;
+  return instance.get();
 }
 
 SpellcheckServiceFactory::SpellcheckServiceFactory()
     : ProfileKeyedServiceFactory(
           "SpellcheckService",
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   // TODO(erg): Uncomment these as they are initialized.
   // DependsOn(RequestContextFactory::GetInstance());
 }
 
-SpellcheckServiceFactory::~SpellcheckServiceFactory() {}
+SpellcheckServiceFactory::~SpellcheckServiceFactory() = default;
 
 KeyedService* SpellcheckServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {

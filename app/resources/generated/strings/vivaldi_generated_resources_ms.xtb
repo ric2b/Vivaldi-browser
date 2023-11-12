@@ -34,7 +34,6 @@
 <translation id="3241680850019875542">Pilih direktori akar bagi sambungan untuk pek. Untuk mengemas kini sambungan, pilih kunci persendirian untuk gunakan semula juga.</translation>
 <translation id="3288047731229977326">Sambungan yang dijalankan dalam mod pembangun boleh membahayakan komputer anda. Jika anda bukan pembangun, anda harus melumpuhkan sambungan yang dijalankan dalam mod pembangun ini supaya kekal selamat.</translation>
 <translation id="3378572629723696641">Sambungan ini mungkin telah tercemar.</translation>
-<translation id="3505030558724226696">Batalkan akses peranti</translation>
 <translation id="3678156199662914018">Sambungan: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">Baiki apl</translation>
 <translation id="3908501907586732282">Dayakan sambungan</translation>
@@ -66,7 +65,6 @@
 <translation id="5355926466126177564">Sambungan "<ph name="EXTENSION_NAME" />" telah menukar halaman yang ditunjukkan apabila anda membuat carian daripada Kotak Omni.</translation>
 <translation id="5362741141255528695">Pilih fail kunci persendirian.</translation>
 <translation id="5370819323174483825">&amp;Muat semula</translation>
-<translation id="5483785310822538350">Batalkan akses fail dan peranti</translation>
 <translation id="5485102783864353244">Tambah apl</translation>
 <translation id="5521078259930077036">Adakah ini halaman utama yang anda jangkakan?</translation>
 <translation id="5542132724887566711">Profil</translation>
@@ -90,7 +88,6 @@
 <translation id="6691936601825168937">&amp;Majukan</translation>
 <translation id="6798954102094737107">Pemalam: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6900284862687837908">Apl Latar Belakang: <ph name="BACKGROUND_APP_URL" /></translation>
-<translation id="6904344821472985372">Batalkan Akses Fail</translation>
 <translation id="7287143125007575591">Akses ditolak.</translation>
 <translation id="7427348830195639090">Halaman Latar Belakang: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>

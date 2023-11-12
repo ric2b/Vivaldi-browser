@@ -21,7 +21,9 @@
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/permissions/features.h"
+#include "components/permissions/permission_context_base.h"
 #include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permission_request_id.h"
@@ -566,9 +568,10 @@ void PermissionContextBase::UpdateContentSetting(const GURL& requesting_origin,
   DCHECK(content_setting == CONTENT_SETTING_ALLOW ||
          content_setting == CONTENT_SETTING_BLOCK);
 
-  content_settings::ContentSettingConstraints constraints = {
-      base::Time(), is_one_time ? content_settings::SessionModel::OneTime
-                                : content_settings::SessionModel::Durable};
+  content_settings::ContentSettingConstraints constraints;
+  constraints.set_session_model(is_one_time
+                                    ? content_settings::SessionModel::OneTime
+                                    : content_settings::SessionModel::Durable);
 
 #if !BUILDFLAG(IS_ANDROID)
   if (base::FeatureList::IsEnabled(
@@ -581,10 +584,18 @@ void PermissionContextBase::UpdateContentSetting(const GURL& requesting_origin,
       // the future, consider whether revocation for such permission makes
       // sense, and/or change this to an early return so that we don't
       // unnecessarily record timestamps where we don't need them.
-      constraints.track_last_visit_for_autoexpiration = true;
+      constraints.set_track_last_visit_for_autoexpiration(true);
     }
   }
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+  if (base::FeatureList::IsEnabled(permissions::features::kOneTimePermission) &&
+      is_one_time) {
+    if (base::FeatureList::IsEnabled(
+            content_settings::features::kActiveContentSettingExpiry)) {
+      constraints.set_lifetime(kOneTimePermissionMaximumLifetime);
+    }
+  }
 
   PermissionsClient::Get()
       ->GetSettingsMap(browser_context_)

@@ -13,6 +13,7 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.BuildInfo;
 import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
@@ -52,6 +53,8 @@ import org.vivaldi.browser.themes.VivaldiAccentColor;
 
 /**
  * Maintains the status bar color for a {@link Window}.
+ *
+ * TODO(crbug.com/1450945): Prevent initialization of StatusBarColorController for automotive.
  */
 public class StatusBarColorController
         implements DestroyObserver, TopToolbarCoordinator.UrlExpansionObserver,
@@ -212,7 +215,7 @@ public class StatusBarColorController
                 mLayoutStateProvider = layoutManager;
                 mLayoutStateObserver = new LayoutStateObserver() {
                     @Override
-                    public void onStartedShowing(int layoutType, boolean showToolbar) {
+                    public void onStartedShowing(int layoutType) {
                         if (layoutType != LayoutType.TAB_SWITCHER
                                 && layoutType != LayoutType.START_SURFACE) {
                             return;
@@ -454,6 +457,13 @@ public class StatusBarColorController
      * @param color The color that the status bar should be set to.
      */
     public static void setStatusBarColor(Window window, @ColorInt int color) {
+        // The status bar should always be black in automotive devices to match the black back
+        // button toolbar.
+        if (BuildInfo.getInstance().isAutomotive) {
+            ApiCompatibilityUtils.setStatusBarColor(window, Color.BLACK);
+            ApiCompatibilityUtils.setStatusBarIconColor(window.getDecorView().getRootView(), false);
+            return;
+        }
         if (UiUtils.isSystemUiThemingDisabled()) return;
 
         final View root = window.getDecorView().getRootView();

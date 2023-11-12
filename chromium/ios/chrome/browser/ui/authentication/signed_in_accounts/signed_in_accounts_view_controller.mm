@@ -7,11 +7,12 @@
 #import "base/ios/ios_util.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/ui/authentication/signed_in_accounts/signed_in_accounts_presentation_controller.h"
 #import "ios/chrome/browser/ui/authentication/signed_in_accounts/signed_in_accounts_table_view_controller.h"
@@ -60,6 +61,7 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
   UIButton* _secondaryButton;
 }
 @property(nonatomic, readonly, weak) id<ApplicationSettingsCommands> dispatcher;
+@property(nonatomic, assign) signin::IdentityManager* identityManager;
 @end
 
 @implementation SignedInAccountsViewController
@@ -85,6 +87,8 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
   if (self) {
     _browserState = browserState;
     _dispatcher = dispatcher;
+    self.identityManager =
+        IdentityManagerFactory::GetForBrowserState(_browserState);
     _identityManagerObserver =
         std::make_unique<signin::IdentityManagerObserverBridge>(
             IdentityManagerFactory::GetForBrowserState(_browserState), self);
@@ -103,18 +107,31 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
   if (authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
     authService->ApproveAccountList();
   }
-
+  __weak __typeof(self) weakSelf = self;
   [self.presentingViewController dismissViewControllerAnimated:YES
-                                                    completion:completion];
+                                                    completion:^{
+                                                      [weakSelf teardownUI];
+                                                      if (completion) {
+                                                        completion();
+                                                      }
+                                                    }];
 }
 
-- (void)dealloc {
+- (void)teardownUI {
+  if (!_browserState) {
+    return;
+  }
+  [_accountTableView teardownUI];
+  _browserState = nullptr;
   [_primaryButton removeTarget:self
                         action:@selector(onPrimaryButtonPressed:)
               forControlEvents:UIControlEventTouchDown];
   [_secondaryButton removeTarget:self
                           action:@selector(onSecondaryButtonPressed:)
                 forControlEvents:UIControlEventTouchDown];
+  _primaryButton = nil;
+  _secondaryButton = nil;
+  self.identityManager = nullptr;
 }
 
 #pragma mark UIViewController
@@ -123,11 +140,9 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
   CGFloat width = std::min(
       kDialogMaxWidth, self.presentingViewController.view.bounds.size.width -
                            2 * kViewControllerHorizontalPadding);
-  signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForBrowserState(_browserState);
   int shownAccounts =
       std::min(kMaxShownAccounts,
-               identityManager->GetAccountsWithRefreshTokens().size());
+               self.identityManager->GetAccountsWithRefreshTokens().size());
   CGSize maxSize = CGSizeMake(width - 2 * kHorizontalPadding, CGFLOAT_MAX);
   CGSize buttonSize = [_primaryButton sizeThatFits:maxSize];
   CGSize infoSize = [_infoLabel sizeThatFits:maxSize];
@@ -154,9 +169,11 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
                                        weight:kHeadlineFontWeight];
   _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
   [self.view addSubview:_titleLabel];
-
+  ChromeAccountManagerService* accountManagerService =
+      ChromeAccountManagerServiceFactory::GetForBrowserState(_browserState);
   _accountTableView = [[SignedInAccountsTableViewController alloc]
-      initWithBrowserState:_browserState];
+      initWithIdentityManager:self.identityManager
+        accountManagerService:accountManagerService];
   _accountTableView.view.translatesAutoresizingMaskIntoConstraints = NO;
   [self addChildViewController:_accountTableView];
   [self.view addSubview:_accountTableView.view];
@@ -174,70 +191,75 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
   _infoLabel.translatesAutoresizingMaskIntoConstraints = NO;
   [self.view addSubview:_infoLabel];
 
-  // TODO(crbug.com/1418068): Simplify after minimum version required is >=
-  // iOS 15.
-  if (base::ios::IsRunningOnIOS15OrLater() &&
-      IsUIButtonConfigurationEnabled()) {
-    if (@available(iOS 15, *)) {
-      UIButtonConfiguration* buttonConfiguration =
-          [UIButtonConfiguration plainButtonConfiguration];
-      buttonConfiguration.contentInsets =
-          NSDirectionalEdgeInsetsMake(8, 16, 8, 16);
-      _primaryButton = [UIButton buttonWithConfiguration:buttonConfiguration
-                                           primaryAction:nil];
-    }
+  _primaryButton = [[UIButton alloc] init];
+  NSString* primaryButtonString =
+      l10n_util::GetNSString(IDS_IOS_SIGNED_IN_ACCOUNTS_VIEW_OK_BUTTON);
+  _primaryButton.accessibilityLabel = primaryButtonString;
+
+  if (IsUIButtonConfigurationEnabled()) {
+    UIButtonConfiguration* buttonConfiguration =
+        [UIButtonConfiguration plainButtonConfiguration];
+    buttonConfiguration.contentInsets =
+        NSDirectionalEdgeInsetsMake(8, 16, 8, 16);
+    UIFont* font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    NSDictionary* attributes = @{NSFontAttributeName : font};
+    NSAttributedString* attributedTitle = [[NSAttributedString alloc]
+        initWithString:primaryButtonString.uppercaseString
+            attributes:attributes];
+    buttonConfiguration.attributedTitle = attributedTitle;
+    buttonConfiguration.baseForegroundColor =
+        [UIColor colorNamed:kSolidButtonTextColor];
+    _primaryButton.configuration = buttonConfiguration;
   } else {
-    _primaryButton = [[UIButton alloc] init];
     UIEdgeInsets contentEdgeInsets = UIEdgeInsetsMake(8, 16, 8, 16);
     SetContentEdgeInsets(_primaryButton, contentEdgeInsets);
+    [_primaryButton setTitle:primaryButtonString.uppercaseString
+                    forState:UIControlStateNormal];
+    [_primaryButton setTitleColor:[UIColor colorNamed:kSolidButtonTextColor]
+                         forState:UIControlStateNormal];
+    _primaryButton.titleLabel.font =
+        [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
   }
 
   [_primaryButton addTarget:self
                      action:@selector(onPrimaryButtonPressed:)
            forControlEvents:UIControlEventTouchUpInside];
-  NSString* primaryButtonString =
-      l10n_util::GetNSString(IDS_IOS_SIGNED_IN_ACCOUNTS_VIEW_OK_BUTTON);
-  [_primaryButton setTitle:primaryButtonString.uppercaseString
-                  forState:UIControlStateNormal];
-  _primaryButton.accessibilityLabel = primaryButtonString;
   _primaryButton.backgroundColor = [UIColor colorNamed:kBlueColor];
-  [_primaryButton setTitleColor:[UIColor colorNamed:kSolidButtonTextColor]
-                       forState:UIControlStateNormal];
-  _primaryButton.titleLabel.font =
-      [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
   _primaryButton.translatesAutoresizingMaskIntoConstraints = NO;
   [self.view addSubview:_primaryButton];
 
-  // TODO(crbug.com/1418068): Simplify after minimum version required is >=
-  // iOS 15.
-  if (base::ios::IsRunningOnIOS15OrLater() &&
-      IsUIButtonConfigurationEnabled()) {
-    if (@available(iOS 15, *)) {
-      UIButtonConfiguration* buttonConfiguration =
-          [UIButtonConfiguration plainButtonConfiguration];
-      buttonConfiguration.contentInsets =
-          NSDirectionalEdgeInsetsMake(8, 16, 8, 16);
-      _secondaryButton = [UIButton buttonWithConfiguration:buttonConfiguration
-                                             primaryAction:nil];
-    }
+  _secondaryButton = [[UIButton alloc] init];
+  NSString* secondaryButtonString =
+      l10n_util::GetNSString(IDS_IOS_SIGNED_IN_ACCOUNTS_VIEW_SETTINGS_BUTTON);
+  _secondaryButton.accessibilityLabel = secondaryButtonString;
+
+  if (IsUIButtonConfigurationEnabled()) {
+    UIButtonConfiguration* buttonConfiguration =
+        [UIButtonConfiguration plainButtonConfiguration];
+    buttonConfiguration.contentInsets =
+        NSDirectionalEdgeInsetsMake(8, 16, 8, 16);
+    UIFont* font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    NSDictionary* attributes = @{NSFontAttributeName : font};
+    NSAttributedString* attributedTitle = [[NSAttributedString alloc]
+        initWithString:secondaryButtonString.uppercaseString
+            attributes:attributes];
+    buttonConfiguration.attributedTitle = attributedTitle;
+    buttonConfiguration.baseForegroundColor = [UIColor colorNamed:kBlueColor];
+    _secondaryButton.configuration = buttonConfiguration;
   } else {
-    _secondaryButton = [[UIButton alloc] init];
     UIEdgeInsets contentEdgeInsets = UIEdgeInsetsMake(8, 16, 8, 16);
     SetContentEdgeInsets(_secondaryButton, contentEdgeInsets);
+    [_secondaryButton setTitle:secondaryButtonString.uppercaseString
+                      forState:UIControlStateNormal];
+    [_secondaryButton setTitleColor:[UIColor colorNamed:kBlueColor]
+                           forState:UIControlStateNormal];
+    _secondaryButton.titleLabel.font =
+        [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
   }
 
   [_secondaryButton addTarget:self
                        action:@selector(onSecondaryButtonPressed:)
              forControlEvents:UIControlEventTouchUpInside];
-  NSString* secondaryButtonString =
-      l10n_util::GetNSString(IDS_IOS_SIGNED_IN_ACCOUNTS_VIEW_SETTINGS_BUTTON);
-  [_secondaryButton setTitle:secondaryButtonString.uppercaseString
-                    forState:UIControlStateNormal];
-  _secondaryButton.accessibilityLabel = secondaryButtonString;
-  [_secondaryButton setTitleColor:[UIColor colorNamed:kBlueColor]
-                         forState:UIControlStateNormal];
-  _secondaryButton.titleLabel.font =
-      [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
   _secondaryButton.translatesAutoresizingMaskIntoConstraints = NO;
   [self.view addSubview:_secondaryButton];
 
@@ -307,9 +329,7 @@ BOOL gSignedInAccountsViewControllerIsShown = NO;
 #pragma mark IdentityManagerObserverBridgeDelegate
 
 - (void)onEndBatchOfRefreshTokenStateChanges {
-  signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForBrowserState(_browserState);
-  if (identityManager->GetAccountsWithRefreshTokens().empty()) {
+  if (self.identityManager->GetAccountsWithRefreshTokens().empty()) {
     [self dismissWithCompletion:nil];
     return;
   }

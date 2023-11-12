@@ -7,8 +7,27 @@
 
 #pragma mark - SIZE AND PADDINGS
 
-extern const CGFloat vivaldiToolbarHeightFullscreen;
-extern const CGFloat vivaldiNonDynamicToolbarHeightFullscreen;
+// Leading and trailing space for shield and vivaldi menu button.
+extern const CGFloat vPrimaryToolbarHorizontalPadding;
+// Omnibox textfield leading space when there's no image/icon present.
+extern const CGFloat vPrimaryToolbarTextFieldLeadingOffsetNoImage;
+// Omnibox textfield leading space when there's image/icon present.
+extern const CGFloat vPrimaryToolbarTextFieldLeadingOffsetImage;
+// Height for the vivaldi sticky top toolbar view
+extern const CGFloat vStickyToolbarViewHeight;
+
+#pragma mark - ANIMATIONS
+extern const CGFloat vPrimaryToolbarAnimationDuration;
+extern const CGFloat vPrimaryToolbarAnimationDamping;
+extern const CGFloat vPrimaryToolbarAnimationSpringVelocity;
+
+extern const CGFloat vStickyToolbarAnimationDuration;
+extern const CGFloat vStickyToolbarAnimationDamping;
+extern const CGFloat vStickyToolbarAnimationSpringVelocity;
+extern const CGFloat vStickyToolbarExpandedScale;
+extern const CGFloat vStickyToolbarExpandedAlpha;
+extern const CGFloat vStickyToolbarCollapsedScale;
+extern const CGFloat vStickyToolbarCollapsedAlpha;
 
 #pragma mark - ICONS
 

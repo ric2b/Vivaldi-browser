@@ -77,7 +77,6 @@
           "spellCheck": {"type": "boolean", "description": "Whether the text field wants spell-check."},
           "shouldDoLearning": {"type": "boolean", "description": "Whether text entered into the text field should be used to improve typing suggestions for the user."},
           "focusReason": {"$ref": "FocusReason", "description": "How the text field was focused"},
-          "hasBeenPassword": {"type": "boolean", "description": "DEPRECATED: when this was true, we now just set input field type to be password. Was: Whether the text field has ever been a password field."},
           "appKey": {"type": "string", "optional": true, "description": "Key of the app associated with this text field if any."}
         }
       },
@@ -91,6 +90,7 @@
           "enableGestureTyping": { "type": "boolean", "optional": true, "description": "Whether to enable gesture typing."},
           "enablePrediction": { "type": "boolean", "optional": true, "description": "Whether to enable word prediction."},
           "enableSoundOnKeypress": { "type": "boolean", "optional": true, "description": "Whether to enable sound on keypress."},
+          "physicalKeyboardAutoCorrectionEnabledByDefault": {"type": "boolean", "optional": true, "description": "Whether auto correction should be enabled for physical keyboard by default."},
           "physicalKeyboardAutoCorrectionLevel": { "type": "integer", "optional": true, "description": "The level of auto correction for physical keyboard (0: Off, 1: Modest, 2: Aggressive)."},
           "physicalKeyboardEnableCapitalization": { "type": "boolean", "optional": true, "description": "Whether to enable auto capitalization for physical keyboard."},
           "physicalKeyboardEnableDiacriticsOnLongpress": { "type": "boolean", "optional": true, "description": "Whether to enable diacritics on longpress for physical keyboard."},

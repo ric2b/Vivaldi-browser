@@ -6,14 +6,14 @@
 #import <UIKit/UIKit.h>
 
 #import "base/mac/foundation_util.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_start_page_prefs.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/ntp/vivaldi_start_page_prefs.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_layout_preview_view.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_layout_style.h"
 #import "ui/base/l10n/l10n_util.h"

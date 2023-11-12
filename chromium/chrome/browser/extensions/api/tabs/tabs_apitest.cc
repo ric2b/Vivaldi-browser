@@ -132,9 +132,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTabTest, TabAudible) {
       << message_;
 }
 
-// TODO(crbug.com/521410): Flaky on Wayland. Disabled for now on all platforms
-// pending further testing.
-IN_PROC_BROWSER_TEST_P(ExtensionApiTabTestWithContextType, DISABLED_Muted) {
+IN_PROC_BROWSER_TEST_P(ExtensionApiTabTestWithContextType, Muted) {
   ASSERT_TRUE(RunExtensionTest("tabs/basics/muted")) << message_;
 }
 
@@ -244,12 +242,24 @@ INSTANTIATE_TEST_SUITE_P(ServiceWorker,
                          ExtensionApiCaptureTest,
                          ::testing::Values(ContextType::kServiceWorker));
 
-IN_PROC_BROWSER_TEST_P(ExtensionApiCaptureTest, CaptureVisibleTabJpeg) {
+// https://crbug.com/1450747 Flaky on Mac.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_CaptureVisibleTabJpeg DISABLED_CaptureVisibleTabJpeg
+#else
+#define MAYBE_CaptureVisibleTabJpeg CaptureVisibleTabJpeg
+#endif
+IN_PROC_BROWSER_TEST_P(ExtensionApiCaptureTest, MAYBE_CaptureVisibleTabJpeg) {
   ASSERT_TRUE(RunExtensionTest("tabs/capture_visible_tab/test_jpeg"))
       << message_;
 }
 
-IN_PROC_BROWSER_TEST_P(ExtensionApiCaptureTest, CaptureVisibleTabPng) {
+// https://crbug.com/1450933 Flaky on Mac.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_CaptureVisibleTabPng DISABLED_CaptureVisibleTabPng
+#else
+#define MAYBE_CaptureVisibleTabPng CaptureVisibleTabPng
+#endif
+IN_PROC_BROWSER_TEST_P(ExtensionApiCaptureTest, MAYBE_CaptureVisibleTabPng) {
   ASSERT_TRUE(RunExtensionTest("tabs/capture_visible_tab/test_png"))
       << message_;
 }

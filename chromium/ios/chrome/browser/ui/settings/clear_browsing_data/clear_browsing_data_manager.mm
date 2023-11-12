@@ -22,9 +22,7 @@
 #import "components/search_engines/template_url_service_observer.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/strings/grit/components_strings.h"
-#import "components/sync/driver/sync_service.h"
-#import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "components/sync/service/sync_service.h"
 #import "ios/chrome/browser/browsing_data/browsing_data_counter_wrapper.h"
 #import "ios/chrome/browser/browsing_data/browsing_data_features.h"
 #import "ios/chrome/browser/browsing_data/browsing_data_remove_mask.h"
@@ -33,10 +31,13 @@
 #import "ios/chrome/browser/browsing_data/browsing_data_remover_observer_bridge.h"
 #import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/history/web_history_service_factory.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_model.h"
 #import "ios/chrome/browser/shared/ui/symbols/chrome_icon.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -56,13 +57,18 @@
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_consumer.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_ui_constants.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/time_range_selector_table_view_controller.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/branded_images/branded_images_api.h"
 #import "ui/base/l10n/l10n_util_mac.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -85,24 +91,55 @@ UIImage* SymbolForItemType(ClearBrowsingDataItemType itemType) {
   UIImage* symbol = nil;
   switch (itemType) {
     case ItemTypeDataTypeBrowsingHistory:
+
+      if (IsVivaldiRunning()) {
+        symbol = [UIImage imageNamed:@"vivaldi_history_panel"];
+      } else {
       symbol =
           DefaultSymbolTemplateWithPointSize(kHistorySymbol, kSymbolPointSize);
+      } // End Vivaldi
+
       break;
     case ItemTypeDataTypeCookiesSiteData:
+
+      if (IsVivaldiRunning()) {
+        symbol = [UIImage imageNamed:@"vivaldi_clear_history_cookies"];
+      } else {
       symbol = DefaultSymbolTemplateWithPointSize(kInfoCircleSymbol,
                                                   kSymbolPointSize);
+      } // End Vivaldi
+
       break;
     case ItemTypeDataTypeSavedPasswords:
+
+      if (IsVivaldiRunning()) {
+        symbol = [[UIImage imageNamed:@"vivaldi_overflow_menu_passwords"]
+            imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+      } else {
       symbol =
           CustomSymbolTemplateWithPointSize(kPasswordSymbol, kSymbolPointSize);
+      } // End Vivaldi
+
       break;
     case ItemTypeDataTypeCache:
+
+      if (IsVivaldiRunning()) {
+        symbol = [UIImage imageNamed:@"vivaldi_clear_history_cache"];
+      } else {
       symbol = DefaultSymbolTemplateWithPointSize(kCachedDataSymbol,
                                                   kSymbolPointSize);
+      } // End Vivaldi
+
       break;
     case ItemTypeDataTypeAutofill:
+
+      if (IsVivaldiRunning()) {
+        symbol = [UIImage imageNamed:@"vivaldi_clear_history_autofill"];
+      } else {
       symbol = DefaultSymbolTemplateWithPointSize(kAutofillDataSymbol,
                                                   kSymbolPointSize);
+      } // End Vivaldi
+
       break;
     default:
       NOTREACHED();
@@ -253,6 +290,7 @@ UIImage* SymbolForItemType(ClearBrowsingDataItemType itemType) {
   _browsingDataRemoverObserver.reset();
   _scoped_observation.reset();
   _countersByMasks.clear();
+  _counterWrapperProducer = nil;
 }
 
 // Add items for types of browsing data to clear.

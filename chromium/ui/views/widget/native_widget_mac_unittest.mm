@@ -123,7 +123,7 @@ class BridgedNativeWidgetTestApi {
   }
 
  private:
-  raw_ptr<remote_cocoa::NativeWidgetNSWindowBridge> bridge_;
+  raw_ptr<remote_cocoa::NativeWidgetNSWindowBridge, DanglingUntriaged> bridge_;
 };
 
 // Custom native_widget to create a NativeWidgetMacTestWindow.
@@ -281,7 +281,7 @@ class CustomTooltipView : public View {
 
  private:
   std::u16string tooltip_;
-  raw_ptr<View> tooltip_handler_;  // Weak
+  raw_ptr<View, DanglingUntriaged> tooltip_handler_;  // Weak
 };
 
 // A Widget subclass that exposes counts to calls made to OnMouseEvent().
@@ -298,7 +298,8 @@ class MouseTrackingWidget : public Widget {
 };
 
 // Test visibility states triggered externally.
-TEST_F(NativeWidgetMacTest, HideAndShowExternally) {
+// TODO(crbug.com/1450876): Flaky.
+TEST_F(NativeWidgetMacTest, DISABLED_HideAndShowExternally) {
   Widget* widget = CreateTopLevelPlatformWidget();
   NSWindow* ns_window = widget->GetNativeWindow().GetNativeNSWindow();
   WidgetChangeObserver observer(widget);
@@ -484,14 +485,14 @@ TEST_F(NativeWidgetMacTest, ChildWidgetOnInactiveSpace) {
 // Test minimized states triggered externally, implied visibility and restored
 // bounds whilst minimized.
 TEST_F(NativeWidgetMacTest, MiniaturizeExternally) {
-  Widget* widget = new Widget;
+  WidgetAutoclosePtr widget(new Widget);
   Widget::InitParams init_params(Widget::InitParams::TYPE_WINDOW);
   widget->Init(std::move(init_params));
 
-  PaintCountView* view = new PaintCountView();
-  widget->GetContentsView()->AddChildView(view);
+  auto* view = widget->GetContentsView()->AddChildView(
+      std::make_unique<PaintCountView>());
   NSWindow* ns_window = widget->GetNativeWindow().GetNativeNSWindow();
-  WidgetChangeObserver observer(widget);
+  WidgetChangeObserver observer(widget.get());
 
   widget->SetBounds(gfx::Rect(100, 100, 300, 300));
 
@@ -500,7 +501,7 @@ TEST_F(NativeWidgetMacTest, MiniaturizeExternally) {
 
   {
     views::test::PropertyWaiter visibility_waiter(
-        base::BindRepeating(&Widget::IsVisible, base::Unretained(widget)),
+        base::BindRepeating(&Widget::IsVisible, base::Unretained(widget.get())),
         true);
     widget->Show();
     EXPECT_TRUE(visibility_waiter.Wait());
@@ -521,7 +522,8 @@ TEST_F(NativeWidgetMacTest, MiniaturizeExternally) {
   // anything fancy to wait for it finish.
   {
     views::test::PropertyWaiter minimize_waiter(
-        base::BindRepeating(&Widget::IsMinimized, base::Unretained(widget)),
+        base::BindRepeating(&Widget::IsMinimized,
+                            base::Unretained(widget.get())),
         true);
     [ns_window performMiniaturize:nil];
     EXPECT_TRUE(minimize_waiter.Wait());
@@ -541,7 +543,8 @@ TEST_F(NativeWidgetMacTest, MiniaturizeExternally) {
 
   {
     views::test::PropertyWaiter deminimize_waiter(
-        base::BindRepeating(&Widget::IsMinimized, base::Unretained(widget)),
+        base::BindRepeating(&Widget::IsMinimized,
+                            base::Unretained(widget.get())),
         false);
     [ns_window deminiaturize:nil];
     EXPECT_TRUE(deminimize_waiter.Wait());
@@ -558,7 +561,8 @@ TEST_F(NativeWidgetMacTest, MiniaturizeExternally) {
 
   {
     views::test::PropertyWaiter minimize_waiter(
-        base::BindRepeating(&Widget::IsMinimized, base::Unretained(widget)),
+        base::BindRepeating(&Widget::IsMinimized,
+                            base::Unretained(widget.get())),
         true);
     widget->Minimize();
     EXPECT_TRUE(minimize_waiter.Wait());
@@ -573,7 +577,8 @@ TEST_F(NativeWidgetMacTest, MiniaturizeExternally) {
 
   {
     views::test::PropertyWaiter deminimize_waiter(
-        base::BindRepeating(&Widget::IsMinimized, base::Unretained(widget)),
+        base::BindRepeating(&Widget::IsMinimized,
+                            base::Unretained(widget.get())),
         false);
     widget->Restore();  // If miniaturized, should deminiaturize.
     EXPECT_TRUE(deminimize_waiter.Wait());
@@ -588,7 +593,8 @@ TEST_F(NativeWidgetMacTest, MiniaturizeExternally) {
 
   {
     views::test::PropertyWaiter deminimize_waiter(
-        base::BindRepeating(&Widget::IsMinimized, base::Unretained(widget)),
+        base::BindRepeating(&Widget::IsMinimized,
+                            base::Unretained(widget.get())),
         false);
     widget->Restore();  // If not miniaturized, does nothing.
     EXPECT_TRUE(deminimize_waiter.Wait());
@@ -600,8 +606,50 @@ TEST_F(NativeWidgetMacTest, MiniaturizeExternally) {
   EXPECT_EQ(2, observer.lost_visible_count());
   EXPECT_EQ(restored_bounds, widget->GetRestoredBounds());
   EXPECT_EQ(3, view->paint_count());
+}
 
-  widget->CloseNow();
+// Tests that NativeWidgetMac::Show(ui::SHOW_STATE_MINIMIZED) minimizes the
+// widget (previously it ordered its window out).
+TEST_F(NativeWidgetMacTest, MinimizeByNativeShow) {
+  WidgetAutoclosePtr widget(new Widget);
+  Widget::InitParams init_params(Widget::InitParams::TYPE_WINDOW);
+  widget->Init(std::move(init_params));
+
+  auto* view = widget->GetContentsView()->AddChildView(
+      std::make_unique<PaintCountView>());
+  WidgetChangeObserver observer(widget.get());
+
+  widget->SetBounds(gfx::Rect(100, 100, 300, 300));
+
+  EXPECT_TRUE(view->IsDrawn());
+  EXPECT_EQ(0, view->paint_count());
+
+  {
+    views::test::PropertyWaiter visibility_waiter(
+        base::BindRepeating(&Widget::IsVisible, base::Unretained(widget.get())),
+        true);
+    widget->Show();
+    EXPECT_TRUE(visibility_waiter.Wait());
+  }
+
+  EXPECT_FALSE(widget->IsMinimized());
+  EXPECT_TRUE(widget->IsVisible());
+
+  {
+    views::test::PropertyWaiter minimize_waiter(
+        base::BindRepeating(&Widget::IsMinimized,
+                            base::Unretained(widget.get())),
+        true);
+
+    NativeWidgetMac* native_widget =
+        static_cast<views::NativeWidgetMac*>(widget->native_widget());
+    gfx::Rect restore_bounds(100, 100, 300, 300);
+    native_widget->Show(ui::SHOW_STATE_MINIMIZED, restore_bounds);
+
+    EXPECT_TRUE(minimize_waiter.Wait());
+  }
+
+  EXPECT_TRUE(widget->IsMinimized());
 }
 
 TEST_F(NativeWidgetMacTest, MiniaturizeFramelessWindow) {
@@ -1094,10 +1142,10 @@ TEST_F(NativeWidgetMacTest, CapturedMouseUpClearsDrag) {
 
   // Send a click. Note a click may initiate a drag, so the mouse-up is sent as
   // a captured event.
-  std::pair<NSEvent*, NSEvent*> click =
+  NSArray<NSEvent*>* click =
       cocoa_test_event_utils::MouseClickInView(native_view, 1);
-  [native_view mouseDown:click.first];
-  [native_view processCapturedMouseEvent:click.second];
+  [native_view mouseDown:click[0]];
+  [native_view processCapturedMouseEvent:click[1]];
 
   // After a click, Enter/Exit should still work.
   [native_view mouseEntered:enter_event];
@@ -2008,7 +2056,10 @@ TEST_F(NativeWidgetMacTest, ReparentNativeViewTypes) {
 // Test class for Full Keyboard Access related tests.
 class NativeWidgetMacFullKeyboardAccessTest : public NativeWidgetMacTest {
  public:
-  NativeWidgetMacFullKeyboardAccessTest() = default;
+  NativeWidgetMacFullKeyboardAccessTest()
+      : widget_(nullptr),
+        bridge_(nullptr),
+        fake_full_keyboard_access_(nullptr) {}
 
  protected:
   // testing::Test:
@@ -2030,10 +2081,11 @@ class NativeWidgetMacFullKeyboardAccessTest : public NativeWidgetMacTest {
     NativeWidgetMacTest::TearDown();
   }
 
-  raw_ptr<Widget> widget_ = nullptr;
-  raw_ptr<remote_cocoa::NativeWidgetNSWindowBridge> bridge_ = nullptr;
-  raw_ptr<ui::test::ScopedFakeFullKeyboardAccess> fake_full_keyboard_access_ =
+  raw_ptr<Widget, DanglingUntriaged> widget_ = nullptr;
+  raw_ptr<remote_cocoa::NativeWidgetNSWindowBridge, DanglingUntriaged> bridge_ =
       nullptr;
+  raw_ptr<ui::test::ScopedFakeFullKeyboardAccess, DanglingUntriaged>
+      fake_full_keyboard_access_ = nullptr;
 };
 
 // Ensure that calling SetSize doesn't change the origin.
@@ -2162,7 +2214,8 @@ TEST_F(NativeWidgetMacFullKeyboardAccessTest, Activation) {
 
 class NativeWidgetMacViewsOrderTest : public WidgetTest {
  public:
-  NativeWidgetMacViewsOrderTest() = default;
+  NativeWidgetMacViewsOrderTest()
+      : widget_(nullptr), native_host_parent_(nullptr) {}
 
   NativeWidgetMacViewsOrderTest(const NativeWidgetMacViewsOrderTest&) = delete;
   NativeWidgetMacViewsOrderTest& operator=(
@@ -2189,7 +2242,7 @@ class NativeWidgetMacViewsOrderTest : public WidgetTest {
     explicit NativeHostHolder(NativeViewHost* host)
         : host_(host), view_([[NSView alloc] init]) {}
 
-    const raw_ptr<NativeViewHost> host_;
+    const raw_ptr<NativeViewHost, DanglingUntriaged> host_;
     base::scoped_nsobject<NSView> view_;
   };
 
@@ -2229,8 +2282,8 @@ class NativeWidgetMacViewsOrderTest : public WidgetTest {
 
   NSArray<NSView*>* GetStartingSubviews() { return starting_subviews_; }
 
-  raw_ptr<Widget> widget_ = nullptr;
-  raw_ptr<View> native_host_parent_ = nullptr;
+  raw_ptr<Widget, DanglingUntriaged> widget_ = nullptr;
+  raw_ptr<View, DanglingUntriaged> native_host_parent_ = nullptr;
   std::vector<std::unique_ptr<NativeHostHolder>> hosts_;
   base::scoped_nsobject<NSArray<NSView*>> starting_subviews_;
 };
@@ -2378,16 +2431,15 @@ TEST_F(NativeWidgetMacTest, InitCallback) {
         *observed = native_widget;
       },
       &observed_native_widget);
-  NativeWidgetMac::SetInitNativeWidgetCallback(callback);
+  auto subscription =
+      NativeWidgetMac::RegisterInitNativeWidgetCallback(callback);
 
   Widget* widget_a = CreateTopLevelPlatformWidget();
   EXPECT_EQ(observed_native_widget, widget_a->native_widget());
   Widget* widget_b = CreateTopLevelPlatformWidget();
   EXPECT_EQ(observed_native_widget, widget_b->native_widget());
 
-  auto empty = base::RepeatingCallback<void(NativeWidgetMac*)>();
-  DCHECK(empty.is_null());
-  NativeWidgetMac::SetInitNativeWidgetCallback(empty);
+  subscription = {};
   observed_native_widget = nullptr;
   Widget* widget_c = CreateTopLevelPlatformWidget();
   // The original callback from above should no longer be firing.

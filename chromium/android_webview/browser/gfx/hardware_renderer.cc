@@ -58,6 +58,10 @@
 namespace android_webview {
 namespace {
 
+BASE_FEATURE(kWebViewUseOutputSurfaceClipRect,
+             "WebViewUseOutputSurfaceClipRect",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 class ScopedCurrentContext {
  public:
   explicit ScopedCurrentContext(gpu::SharedContextState* state,
@@ -276,13 +280,21 @@ void HardwareRenderer::OnViz::DrawAndSwapOnViz(
                       gfx::Transform());
   render_pass->has_transparent_background = false;
 
+  const bool use_output_surface_clip_rect =
+      base::FeatureList::IsEnabled(kWebViewUseOutputSurfaceClipRect);
+
   viz::SharedQuadState* quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   quad_state->quad_to_target_transform = transform;
   quad_state->quad_layer_rect = gfx::Rect(frame_size);
   quad_state->visible_quad_layer_rect = gfx::Rect(frame_size);
-  quad_state->clip_rect = clip;
   quad_state->opacity = 1.f;
+
+  // We don't need to clip render pass if we apply clip on the viz::Display
+  // level.
+  if (!use_output_surface_clip_rect) {
+    quad_state->clip_rect = clip;
+  }
 
   viz::SurfaceDrawQuad* surface_quad =
       render_pass->CreateAndAppendDrawQuad<viz::SurfaceDrawQuad>();
@@ -369,6 +381,11 @@ void HardwareRenderer::OnViz::DrawAndSwapOnViz(
   }
 
   display_->Resize(viewport);
+
+  if (use_output_surface_clip_rect) {
+    display_->SetOutputSurfaceClipRect(clip);
+  }
+
   auto now = base::TimeTicks::Now();
   display_->DrawAndSwap({now, now});
 
@@ -549,6 +566,8 @@ void HardwareRenderer::DrawAndSwap(const HardwareRendererDrawParams& params,
 
   DCHECK_CALLED_ON_VALID_THREAD(render_thread_checker_);
 
+  base::TimeTicks make_context_current_start_time = base::TimeTicks::Now();
+
   // Ensure that the context is current and that it is released before
   // returning. When using ANGLE, the former is not guaranteed to be true and
   // the latter is required for the external ANGLE context. For non-ANGLE case,
@@ -557,6 +576,14 @@ void HardwareRenderer::DrawAndSwap(const HardwareRendererDrawParams& params,
   ScopedCurrentContext scoped_context(
       output_surface_provider_.shared_context_state().get(),
       output_surface_provider_.gl_surface().get());
+
+  if (!IsUsingVulkan() && gl::GLSurfaceEGL::GetGLDisplayEGL()
+                              ->IsANGLEExternalContextAndSurfaceSupported()) {
+    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+        "Android.WebView.Gfx.MakeANGLEContextCurrentMicroseconds",
+        base::TimeTicks::Now() - make_context_current_start_time,
+        base::Microseconds(1), base::Seconds(1), 100);
+  }
 
   viz::FrameTimingDetailsMap timing_details;
 

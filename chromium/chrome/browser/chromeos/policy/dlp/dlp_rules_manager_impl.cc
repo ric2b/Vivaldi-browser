@@ -15,9 +15,10 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/values.h"
-#include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
+#include "chrome/browser/ash/policy/dlp/dlp_files_controller_ash.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/dlp/data_transfer_dlp_controller.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_files_controller_lacros.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_histogram_helper.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_policy_constants.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_reporting_manager.h"
@@ -61,6 +62,9 @@ struct MatchedRuleInfo {
 
 constexpr char kWildCardMatching[] = "*";
 
+constexpr char kDrivePattern[] = "drive.google.com";
+constexpr char kOneDrivePattern[] = "onedrive.live.com";
+
 DlpRulesManager::Restriction GetClassMapping(const std::string& restriction) {
   static constexpr auto kRestrictionsMap =
       base::MakeFixedFlatMap<base::StringPiece, DlpRulesManager::Restriction>(
@@ -93,18 +97,19 @@ DlpRulesManager::Level GetLevelMapping(const std::string& level) {
                                   : it->second;
 }
 
-DlpRulesManager::Component GetComponentMapping(const std::string& component) {
+data_controls::Component GetComponentMapping(const std::string& component) {
   static constexpr auto kComponentsMap =
-      base::MakeFixedFlatMap<base::StringPiece, DlpRulesManager::Component>(
-          {{dlp::kArc, DlpRulesManager::Component::kArc},
-           {dlp::kCrostini, DlpRulesManager::Component::kCrostini},
-           {dlp::kPluginVm, DlpRulesManager::Component::kPluginVm},
-           {dlp::kDrive, DlpRulesManager::Component::kDrive},
-           {dlp::kUsb, DlpRulesManager::Component::kUsb}});
+      base::MakeFixedFlatMap<base::StringPiece, data_controls::Component>(
+          {{dlp::kArc, data_controls::Component::kArc},
+           {dlp::kCrostini, data_controls::Component::kCrostini},
+           {dlp::kPluginVm, data_controls::Component::kPluginVm},
+           {dlp::kDrive, data_controls::Component::kDrive},
+           {dlp::kOneDrive, data_controls::Component::kOneDrive},
+           {dlp::kUsb, data_controls::Component::kUsb}});
 
   auto* it = kComponentsMap.find(component);
   return (it == kComponentsMap.end())
-             ? DlpRulesManager::Component::kUnknownComponent
+             ? data_controls::Component::kUnknownComponent
              : it->second;
 }
 
@@ -122,6 +127,30 @@ DlpRulesManager::Component GetComponentMapping(const std::string& component) {
                                       : it->second;
 }
 
+// Creates a condition set for the given `url`.
+scoped_refptr<url_matcher::URLMatcherConditionSet> CreateConditionSet(
+    url_matcher::URLMatcher* matcher,
+    UrlConditionId condition_id,
+    const std::string& url) {
+  CHECK(matcher);
+
+  std::string scheme;
+  std::string host;
+  uint16_t port = 0;
+  std::string path;
+  std::string query;
+  bool match_subdomains = true;
+
+  if (!url_matcher::util::FilterToComponents(
+          url, &scheme, &host, &match_subdomains, &port, &path, &query)) {
+    LOG(ERROR) << "Invalid pattern " << url;
+    return nullptr;
+  }
+  return url_matcher::util::CreateConditionSet(matcher, condition_id, scheme,
+                                               host, match_subdomains, port,
+                                               path, query, /*allow=*/true);
+}
+
 // Creates `urls` conditions, saves patterns strings mapping in
 // `patterns_mapping`, and saves conditions ids to rules ids mapping in `map`.
 void AddUrlConditions(url_matcher::URLMatcher* matcher,
@@ -132,26 +161,56 @@ void AddUrlConditions(url_matcher::URLMatcher* matcher,
                       RuleId rule_id,
                       std::map<UrlConditionId, RuleId>& map) {
   DCHECK(urls);
-  std::string scheme;
-  std::string host;
-  uint16_t port = 0;
-  std::string path;
-  std::string query;
-  bool match_subdomains = true;
   for (const auto& list_entry : *urls) {
     std::string url = list_entry.GetString();
-    if (!url_matcher::util::FilterToComponents(
-            url, &scheme, &host, &match_subdomains, &port, &path, &query)) {
-      LOG(ERROR) << "Invalid pattern " << url;
+
+    ++condition_id;
+    auto condition_set = CreateConditionSet(matcher, condition_id, url);
+    if (!condition_set) {
       continue;
     }
-    auto condition_set = url_matcher::util::CreateConditionSet(
-        matcher, ++condition_id, scheme, host, match_subdomains, port, path,
-        query, /*allow=*/true);
-
     conditions.push_back(std::move(condition_set));
     map[condition_id] = rule_id;
     patterns_mapping[condition_id] = url;
+  }
+}
+
+// Returns the URLs associated with the given component. An empty vector is
+// returned if there are none.
+std::vector<std::string> GetAssociatedUrlsConditions(
+    data_controls::Component component) {
+  switch (component) {
+    case data_controls::Component::kDrive:
+      return {kDrivePattern};
+    case data_controls::Component::kOneDrive:
+      return {kOneDrivePattern};
+    case data_controls::Component::kUnknownComponent:
+    case data_controls::Component::kArc:
+    case data_controls::Component::kCrostini:
+    case data_controls::Component::kPluginVm:
+    case data_controls::Component::kUsb:
+      return {};
+  }
+}
+
+// Add URL conditions associated with the given `component`.
+void AddAssociatedUrlConditions(
+    data_controls::Component component,
+    url_matcher::URLMatcher* matcher,
+    UrlConditionId& condition_id,
+    url_matcher::URLMatcherConditionSet::Vector& conditions,
+    std::map<UrlConditionId, std::string>& patterns_mapping,
+    RuleId rule_id,
+    std::map<UrlConditionId, RuleId>& map) {
+  base::Value::List destinations_urls;
+
+  for (const auto& url : GetAssociatedUrlsConditions(component)) {
+    destinations_urls.Append(url);
+  }
+
+  if (!destinations_urls.empty()) {
+    AddUrlConditions(matcher, condition_id, &destinations_urls, conditions,
+                     patterns_mapping, rule_id, map);
   }
 }
 
@@ -369,7 +428,7 @@ DlpRulesManager::Level DlpRulesManagerImpl::IsRestrictedDestination(
 
 DlpRulesManager::Level DlpRulesManagerImpl::IsRestrictedComponent(
     const GURL& source,
-    const Component& destination,
+    const data_controls::Component& destination,
     Restriction restriction,
     std::string* out_source_pattern,
     RuleMetadata* out_rule_metadata) const {
@@ -377,7 +436,7 @@ DlpRulesManager::Level DlpRulesManagerImpl::IsRestrictedComponent(
   DCHECK(restriction == Restriction::kClipboard ||
          restriction == Restriction::kFiles);
 
-  if (destination == Component::kUnknownComponent) {
+  if (destination == data_controls::Component::kUnknownComponent) {
     return DlpRulesManager::Level::kAllow;
   }
 
@@ -490,8 +549,8 @@ DlpRulesManagerImpl::GetAggregatedComponents(const GURL& source,
   DCHECK(restriction == Restriction::kClipboard ||
          restriction == Restriction::kFiles);
 
-  std::map<Level, std::set<Component>> result;
-  for (Component component : components) {
+  std::map<Level, std::set<data_controls::Component>> result;
+  for (data_controls::Component component : data_controls::kAllComponents) {
     std::string out_source_pattern;
     Level level = IsRestrictedComponent(source, component, restriction,
                                         &out_source_pattern, nullptr);
@@ -528,11 +587,9 @@ DlpReportingManager* DlpRulesManagerImpl::GetReportingManager() const {
   return reporting_manager_.get();
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 DlpFilesController* DlpRulesManagerImpl::GetDlpFilesController() const {
   return files_controller_.get();
 }
-#endif
 
 std::string DlpRulesManagerImpl::GetSourceUrlPattern(
     const GURL& source_url,
@@ -603,7 +660,7 @@ void DlpRulesManagerImpl::OnPolicyUpdate() {
   src_conditions_.clear();
   dst_conditions_.clear();
   rules_id_metadata_mapping_.clear();
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   files_controller_ = nullptr;
 #endif
 
@@ -653,8 +710,13 @@ void DlpRulesManagerImpl::OnPolicyUpdate() {
     if (destinations_components) {
       for (const auto& component : *destinations_components) {
         DCHECK(component.is_string());
-        components_rules_[GetComponentMapping(component.GetString())].insert(
-            rules_counter);
+        data_controls::Component component_mapping =
+            GetComponentMapping(component.GetString());
+        components_rules_[component_mapping].insert(rules_counter);
+        AddAssociatedUrlConditions(component_mapping, dst_url_matcher_.get(),
+                                   dst_url_condition_id, dst_conditions_,
+                                   dst_patterns_mapping_, rules_counter,
+                                   dst_url_rules_mapping_);
       }
     }
 
@@ -709,6 +771,10 @@ void DlpRulesManagerImpl::OnPolicyUpdate() {
             DCHECK(component.is_string());
             files_rule.add_destination_components(
                 GetComponentProtoMapping(component.GetString()));
+            for (const auto& url : GetAssociatedUrlsConditions(
+                     GetComponentMapping(component.GetString()))) {
+              files_rule.add_destination_urls(url);
+            }
           }
         }
 
@@ -747,7 +813,11 @@ void DlpRulesManagerImpl::OnPolicyUpdate() {
           request_to_daemon, base::BindOnce(&OnSetDlpFilesPolicy));
 #if BUILDFLAG(IS_CHROMEOS_ASH)
       if (!files_controller_) {
-        files_controller_ = std::make_unique<DlpFilesController>(*this);
+        files_controller_ = std::make_unique<DlpFilesControllerAsh>(*this);
+      }
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+      if (!files_controller_) {
+        files_controller_ = std::make_unique<DlpFilesControllerLacros>(*this);
       }
 #endif
     } else if (chromeos::DlpClient::Get() &&

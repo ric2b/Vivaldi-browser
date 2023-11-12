@@ -16,10 +16,11 @@ import 'chrome://resources/cr_elements/cr_hidden_style.css.js';
 import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import '/shared/settings/controls/extension_controlled_indicator.js';
-import '../../settings_vars.css.js';
+import '../settings_vars.css.js';
 import './internet_shared.css.js';
-import '../../controls/settings_toggle_button.js';
+import '/shared/settings/controls/settings_toggle_button.js';
 
+import {SettingsToggleButtonElement} from '/shared/settings/controls/settings_toggle_button.js';
 import {CrPolicyNetworkBehaviorMojo, CrPolicyNetworkBehaviorMojoInterface} from 'chrome://resources/ash/common/network/cr_policy_network_behavior_mojo.js';
 import {NetworkProxyElement} from 'chrome://resources/ash/common/network/network_proxy.js';
 import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
@@ -31,11 +32,9 @@ import {ManagedProperties, ManagedString} from 'chrome://resources/mojo/chromeos
 import {OncSource} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {SettingsToggleButtonElement} from '../../controls/settings_toggle_button.js';
 import {Constructor} from '../common/types.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin, RouteObserverMixinInterface} from '../route_observer_mixin.js';
-import {Route} from '../router.js';
+import {Route, routes} from '../router.js';
 
 import {getTemplate} from './network_proxy_section.html.js';
 
@@ -45,7 +44,7 @@ interface ExtensionInfo {
   canBeDisabled: boolean|undefined;
 }
 
-interface NetworkProxySectionElement {
+export interface NetworkProxySectionElement {
   $: {
     allowShared: SettingsToggleButtonElement,
     confirmAllowSharedDialog: CrDialogElement,
@@ -61,7 +60,7 @@ const NetworkProxySectionElementBase =
     Constructor<PolymerElement&I18nMixinInterface&RouteObserverMixinInterface&
                 PrefsMixinInterface&CrPolicyNetworkBehaviorMojoInterface>;
 
-class NetworkProxySectionElement extends NetworkProxySectionElementBase {
+export class NetworkProxySectionElement extends NetworkProxySectionElementBase {
   static get is() {
     return 'network-proxy-section' as const;
   }

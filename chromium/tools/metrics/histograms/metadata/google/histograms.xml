@@ -23,7 +23,7 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <histogram name="GoogleUpdate.ErrorHresult" enum="Hresult"
-    expires_after="2023-06-26">
+    expires_after="2024-06-26">
   <owner>sorin@chromium.org</owner>
   <owner>waffles@chromium.org</owner>
   <summary>The HRESULT for a failed on-demand update check.</summary>
@@ -41,34 +41,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="GoogleUpdate.Result.Session" enum="BooleanSuccess"
-    expires_after="2020-10-15">
-<!-- Name completed by histogram_suffixes name="GoogleUpdate.Result.UpdateType" -->
-
-  <owner>dtrainor@chromium.org</owner>
-  <owner>nyquist@chromium.org</owner>
-  <summary>
-    (Android-only) Whether or not an update was successful when looking at the
-    Chrome version on the next session where there is no update in progress.
-  </summary>
-</histogram>
-
-<histogram name="GoogleUpdate.Result.TimeWindow" enum="BooleanSuccess"
-    expires_after="2020-10-15">
-<!-- Name completed by histogram_suffixes name="GoogleUpdate.Result.UpdateType" -->
-
-  <owner>dtrainor@chromium.org</owner>
-  <owner>nyquist@chromium.org</owner>
-  <summary>
-    (Android-only) Whether or not an update was successful within a specific
-    server-configured window of time (e.g. an update may not occur right after
-    the user attempts to start it, but if they update sometime in the next X
-    days, we can possibly attribute it to the update flow we started). An
-    example window value could be on the order of days (e.g. 2 days since an
-    update started).
-  </summary>
-</histogram>
-
 <histogram name="GoogleUpdate.StartingUpdateState"
     enum="BooleanAlreadyUpdating" expires_after="2020-10-15">
   <owner>dtrainor@chromium.org</owner>
@@ -80,14 +52,14 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GoogleUpdate.UpdateErrorCode" enum="GoogleUpdateErrorCode"
-    expires_after="2023-09-17">
+    expires_after="2023-11-19">
   <owner>sorin@chromium.org</owner>
   <owner>waffles@chromium.org</owner>
   <summary>The error code for a failed on-demand update check.</summary>
 </histogram>
 
 <histogram name="GoogleUpdate.UpgradeResult" enum="GoogleUpdateUpgradeStatus"
-    expires_after="2023-08-27">
+    expires_after="2023-11-12">
   <owner>sorin@chromium.org</owner>
   <owner>waffles@chromium.org</owner>
   <summary>The result of an on-demand update check.</summary>

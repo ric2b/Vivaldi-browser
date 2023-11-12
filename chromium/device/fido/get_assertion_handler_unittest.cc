@@ -199,10 +199,10 @@ class FidoGetAssertionHandlerTest : public ::testing::Test {
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   std::unique_ptr<test::FakeFidoDiscoveryFactory> fake_discovery_factory_ =
       std::make_unique<test::FakeFidoDiscoveryFactory>();
-  raw_ptr<test::FakeFidoDiscovery> discovery_;
-  raw_ptr<test::FakeFidoDiscovery> cable_discovery_;
-  raw_ptr<test::FakeFidoDiscovery> nfc_discovery_;
-  raw_ptr<test::FakeFidoDiscovery> platform_discovery_;
+  raw_ptr<test::FakeFidoDiscovery, DanglingUntriaged> discovery_;
+  raw_ptr<test::FakeFidoDiscovery, DanglingUntriaged> cable_discovery_;
+  raw_ptr<test::FakeFidoDiscovery, DanglingUntriaged> nfc_discovery_;
+  raw_ptr<test::FakeFidoDiscovery, DanglingUntriaged> platform_discovery_;
   scoped_refptr<::testing::NiceMock<MockBluetoothAdapter>> mock_adapter_ =
       base::MakeRefCounted<::testing::NiceMock<MockBluetoothAdapter>>();
   TestGetAssertionRequestCallback get_assertion_cb_;
@@ -930,6 +930,7 @@ TEST(GetAssertionRequestHandlerWinTest, TestWinUsbDiscovery) {
     api.set_available(enable_api);
     api.InjectNonDiscoverableCredential(
         test_data::kTestGetAssertionCredentialId, test_data::kRelyingPartyId);
+    WinWebAuthnApi::ScopedOverride win_webauthn_api_override(&api);
 
     // Simulate a connected HID device.
     ScopedFakeFidoHidManager fake_hid_manager;
@@ -937,7 +938,6 @@ TEST(GetAssertionRequestHandlerWinTest, TestWinUsbDiscovery) {
 
     TestGetAssertionRequestCallback cb;
     FidoDiscoveryFactory fido_discovery_factory;
-    fido_discovery_factory.set_win_webauthn_api(&api);
     CtapGetAssertionRequest request(test_data::kRelyingPartyId,
                                     test_data::kClientDataJson);
     request.allow_list = {PublicKeyCredentialDescriptor(

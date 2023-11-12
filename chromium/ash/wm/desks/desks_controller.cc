@@ -5,15 +5,14 @@
 #include "ash/wm/desks/desks_controller.h"
 
 #include <algorithm>
-#include <memory>
 #include <utility>
 
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/notifier_catalogs.h"
-#include "ash/public/cpp/desk_template.h"
 #include "ash/public/cpp/shelf_model.h"
+#include "ash/public/cpp/shelf_prefs.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/system/toast_data.h"
@@ -27,8 +26,8 @@
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desk_animation_base.h"
 #include "ash/wm/desks/desk_animation_impl.h"
+#include "ash/wm/desks/desk_bar_controller.h"
 #include "ash/wm/desks/desks_animations.h"
-#include "ash/wm/desks/desks_histogram_enums.h"
 #include "ash/wm/desks/desks_restore_util.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/desks/templates/saved_desk_dialog_controller.h"
@@ -58,7 +57,6 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/i18n/number_formatting.h"
-#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
@@ -66,13 +64,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/time/time.h"
-#include "base/timer/timer.h"
-#include "base/uuid.h"
 #include "chromeos/ui/wm/features.h"
 #include "components/app_restore/app_launch_info.h"
 #include "components/app_restore/full_restore_utils.h"
-#include "components/app_restore/restore_data.h"
 #include "components/app_restore/window_info.h"
 #include "components/app_restore/window_properties.h"
 #include "components/user_manager/user_manager.h"
@@ -189,7 +183,7 @@ void RemoveAllWindowsFromOverview() {
       // overview transformation to the windows again when appending those
       // windows back to the overview grid regardless of whether those windows
       // were already in that transformation.
-      overview_item->RestoreWindow(/*reset_transform=*/true);
+      overview_item->RestoreWindow(/*reset_transform=*/true, /*animate=*/false);
       overview_session->RemoveItem(overview_item);
     }
   }
@@ -276,6 +270,13 @@ void ReportNumberOfZombieWindows(
     std::unique_ptr<aura::WindowTracker> window_tracker) {
   base::UmaHistogramCounts100(kCloseAllZombieWindowsFoundHistogramName,
                               window_tracker->windows().size());
+}
+
+AccountId GetPrimaryUserAccountId() {
+  return Shell::Get()
+      ->session_controller()
+      ->GetPrimaryUserSession()
+      ->user_info.account_id;
 }
 
 }  // namespace
@@ -427,6 +428,10 @@ DesksController::DesksController()
   weekly_active_desks_scheduler_.Start(
       FROM_HERE, base::Days(7), this,
       &DesksController::RecordAndResetNumberOfWeeklyActiveDesks);
+
+  if (ash::features::IsDeskButtonEnabled()) {
+    desk_bar_controller_ = std::make_unique<DeskBarController>();
+  }
 }
 
 DesksController::~DesksController() {
@@ -498,10 +503,7 @@ DesksController::GetVisibleOnAllDesksWindowsOnRoot(
 void DesksController::RestorePrimaryUserActiveDeskIndex(int active_desk_index) {
   DCHECK_GE(active_desk_index, 0);
   DCHECK_LT(active_desk_index, static_cast<int>(desks_.size()));
-  user_to_active_desk_index_[Shell::Get()
-                                 ->session_controller()
-                                 ->GetPrimaryUserSession()
-                                 ->user_info.account_id] = active_desk_index;
+  user_to_active_desk_index_[GetPrimaryUserAccountId()] = active_desk_index;
   // Following |OnActiveUserSessionChanged| approach, restoring uses
   // DesksSwitchSource::kUserSwitch as a desk switch source.
   // TODO(crbug.com/1145404): consider adding an UMA metric for desks
@@ -515,6 +517,7 @@ void DesksController::OnNewUserShown() {
 }
 
 void DesksController::Shutdown() {
+  desk_bar_controller_.reset();
   animation_.reset();
   desks_restore_util::UpdatePrimaryUserDeskMetricsPrefs();
 }
@@ -555,6 +558,15 @@ Desk* DesksController::GetPreviousDesk(bool use_target_active_desk) const {
 Desk* DesksController::GetDeskByUuid(const base::Uuid& desk_uuid) const {
   auto it = base::ranges::find(desks_, desk_uuid, &Desk::uuid);
   return it != desks_.end() ? it->get() : nullptr;
+}
+
+int DesksController::GetDeskIndexByUuid(const base::Uuid& desk_uuid) const {
+  for (size_t i = 0; i < desks_.size(); ++i) {
+    if (desk_uuid == desks_[i]->uuid()) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 bool DesksController::CanRemoveDesks() const {
@@ -609,6 +621,14 @@ void DesksController::NewDesk(DesksCreationRemovalSource source) {
     observer.OnDeskAdded(new_desk);
 
   if (!is_first_ever_desk) {
+    if (features::IsDeskButtonEnabled()) {
+      PrefService* prefs =
+          Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+      // Record that virtual desks have been used on this device so we can show
+      // the desk button from now on, if the user doesn't and hasn't elected to
+      // hide it from the shelf context menu.
+      SetDeviceUsesDesksPref(prefs, true);
+    }
     desks_restore_util::UpdatePrimaryUserDeskGuidsPrefs();
     desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
     desks_restore_util::UpdatePrimaryUserDeskMetricsPrefs();
@@ -681,8 +701,8 @@ void DesksController::ReorderDesk(int old_index, int new_index) {
   // two positions shift left (-1), otherwiser shift right (+1).
   const int offset = new_index > old_index ? -1 : 1;
 
-  for (auto& iter : user_to_active_desk_index_) {
-    const int old_active_index = iter.second;
+  for (auto& [account_id, desk_index] : user_to_active_desk_index_) {
+    const int old_active_index = desk_index;
     if (old_active_index < starting_affected_index ||
         old_active_index > ending_affected_index) {
       // Skip unaffected desk index.
@@ -690,16 +710,13 @@ void DesksController::ReorderDesk(int old_index, int new_index) {
     }
     // The moving desk changes from old_index to new_index, while other desks
     // between the two positions shift by one position.
-    iter.second =
+    desk_index =
         old_active_index == old_index ? new_index : old_active_index + offset;
   }
 
   // 3. For primary user's active desks restore, update the active desk index.
   desks_restore_util::UpdatePrimaryUserActiveDeskPrefs(
-      user_to_active_desk_index_[Shell::Get()
-                                     ->session_controller()
-                                     ->GetPrimaryUserSession()
-                                     ->user_info.account_id]);
+      user_to_active_desk_index_[GetPrimaryUserAccountId()]);
 
   // 4. For restoring windows to the right desks, update workspaces of all
   // windows in the affected desks for all simultaneously logged-in users.
@@ -739,6 +756,11 @@ void DesksController::ActivateDesk(const Desk* desk, DesksSwitchSource source) {
           OverviewEndAction::kDeskActivation,
           is_user_switch ? OverviewEnterExitType::kImmediateExit
                          : OverviewEnterExitType::kNormal);
+    }
+    // Selecting the active desk in desk button desk bar is allowed, and
+    // should just close all desk bars.
+    if (desk_bar_controller_) {
+      desk_bar_controller_->CloseAllDeskBars();
     }
     return;
   }
@@ -1278,13 +1300,11 @@ bool DesksController::OnSingleInstanceAppLaunchingFromSavedDesk(
   // not be visible on all desks.
   if (!desks_util::IsWindowVisibleOnAllWorkspaces(
           existing_app_instance_window)) {
-    // The index of the target desk is found in `app_restore_data`. If it isn't
-    // set, or out of bounds, then we default to the rightmost desk.
-    const int rightmost_desk_index = desks_.size() - 1;
-    const int target_desk_index =
-        std::min(app_restore_data.desk_id.value_or(rightmost_desk_index),
-                 rightmost_desk_index);
-    Desk* target_desk = desks_[target_desk_index].get();
+    // The uuid of the target desk is found in `app_restore_data`. If it isn't
+    // set, or is invalid, then we default to the rightmost desk.
+    Desk* target_desk = app_restore_data.desk_guid.is_valid()
+                            ? GetDeskByUuid(app_restore_data.desk_guid)
+                            : desks_.back().get();
 
     DCHECK(src_desk);
     if (src_desk != target_desk) {
@@ -1321,10 +1341,9 @@ bool DesksController::OnSingleInstanceAppLaunchingFromSavedDesk(
     // Not all window states are supported.
     const bool restoreable_state =
         chromeos::IsNormalWindowStateType(target_state) ||
+        chromeos::IsSnappedWindowStateType(target_state) ||
         target_state == chromeos::WindowStateType::kMinimized ||
-        target_state == chromeos::WindowStateType::kMaximized ||
-        target_state == chromeos::WindowStateType::kPrimarySnapped ||
-        target_state == chromeos::WindowStateType::kSecondarySnapped;
+        target_state == chromeos::WindowStateType::kMaximized;
 
     if (restoreable_state) {
       WindowState* window_state =
@@ -1352,13 +1371,12 @@ bool DesksController::OnSingleInstanceAppLaunchingFromSavedDesk(
           case chromeos::WindowStateType::kPrimarySnapped:
           case chromeos::WindowStateType::kSecondarySnapped:
             if (window_state->CanSnap()) {
-              window_state->set_snap_action_source(
-                  WindowSnapActionSource::kOthers);
-
-              const WMEvent event(
+              const WindowSnapWMEvent event(
                   target_state == chromeos::WindowStateType::kPrimarySnapped
                       ? WM_EVENT_SNAP_PRIMARY
-                      : WM_EVENT_SNAP_SECONDARY);
+                      : WM_EVENT_SNAP_SECONDARY,
+                  WindowSnapActionSource::
+                      kSnapByFullRestoreOrDeskTemplateOrSavedDesk);
               window_state->OnWMEvent(&event);
             }
             break;
@@ -1518,7 +1536,7 @@ void DesksController::OnWindowActivated(ActivationReason reason,
                                         aura::Window* lost_active) {}
 
 void DesksController::OnActiveUserSessionChanged(const AccountId& account_id) {
-  // TODO(afakhry): Remove this when multi-profile support goes away.
+  // TODO(b/284482035): Remove this when multi-profile support goes away.
   DCHECK(current_account_id_.is_valid());
   if (current_account_id_ == account_id) {
     return;
@@ -1596,8 +1614,8 @@ void DesksController::ActivateDeskInternal(const Desk* desk,
     return;
 
   base::AutoReset<bool> in_progress(&are_desks_being_modified_, true);
-  base::AutoReset<Desk*> activate_desk(&desk_to_activate_,
-                                       const_cast<Desk*>(desk));
+  base::AutoReset<raw_ptr<Desk>> activate_desk(&desk_to_activate_,
+                                               const_cast<Desk*>(desk));
 
   // Mark the new desk as active first, so that deactivating windows on the
   // `old_active` desk do not activate other windows on the same desk. See
@@ -1668,10 +1686,12 @@ void DesksController::ActivateDeskInternal(const Desk* desk,
 
   NotifyFullScreenStateChangedAcrossDesksIfNeeded(old_active);
 
+  const int active_desk_index = GetActiveDeskIndex();
+  user_to_active_desk_index_[current_account_id_] = active_desk_index;
+
   // Only update active desk prefs when a primary user switches a desk.
   if (shell->session_controller()->IsUserPrimary()) {
-    desks_restore_util::UpdatePrimaryUserActiveDeskPrefs(
-        GetDeskIndex(active_desk_));
+    desks_restore_util::UpdatePrimaryUserActiveDeskPrefs(active_desk_index);
   }
 }
 
@@ -1699,6 +1719,18 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
       window->SetProperty(aura::client::kWindowWorkspaceKey, i - 1);
     }
   }
+
+  // If the removed desk is before the active desk (or the active desk) of any
+  // logged in user, it needs to be adjusted.
+  for (auto& [account_id, desk_index] : user_to_active_desk_index_) {
+    if (removed_desk_index <= desk_index && desk_index > 0) {
+      --desk_index;
+    }
+  }
+  // Update the prefs for the primary user, since it may have been affected by
+  // the desk removal.
+  desks_restore_util::UpdatePrimaryUserActiveDeskPrefs(
+      user_to_active_desk_index_[GetPrimaryUserAccountId()]);
 
   // Keep the removed desk's data alive until at least the end of this function.
   // `MaybeCommitPendingDeskRemoval` at this point should have cleared
@@ -1887,9 +1919,20 @@ void DesksController::UndoDeskRemoval() {
   base::UmaHistogramBoolean(kCloseAllUndoHistogramName, true);
   Desk* readded_desk_ptr = temporary_removed_desk_->desk();
   auto readded_desk_data = std::move(temporary_removed_desk_);
-  desks_.insert(desks_.begin() + readded_desk_data->index(),
+  const int readded_desk_index = readded_desk_data->index();
+  desks_.insert(desks_.begin() + readded_desk_index,
                 readded_desk_data->AcquireDesk());
   readded_desk_ptr->set_is_desk_being_removed(false);
+
+  // If the re-added desk is before the active desk of any logged in user, it
+  // needs to be adjusted.
+  for (auto& [account_id, desk_index] : user_to_active_desk_index_) {
+    if (readded_desk_index <= desk_index) {
+      ++desk_index;
+    }
+  }
+  desks_restore_util::UpdatePrimaryUserActiveDeskPrefs(
+      user_to_active_desk_index_[GetPrimaryUserAccountId()]);
 
   for (auto& observer : observers_)
     observer.OnDeskAdded(readded_desk_ptr);
@@ -1939,6 +1982,10 @@ void DesksController::FinalizeDeskRemoval(RemovedDeskData* removed_desk_data) {
     ReportClosedWindowsCountPerSourceHistogram(
         removed_desk_data->desk_removal_source(),
         removed_desk->windows().size());
+  }
+
+  for (auto& observer : observers_) {
+    observer.OnDeskRemovalFinalized(removed_desk->uuid());
   }
 
   ReportDesksCountHistogram();

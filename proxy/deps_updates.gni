@@ -1,0 +1,29 @@
+# Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+import("//vivaldi/proxy/proxy_feature.gni")
+
+if (enable_relay_proxy) {
+  update_target("//chrome/browser:browser") {
+    public_deps += [
+      "//vivaldi/proxy",
+    ]
+    allow_circular_includes_from += [
+      "//vivaldi/proxy",
+    ]
+  }
+
+  update_target("//chrome:dependencies") {
+    public_deps += [ "//vivaldi/proxy" ]
+  }
+
+  if (is_mac) {
+    update_target("//chrome:chrome_framework_helpers") {
+      sources += [
+        "$root_out_dir/vivaldi-proxy/relayproxy-darwin",
+      ]
+      public_deps += [
+        "//vivaldi/proxy:copy-proxy-binary",
+      ]
+    }
+  }
+}

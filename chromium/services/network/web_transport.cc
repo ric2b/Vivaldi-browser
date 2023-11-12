@@ -298,7 +298,10 @@ class WebTransport::Stream final {
         }
       }
       if (read_result.fin) {
-        transport_->client_->OnIncomingStreamClosed(id_, /*fin_received=*/true);
+        if (transport_->client_) {
+          transport_->client_->OnIncomingStreamClosed(id_,
+                                                      /*fin_received=*/true);
+        }
         writable_watcher_.Cancel();
         writable_.reset();
         incoming_ = nullptr;
@@ -409,6 +412,7 @@ void WebTransport::SendDatagram(base::span<const uint8_t> data,
 
   datagram_callbacks_.emplace(std::move(callback));
 
+  CHECK(transport_->session());
   transport_->session()->SendOrQueueDatagram(absl::string_view(
       reinterpret_cast<const char*>(data.data()), data.size()));
 }
@@ -427,6 +431,7 @@ void WebTransport::CreateStream(
   }
 
   quic::WebTransportSession* const session = transport_->session();
+  CHECK(session);
 
   if (writable) {
     // Bidirectional
@@ -508,6 +513,7 @@ void WebTransport::SetOutgoingDatagramExpirationDuration(
     return;
   }
 
+  CHECK(transport_->session());
   transport_->session()->SetDatagramMaxTimeInQueue(
       absl::Microseconds(duration.InMicroseconds()));
 }
@@ -620,6 +626,7 @@ void WebTransport::OnIncomingBidirectionalStreamAvailable() {
   DCHECK(client_);
 
   while (!bidirectional_stream_acceptances_.empty()) {
+    CHECK(transport_->session());
     quic::WebTransportStream* const stream =
         transport_->session()->AcceptIncomingBidirectionalStream();
     if (!stream) {
@@ -666,6 +673,7 @@ void WebTransport::OnIncomingUnidirectionalStreamAvailable() {
   DCHECK(client_);
 
   while (!unidirectional_stream_acceptances_.empty()) {
+    CHECK(transport_->session());
     quic::WebTransportStream* const stream =
         transport_->session()->AcceptIncomingUnidirectionalStream();
 

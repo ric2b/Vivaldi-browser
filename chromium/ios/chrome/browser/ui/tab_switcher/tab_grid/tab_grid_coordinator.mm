@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator.h"
 
-#import "base/mac/bundle_locations.h"
+#import "base/apple/bundle_locations.h"
 #import "base/mac/foundation_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
@@ -14,22 +14,29 @@
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/search_engines/template_url_service.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/application_context/application_context.h"
+#import "ios/chrome/browser/bookmarks/account_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/bring_android_tabs/bring_android_tabs_to_ios_service.h"
 #import "ios/chrome/browser/bring_android_tabs/bring_android_tabs_to_ios_service_factory.h"
 #import "ios/chrome/browser/bring_android_tabs/features.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/find_in_page/find_tab_helper.h"
 #import "ios/chrome/browser/main/browser_util.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/reading_list/reading_list_browser_agent.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/default_browser_promo/non_modal_default_browser_promo_scheduler_scene_agent.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/shared/public/commands/bring_android_tabs_commands.h"
@@ -44,15 +51,18 @@
 #import "ios/chrome/browser/shared/ui/util/named_guide.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
+#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/sync/session_sync_service_factory.h"
+#import "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/synced_sessions/distant_session.h"
 #import "ios/chrome/browser/synced_sessions/synced_sessions_util.h"
 #import "ios/chrome/browser/tabs/features.h"
 #import "ios/chrome/browser/tabs/inactive_tabs/features.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmarks_coordinator.h"
 #import "ios/chrome/browser/ui/bring_android_tabs/bring_android_tabs_prompt_coordinator.h"
 #import "ios/chrome/browser/ui/bring_android_tabs/tab_list_from_android_coordinator.h"
 #import "ios/chrome/browser/ui/commerce/price_card/price_card_mediator.h"
-#import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
 #import "ios/chrome/browser/ui/gestures/view_controller_trait_collection_observer.h"
 #import "ios/chrome/browser/ui/gestures/view_revealing_vertical_pan_handler.h"
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
@@ -61,7 +71,6 @@
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_mediator.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/main/bvc_container_view_controller.h"
-#import "ios/chrome/browser/ui/main/default_browser_scene_agent.h"
 #import "ios/chrome/browser/ui/menu/tab_context_menu_delegate.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_mediator.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_menu_helper.h"
@@ -82,15 +91,14 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_view_controller.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/tab_grid_transition_handler.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/legacy_tab_grid_transition_handler.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_utils.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_coordinator.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/public/provider/chrome/browser/find_in_page/find_in_page_api.h"
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
@@ -103,6 +111,32 @@ using vivaldi::IsVivaldiRunning;
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+
+// If Find in Page uses the system Find panel and if the Find UI is marked as
+// active in the current web state of `browser`, this returns true. Otherwise,
+// returns false.
+bool FindNavigatorShouldBePresentedInBrowser(Browser* browser) {
+  if (!ios::provider::IsNativeFindInPageWithSystemFindPanel() || !browser) {
+    return false;
+  }
+
+  web::WebState* currentWebState =
+      browser->GetWebStateList()->GetActiveWebState();
+  if (!currentWebState) {
+    return false;
+  }
+
+  FindTabHelper* helper = FindTabHelper::FromWebState(currentWebState);
+  if (!helper) {
+    return false;
+  }
+
+  return helper->IsFindUIActive();
+}
+
+}  // namespace
 
 @interface TabGridCoordinator () <BringAndroidTabsCommands,
                                   RecentTabsPresentationDelegate,
@@ -151,7 +185,8 @@ using vivaldi::IsVivaldiRunning;
 // controller will present this.
 @property(nonatomic, strong) BVCContainerViewController* bvcContainer;
 // Handler for the transitions between the TabGrid and the Browser.
-@property(nonatomic, strong) TabGridTransitionHandler* transitionHandler;
+@property(nonatomic, strong)
+    LegacyTabGridTransitionHandler* legacyTransitionHandler;
 // Mediator for regular Tabs.
 @property(nonatomic, strong) TabGridMediator* regularTabsMediator;
 // Mediator for incognito Tabs.
@@ -186,8 +221,6 @@ using vivaldi::IsVivaldiRunning;
 @property(nonatomic, strong) InactiveTabsCoordinator* inactiveTabsCoordinator;
 // The timestamp of the user entering the tab grid.
 @property(nonatomic, assign) base::TimeTicks tabGridEnterTime;
-// The timestamp of the user exiting the tab grid.
-@property(nonatomic, assign) base::TimeTicks tabGridExitTime;
 
 // The page configuration used when create the tab grid view controller;
 @property(nonatomic, assign) TabGridPageConfiguration pageConfiguration;
@@ -422,9 +455,8 @@ using vivaldi::IsVivaldiRunning;
 
   SceneState* sceneState =
       SceneStateBrowserAgent::FromBrowser(self.regularBrowser)->GetSceneState();
-  DefaultBrowserSceneAgent* agent =
-      [DefaultBrowserSceneAgent agentFromScene:sceneState];
-  [agent.nonModalScheduler logTabGridEntered];
+  [[NonModalDefaultBrowserPromoSchedulerSceneAgent agentFromScene:sceneState]
+      logTabGridEntered];
 
   // Store the currentActivePage at this point in code, to be potentially used
   // during execution of the dispatched block to get the transition from Browser
@@ -450,6 +482,41 @@ using vivaldi::IsVivaldiRunning;
     }
   }
 
+  __weak __typeof(self) weakSelf = self;
+
+  ProceduralBlock transitionCompletionBlock = ^{
+    __typeof(self) strongSelf = weakSelf;
+    if (!strongSelf) {
+      return;
+    }
+
+    strongSelf.bvcContainer = nil;
+    [strongSelf.baseViewController contentDidAppear];
+
+    if (shouldDisplayBringAndroidTabsPrompt) {
+      [strongSelf displayBringAndroidTabsPrompt];
+    }
+  };
+
+  ProceduralBlock transitionBlock = ^{
+    __typeof(self) strongSelf = weakSelf;
+    if (!strongSelf) {
+      return;
+    }
+
+    [strongSelf
+        performBrowserToTabGridTransitionWithActivePage:currentActivePage
+                                       animationEnabled:animated
+                                             completion:
+                                                 transitionCompletionBlock];
+    // On iOS 15+, snapshotting views with afterScreenUpdates:YES waits 0.5s
+    // for the status bar style to update. Work around that delay by taking
+    // the snapshot first (during
+    // `transitionFromBrowser:toTabGrid:activePage:withCompletion`) and then
+    // updating the status bar style afterwards.
+    strongSelf.baseViewController.childViewControllerForStatusBarStyle = nil;
+  };
+
   // If a BVC is currently being presented, dismiss it.  This will trigger any
   // necessary animations.
   if (self.bvcContainer) {
@@ -457,29 +524,7 @@ using vivaldi::IsVivaldiRunning;
     // This is done with a dispatch to make sure that the view isn't added to
     // the view hierarchy right away, as it is not the expectations of the
     // API.
-    dispatch_async(dispatch_get_main_queue(), ^{
-      self.transitionHandler = [[TabGridTransitionHandler alloc]
-          initWithLayoutProvider:self.baseViewController];
-      self.transitionHandler.animationDisabled = !animated;
-      [self.transitionHandler
-          transitionFromBrowser:self.bvcContainer
-                      toTabGrid:self.baseViewController
-                     activePage:currentActivePage
-                 withCompletion:^{
-                   self.bvcContainer = nil;
-                   [self.baseViewController contentDidAppear];
-                   if (shouldDisplayBringAndroidTabsPrompt) {
-                     [self displayBringAndroidTabsPrompt];
-                   }
-                 }];
-
-      // On iOS 15+, snapshotting views with afterScreenUpdates:YES waits 0.5s
-      // for the status bar style to update. Work around that delay by taking
-      // the snapshot first (during
-      // `transitionFromBrowser:toTabGrid:activePage:withCompletion`) and then
-      // updating the status bar style afterwards.
-      self.baseViewController.childViewControllerForStatusBarStyle = nil;
-    });
+    dispatch_async(dispatch_get_main_queue(), transitionBlock);
   } else if (shouldDisplayBringAndroidTabsPrompt) {
     [self displayBringAndroidTabsPrompt];
   }
@@ -490,13 +535,6 @@ using vivaldi::IsVivaldiRunning;
   [self.priceCardMediator logMetrics:TAB_SWITCHER];
 }
 
-- (void)reportTabGridUsageTime {
-  base::TimeDelta duration = self.tabGridExitTime - self.tabGridEnterTime;
-  base::UmaHistogramLongTimes("IOS.TabSwitcher.TimeSpent", duration);
-  self.tabGridEnterTime = base::TimeTicks();
-  self.tabGridExitTime = base::TimeTicks();
-}
-
 - (void)showTabViewController:(UIViewController*)viewController
                     incognito:(BOOL)incognito
            shouldCloseTabGrid:(BOOL)shouldCloseTabGrid
@@ -504,12 +542,14 @@ using vivaldi::IsVivaldiRunning;
   bool thumbStripEnabled = self.isThumbStripEnabled;
   DCHECK(viewController || (thumbStripEnabled && self.bvcContainer));
 
-  if (shouldCloseTabGrid) {
-    self.tabGridExitTime = base::TimeTicks::Now();
-
+  if (shouldCloseTabGrid && !self.tabGridEnterTime.is_null()) {
     // Record when the tab switcher is dismissed.
     base::RecordAction(base::UserMetricsAction("MobileTabGridExited"));
-    [self reportTabGridUsageTime];
+
+    // Record how long the tab switcher was presented.
+    base::TimeDelta duration = base::TimeTicks::Now() - self.tabGridEnterTime;
+    base::UmaHistogramLongTimes("IOS.TabSwitcher.TimeSpent", duration);
+    self.tabGridEnterTime = base::TimeTicks();
   }
 
   if (thumbStripEnabled) {
@@ -572,7 +612,11 @@ using vivaldi::IsVivaldiRunning;
       // complete, reset the tab grid mode.
       self.baseViewController.tabGridMode = TabGridModeNormal;
     }
-    if (!GetFirstResponder()) {
+    Browser* browser = self.bvcContainer.incognito ? self.incognitoBrowser
+                                                   : self.regularBrowser;
+    if (!GetFirstResponderInWindowScene(
+            self.baseViewController.view.window.windowScene) &&
+        !FindNavigatorShouldBePresentedInBrowser(browser)) {
       // It is possible to already have a first responder (for example the
       // omnibox). In that case, we don't want to mark BVC as first responder.
       [self.bvcContainer.currentBVC becomeFirstResponder];
@@ -585,16 +629,10 @@ using vivaldi::IsVivaldiRunning;
 
   [self.baseViewController contentWillDisappearAnimated:animated];
 
-  self.transitionHandler = [[TabGridTransitionHandler alloc]
-      initWithLayoutProvider:self.baseViewController];
-  self.transitionHandler.animationDisabled = !animated;
-  [self.transitionHandler
-      transitionFromTabGrid:self.baseViewController
-                  toBrowser:self.bvcContainer
-                 activePage:self.baseViewController.activePage
-             withCompletion:^{
-               extendedCompletion();
-             }];
+  [self performTabGridToBrowserTransitionWithActivePage:self.baseViewController
+                                                            .activePage
+                                       animationEnabled:animated
+                                             completion:extendedCompletion];
 
   // On iOS 15+, snapshotting views with afterScreenUpdates:YES waits 0.5s for
   // the status bar style to update. Work around that delay by taking the
@@ -642,6 +680,43 @@ using vivaldi::IsVivaldiRunning;
       NOTREACHED();
       break;
   }
+}
+
+// Performs the Browser to Tab Grid transition.
+- (void)performBrowserToTabGridTransitionWithActivePage:(TabGridPage)activePage
+                                       animationEnabled:(BOOL)animationEnabled
+                                             completion:
+                                                 (ProceduralBlock)completion {
+  self.legacyTransitionHandler =
+      [self createTransitionHanlderWithAnimationEnabled:animationEnabled];
+  [self.legacyTransitionHandler transitionFromBrowser:self.bvcContainer
+                                            toTabGrid:self.baseViewController
+                                           activePage:activePage
+                                       withCompletion:completion];
+}
+
+// Performs the Tab Grid to Browser transition.
+- (void)performTabGridToBrowserTransitionWithActivePage:(TabGridPage)activePage
+                                       animationEnabled:(BOOL)animationEnabled
+                                             completion:
+                                                 (ProceduralBlock)completion {
+  self.legacyTransitionHandler =
+      [self createTransitionHanlderWithAnimationEnabled:animationEnabled];
+  [self.legacyTransitionHandler transitionFromTabGrid:self.baseViewController
+                                            toBrowser:self.bvcContainer
+                                           activePage:activePage
+                                       withCompletion:completion];
+}
+
+// Creates a transition handler with `animationEnabled` parameter.
+- (LegacyTabGridTransitionHandler*)createTransitionHanlderWithAnimationEnabled:
+    (BOOL)animationEnabled {
+  LegacyTabGridTransitionHandler* transitionHandler =
+      [[LegacyTabGridTransitionHandler alloc]
+          initWithLayoutProvider:self.baseViewController];
+  transitionHandler.animationDisabled = !animationEnabled;
+
+  return transitionHandler;
 }
 
 #pragma mark - Private (Thumb Strip)
@@ -820,8 +895,7 @@ using vivaldi::IsVivaldiRunning;
 
   // Vivaldi
   [self setupRecentlyClosedTab:baseViewController
-           regularBrowserState:regularBrowserState
-           regularWebStateList:regularWebStateList];
+           regularBrowserState:regularBrowserState];
   // End Vivaldi
 
   self.regularTabContextMenuHelper = [[TabContextMenuHelper alloc]
@@ -850,10 +924,28 @@ using vivaldi::IsVivaldiRunning;
   // TODO(crbug.com/845192) : Remove RecentTabsTableViewController dependency on
   // ChromeBrowserState so that we don't need to expose the view controller.
   baseViewController.remoteTabsViewController.browser = self.regularBrowser;
-  self.remoteTabsMediator = [[RecentTabsMediator alloc] init];
-  self.remoteTabsMediator.browserState = regularBrowserState;
+  sync_sessions::SessionSyncService* syncService =
+      SessionSyncServiceFactory::GetForBrowserState(regularBrowserState);
+  signin::IdentityManager* identityManager =
+      IdentityManagerFactory::GetForBrowserState(regularBrowserState);
+  sessions::TabRestoreService* restoreService =
+      IOSChromeTabRestoreServiceFactory::GetForBrowserState(
+          regularBrowserState);
+  FaviconLoader* faviconLoader =
+      IOSChromeFaviconLoaderFactory::GetForBrowserState(regularBrowserState);
+  SyncSetupService* service =
+      SyncSetupServiceFactory::GetForBrowserState(regularBrowserState);
+  BrowserList* browserList =
+      BrowserListFactory::GetForBrowserState(regularBrowserState);
+  self.remoteTabsMediator =
+      [[RecentTabsMediator alloc] initWithSessionSyncService:syncService
+                                             identityManager:identityManager
+                                              restoreService:restoreService
+                                               faviconLoader:faviconLoader
+                                            syncSetupService:service
+                                                 browserList:browserList];
+
   self.remoteTabsMediator.consumer = baseViewController.remoteTabsConsumer;
-  self.remoteTabsMediator.webStateList = regularWebStateList;
   baseViewController.remoteTabsViewController.imageDataSource =
       self.remoteTabsMediator;
   baseViewController.remoteTabsViewController.delegate =
@@ -878,7 +970,7 @@ using vivaldi::IsVivaldiRunning;
   // hierarchy. As a workaround, the view controller hierarchy is loaded here
   // before `RecentTabsMediator` updates are started.
   self.window.rootViewController = self.baseViewController;
-  if (self.remoteTabsMediator.browserState) {
+  if (regularBrowserState) {
     [self.remoteTabsMediator initObservers];
     [self.remoteTabsMediator refreshSessionsView];
   }
@@ -970,6 +1062,9 @@ using vivaldi::IsVivaldiRunning;
 
   [self.historyCoordinator stop];
   self.historyCoordinator = nil;
+
+  [_bookmarksCoordinator stop];
+  _bookmarksCoordinator = nil;
 
   // Vivaldi
   [self.baseViewController.closedTabsViewController dismissModals];
@@ -1318,18 +1413,19 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)bookmarkURL:(const GURL&)URL title:(NSString*)title {
-  bookmarks::BookmarkModel* bookmarkModel =
+  bookmarks::BookmarkModel* localOrSyncableBookmarkModel =
       ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
           self.regularBrowser->GetBrowserState());
-  bool currentlyBookmarked =
-      bookmarkModel && bookmarkModel->GetMostRecentlyAddedUserNodeForURL(URL);
-
-  if (currentlyBookmarked) {
+  bookmarks::BookmarkModel* accountBookmarkModel =
+      ios::AccountBookmarkModelFactory::GetForBrowserState(
+          self.regularBrowser->GetBrowserState());
+  if (bookmark_utils_ios::IsBookmarked(URL, localOrSyncableBookmarkModel,
+                                       accountBookmarkModel)) {
     [self editBookmarkWithURL:URL];
   } else {
     base::RecordAction(base::UserMetricsAction(
         "MobileTabGridOpenedBookmarkEditorForNewBookmark"));
-    [self.bookmarksCoordinator bookmarkURL:URL title:title];
+    [self.bookmarksCoordinator createBookmarkURL:URL title:title];
   }
 }
 
@@ -1512,8 +1608,7 @@ using vivaldi::IsVivaldiRunning;
 
 // Setup recently closed tab and context menu
 - (void) setupRecentlyClosedTab:(TabGridViewController*)baseViewController
-            regularBrowserState:(ChromeBrowserState*)regularBrowserState
-            regularWebStateList:(WebStateList*)regularWebStateList {
+            regularBrowserState:(ChromeBrowserState*)regularBrowserState {
   // Context menu setup
   self.closedTabsContextMenuHelper =
       [[RecentTabsContextMenuHelper alloc] initWithBrowser:self.regularBrowser
@@ -1524,11 +1619,28 @@ using vivaldi::IsVivaldiRunning;
 
   // Recently closed tab setup
   baseViewController.closedTabsViewController.browser = self.regularBrowser;
-  self.closedTabsMediator = [[RecentTabsMediator alloc] init];
-  self.closedTabsMediator.browserState = regularBrowserState;
-  self.closedTabsMediator.consumer = baseViewController.closedTabsConsumer;
-  self.closedTabsMediator.webStateList = regularWebStateList;
+  sync_sessions::SessionSyncService* syncService =
+      SessionSyncServiceFactory::GetForBrowserState(regularBrowserState);
+  signin::IdentityManager* identityManager =
+      IdentityManagerFactory::GetForBrowserState(regularBrowserState);
+  sessions::TabRestoreService* restoreService =
+      IOSChromeTabRestoreServiceFactory::GetForBrowserState(
+          regularBrowserState);
+  FaviconLoader* faviconLoader =
+      IOSChromeFaviconLoaderFactory::GetForBrowserState(regularBrowserState);
+  SyncSetupService* service =
+      SyncSetupServiceFactory::GetForBrowserState(regularBrowserState);
+  BrowserList* browserList =
+      BrowserListFactory::GetForBrowserState(regularBrowserState);
+  self.closedTabsMediator =
+      [[RecentTabsMediator alloc] initWithSessionSyncService:syncService
+                                             identityManager:identityManager
+                                              restoreService:restoreService
+                                               faviconLoader:faviconLoader
+                                            syncSetupService:service
+                                                 browserList:browserList];
 
+  self.closedTabsMediator.consumer = baseViewController.closedTabsConsumer;
   baseViewController.closedTabsViewController.imageDataSource =
       self.closedTabsMediator;
   baseViewController.closedTabsViewController.delegate =
@@ -1543,12 +1655,11 @@ using vivaldi::IsVivaldiRunning;
 
   baseViewController.closedTabsViewController.page = TabGridPageClosedTabs;
 
-  if (self.closedTabsMediator.browserState) {
+  if (regularBrowserState) {
     [self.closedTabsMediator initObservers];
     [self.closedTabsMediator refreshSessionsView];
   }
 }
-// End Vivaldi
 
 // Initializes the panel interaction controller if not already initialized.
 - (void)initializePanelInteractionController {

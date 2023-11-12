@@ -20,6 +20,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/content_settings/core/browser/content_settings_uma_util.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -290,17 +291,17 @@ class PermissionContextBaseTests : public content::RenderViewHostTestHarness {
       auto* entry = entries.front();
       ukm_recorder.ExpectEntrySourceHasUrl(entry, url);
 
-      size_t num_values = 0;
-
-      EXPECT_NE(ContentSettingTypeToHistogramValue(content_settings_type,
-                                                   &num_values),
+      EXPECT_NE(content_settings_uma_util::ContentSettingTypeToHistogramValue(
+                    content_settings_type),
                 -1);
 
       EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "Source"),
                 static_cast<int64_t>(PermissionSourceUI::PROMPT));
-      EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "PermissionType"),
-                static_cast<int64_t>(ContentSettingTypeToHistogramValue(
-                    content_settings_type, &num_values)));
+      EXPECT_EQ(
+          *ukm_recorder.GetEntryMetric(entry, "PermissionType"),
+          static_cast<int64_t>(
+              content_settings_uma_util::ContentSettingTypeToHistogramValue(
+                  content_settings_type)));
       EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "Action"),
                 static_cast<int64_t>(action.value()));
 
@@ -914,8 +915,8 @@ TEST_F(PermissionContextBaseTests, ExpirationAllow) {
                           ContentSettingsType::GEOLOCATION, &info);
 
   // The last_visited should lie between today and a week ago.
-  EXPECT_GE(info.metadata.last_visited, now - base::Days(7));
-  EXPECT_LE(info.metadata.last_visited, now);
+  EXPECT_GE(info.metadata.last_visited(), now - base::Days(7));
+  EXPECT_LE(info.metadata.last_visited(), now);
 }
 
 TEST_F(PermissionContextBaseTests, ExpirationBlock) {
@@ -934,7 +935,7 @@ TEST_F(PermissionContextBaseTests, ExpirationBlock) {
                           ContentSettingsType::GEOLOCATION, &info);
 
   // last_visited is not set for BLOCKed permissions.
-  EXPECT_EQ(base::Time(), info.metadata.last_visited);
+  EXPECT_EQ(base::Time(), info.metadata.last_visited());
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 

@@ -61,6 +61,7 @@
       probes: [
         "ActiveStyleSheetsUpdated",
         "DidMutateStyleSheet",
+        "GetTextPosition",
         "DocumentDetached",
         "FontsUpdated",
         "ForcePseudoState",
@@ -100,6 +101,7 @@
         "BreakableLocation",
         "CharacterDataModified",
         "DidCreateCanvasContext",
+        "DidCreateOffscreenCanvasContext",
         "DidFireWebGLError",
         "DidFireWebGLErrorOrWarning",
         "DidFireWebGLWarning",

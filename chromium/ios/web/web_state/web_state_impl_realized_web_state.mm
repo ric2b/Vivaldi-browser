@@ -16,7 +16,6 @@
 #import "base/time/time.h"
 #import "ios/web/common/features.h"
 #import "ios/web/js_messaging/java_script_feature_manager.h"
-#import "ios/web/js_messaging/web_frames_manager_impl.h"
 #import "ios/web/js_messaging/web_view_js_utils.h"
 #import "ios/web/navigation/crw_error_page_helper.h"
 #import "ios/web/navigation/navigation_context_impl.h"
@@ -26,7 +25,6 @@
 #import "ios/web/navigation/wk_navigation_util.h"
 #import "ios/web/public/browser_state.h"
 #import "ios/web/public/favicon/favicon_url.h"
-#import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/web_state_policy_decider.h"
 #import "ios/web/public/security/certificate_policy_cache.h"
@@ -51,6 +49,19 @@
 #import "url/url_constants.h"
 
 namespace web {
+namespace {
+
+// Returns the session data blob from the cache for `weak_web_state`.
+NSData* FetchSessionDataBlob(base::WeakPtr<WebState> weak_web_state) {
+  web::WebState* web_state = weak_web_state.get();
+  if (!web_state) {
+    return nil;
+  }
+
+  return GetWebClient()->FetchSessionFromCache(web_state);
+}
+
+}  // namespace
 
 #pragma mark - WebStateImpl::RealizedWebState public methods
 
@@ -80,11 +91,14 @@ void WebStateImpl::RealizedWebState::Init(const CreateParams& params,
   navigation_manager_->SetBrowserState(params.browser_state);
   web_controller_ = [[CRWWebController alloc] initWithWebState:owner_];
 
-  owner_->GetPageWorldWebFramesManager()->AddObserver(this);
-
   // Restore session history last because NavigationManagerImpl relies on
   // CRWWebController to restore history into the web view.
   if (session_storage) {
+    // Set the callback used to load the native session data blob from the
+    // session cache.
+    navigation_manager_->SetNativeSessionFetcher(
+        base::BindOnce(&FetchSessionDataBlob, owner_->GetWeakPtr()));
+
     // Session storage restore is asynchronous because it involves a page
     // load in WKWebView. Temporarily cache the restored session so it can
     // be returned if BuildSessionStorage() or GetTitle() is called before
@@ -99,8 +113,7 @@ void WebStateImpl::RealizedWebState::Init(const CreateParams& params,
     // Update the BrowserState's CertificatePolicyCache with the newly
     // restored policy cache entries.
     DCHECK(certificate_policy_cache_);
-    certificate_policy_cache_->UpdateCertificatePolicyCache(
-        web::BrowserState::GetCertificatePolicyCache(params.browser_state));
+    certificate_policy_cache_->UpdateCertificatePolicyCache();
 
     // Restore the last active time, even if it is null, as that would mean
     // the session predates M-99 (when the last active time started to be
@@ -128,7 +141,6 @@ void WebStateImpl::RealizedWebState::Init(const CreateParams& params,
 
 void WebStateImpl::RealizedWebState::TearDown() {
   [web_controller_ close];
-  owner_->GetPageWorldWebFramesManager()->RemoveObserver(this);
 
   // WebUI depends on web state so it must be destroyed first in case any WebUI
   // implementations depends on accessing web state during destruction.
@@ -698,34 +710,22 @@ const GURL& WebStateImpl::RealizedWebState::GetLastCommittedURL() const {
   return item ? item->GetVirtualURL() : GURL::EmptyGURL();
 }
 
-GURL WebStateImpl::RealizedWebState::GetCurrentURL(
-    URLVerificationTrustLevel* trust_level) const {
-  if (!trust_level) {
-    auto ignore_trust = URLVerificationTrustLevel::kNone;
-    return [web_controller_ currentURLWithTrustLevel:&ignore_trust];
-  }
-  GURL result = [web_controller_ currentURLWithTrustLevel:trust_level];
-
+absl::optional<GURL>
+WebStateImpl::RealizedWebState::GetLastCommittedURLIfTrusted() const {
   NavigationItemImpl* item = navigation_manager_->GetLastCommittedItemImpl();
-  GURL lastCommittedURL = item ? item->GetURL() : GURL();
+  if (!item) {
+    return GURL();
+  }
 
-  bool equalOrigins;
-  if (result.SchemeIs(url::kAboutScheme) &&
-      GetWebClient()->IsAppSpecificURL(GetLastCommittedURL())) {
-    // This special case is added for any app specific URLs that have been
-    // rewritten to about:// URLs.  In this case, an about scheme does not have
-    // an origin to compare, only a path.
-    equalOrigins = result.path() == lastCommittedURL.path();
-  } else {
-    equalOrigins = result.DeprecatedGetOriginAsURL() ==
-                   lastCommittedURL.DeprecatedGetOriginAsURL();
+  if (item->IsUntrusted()) {
+    return absl::nullopt;
   }
-  UMA_HISTOGRAM_BOOLEAN("Web.CurrentOriginEqualsLastCommittedOrigin",
-                        equalOrigins);
-  if (!equalOrigins || (item && item->IsUntrusted())) {
-    *trust_level = URLVerificationTrustLevel::kMixed;
-  }
-  return result;
+
+  return item->GetVirtualURL();
+}
+
+GURL WebStateImpl::RealizedWebState::GetCurrentURL() const {
+  return [web_controller_ currentURL];
 }
 
 id<CRWWebViewProxy> WebStateImpl::RealizedWebState::GetWebViewProxy() const {
@@ -809,6 +809,8 @@ bool WebStateImpl::RealizedWebState::SetSessionStateData(NSData* data) {
           failedNavigationURLFromErrorPageFileURL:item->GetURL()]);
     }
   }
+
+  web::GetWebClient()->CleanupNativeRestoreURLs(owner_);
   return true;
 }
 
@@ -948,28 +950,6 @@ void WebStateImpl::RealizedWebState::RemoveWebView() {
 
 NavigationItemImpl* WebStateImpl::RealizedWebState::GetPendingItem() {
   return [web_controller_ lastPendingItemForNewNavigation];
-}
-
-#pragma mark - WebFramesManager::Observer methods
-
-void WebStateImpl::RealizedWebState::WebFrameBecameAvailable(
-    WebFramesManager* web_frames_manager,
-    WebFrame* web_frame) {
-  for (auto& observer : observers())
-    observer.WebFrameDidBecomeAvailable(owner_, web_frame);
-}
-
-void WebStateImpl::RealizedWebState::WebFrameBecameUnavailable(
-    WebFramesManager* web_frames_manager,
-    const std::string& frame_id) {
-  WebFrame* frame = web_frames_manager->GetFrameWithId(frame_id);
-  if (!frame) {
-    return;
-  }
-
-  for (auto& observer : observers()) {
-    observer.WebFrameWillBecomeUnavailable(owner_, frame);
-  }
 }
 
 #pragma mark - WebStateImpl::RealizedWebState private methods

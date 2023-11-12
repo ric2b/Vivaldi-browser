@@ -57,6 +57,8 @@
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_root_table_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
+#import "ios/chrome/browser/ui/settings/tabs/inactive_tabs/inactive_tabs_settings_constants.h"
+#import "ios/chrome/browser/ui/settings/tabs/tabs_settings_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/plus_sign_cell.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
@@ -567,6 +569,15 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   return grey_kindOfClassName(@"OmniboxPopupRowCell");
 }
 
++ (id<GREYMatcher>)omniboxPopupRowWithString:(NSString*)string {
+  id<GREYMatcher> textMatcher = grey_descendant(
+      [ChromeMatchersAppInterface staticTextWithAccessibilityLabel:string]);
+  id<GREYMatcher> popupRow =
+      grey_allOf([ChromeMatchersAppInterface omniboxPopupRow], textMatcher,
+                 grey_sufficientlyVisible(), nil);
+  return popupRow;
+}
+
 + (id<GREYMatcher>)omniboxPopupList {
   return grey_accessibilityID(kOmniboxPopupTableViewAccessibilityIdentifier);
 }
@@ -622,6 +633,14 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   return grey_accessibilityID(kNotificationsTableViewId);
 }
 
++ (id<GREYMatcher>)settingsInactiveTabsTableView {
+  return grey_accessibilityID(kInactiveTabsSettingsTableViewId);
+}
+
++ (id<GREYMatcher>)settingsTabsTableView {
+  return grey_accessibilityID(kTabsSettingsTableViewId);
+}
+
 + (id<GREYMatcher>)settingsTrackingPriceTableView {
   return grey_accessibilityID(kTrackingPriceTableViewId);
 }
@@ -635,6 +654,16 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   return grey_allOf(grey_kindOfClass([UITableViewCell class]),
                     grey_accessibilityID(kSettingsGoogleServicesCellId),
                     grey_sufficientlyVisible(), nil);
+}
+
++ (id<GREYMatcher>)inactiveTabsSettingsButton {
+  return [ChromeMatchersAppInterface
+      buttonWithAccessibilityLabelID:(IDS_IOS_OPTIONS_MOVE_INACTIVE_TABS)];
+}
+
++ (id<GREYMatcher>)tabsSettingsButton {
+  return [ChromeMatchersAppInterface
+      buttonWithAccessibilityLabelID:(IDS_IOS_TABS_MANAGEMENT_SETTINGS)];
 }
 
 + (id<GREYMatcher>)manageSyncSettingsButton {
@@ -1015,8 +1044,8 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 
 + (id<GREYMatcher>)historyEntryForURL:(NSString*)URL title:(NSString*)title {
   GREYMatchesBlock matches = ^BOOL(TableViewURLCell* cell) {
-    return [cell.titleLabel.text isEqual:title] &&
-           [cell.URLLabel.text isEqual:URL];
+    return [cell.titleLabel.text isEqualToString:title] &&
+           [cell.URLLabel.text isEqualToString:URL];
   };
 
   GREYDescribeToBlock describe = ^(id<GREYDescription> description) {
@@ -1066,6 +1095,19 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   };
   return [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
                                               descriptionBlock:describe];
+}
+
++ (id<GREYMatcher>)passwordsTableViewMatcher {
+  return grey_accessibilityID(kPasswordsTableViewId);
+}
+
++ (id<GREYMatcher>)defaultBrowserSettingsTableViewMatcher {
+  return grey_accessibilityID(kDefaultBrowserSettingsTableViewId);
+}
+
++ (id<GREYMatcher>)safetyCheckTableViewMatcher {
+  return grey_accessibilityID(
+      SafetyCheckTableViewController.accessibilityIdentifier);
 }
 
 #pragma mark - Overflow Menu Destinations

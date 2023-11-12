@@ -16,7 +16,6 @@
 #include "ash/public/cpp/system_tray_client.h"
 #include "ash/public/cpp/update_types.h"
 #include "ash/session/session_controller_impl.h"
-#include "ash/shelf/shelf_party_feature_pod_controller.h"
 #include "ash/shell.h"
 #include "ash/system/accessibility/accessibility_feature_pod_controller.h"
 #include "ash/system/accessibility/unified_accessibility_detailed_view_controller.h"
@@ -30,6 +29,8 @@
 #include "ash/system/cast/cast_feature_pod_controller.h"
 #include "ash/system/cast/unified_cast_detailed_view_controller.h"
 #include "ash/system/dark_mode/dark_mode_feature_pod_controller.h"
+#include "ash/system/hotspot/hotspot_detailed_view_controller.h"
+#include "ash/system/hotspot/hotspot_feature_pod_controller.h"
 #include "ash/system/ime/ime_feature_pod_controller.h"
 #include "ash/system/ime/unified_ime_detailed_view_controller.h"
 #include "ash/system/locale/locale_feature_pod_controller.h"
@@ -67,6 +68,7 @@
 #include "ash/system/unified/unified_system_tray_model.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "ash/system/unified/user_chooser_detailed_view_controller.h"
+#include "ash/wm/focus_mode/focus_mode_feature_pod_controller.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/functional/bind.h"
@@ -171,8 +173,7 @@ UnifiedSystemTrayController::CreateUnifiedQuickSettingsView() {
 
   InitFeaturePods();
 
-  if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsForChromeOS) &&
-      !Shell::Get()->session_controller()->IsScreenLocked() &&
+  if (!Shell::Get()->session_controller()->IsScreenLocked() &&
       !MediaTray::IsPinnedToShelf()) {
     media_controls_controller_ =
         std::make_unique<UnifiedMediaControlsController>(this);
@@ -200,8 +201,7 @@ UnifiedSystemTrayController::CreateQuickSettingsView(int max_height) {
   auto qs_view = std::make_unique<QuickSettingsView>(this);
   quick_settings_view_ = qs_view.get();
 
-  if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsForChromeOS) &&
-      !Shell::Get()->session_controller()->IsScreenLocked() &&
+  if (!Shell::Get()->session_controller()->IsScreenLocked() &&
       !MediaTray::IsPinnedToShelf()) {
     if (base::FeatureList::IsEnabled(
             media::kGlobalMediaControlsCrOSUpdatedUI)) {
@@ -476,6 +476,12 @@ void UnifiedSystemTrayController::ShowNetworkDetailedView(bool force) {
   ShowDetailedView(std::make_unique<NetworkDetailedViewController>(this));
 }
 
+void UnifiedSystemTrayController::ShowHotspotDetailedView() {
+  DCHECK(features::IsQsRevampEnabled());
+
+  ShowDetailedView(std::make_unique<HotspotDetailedViewController>(this));
+}
+
 void UnifiedSystemTrayController::ShowBluetoothDetailedView() {
   // QSRevamp does not allow expand/collapse of the System Tray.
   if (!IsExpanded() && !features::IsQsRevampEnabled()) {
@@ -496,6 +502,10 @@ void UnifiedSystemTrayController::ShowAccessibilityDetailedView() {
       base::UserMetricsAction("StatusArea_Accessability_DetailedView"));
   ShowDetailedView(
       std::make_unique<UnifiedAccessibilityDetailedViewController>(this));
+}
+
+void UnifiedSystemTrayController::ShowFocusModeDetailedView() {
+  // TODO(b/286931532): Create the Focus Mode detailed view.
 }
 
 void UnifiedSystemTrayController::ShowVPNDetailedView() {
@@ -689,6 +699,9 @@ void UnifiedSystemTrayController::InitFeaturePods() {
   AddFeaturePodItem(std::make_unique<NetworkFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<BluetoothFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<AccessibilityFeaturePodController>(this));
+  if (base::FeatureList::IsEnabled(features::kFocusMode)) {
+    AddFeaturePodItem(std::make_unique<FocusModeFeaturePodController>(this));
+  }
   AddFeaturePodItem(std::make_unique<QuietModeFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<RotationLockFeaturePodController>());
   AddFeaturePodItem(std::make_unique<PrivacyScreenFeaturePodController>());
@@ -700,9 +713,6 @@ void UnifiedSystemTrayController::InitFeaturePods() {
   AddFeaturePodItem(std::make_unique<IMEFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<LocaleFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<DarkModeFeaturePodController>(this));
-  if (base::FeatureList::IsEnabled(features::kShelfParty)) {
-    AddFeaturePodItem(std::make_unique<ShelfPartyFeaturePodController>());
-  }
   if (media::ShouldEnableAutoFraming()) {
     AddFeaturePodItem(std::make_unique<AutozoomFeaturePodController>());
   }
@@ -728,6 +738,10 @@ void UnifiedSystemTrayController::InitFeatureTiles() {
 
   create_tile(std::make_unique<NetworkFeaturePodController>(this),
               feature_pod_controllers_, tiles);
+  if (features::IsHotspotEnabled()) {
+    create_tile(std::make_unique<HotspotFeaturePodController>(this),
+                feature_pod_controllers_, tiles);
+  }
 
   // CaptureMode and QuietMode tiles will be compact if both are visible.
   bool capture_and_quiet_tiles_are_compact =
@@ -754,6 +768,10 @@ void UnifiedSystemTrayController::InitFeatureTiles() {
               cast_and_rotation_tiles_are_compact);
   create_tile(std::make_unique<AccessibilityFeaturePodController>(this),
               feature_pod_controllers_, tiles);
+  if (base::FeatureList::IsEnabled(features::kFocusMode)) {
+    create_tile(std::make_unique<FocusModeFeaturePodController>(this),
+                feature_pod_controllers_, tiles);
+  }
   create_tile(std::make_unique<NearbyShareFeaturePodController>(this),
               feature_pod_controllers_, tiles);
   create_tile(std::make_unique<LocaleFeaturePodController>(this),
@@ -766,11 +784,6 @@ void UnifiedSystemTrayController::InitFeatureTiles() {
   }
   create_tile(std::make_unique<VPNFeaturePodController>(this),
               feature_pod_controllers_, tiles);
-
-  if (base::FeatureList::IsEnabled(features::kShelfParty)) {
-    create_tile(std::make_unique<ShelfPartyFeaturePodController>(),
-                feature_pod_controllers_, tiles);
-  }
   create_tile(std::make_unique<PrivacyScreenFeaturePodController>(),
               feature_pod_controllers_, tiles);
 
@@ -917,12 +930,17 @@ bool UnifiedSystemTrayController::IsMessageCenterCollapseRequired() const {
     return false;
   }
 
+  if (!bubble_) {
+    return false;
+  }
+
   // Note: This calculaton should be the same as
   // UnifiedMessageCenterBubble::CalculateAvailableHeight().
-  return (bubble_ && CalculateMaxTrayBubbleHeight() -
-                             unified_view_->GetExpandedSystemTrayHeight() -
-                             kUnifiedMessageCenterBubbleSpacing <
-                         kMessageCenterCollapseThreshold);
+  auto available_height = CalculateMaxTrayBubbleHeight(
+      bubble_->GetTray()->GetBubbleWindowContainer());
+  available_height -= unified_view_->GetExpandedSystemTrayHeight();
+  available_height -= kUnifiedMessageCenterBubbleSpacing;
+  return available_height < kMessageCenterCollapseThreshold;
 }
 
 base::TimeDelta UnifiedSystemTrayController::GetAnimationDurationForReporting()

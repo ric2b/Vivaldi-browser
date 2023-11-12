@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {TestRunner} from 'test_runner';
+import {ApplicationTestRunner} from 'application_test_runner';
+
 (async function() {
   TestRunner.addResult(`Tests object store and index entry deletion.\n`);
-  await TestRunner.loadLegacyModule('console'); await TestRunner.loadTestModule('application_test_runner');
+  await TestRunner.loadLegacyModule('console');
     // Note: every test that uses a storage API must manually clean-up state from previous tests.
   await ApplicationTestRunner.resetState();
 
@@ -34,7 +37,6 @@
   await ApplicationTestRunner.createDatabaseAsync('database1');
   UI.panels.resources.sidebar.indexedDBListTreeElement.refreshIndexedDB();
   await databaseAddedPromise;
-  UI.panels.resources.sidebar.indexedDBListTreeElement.expand();
 
   var idbDatabaseTreeElement = UI.panels.resources.sidebar.indexedDBListTreeElement.idbDatabaseTreeElements[0];
   await ApplicationTestRunner.createObjectStoreAsync('database1', 'objectStore1', 'index1');
@@ -50,24 +52,24 @@
 
   var objectStoreTreeElement = idbDatabaseTreeElement.childAt(0);
   objectStoreTreeElement.select();
-  await TestRunner.addSnifferPromise(Resources.IDBDataView.prototype, 'updatedDataForTests');
+  await TestRunner.addSnifferPromise(objectStoreTreeElement.view, 'updatedDataForTests');
   var indexTreeElement = objectStoreTreeElement.childAt(0);
   indexTreeElement.select();
-  await TestRunner.addSnifferPromise(Resources.IDBDataView.prototype, 'updatedDataForTests');
+  await TestRunner.addSnifferPromise(indexTreeElement.view, 'updatedDataForTests');
   dumpObjectStores();
 
   var node = objectStoreTreeElement.view.dataGrid.rootNode().children[0];
   node.select();
   objectStoreTreeElement.view.deleteButtonClicked(node);
-  await TestRunner.addSnifferPromise(Resources.IDBDataView.prototype, 'updatedDataForTests');
-  await TestRunner.addSnifferPromise(Resources.IDBDataView.prototype, 'updatedDataForTests');
+  await TestRunner.addSnifferPromise(objectStoreTreeElement.view, 'updatedDataForTests');
+  await TestRunner.addSnifferPromise(indexTreeElement.view, 'updatedDataForTests');
   dumpObjectStores();
 
   node = indexTreeElement.view.dataGrid.rootNode().children[0];
   node.select();
   indexTreeElement.view.deleteButtonClicked(node);
-  await TestRunner.addSnifferPromise(Resources.IDBDataView.prototype, 'updatedDataForTests');
-  await TestRunner.addSnifferPromise(Resources.IDBDataView.prototype, 'updatedDataForTests');
+  await TestRunner.addSnifferPromise(objectStoreTreeElement.view, 'updatedDataForTests');
+  await TestRunner.addSnifferPromise(indexTreeElement.view, 'updatedDataForTests');
   dumpObjectStores();
 
   TestRunner.completeTest();

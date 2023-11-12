@@ -4,7 +4,7 @@
 
 #include "chrome/browser/sync/wifi_configuration_sync_service_factory.h"
 
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/model_type_store_service_factory.h"
@@ -31,7 +31,8 @@ WifiConfigurationSyncServiceFactory::GetForProfile(Profile* profile,
 // static
 WifiConfigurationSyncServiceFactory*
 WifiConfigurationSyncServiceFactory::GetInstance() {
-  return base::Singleton<WifiConfigurationSyncServiceFactory>::get();
+  static base::NoDestructor<WifiConfigurationSyncServiceFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -44,12 +45,11 @@ bool WifiConfigurationSyncServiceFactory::ShouldRunInProfile(
 }
 
 WifiConfigurationSyncServiceFactory::WifiConfigurationSyncServiceFactory()
-    : ProfileKeyedServiceFactory(
-          "WifiConfigurationSyncService",
-          ProfileSelections::Builder()
-              .WithGuest(ProfileSelections::kRegularProfileDefault)
-              .WithAshInternals(ProfileSelection::kNone)
-              .Build()) {
+    : ProfileKeyedServiceFactory("WifiConfigurationSyncService",
+                                 ProfileSelections::Builder()
+                                     .WithGuest(ProfileSelection::kOriginalOnly)
+                                     .WithAshInternals(ProfileSelection::kNone)
+                                     .Build()) {
   DependsOn(ModelTypeStoreServiceFactory::GetInstance());
 }
 

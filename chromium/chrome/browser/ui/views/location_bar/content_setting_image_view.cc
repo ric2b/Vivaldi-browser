@@ -63,6 +63,7 @@ absl::optional<ViewID> GetViewID(
     case ImageType::CLIPBOARD_READ_WRITE:
     case ImageType::SENSORS:
     case ImageType::NOTIFICATIONS_QUIET_PROMPT:
+    case ImageType::STORAGE_ACCESS:
       return absl::nullopt;
 
     case ImageType::NUM_IMAGE_TYPES:
@@ -117,6 +118,10 @@ ContentSettingImageView::ContentSettingImageView(
       /*role_description*/ absl::nullopt,
       accessible_name.empty() ? ax::mojom::NameFrom::kAttributeExplicitlyEmpty
                               : ax::mojom::NameFrom::kAttribute);
+
+  // The chrome refresh version of this view has a ripple effect which is
+  // configured by the background.
+  UpdateBackground();
 }
 
 ContentSettingImageView::~ContentSettingImageView() = default;
@@ -127,7 +132,10 @@ void ContentSettingImageView::Update() {
 
   // Calling Update() with a nullptr WebContents will hide the image.
   content_setting_image_model_->Update(
-      delegate_->ShouldHideContentSettingImage() ? nullptr : web_contents);
+      delegate_->ShouldHideContentSettingImage(
+          content_setting_image_model_->image_type())
+          ? nullptr
+          : web_contents);
   SetTooltipText(content_setting_image_model_->get_tooltip());
 
   if (!content_setting_image_model_->is_visible()) {

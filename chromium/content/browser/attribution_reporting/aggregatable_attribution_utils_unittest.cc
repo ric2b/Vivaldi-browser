@@ -13,12 +13,13 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "components/aggregation_service/aggregation_service.mojom.h"
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
 #include "components/attribution_reporting/filters.h"
+#include "components/attribution_reporting/source_registration_error.mojom.h"
 #include "components/attribution_reporting/source_type.mojom.h"
+#include "components/attribution_reporting/suitable_origin.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/attribution_reporting/aggregatable_histogram_contribution.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
@@ -100,7 +101,7 @@ TEST(AggregatableAttributionUtilsTest, CreateAggregatableHistogram) {
   histograms.ExpectUniqueSample(
       "Conversions.AggregatableReport.DroppedKeysPercentage", 33, 1);
   histograms.ExpectUniqueSample(
-      "Conversions.AggregatableReport.NumContributionsPerReport", 2, 1);
+      "Conversions.AggregatableReport.NumContributionsPerReport2", 2, 1);
 }
 
 TEST(AggregatableAttributionUtilsTest,
@@ -124,7 +125,7 @@ TEST(AggregatableAttributionUtilsTest,
   histograms.ExpectUniqueSample(
       "Conversions.AggregatableReport.DroppedKeysPercentage", 100, 1);
   histograms.ExpectUniqueSample(
-      "Conversions.AggregatableReport.NumContributionsPerReport", 0, 1);
+      "Conversions.AggregatableReport.NumContributionsPerReport2", 0, 1);
 }
 
 TEST(AggregatableAttributionUtilsTest, RoundsSourceRegistrationTime) {
@@ -165,23 +166,21 @@ TEST(AggregatableAttributionUtilsTest, RoundsSourceRegistrationTime) {
 }
 
 TEST(AggregatableAttributionUtilsTest, AggregationCoordinatorSet) {
-  for (auto aggregation_coordinator :
-       {::aggregation_service::mojom::AggregationCoordinator::kAwsCloud}) {
-    AttributionReport report =
-        ReportBuilder(AttributionInfoBuilder().Build(),
-                      SourceBuilder().BuildStored())
-            .SetAggregatableHistogramContributions(
-                {AggregatableHistogramContribution(/*key=*/1, /*value=*/2)})
-            .SetAggregationCoordinator(aggregation_coordinator)
-            .BuildAggregatableAttribution();
+  auto coordinator_origin =
+      attribution_reporting::SuitableOrigin::Deserialize("https://a.test");
+  AttributionReport report =
+      ReportBuilder(AttributionInfoBuilder().Build(),
+                    SourceBuilder().BuildStored())
+          .SetAggregatableHistogramContributions(
+              {AggregatableHistogramContribution(/*key=*/1, /*value=*/2)})
+          .SetAggregationCoordinatorOrigin(*coordinator_origin)
+          .BuildAggregatableAttribution();
 
-    absl::optional<AggregatableReportRequest> request =
-        CreateAggregatableReportRequest(report);
-    ASSERT_TRUE(request.has_value()) << aggregation_coordinator;
-    EXPECT_EQ(request->payload_contents().aggregation_coordinator,
-              aggregation_coordinator)
-        << aggregation_coordinator;
-  }
+  absl::optional<AggregatableReportRequest> request =
+      CreateAggregatableReportRequest(report);
+  ASSERT_TRUE(request.has_value());
+  EXPECT_EQ(request->payload_contents().aggregation_coordinator_origin,
+            coordinator_origin);
 }
 
 TEST(AggregatableAttributionUtilsTest, AggregatableReportRequestForNullReport) {
@@ -195,13 +194,34 @@ TEST(AggregatableAttributionUtilsTest, AggregatableReportRequestForNullReport) {
   EXPECT_THAT(request->payload_contents().contributions,
               ElementsAre(blink::mojom::AggregatableReportHistogramContribution(
                   /*bucket=*/0, /*value=*/0)));
-  EXPECT_EQ(request->payload_contents().aggregation_coordinator,
-            ::aggregation_service::mojom::AggregationCoordinator::kAwsCloud);
+  EXPECT_FALSE(
+      request->payload_contents().aggregation_coordinator_origin.has_value());
   const std::string* source_registration_time =
       request->shared_info().additional_fields.FindString(
           "source_registration_time");
   ASSERT_TRUE(source_registration_time);
   EXPECT_EQ(*source_registration_time, "1234483200");
+}
+
+TEST(AggregatableAttributionUtilsTest,
+     AggregatableReportRequestExcludingSourceRegistrationTime) {
+  absl::optional<AggregatableReportRequest> request =
+      CreateAggregatableReportRequest(
+          ReportBuilder(AttributionInfoBuilder().Build(),
+                        SourceBuilder(base::Time::FromJavaTime(1234567890123))
+                            .BuildStored())
+              .SetAggregatableHistogramContributions(
+                  {AggregatableHistogramContribution(/*key=*/1, /*value=*/2)})
+              .SetSourceRegistrationTimeConfig(
+                  attribution_reporting::mojom::SourceRegistrationTimeConfig::
+                      kExclude)
+              .BuildAggregatableAttribution());
+  ASSERT_TRUE(request.has_value());
+  const std::string* source_registration_time =
+      request->shared_info().additional_fields.FindString(
+          "source_registration_time");
+  ASSERT_TRUE(source_registration_time);
+  EXPECT_EQ(*source_registration_time, "0");
 }
 
 }  // namespace content

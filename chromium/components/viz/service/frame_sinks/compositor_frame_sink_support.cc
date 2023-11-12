@@ -17,9 +17,6 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/base/features.h"
-#include "components/power_scheduler/power_mode.h"
-#include "components/power_scheduler/power_mode_arbiter.h"
-#include "components/power_scheduler/power_mode_voter.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/quads/compositor_frame.h"
@@ -73,14 +70,7 @@ CompositorFrameSinkSupport::CompositorFrameSinkSupport(
       frame_sink_id_(frame_sink_id),
       surface_resource_holder_(this),
       is_root_(is_root),
-      allow_copy_output_requests_(is_root),
-      // Don't track the root surface for PowerMode voting. All child surfaces
-      // are tracked individually instead, and tracking the root surface could
-      // override votes from the children.
-      power_mode_voter_(
-          is_root ? nullptr
-                  : power_scheduler::PowerModeArbiter::GetInstance()->NewVoter(
-                        "PowerModeVoter.Animation")) {
+      allow_copy_output_requests_(is_root) {
   // This may result in SetBeginFrameSource() being called.
   frame_sink_manager_->RegisterCompositorFrameSinkSupport(frame_sink_id_, this);
 }
@@ -619,6 +609,24 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrame(
   else
     preferred_frame_interval_ = BeginFrameArgs::MinInterval();
 
+  if (features::ShouldOnBeginFrameThrottleVideo() &&
+      frame_sink_type_ == mojom::CompositorFrameSinkType::kVideo) {
+    // Skip throttling for very small changes in frame interval.
+    // A value of 2 ms proved to be enough to not have throttle firing during
+    // a constant video playback but can be changed to a higher value if
+    // over firing occurs in some edge case while always aiming to keep it
+    // lower than a full frame interval.
+    if ((last_known_frame_interval_ - preferred_frame_interval_).magnitude() >
+        base::Milliseconds(2)) {
+      TRACE_EVENT_INSTANT2("viz", "Set sink framerate",
+                           TRACE_EVENT_SCOPE_THREAD, "interval",
+                           preferred_frame_interval_, "sourceid",
+                           frame.metadata.begin_frame_ack.frame_id.source_id);
+      last_known_frame_interval_ = preferred_frame_interval_;
+      ThrottleBeginFrame(preferred_frame_interval_);
+    }
+  }
+
   Surface* prev_surface =
       surface_manager_->GetSurfaceForId(last_created_surface_id_);
   Surface* current_surface = nullptr;
@@ -791,7 +799,7 @@ void CompositorFrameSinkSupport::DidPresentCompositorFrame(
   DCHECK_LE(pending_received_frame_times_.size(), 25u);
   auto received_frame_timestamp =
       pending_received_frame_times_.find(frame_token);
-  DCHECK(received_frame_timestamp != pending_received_frame_times_.end());
+  CHECK(received_frame_timestamp != pending_received_frame_times_.end());
 
   FrameTimingDetails details;
   details.received_compositor_frame_timestamp =
@@ -806,14 +814,13 @@ void CompositorFrameSinkSupport::DidPresentCompositorFrame(
   // that the frames are presented too late when in fact, this is intentional.
   if (begin_frame_interval_.is_positive() &&
       details.presentation_feedback.interval.is_positive() &&
-      features::ShouldOverrideThrottledFrameRateParams()) {
+      ShouldAdjustBeginFrameArgs()) {
     details.presentation_feedback.interval = begin_frame_interval_;
   }
   pending_received_frame_times_.erase(received_frame_timestamp);
 
   // We should only ever get one PresentationFeedback per frame_token.
-  DCHECK(frame_timing_details_.find(frame_token) ==
-         frame_timing_details_.end());
+  CHECK(!frame_timing_details_.contains(frame_token));
   frame_timing_details_.emplace(frame_token, details);
 
   if (!feedback.failed() && frame_sink_manager_->frame_counter()) {
@@ -868,8 +875,8 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
   CheckPendingSurfaces();
 
   BeginFrameArgs adjusted_args = args;
-  if (begin_frame_interval_.is_positive() &&
-      features::ShouldOverrideThrottledFrameRateParams()) {
+  adjusted_args.dispatch_time = base::TimeTicks::Now();
+  if (begin_frame_interval_.is_positive() && ShouldAdjustBeginFrameArgs()) {
     adjusted_args.interval = begin_frame_interval_;
     // Deadline is not necessarily frame_time + interval. For example, it may
     // incorporate an estimate for the frame's draw/swap time, so it's
@@ -905,14 +912,14 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
       bool frame_ack = ack_queued_for_client_count_ > 0;
       ack_pending_during_on_begin_frame_ =
           !frame_ack && ack_pending_from_surface_count_;
-      client_->OnBeginFrame(adjusted_args, std::move(frame_timing_details_),
-                            frame_ack, std::move(surface_returned_resources_));
+      client_->OnBeginFrame(adjusted_args, frame_timing_details_, frame_ack,
+                            std::move(surface_returned_resources_));
       if (frame_ack) {
         ack_queued_for_client_count_--;
       }
       surface_returned_resources_.clear();
     } else {
-      client_->OnBeginFrame(adjusted_args, std::move(frame_timing_details_),
+      client_->OnBeginFrame(adjusted_args, frame_timing_details_,
                             /*frame_ack=*/false,
                             std::vector<ReturnedResource>());
     }
@@ -973,25 +980,11 @@ void CompositorFrameSinkSupport::UpdateNeedsBeginFramesInternal() {
 void CompositorFrameSinkSupport::StartObservingBeginFrameSource() {
   added_frame_observer_ = true;
   begin_frame_source_->AddObserver(this);
-  if (power_mode_voter_) {
-    power_mode_voter_->VoteFor(
-        frame_sink_type_ == mojom::CompositorFrameSinkType::kMediaStream ||
-                frame_sink_type_ == mojom::CompositorFrameSinkType::kVideo
-            ? power_scheduler::PowerMode::kVideoPlayback
-            : power_scheduler::PowerMode::kAnimation);
-  }
 }
 
 void CompositorFrameSinkSupport::StopObservingBeginFrameSource() {
   added_frame_observer_ = false;
   begin_frame_source_->RemoveObserver(this);
-  if (power_mode_voter_) {
-    power_mode_voter_->ResetVoteAfterTimeout(
-        frame_sink_type_ == mojom::CompositorFrameSinkType::kMediaStream ||
-                frame_sink_type_ == mojom::CompositorFrameSinkType::kVideo
-            ? power_scheduler::PowerModeVoter::kVideoTimeout
-            : power_scheduler::PowerModeVoter::kAnimationTimeout);
-  }
 }
 
 const FrameSinkId& CompositorFrameSinkSupport::GetFrameSinkId() const {
@@ -1233,6 +1226,11 @@ void CompositorFrameSinkSupport::CheckPendingSurfaces() {
 
 bool CompositorFrameSinkSupport::ShouldMergeBeginFrameWithAcks() const {
   return features::IsOnBeginFrameAcksEnabled() && wants_begin_frame_acks_;
+}
+
+bool CompositorFrameSinkSupport::ShouldAdjustBeginFrameArgs() const {
+  return features::ShouldOverrideThrottledFrameRateParams() ||
+         features::ShouldOnBeginFrameThrottleVideo();
 }
 
 bool CompositorFrameSinkSupport::ShouldThrottleBeginFrameAsRequested(

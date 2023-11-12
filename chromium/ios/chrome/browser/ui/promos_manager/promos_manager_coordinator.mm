@@ -9,29 +9,33 @@
 
 #import "base/check.h"
 #import "base/containers/small_map.h"
+#import "base/debug/dump_without_crashing.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/crash/core/common/crash_key.h"
 #import "components/feature_engagement/public/tracker.h"
 #import "ios/chrome/app/tests_hook.h"
-#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/credential_provider_promo/features.h"
 #import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/feature_engagement/tracker_factory.h"
-#import "ios/chrome/browser/flags/system_flags.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/promos_manager/features.h"
 #import "ios/chrome/browser/promos_manager/promo_config.h"
 #import "ios/chrome/browser/promos_manager/promos_manager.h"
 #import "ios/chrome/browser/promos_manager/promos_manager_factory.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/credential_provider_promo_commands.h"
 #import "ios/chrome/browser/shared/public/commands/promos_manager_commands.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/ui/app_store_rating/app_store_rating_display_handler.h"
 #import "ios/chrome/browser/ui/app_store_rating/features.h"
 #import "ios/chrome/browser/ui/credential_provider_promo/credential_provider_promo_display_handler.h"
+#import "ios/chrome/browser/ui/default_promo/post_restore/features.h"
+#import "ios/chrome/browser/ui/default_promo/post_restore/post_restore_default_browser_promo_provider.h"
 #import "ios/chrome/browser/ui/default_promo/promo_handler/default_browser_promo_display_handler.h"
-#import "ios/chrome/browser/ui/post_restore_signin/features.h"
 #import "ios/chrome/browser/ui/post_restore_signin/post_restore_signin_provider.h"
 #import "ios/chrome/browser/ui/promos_manager/bannered_promo_view_provider.h"
 #import "ios/chrome/browser/ui/promos_manager/promos_manager_mediator.h"
@@ -45,6 +49,7 @@
 #import "ios/chrome/common/ui/promo_style/promo_style_view_controller.h"
 #import "ios/chrome/common/ui/promo_style/promo_style_view_controller_delegate.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/public/provider/chrome/browser/signin/choice_api.h"
 #import "third_party/abseil-cpp/absl/types/optional.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
@@ -129,7 +134,7 @@
 #pragma mark - Public
 
 - (void)start {
-  [self displayPromoIfAvailable];
+  [self displayPromoIfAvailable:YES];
 }
 
 - (void)stop {
@@ -138,6 +143,12 @@
 }
 
 - (void)displayPromoIfAvailable {
+  [self displayPromoIfAvailable:NO];
+}
+
+// Display a promo if one is available, with special behavior if this is the
+// first time this coordinator has shown a promo.
+- (void)displayPromoIfAvailable:(BOOL)isFirstShownPromo {
   if (ShouldPromosManagerUseFET()) {
     // Wait to present a promo until the feature engagement tracker database
     // is fully initialized.
@@ -146,7 +157,7 @@
       if (!successfullyLoaded) {
         return;
       }
-      [weakSelf displayPromoCallback];
+      [weakSelf displayPromoCallback:isFirstShownPromo];
     };
 
     feature_engagement::Tracker* tracker =
@@ -154,13 +165,13 @@
             self.browser->GetBrowserState());
     tracker->AddOnInitializedCallback(base::BindOnce(onInitializedBlock));
   } else {
-    [self displayPromoCallback];
+    [self displayPromoCallback:isFirstShownPromo];
   }
 }
 
-- (void)displayPromoCallback {
+- (void)displayPromoCallback:(BOOL)isFirstShownPromo {
   absl::optional<promos_manager::Promo> nextPromoForDisplay =
-      [self.mediator nextPromoForDisplay];
+      [self.mediator nextPromoForDisplay:isFirstShownPromo];
 
   if (nextPromoForDisplay.has_value()) {
     [self displayPromo:nextPromoForDisplay.value()];
@@ -204,6 +215,16 @@
 - (void)displayPromo:(promos_manager::Promo)promo {
   if (tests_hook::DisablePromoManagerFullScreenPromos()) {
     return;
+  }
+
+  // Trying to display a promo while the previous dismissal was not communicated
+  // back to the promos manager.
+  // TODO(crbug.com/1452233): Remove once all promos dismiss themselves.
+  if (current_promo.has_value()) {
+    static crash_reporter::CrashKeyString<40> key("current-promo");
+    crash_reporter::ScopedCrashKeyString crashKey(
+        &key, ShortNameForPromo(current_promo.value()));
+    base::debug::DumpWithoutCrashing();
   }
 
   current_promo = promo;
@@ -528,29 +549,24 @@
   // Add StandardPromoViewProvider promos here. For example:
   // TODO(crbug.com/1360880): Create first StandardPromoViewProvider promo.
 
-  // BanneredPromoViewProvider promo(s) below:
-  if (post_restore_signin::features::CurrentPostRestoreSignInType() ==
-      post_restore_signin::features::PostRestoreSignInType::kFullscreen)
-    _banneredViewProviderPromos
-        [promos_manager::Promo::PostRestoreSignInFullscreen] =
-            [[PostRestoreSignInProvider alloc] init];
-
   // StandardPromoAlertProvider promo(s) below:
-  if (post_restore_signin::features::CurrentPostRestoreSignInType() ==
-      post_restore_signin::features::PostRestoreSignInType::kAlert)
-    _alertProviderPromos[promos_manager::Promo::PostRestoreSignInAlert] =
-        [[PostRestoreSignInProvider alloc] init];
-
-  // WhatsNewPromoHandler promo below:
-  if (IsWhatsNewEnabled()) {
-    _displayHandlerPromos[promos_manager::Promo::WhatsNew] =
-        [[WhatsNewPromoDisplayHandler alloc]
-            initWithPromosManager:PromosManagerFactory::GetForBrowserState(
-                                      self.browser->GetBrowserState())];
+  _alertProviderPromos[promos_manager::Promo::PostRestoreSignInAlert] =
+      [[PostRestoreSignInProvider alloc] init];
+  if (GetPostRestoreDefaultBrowserPromoType() ==
+      PostRestoreDefaultBrowserPromoType::kAlert) {
+    _alertProviderPromos
+        [promos_manager::Promo::PostRestoreDefaultBrowserAlert] =
+            [[PostRestoreDefaultBrowserPromoProvider alloc] init];
   }
 
+  // WhatsNewPromoHandler promo below:
+  _displayHandlerPromos[promos_manager::Promo::WhatsNew] =
+      [[WhatsNewPromoDisplayHandler alloc]
+          initWithPromosManager:PromosManagerFactory::GetForBrowserState(
+                                    self.browser->GetBrowserState())];
+
   // CredentialProvider Promo handler
-  if (IsCredentialProviderExtensionPromoEnabled()) {
+  if (IsCredentialProviderExtensionPromoEnabled() || IsIOSSetUpListEnabled()) {
     id<CredentialProviderPromoCommands> handler = HandlerForProtocol(
         self.browser->GetCommandDispatcher(), CredentialProviderPromoCommands);
     _displayHandlerPromos[promos_manager::Promo::CredentialProviderExtension] =
@@ -561,6 +577,12 @@
   if (IsDefaultBrowserInPromoManagerEnabled()) {
     _displayHandlerPromos[promos_manager::Promo::DefaultBrowser] =
         [[DefaultBrowserPromoDisplayHandler alloc] init];
+  }
+
+  // Choice Promo handler
+  if (ios::provider::IsChoiceEnabled()) {
+    _displayHandlerPromos[promos_manager::Promo::Choice] =
+        ios::provider::CreateChoiceDisplayHandler();
   }
 }
 

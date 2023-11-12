@@ -21,6 +21,14 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
+#import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -59,6 +67,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
     _delegate = delegate;
     self.styler.tableViewBackgroundColor =
         [UIColor colorNamed:kGridBackgroundColor];
+
+    // Vivaldi
+    self.styler.cellBackgroundColor =
+        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+    // End Vivaldi
+
   }
   return self;
 }
@@ -115,8 +129,15 @@ typedef NS_ENUM(NSInteger, ItemType) {
       initWithType:ItemTypeSuggestedActionSearchWeb];
   searchWebItem.title =
       l10n_util::GetNSString(IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_WEB);
+
+  if (IsVivaldiRunning()) {
+    searchWebItem.image = [[UIImage imageNamed:vSearch]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } else {
   searchWebItem.image = [[UIImage imageNamed:@"suggested_action_web"]
       imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } // End Vivaldi
+
   searchWebItem.textColor = actionsTextColor;
   [model addItem:searchWebItem
       toSectionWithIdentifier:kSectionIdentifierSuggestedActions];
@@ -125,9 +146,17 @@ typedef NS_ENUM(NSInteger, ItemType) {
       initWithType:ItemTypeSuggestedActionSearchRecentTabs];
   searchRecentTabsItem.title = l10n_util::GetNSString(
       IDS_IOS_TABS_SEARCH_SUGGESTED_ACTION_SEARCH_RECENT_TABS);
+
+  if (IsVivaldiRunning()) {
+    searchRecentTabsItem.image =
+        [[UIImage imageNamed:vOverflowClearHistory]
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } else {
   searchRecentTabsItem.image =
       [[UIImage imageNamed:@"suggested_action_recent_tabs"]
           imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } // End Vivaldi
+
   searchRecentTabsItem.textColor = actionsTextColor;
   [model addItem:searchRecentTabsItem
       toSectionWithIdentifier:kSectionIdentifierSuggestedActions];
@@ -136,6 +165,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [[TableViewTabsSearchSuggestedHistoryItem alloc]
           initWithType:ItemTypeSuggestedActionSearchHistory];
   searchHistoryItem.textColor = actionsTextColor;
+
+  // Vivaldi
+  searchHistoryItem.image =
+      [[UIImage imageNamed:vOverflowHistory]
+          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  // End Vivaldi
+
   [model addItem:searchHistoryItem
       toSectionWithIdentifier:kSectionIdentifierSuggestedActions];
 }

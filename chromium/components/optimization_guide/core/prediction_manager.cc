@@ -173,7 +173,14 @@ bool IsModelMetadataTypeOnServerAllowlist(const proto::Any& model_metadata) {
          model_metadata.type_url() ==
              "type.googleapis.com/"
              "google.privacy.webpermissionpredictions.v1."
-             "WebPermissionPredictionsModelMetadata";
+             "WebPermissionPredictionsModelMetadata" ||
+         model_metadata.type_url() ==
+             "type.googleapis.com/"
+             "google.internal.chrome.optimizationguide.v1."
+             "ClientSidePhishingModelMetadata" ||
+         model_metadata.type_url() ==
+             "type.googleapis.com/"
+             "lens.prime.csc.VisualSearchModelMetadata";
 }
 
 void RecordModelAvailableAtRegistration(
@@ -225,7 +232,6 @@ void PredictionManager::Initialize(
     BackgroundDownloadServiceProvider background_download_service_provider) {
   if (features::IsInstallWideModelStoreEnabled()) {
     store_is_ready_ = true;
-    init_time_ = base::TimeTicks::Now();
     LoadPredictionModels(GetRegisteredOptimizationTargets());
     LOCAL_HISTOGRAM_BOOLEAN(
         "OptimizationGuide.PredictionManager.StoreInitialized", true);
@@ -362,7 +368,7 @@ void PredictionManager::FetchModels(bool is_first_model_fetch) {
   proto::ModelInfo base_model_info;
   // There should only be one supported model engine version at a time.
   base_model_info.add_supported_model_engine_versions(
-      proto::MODEL_ENGINE_VERSION_TFLITE_2_13);
+      proto::MODEL_ENGINE_VERSION_TFLITE_2_14_1);
   // This histogram is used for integration tests. Do not remove.
   // Update this to be 10000 if/when we exceed 100 model engine versions.
   LOCAL_HISTOGRAM_COUNTS_100(
@@ -767,6 +773,10 @@ void PredictionManager::MaybeInitializeModelDownloads(
     download::BackgroundDownloadService* background_download_service) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  if (features::IsInstallWideModelStoreEnabled()) {
+    init_time_ = base::TimeTicks::Now();
+  }
+
   // Create the download manager here if we are allowed to.
   if (features::IsModelDownloadingEnabled() && !off_the_record_ &&
       !prediction_model_download_manager_) {
@@ -792,6 +802,7 @@ void PredictionManager::MaybeInitializeModelDownloads(
 void PredictionManager::OnStoreInitialized(
     BackgroundDownloadServiceProvider background_download_service_provider) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!features::IsInstallWideModelStoreEnabled());
 
   store_is_ready_ = true;
   init_time_ = base::TimeTicks::Now();

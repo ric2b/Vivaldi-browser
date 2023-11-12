@@ -87,12 +87,13 @@ TEST_F(PrivacySandboxSettingsDelegateTest,
   // When the capability is restricted, the delegate should return as such.
   SetPrivacySandboxAccountCapability(kTestEmail, false);
   EXPECT_TRUE(delegate()->IsPrivacySandboxRestricted());
-
-  // Even when the capability is unrestricted, the sandbox should remain
-  // restricted.
+  // Even when the capability is currently unrestricted, the sandbox should
+  // remain restricted. The capability should be reported as currently
+  // unrestricted.
   // TODO (crbug.com/1428546): Adjust when we have a graduation flow.
   SetPrivacySandboxAccountCapability(kTestEmail, true);
   EXPECT_TRUE(delegate()->IsPrivacySandboxRestricted());
+  EXPECT_TRUE(delegate()->IsPrivacySandboxCurrentlyUnrestricted());
 }
 
 TEST_F(PrivacySandboxSettingsDelegateTest,
@@ -102,6 +103,7 @@ TEST_F(PrivacySandboxSettingsDelegateTest,
   // If the user is not signed in to Chrome then we don't use any age signal and
   // don't restrict the feature.
   EXPECT_FALSE(delegate()->IsPrivacySandboxRestricted());
+  EXPECT_FALSE(delegate()->IsPrivacySandboxCurrentlyUnrestricted());
 }
 
 TEST_F(PrivacySandboxSettingsDelegateTest,
@@ -130,6 +132,30 @@ TEST_F(PrivacySandboxSettingsDelegateTest,
 }
 
 TEST_F(PrivacySandboxSettingsDelegateTest,
+       RestrictedNoticeRequiredWithoutAccountToken) {
+  feature_list()->InitAndEnableFeatureWithParameters(
+      privacy_sandbox::kPrivacySandboxSettings4,
+      {{privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.name,
+        "true"}});
+  // Sign the user in.
+  identity_test_env()->MakePrimaryAccountAvailable(
+      kTestEmail, signin::ConsentLevel::kSignin);
+
+  // Initially the account capability will be in an unknown state
+  EXPECT_FALSE(delegate()->IsSubjectToM1NoticeRestricted());
+
+  // Enable the account capability
+  SetRestrictedNoticeCapability(kTestEmail, true);
+
+  // Remove the refresh token for the account
+  signin::RemoveRefreshTokenForPrimaryAccount(
+      identity_test_env()->identity_manager());
+
+  // Capability is fetched even if the token is not available
+  EXPECT_TRUE(delegate()->IsSubjectToM1NoticeRestricted());
+}
+
+TEST_F(PrivacySandboxSettingsDelegateTest,
        RestrictedNoticeRequiredForSignedOutUser) {
   feature_list()->InitAndEnableFeatureWithParameters(
       privacy_sandbox::kPrivacySandboxSettings4,
@@ -152,6 +178,16 @@ TEST_F(PrivacySandboxSettingsDelegateTest,
   // Even if the user is signed in to Chrome, the feature being disabled means
   // no notice should be shown.
   EXPECT_FALSE(delegate()->IsSubjectToM1NoticeRestricted());
+}
+
+TEST_F(PrivacySandboxSettingsDelegateTest,
+       UnrestrictedPref_UserSignedInWithoutAccountCapability) {
+  identity_test_env()->MakePrimaryAccountAvailable(
+      kTestEmail, signin::ConsentLevel::kSignin);
+  SetPrivacySandboxAccountCapability(kTestEmail, false);
+
+  delegate()->IsPrivacySandboxRestricted();
+  EXPECT_FALSE(prefs()->GetBoolean(prefs::kPrivacySandboxM1Unrestricted));
 }
 
 TEST_F(PrivacySandboxSettingsDelegateTest,
@@ -205,4 +241,5 @@ TEST_F(PrivacySandboxSettingsDelegateTest,
             .name,
         "true"}});
   EXPECT_TRUE(delegate()->IsPrivacySandboxRestricted());
+  EXPECT_FALSE(delegate()->IsPrivacySandboxCurrentlyUnrestricted());
 }

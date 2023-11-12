@@ -35,6 +35,7 @@
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/crl_set.h"
 #include "net/cert/ev_root_ca_metadata.h"
+#include "net/cert/internal/cert_issuer_source_aia.h"
 #include "net/cert/internal/system_trust_store.h"
 #include "net/cert/ocsp_revocation_status.h"
 #include "net/cert/pem.h"
@@ -1619,7 +1620,6 @@ TEST_P(CertVerifyProcInternalTest, VerifyReturnChainBasic) {
   ASSERT_NE(static_cast<X509Certificate*>(nullptr),
             verify_result.verified_cert.get());
 
-  EXPECT_NE(google_full_chain, verify_result.verified_cert);
   EXPECT_TRUE(
       x509_util::CryptoBufferEqual(google_full_chain->cert_buffer(),
                                    verify_result.verified_cert->cert_buffer()));
@@ -3037,6 +3037,13 @@ TEST_P(CertVerifyProcInternalWithNetFetchingTest,
   EXPECT_NE(OK, error);
 
   EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+  if (VerifyProcTypeIsBuiltin()) {
+    const net::CertIssuerSourceAia::AiaDebugData* aia_debug_data =
+        net::CertIssuerSourceAia::AiaDebugData::Get(&verify_result);
+    ASSERT_TRUE(aia_debug_data);
+    EXPECT_EQ(0, aia_debug_data->aia_fetch_success());
+    EXPECT_EQ(1, aia_debug_data->aia_fetch_fail());
+  }
 }
 #undef MAYBE_IntermediateFromAia404
 
@@ -3092,6 +3099,13 @@ TEST_P(CertVerifyProcInternalWithNetFetchingTest,
     int error = Verify(leaf.get(), kHostname, /*flags=*/0, CertificateList(),
                        &verify_result);
     EXPECT_THAT(error, IsOk());
+    if (VerifyProcTypeIsBuiltin()) {
+      const net::CertIssuerSourceAia::AiaDebugData* aia_debug_data =
+          net::CertIssuerSourceAia::AiaDebugData::Get(&verify_result);
+      ASSERT_TRUE(aia_debug_data);
+      EXPECT_EQ(1, aia_debug_data->aia_fetch_success());
+      EXPECT_EQ(0, aia_debug_data->aia_fetch_fail());
+    }
   }
 }
 
@@ -3148,6 +3162,14 @@ TEST_P(CertVerifyProcInternalWithNetFetchingTest,
   } else {
     EXPECT_THAT(error, IsOk());
   }
+
+  if (VerifyProcTypeIsBuiltin()) {
+    const net::CertIssuerSourceAia::AiaDebugData* aia_debug_data =
+        net::CertIssuerSourceAia::AiaDebugData::Get(&verify_result);
+    ASSERT_TRUE(aia_debug_data);
+    EXPECT_EQ(1, aia_debug_data->aia_fetch_success());
+    EXPECT_EQ(0, aia_debug_data->aia_fetch_fail());
+  }
 }
 
 // This test is the same as IntermediateFromAia200Pem, but with a different
@@ -3200,6 +3222,13 @@ TEST_P(CertVerifyProcInternalWithNetFetchingTest,
     EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
   } else {
     EXPECT_THAT(error, IsOk());
+  }
+  if (VerifyProcTypeIsBuiltin()) {
+    const net::CertIssuerSourceAia::AiaDebugData* aia_debug_data =
+        net::CertIssuerSourceAia::AiaDebugData::Get(&verify_result);
+    ASSERT_TRUE(aia_debug_data);
+    EXPECT_EQ(1, aia_debug_data->aia_fetch_success());
+    EXPECT_EQ(0, aia_debug_data->aia_fetch_fail());
   }
 }
 
@@ -3267,6 +3296,11 @@ TEST_P(CertVerifyProcInternalWithNetFetchingTest,
 
     EXPECT_FALSE(verify_result.has_sha1);
     EXPECT_THAT(error, IsOk());
+    const net::CertIssuerSourceAia::AiaDebugData* aia_debug_data =
+        net::CertIssuerSourceAia::AiaDebugData::Get(&verify_result);
+    ASSERT_TRUE(aia_debug_data);
+    EXPECT_EQ(1, aia_debug_data->aia_fetch_success());
+    EXPECT_EQ(0, aia_debug_data->aia_fetch_fail());
   } else {
     EXPECT_NE(OK, error);
     if (verify_proc_type() == CERT_VERIFY_PROC_ANDROID &&

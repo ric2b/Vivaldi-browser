@@ -316,6 +316,13 @@ class VIEWS_EXPORT Textfield : public View,
   // updating the cursor position and visibility.
   void FitToLocalBounds();
 
+  // Getter/Setter methods for |use_default_border_|.
+  bool GetUseDefaultBorder() const;
+  void SetUseDefaultBorder(bool use_default_border);
+
+  // Removes the Inkdrop hover effect.
+  void RemoveHoverEffect();
+
   // View overrides:
   int GetBaseline() const override;
   gfx::Size CalculatePreferredSize() const override;
@@ -389,6 +396,7 @@ class VIEWS_EXPORT Textfield : public View,
                              gfx::SelectionBound* focus) override;
   gfx::Rect GetBounds() override;
   gfx::NativeView GetNativeView() const override;
+  bool IsSelectionDragging() const override;
   void ConvertPointToScreen(gfx::Point* point) override;
   void ConvertPointFromScreen(gfx::Point* point) override;
   void OpenContextMenu(const gfx::Point& anchor) override;
@@ -560,8 +568,10 @@ class VIEWS_EXPORT Textfield : public View,
   // Updates the painted background color.
   void UpdateBackgroundColor();
 
-  // Updates the border per the state of |invalid_|.
-  void UpdateBorder();
+  // Updates the border per the state of the textfield (i.e. Normal, Invalid,
+  // Readonly, Disabled). This will not do anything if a custom border has been
+  // set by SetBorder().
+  void UpdateDefaultBorder();
 
   // Updates the selection text color.
   void UpdateSelectionTextColor();
@@ -658,12 +668,23 @@ class VIEWS_EXPORT Textfield : public View,
   // Returns the corner radius of the text field.
   float GetCornerRadius();
 
-  // Checks and updates the selection dragging state for the upcoming scroll
-  // sequence, if required. If the scroll sequence starts while long pressing,
-  // it will be used for adjusting the text selection. Otherwise, if the scroll
-  // begins horizontally it will be used for cursor placement. Otherwise, the
-  // scroll sequence won't be used for selection dragging.
-  void MaybeStartSelectionDragging(ui::GestureEvent* event);
+  // Prepares the Textfield for gesture scrolling by setting the drag start
+  // state.
+  void OnGestureScrollBegin(int drag_start_location_x);
+
+  // Performs gesture scrolling.
+  void GestureScroll(int drag_location_x);
+
+  // Performs gesture handling needed for touch selection dragging. Sets `event`
+  // as handled and returns true if the event should not be processed further.
+  bool HandleGestureForSelectionDragging(ui::GestureEvent* event);
+
+  // Determines whether touch selection dragging should start and updates the
+  // selection dragging state if needed. Returns true if selection dragging
+  // starts.
+  bool StartSelectionDragging(const ui::GestureEvent& event);
+
+  void StopSelectionDragging();
 
   // The text model.
   std::unique_ptr<TextfieldModel> model_;
@@ -751,10 +772,13 @@ class VIEWS_EXPORT Textfield : public View,
 
   SelectionController selection_controller_;
 
-  // Tracks when the current scroll sequence should be used for cursor placement
+  // Tracks the touch selection dragging state which is used when determining
+  // whether a dragging movement should be used for scrolling, cursor placement
   // or adjusting the text selection.
   enum class SelectionDraggingState {
     kNone,
+    kSelectedAll,
+    kSelectedWord,
     kDraggingCursor,
     kDraggingSelectionExtent
   };
@@ -772,18 +796,20 @@ class VIEWS_EXPORT Textfield : public View,
 
   // Tracks the selection extent, which is used to determine the logical end of
   // the selection. Roughly, this corresponds to the last drag position of the
-  // touch handle used to update the selection range. Note that the extent may
-  // be different to the logical end of the selection due to "expand by word,
-  // shrink by character" behaviour, in which the selection end can move to the
-  // next word boundary from the extent when expanding.
-  gfx::SelectionModel extent_caret_;
+  // touch handle or scroll gesture used to update the selection range.
+  gfx::Point selection_extent_;
 
-  // Break type which selection endpoints can be moved to when updating the
-  // selection extent. For "expand by word, shrink by character" behaviour, the
-  // break type is set to WORD_BREAK if the selection has expanded past the
-  // current word boundary and back to CHARACTER_BREAK if the selection is
-  // shrinking.
+  // Specifies granularity of selection extent updates, i.e. the break type
+  // where we can place the end of the selection when the extent is moved. For
+  // "expand by word, shrink by character" behaviour, the break type is set to
+  // WORD_BREAK if the selection has expanded past the current word boundary and
+  // back to CHARACTER_BREAK if the selection is shrinking.
   gfx::BreakType break_type_ = gfx::CHARACTER_BREAK;
+
+  // The horizontal offset applied to selection extent when adjusting the
+  // selection. We apply this offset to smoothen the movement of the end of the
+  // selection after switching between word and character granularity.
+  int extent_offset_x_ = 0;
 
   // Whether touch selection handles should be shown once the current scroll
   // sequence ends. Handles should be shown if touch editing handles were hidden
@@ -825,6 +851,10 @@ class VIEWS_EXPORT Textfield : public View,
   // directionality.
   bool force_text_directionality_ = false;
 
+  // Helper flag that tracks whether SetBorder was called with a custom
+  // border.
+  bool use_default_border_ = true;
+
   // Holds the subscription object for the enabled changed callback.
   base::CallbackListSubscription enabled_changed_subscription_ =
       AddEnabledChangedCallback(
@@ -855,6 +885,7 @@ VIEW_BUILDER_PROPERTY(std::u16string, Text)
 VIEW_BUILDER_PROPERTY(SkColor, TextColor)
 VIEW_BUILDER_PROPERTY(int, TextInputFlags)
 VIEW_BUILDER_PROPERTY(ui::TextInputType, TextInputType)
+VIEW_BUILDER_PROPERTY(bool, UseDefaultBorder)
 END_VIEW_BUILDER
 
 }  // namespace views

@@ -9,14 +9,13 @@
 #include <utility>
 
 #include "base/functional/bind.h"
-#include "base/guid.h"
 #include "base/i18n/file_util_icu.h"
-#include "base/mac/scoped_nsobject.h"
 #include "base/no_destructor.h"
 #include "base/rand_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/uuid.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/visibility_timer_tab_helper.h"
 #include "chrome/browser/webshare/prepare_directory_task.h"
@@ -31,6 +30,10 @@
 #include "storage/browser/blob/blob_storage_context.h"
 #include "url/gurl.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using content::BrowserContext;
 using content::StoragePartition;
 
@@ -40,8 +43,8 @@ constexpr base::FilePath::CharType kWebShareDirname[] =
     FILE_PATH_LITERAL("WebShare");
 
 base::FilePath GenerateUniqueSubDirectory(const base::FilePath& directory) {
-  std::string unique_subdirectory =
-      base::StringPrintf("share-%s", base::GenerateGUID().c_str());
+  std::string unique_subdirectory = base::StringPrintf(
+      "share-%s", base::Uuid::GenerateRandomV4().AsLowercaseString().c_str());
   return directory.Append(unique_subdirectory);
 }
 

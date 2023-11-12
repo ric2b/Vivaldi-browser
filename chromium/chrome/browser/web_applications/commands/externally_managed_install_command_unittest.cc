@@ -83,6 +83,7 @@ class ExternallyManagedInstallCommandTest : public WebAppTest {
     manifest->name = u"Example App";
     manifest->short_name = u"App";
     manifest->start_url = kWebAppUrl;
+    manifest->id = GenerateManifestIdFromStartUrlOnly(kWebAppUrl);
     manifest->display = blink::mojom::DisplayMode::kStandalone;
     return manifest;
   }
@@ -173,7 +174,7 @@ class ExternallyManagedInstallCommandTest : public WebAppTest {
 
  private:
   base::flat_map<AppId, BitmapData> app_to_icons_data_;
-  raw_ptr<TestShortcutManager> shortcut_manager_;
+  raw_ptr<TestShortcutManager, DanglingUntriaged> shortcut_manager_;
   std::unique_ptr<TestWebAppUrlLoader> url_loader_;
 };
 

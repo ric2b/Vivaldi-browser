@@ -12,7 +12,6 @@ import android.text.Editable;
 import android.text.InputFilter;
 import android.text.Spannable;
 import android.text.SpannableString;
-import android.text.TextWatcher;
 import android.text.style.ImageSpan;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -44,6 +43,7 @@ import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.text.EmptyTextWatcher;
 import org.chromium.url.GURL;
 
 import java.lang.annotation.Retention;
@@ -53,7 +53,7 @@ import java.util.Calendar;
 /**
  * A prompt that bugs users to enter their CVC when unmasking a Wallet instrument (credit card).
  */
-public class CardUnmaskPrompt implements TextWatcher, OnClickListener,
+public class CardUnmaskPrompt implements EmptyTextWatcher, OnClickListener,
                                          ModalDialogProperties.Controller,
                                          CompoundButton.OnCheckedChangeListener {
     private static CardUnmaskObserverForTest sObserverForTest;
@@ -82,7 +82,6 @@ public class CardUnmaskPrompt implements TextWatcher, OnClickListener,
 
     private int mThisYear;
     private int mThisMonth;
-    private boolean mValidationWaitsForCalendarTask;
     private ModalDialogManager mModalDialogManager;
     private Context mContext;
 
@@ -183,15 +182,13 @@ public class CardUnmaskPrompt implements TextWatcher, OnClickListener,
                     ChromeFeatureList.AUTOFILL_TOUCH_TO_FILL_FOR_CREDIT_CARDS_ANDROID)) {
             mMainView = inflater.inflate(R.layout.autofill_card_unmask_prompt_new, null);
             AutofillUiUtils.addCardDetails(context, mMainView, cardName, cardLastFourDigits,
-                    cardExpiration, cardArtUrl, cardIconId,
-                    AutofillUiUtils.getCardUnmaskDialogIconWidthId(),
-                    AutofillUiUtils.getCardUnmaskDialogIconHeightId(),
+                    cardExpiration, cardArtUrl, cardIconId, AutofillUiUtils.CardIconSize.LARGE,
                     R.dimen.card_unmask_dialog_credit_card_icon_end_margin,
                     /* cardNameAndNumberTextAppearance= */ R.style.TextAppearance_TextLarge_Primary,
                     /* cardLabelTextAppearance= */ R.style.TextAppearance_TextMedium_Secondary,
-                    /* showCustomIcon= */ isVirtualCard
-                            || ChromeFeatureList.isEnabled(
-                                    ChromeFeatureList.AUTOFILL_ENABLE_CARD_ART_IMAGE));
+                    /* showCustomIcon= */
+                    AutofillUiUtils.shouldShowCustomIcon(
+                            cardArtUrl, /* isVirtualCard= */ isVirtualCard));
         } else {
             mMainView = inflater.inflate(R.layout.autofill_card_unmask_prompt, null);
         }
@@ -231,7 +228,9 @@ public class CardUnmaskPrompt implements TextWatcher, OnClickListener,
                         .with(ModalDialogProperties.CUSTOM_VIEW, mMainView)
                         .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, confirmButtonLabel)
                         .with(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, context.getResources(),
-                                R.string.cancel);
+                                R.string.cancel)
+                        .with(ModalDialogProperties.BUTTON_STYLES,
+                                ModalDialogProperties.ButtonStyles.PRIMARY_FILLED_NEGATIVE_OUTLINE);
         mDialogModel = dialogModelBuilder.build();
 
         mShouldRequestExpirationDate = shouldRequestExpirationDate;
@@ -286,7 +285,6 @@ public class CardUnmaskPrompt implements TextWatcher, OnClickListener,
         protected void onPostExecute(Calendar result) {
             mThisYear = result.get(Calendar.YEAR);
             mThisMonth = result.get(Calendar.MONTH) + 1;
-            if (mValidationWaitsForCalendarTask) validate();
         }
     }
 
@@ -419,12 +417,6 @@ public class CardUnmaskPrompt implements TextWatcher, OnClickListener,
             }
         }
     }
-
-    @Override
-    public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-    @Override
-    public void onTextChanged(CharSequence s, int start, int before, int count) {}
 
     @Override
     public void onClick(View v) {

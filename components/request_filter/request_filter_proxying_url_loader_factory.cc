@@ -124,7 +124,8 @@ RequestFilterProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
     const network::ResourceRequest& request,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
     mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
-    mojo::PendingRemote<network::mojom::URLLoaderClient> client)
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+    scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner)
     : factory_(factory),
       request_(request),
       original_initiator_(request.request_initiator),
@@ -134,12 +135,15 @@ RequestFilterProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
       frame_routing_id_(frame_routing_id),
       options_(options),
       traffic_annotation_(traffic_annotation),
-      proxied_loader_receiver_(this, std::move(loader_receiver)),
+      proxied_loader_receiver_(this,
+                               std::move(loader_receiver),
+                               navigation_response_task_runner),
       target_client_(std::move(client)),
       current_response_(network::mojom::URLResponseHead::New()),
       has_any_extra_headers_listeners_(
           network_service_request_id_ != 0 &&
-          factory->request_handler_->WantsExtraHeadersForAnyRequest()) {
+          factory->request_handler_->WantsExtraHeadersForAnyRequest()),
+      navigation_response_task_runner_(navigation_response_task_runner) {
   // If there is a client error, clean up the request.
   target_client_.set_disconnect_handler(
       base::BindOnce(&RequestFilterProxyingURLLoaderFactory::InProgressRequest::
@@ -666,9 +670,11 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     if (has_any_extra_headers_listeners_)
       options |= network::mojom::kURLLoadOptionUseHeaderClient;
     factory_->target_factory_->CreateLoaderAndStart(
-        target_loader_.BindNewPipeAndPassReceiver(),
+        target_loader_.BindNewPipeAndPassReceiver(
+            navigation_response_task_runner_),
         network_service_request_id_, options, request_,
-        proxied_client_receiver_.BindNewPipeAndPassRemote(),
+        proxied_client_receiver_.BindNewPipeAndPassRemote(
+            navigation_response_task_runner_),
         traffic_annotation_);
   }
 
@@ -1108,7 +1114,8 @@ RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
         forwarding_header_client,
     RequestFilterManager::ProxySet* proxies,
-    content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type)
+    content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
+    scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner)
     : browser_context_(browser_context),
       render_process_id_(render_process_id),
       frame_routing_id_(frame_routing_id),
@@ -1118,7 +1125,9 @@ RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
       navigation_id_(std::move(navigation_id)),
       forwarding_url_loader_header_client_(std::move(forwarding_header_client)),
       proxies_(proxies),
-      loader_factory_type_(loader_factory_type) {
+      loader_factory_type_(loader_factory_type),
+      navigation_response_task_runner_(
+          std::move(navigation_response_task_runner)) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // base::Unretained is safe here because the callback will be
   // canceled when |shutdown_notifier_subscription_| is destroyed, and
@@ -1134,13 +1143,15 @@ RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
   target_factory_.set_disconnect_handler(base::BindOnce(
       &RequestFilterProxyingURLLoaderFactory::OnTargetFactoryError,
       base::Unretained(this)));
-  proxy_receivers_.Add(this, std::move(loader_receiver));
+  proxy_receivers_.Add(this, std::move(loader_receiver),
+                       navigation_response_task_runner_);
   proxy_receivers_.set_disconnect_handler(base::BindRepeating(
       &RequestFilterProxyingURLLoaderFactory::OnProxyBindingError,
       base::Unretained(this)));
 
   if (header_client_receiver)
-    url_loader_header_client_receiver_.Bind(std::move(header_client_receiver));
+    url_loader_header_client_receiver_.Bind(std::move(header_client_receiver),
+                                            navigation_response_task_runner_);
 }
 
 void RequestFilterProxyingURLLoaderFactory::StartProxying(
@@ -1158,7 +1169,8 @@ void RequestFilterProxyingURLLoaderFactory::StartProxying(
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
         forwarding_header_client,
     RequestFilterManager::ProxySet* proxies,
-    content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type) {
+    content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
+    scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   auto proxy = std::make_unique<RequestFilterProxyingURLLoaderFactory>(
@@ -1166,7 +1178,7 @@ void RequestFilterProxyingURLLoaderFactory::StartProxying(
       request_handler, request_id_generator, std::move(navigation_id),
       std::move(loader_receiver), std::move(target_factory_remote),
       std::move(header_client_receiver), std::move(forwarding_header_client),
-      proxies, loader_factory_type);
+      proxies, loader_factory_type, std::move(navigation_response_task_runner));
 
   proxies->AddProxy(std::move(proxy));
 }
@@ -1201,7 +1213,8 @@ void RequestFilterProxyingURLLoaderFactory::CreateLoaderAndStart(
       std::make_unique<InProgressRequest>(
           this, filtered_request_id, request_id, view_routing_id_,
           frame_routing_id_, options, request, traffic_annotation,
-          std::move(loader_receiver), std::move(client)));
+          std::move(loader_receiver), std::move(client),
+          navigation_response_task_runner_));
   result.first->second->Restart();
 }
 
@@ -1299,5 +1312,9 @@ void RequestFilterProxyingURLLoaderFactory::MaybeRemoveProxy() {
 
   // Deletes |this|.
   proxies_->RemoveProxy(this);
+}
+
+void RequestFilterProxyingURLLoaderFactory::EnsureAssociatedFactoryBuilt() {
+  ShutdownNotifierFactory::GetInstance();
 }
 }  // namespace vivaldi

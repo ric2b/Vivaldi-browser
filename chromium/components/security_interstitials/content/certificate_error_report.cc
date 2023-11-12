@@ -199,6 +199,17 @@ void AddChromeRootStoreDebugInfoToReport(
       chrome_root_store_debug_info->chrome_root_store_version);
 }
 #endif
+
+void AddAIADebugInfoToReport(
+    const cert_verifier::mojom::AiaFetchDebugInfoPtr& aia_debug_info,
+    chrome_browser_ssl::AiaFetchDebugInfo* report_info) {
+  if (!aia_debug_info) {
+    return;
+  }
+
+  report_info->set_aia_fetch_failure(aia_debug_info->aia_fetch_failure);
+  report_info->set_aia_fetch_success(aia_debug_info->aia_fetch_success);
+}
 #endif  // BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
 
 bool CertificateChainToString(const net::X509Certificate& cert,
@@ -298,6 +309,11 @@ CertificateErrorReport::CertificateErrorReport(
     trial_report->set_trial_der_verification_time(
         debug_info->trial_der_verification_time);
   }
+
+  AddAIADebugInfoToReport(debug_info->primary_aia_fetch_debug_info,
+                          trial_report->mutable_primary_aia_fetch_debug_info());
+  AddAIADebugInfoToReport(debug_info->trial_aia_fetch_debug_info,
+                          trial_report->mutable_trial_aia_fetch_debug_info());
 }
 #endif  // BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
 
@@ -486,8 +502,9 @@ CertificateErrorReport::CertificateErrorReport(
       chrome_browser_ssl::CertLoggerFeaturesInfo::ANDROID_AIA_FETCHING_ENABLED);
 #endif
 
-  cert_report_->set_chrome_version(version_info::GetVersionNumber());
-  cert_report_->set_os_type(version_info::GetOSType());
+  cert_report_->set_chrome_version(
+      std::string(version_info::GetVersionNumber()));
+  cert_report_->set_os_type(std::string(version_info::GetOSType()));
   cert_report_->set_os_version(base::SysInfo::OperatingSystemVersion());
   cert_report_->set_hardware_model_name(base::SysInfo::HardwareModelName());
   cert_report_->set_os_architecture(

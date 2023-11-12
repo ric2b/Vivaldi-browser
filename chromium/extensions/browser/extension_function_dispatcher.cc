@@ -19,6 +19,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process.h"
 #include "base/scoped_observation.h"
+#include "base/trace_event/typed_macros.h"
+#include "base/tracing/protos/chrome_track_event.pbzero.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
@@ -47,12 +49,14 @@
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/extension_urls.h"
+#include "extensions/common/trace_util.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_macros.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 using content::BrowserThread;
+using perfetto::protos::pbzero::ChromeTrackEvent;
 
 namespace extensions {
 namespace {
@@ -107,8 +111,16 @@ bool CanRendererActOnBehalfOfExtension(
   if (extension_id.empty())
     return true;
 
-  // Did `render_process_id` run a content script from `extension_id`?
+  // Did `render_process_id` run a content script or user script from
+  // `extension_id`?
+  // TODO(https://crbug.com/1186557): Ideally, we'd only check content script/
+  // user script status if the renderer claimed to be acting on behalf of the
+  // corresponding type (e.g. Feature::CONTENT_SCRIPT_CONTEXT). We evaluate this
+  // later in ProcessMap::CanProcessHostContextType(), but we could be stricter
+  // by including it here.
   if (ContentScriptTracker::DidProcessRunContentScriptFromExtension(
+          render_process_host, extension_id) ||
+      ContentScriptTracker::DidProcessRunUserScriptFromExtension(
           render_process_host, extension_id)) {
     return true;
   }
@@ -386,18 +398,22 @@ void ExtensionFunctionDispatcher::Dispatch(
     mojom::RequestParamsPtr params,
     content::RenderFrameHost& frame,
     mojom::LocalFrameHost::RequestCallback callback) {
+  content::RenderProcessHost& process = *frame.GetProcess();
+  TRACE_EVENT("extensions", "ExtensionFunctionDispatcher::Dispatch",
+              ChromeTrackEvent::kRenderProcessHost, process,
+              ChromeTrackEvent::kChromeExtensionId,
+              ExtensionIdForTracing(params->extension_id));
+
   ScopedRequestParamsCrashKeys request_params_crash_keys(*params);
   SCOPED_CRASH_KEY_STRING256(
       "extensions", "frame.GetSiteInstance()",
       frame.GetSiteInstance()->GetSiteURL().possibly_invalid_spec());
 
-  if (auto bad_message_code =
-          ValidateRequest(*params, &frame, *frame.GetProcess())) {
+  if (auto bad_message_code = ValidateRequest(*params, &frame, process)) {
     // Kill the renderer if it's an invalid request.
-    const char* msg = ToString(*bad_message_code);
-    std::move(callback).Run(ExtensionFunction::FAILED, base::Value::List(), msg,
-                            nullptr);
-    mojo::ReportBadMessage(msg);
+    bad_message::ReceivedBadMessage(&process, *bad_message_code);
+    std::move(callback).Run(ExtensionFunction::FAILED, base::Value::List(),
+                            ToString(*bad_message_code), nullptr);
     return;
   }
 
@@ -413,7 +429,7 @@ void ExtensionFunctionDispatcher::Dispatch(
   }
 
   DispatchWithCallbackInternal(
-      *params, &frame, frame.GetProcess()->GetID(),
+      *params, &frame, *frame.GetProcess(),
       callback_wrapper->CreateCallback(std::move(callback)));
 }
 
@@ -432,6 +448,11 @@ void ExtensionFunctionDispatcher::DispatchForServiceWorker(
   if (!rph)
     return;
 
+  TRACE_EVENT("extensions",
+              "ExtensionFunctionDispatcher::DispatchForServiceWorker",
+              ChromeTrackEvent::kRenderProcessHost, *rph,
+              ChromeTrackEvent::kChromeExtensionId,
+              ExtensionIdForTracing(params->extension_id));
   if (auto bad_message_code = ValidateRequest(*params, nullptr, *rph)) {
     // Kill the renderer if it's an invalid request.
     bad_message::ReceivedBadMessage(render_process_id, *bad_message_code);
@@ -455,7 +476,7 @@ void ExtensionFunctionDispatcher::DispatchForServiceWorker(
   }
 
   DispatchWithCallbackInternal(
-      *params, nullptr, render_process_id,
+      *params, nullptr, *rph,
       callback_wrapper->CreateCallback(params->request_id,
                                        params->worker_thread_id));
 }
@@ -463,7 +484,7 @@ void ExtensionFunctionDispatcher::DispatchForServiceWorker(
 void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
     const mojom::RequestParams& params,
     content::RenderFrameHost* render_frame_host,
-    int render_process_id,
+    content::RenderProcessHost& render_process_host,
     ExtensionFunction::ResponseCallback callback) {
   ProcessMap* process_map = ProcessMap::Get(browser_context_);
   if (!process_map) {
@@ -473,6 +494,8 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
                             kProcessNotFound);
     return;
   }
+
+  const int render_process_id = render_process_host.GetID();
 
   const GURL* rfh_url = nullptr;
   if (render_frame_host) {
@@ -493,7 +516,7 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
 
   Feature::Context context_type =
       MojomContextToFeatureContext(params.context_type);
-  if (!process_map->CanProcessHostContextType(extension, render_process_id,
+  if (!process_map->CanProcessHostContextType(extension, render_process_host,
                                               context_type)) {
     // TODO(https://crbug.com/1186557): Ideally, we'd be able to mark some
     // of these as bad messages. We can't do that in all cases because there
@@ -611,9 +634,19 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
   if (!registry->enabled_extensions().GetByID(params.extension_id))
     return;
 
-  if (!IsRequestFromServiceWorker(params)) {
-    // Increment ref count for non-service worker extension API. Ref count for
-    // service worker extension API is handled separately on IO thread via IPC.
+  // Increment the keepalive to ensure the extension doesn't shut down while
+  // it's executing an API function.
+  if (IsRequestFromServiceWorker(params)) {
+    CHECK(function->worker_id());
+    const content::ServiceWorkerExternalRequestTimeoutType timeout_type =
+        function->ShouldKeepWorkerAliveIndefinitely()
+            ? content::ServiceWorkerExternalRequestTimeoutType::kDoesNotTimeout
+            : content::ServiceWorkerExternalRequestTimeoutType::kDefault;
+    base::Uuid uuid = process_manager->IncrementServiceWorkerKeepaliveCount(
+        *function->worker_id(), timeout_type, Activity::API_FUNCTION,
+        function->name());
+    function->set_request_uuid(std::move(uuid));
+  } else {
     process_manager->IncrementLazyKeepaliveCount(
         function->extension(), Activity::API_FUNCTION, function->name());
   }
@@ -633,15 +666,43 @@ void ExtensionFunctionDispatcher::RemoveWorkerCallbacksForProcess(
 }
 
 void ExtensionFunctionDispatcher::OnExtensionFunctionCompleted(
-    const Extension* extension,
-    bool is_from_service_worker,
-    const char* name) {
-  if (extension && !is_from_service_worker) {
-    // Decrement ref count for non-service worker extension API. Service
-    // worker extension API ref counts are handled separately on IO thread
-    // directly via IPC.
-    ProcessManager::Get(browser_context_)
-        ->DecrementLazyKeepaliveCount(extension, Activity::API_FUNCTION, name);
+    const ExtensionFunction& extension_function) {
+  if (!extension_function.extension()) {
+    // The function had no associated extension; nothing to clean up.
+    return;
+  }
+
+  if (!extension_function.browser_context()) {
+    // The ExtensionFunction's browser context is null'ed out when the browser
+    // context is being shut down. If this happens, there's nothing to clean up.
+    return;
+  }
+
+  if (!ExtensionRegistry::Get(browser_context_)
+           ->enabled_extensions()
+           .GetByID(extension_function.extension()->id())) {
+    // The extension may have been unloaded (the ExtensionFunction holds a
+    // reference to it, so it's still safe to access). If so, there's nothing to
+    // // clean up.
+    return;
+  }
+
+  ProcessManager* process_manager = ProcessManager::Get(browser_context_);
+  if (extension_function.is_from_service_worker()) {
+    CHECK(extension_function.request_uuid().is_valid());
+    CHECK(extension_function.worker_id());
+
+    // The service worker may have been stopped already. For instance, it may
+    // have timed out and been stopped by the content layer.
+    if (process_manager->HasServiceWorker(*extension_function.worker_id())) {
+      process_manager->DecrementServiceWorkerKeepaliveCount(
+          *extension_function.worker_id(), extension_function.request_uuid(),
+          Activity::API_FUNCTION, extension_function.name());
+    }
+  } else {
+    process_manager->DecrementLazyKeepaliveCount(extension_function.extension(),
+                                                 Activity::API_FUNCTION,
+                                                 extension_function.name());
   }
 }
 
@@ -730,9 +791,14 @@ ExtensionFunctionDispatcher::CreateExtensionFunction(
   function->set_response_callback(std::move(callback));
   function->set_source_context_type(context_type);
   function->set_source_process_id(requesting_process_id);
-  function->set_worker_thread_id(params.worker_thread_id);
   if (is_worker_request) {
-    function->set_service_worker_version_id(params.service_worker_version_id);
+    CHECK(extension);
+    WorkerId worker_id;
+    worker_id.thread_id = params.worker_thread_id;
+    worker_id.version_id = params.service_worker_version_id;
+    worker_id.render_process_id = requesting_process_id;
+    worker_id.extension_id = extension->id();
+    function->set_worker_id(std::move(worker_id));
   } else {
     function->SetRenderFrameHost(render_frame_host);
   }

@@ -9,9 +9,10 @@
 #import "base/strings/string_number_conversions.h"
 #import "components/google/core/common/google_util.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/passwords/password_checkup_metrics.h"
 #import "ios/chrome/browser/passwords/password_checkup_utils.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_check_cell.h"
@@ -174,6 +175,9 @@ void SetUpTrailingIconAndAccessoryType(
   // Image view at the top of the screen, indicating the overall Password
   // Checkup status.
   UIImageView* _headerImageView;
+
+  // Whether the previous password checkup state was the running state.
+  BOOL _wasRunning;
 }
 
 @end
@@ -384,6 +388,14 @@ void SetUpTrailingIconAndAccessoryType(
     [self.handler dismissAfterAllPasswordsGone];
   }
 
+  // If the previous state was PasswordCheckupHomepageStateRunning, focus
+  // accessibility on the Compromised Passwords cell to let the user know that
+  // the Password Checkup results are available.
+  if (_passwordCheckupState == PasswordCheckupHomepageStateRunning) {
+    [self focusAccessibilityOnCellForItemType:ItemTypeCompromisedPasswords
+                            sectionIdentifier:SectionIdentifierInsecureTypes];
+  }
+
   _passwordCheckupState = state;
   _insecurePasswordCounts = insecurePasswordCounts;
   _formattedElapsedTimeSinceLastCheck = formattedElapsedTimeSinceLastCheck;
@@ -447,7 +459,15 @@ void SetUpTrailingIconAndAccessoryType(
       break;
     case ItemTypeCheckPasswordsButton:
       if (_checkPasswordsButtonItem.isEnabled) {
+        password_manager::LogStartPasswordCheckManually();
         [self.delegate startPasswordCheck];
+
+        // Focus accessibility on the Password Checkup Timestamp cell to let the
+        // user know that their passwords are being checked.
+        [self
+            focusAccessibilityOnCellForItemType:ItemTypePasswordCheckupTimestamp
+                              sectionIdentifier:
+                                  SectionIdentifierLastPasswordCheckup];
       }
       break;
   }
@@ -716,4 +736,22 @@ void SetUpTrailingIconAndAccessoryType(
   [self updateNavigationBarBackgroundColorForDismissal:YES];
 }
 
+// Notifies accessibility to focus on the cell for the given ItemType and
+// SectionIdentifierCompromised when its layout changed.
+- (void)focusAccessibilityOnCellForItemType:(ItemType)itemType
+                          sectionIdentifier:
+                              (SectionIdentifier)sectionIdentifier {
+  if (!UIAccessibilityIsVoiceOverRunning() ||
+      ![self.tableViewModel hasItemForItemType:itemType
+                             sectionIdentifier:sectionIdentifier]) {
+    return;
+  }
+
+  NSIndexPath* indexPath =
+      [self.tableViewModel indexPathForItemType:itemType
+                              sectionIdentifier:sectionIdentifier];
+  UITableViewCell* cell = [self.tableView cellForRowAtIndexPath:indexPath];
+  UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification,
+                                  cell);
+}
 @end

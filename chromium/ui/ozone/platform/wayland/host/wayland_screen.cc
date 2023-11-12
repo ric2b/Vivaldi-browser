@@ -24,6 +24,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/ozone/platform/wayland/host/dump_util.h"
 #include "ui/ozone/platform/wayland/host/org_kde_kwin_idle.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
@@ -139,11 +140,12 @@ void WaylandScreen::OnOutputAddedOrUpdated(
 
 void WaylandScreen::OnOutputRemoved(WaylandOutput::Id output_id) {
   DCHECK(display_id_map_.contains(output_id));
-  if (display_id_map_.find(output_id) == display_id_map_.end())
+  auto iter = display_id_map_.find(output_id);
+  if (iter == display_id_map_.end()) {
     return;
+  }
 
-  int64_t display_id = display_id_map_[output_id];
-
+  int64_t display_id = iter->second;
   if (display_id == GetPrimaryDisplay().id()) {
     // First, set a new primary display as required by the |display_list_|. It's
     // safe to set any of the displays to be a primary one. Once the output is
@@ -159,6 +161,13 @@ void WaylandScreen::OnOutputRemoved(WaylandOutput::Id output_id) {
       }
     }
   }
+
+  // The `display_id_map_` and the `display_list_` must be updated at the same
+  // time to ensure internal display state is consistent. Code may otherwise
+  // draw different conclusions on the availability of a display depending on
+  // which of these structures are queried (see crbug.com/1408304).
+  display_id_map_.erase(iter);
+
   auto it = display_list_.FindDisplayById(display_id);
   if (it != display_list_.displays().end())
     display_list_.RemoveDisplay(display_id);
@@ -185,6 +194,8 @@ void WaylandScreen::AddOrUpdateDisplay(const WaylandOutput::Metrics& metrics) {
       panel_rotation == display::Display::Rotation::ROTATE_270) {
     size_in_pixels.Transpose();
   }
+  size_in_pixels.Enlarge(-metrics.physical_overscan_insets.width(),
+                         -metrics.physical_overscan_insets.height());
   changed_display.set_size_in_pixels(size_in_pixels);
 
   if (!metrics.logical_size.IsEmpty()) {
@@ -522,5 +533,48 @@ display::TabletState WaylandScreen::GetTabletState() const {
   return tablet_state_;
 }
 #endif
+
+bool WaylandScreen::VerifyOutputStateConsistentForTesting() const {
+  // The number of displays tracked by the display_list_ and the display_id_map_
+  // should match.
+  const auto& displays = display_list_.displays();
+  if (display_id_map_.size() != displays.size()) {
+    return false;
+  }
+
+  // Both the display_list_ and the display_id_map_ should be tracking the same
+  // displays.
+  for (const auto& pair : display_id_map_) {
+    if (base::ranges::find(displays, pair.second, &display::Display::id) ==
+        displays.end()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void WaylandScreen::DumpState(std::ostream& out) const {
+  out << "WaylandScreen:" << std::endl;
+  for (const auto& display : display_list_.displays()) {
+    out << "  display[" << display.id() << "]:" << display.ToString()
+        << std::endl;
+  }
+  out << "  id_map=";
+  for (const auto& id_pair : display_id_map_) {
+    out << "[" << id_pair.second << ":" << id_pair.first << "] ";
+  }
+  out << std::endl;
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  constexpr auto kTabletStateToStringMap =
+      base::MakeFixedFlatMap<display::TabletState, const char*>(
+          {{display::TabletState::kInClamshellMode, "clamshell"},
+           {display::TabletState::kEnteringTabletMode, "entering_tablet"},
+           {display::TabletState::kInTabletMode, "tablet"},
+           {display::TabletState::kExitingTabletMode, "exiting_tablet"}});
+  out << "  tablet_state="
+      << GetMapValueOrDefault(kTabletStateToStringMap, tablet_state_);
+#endif
+  out << ", screen_saver_suspension_count=" << screen_saver_suspension_count_;
+}
 
 }  // namespace ui

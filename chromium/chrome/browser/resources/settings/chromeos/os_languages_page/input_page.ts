@@ -17,10 +17,11 @@ import './add_input_methods_dialog.js';
 import './add_spellcheck_languages_dialog.js';
 import './os_edit_dictionary_page.js';
 import '../keyboard_shortcut_banner/keyboard_shortcut_banner.js';
-import '../../controls/settings_toggle_button.js';
-import '../../settings_shared.css.js';
+import '/shared/settings/controls/settings_toggle_button.js';
+import '../settings_shared.css.js';
 import '../os_settings_page/os_settings_animated_pages.js';
 
+import {SettingsToggleButtonElement} from '/shared/settings/controls/settings_toggle_button.js';
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
@@ -30,15 +31,13 @@ import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {SettingsToggleButtonElement} from '../../controls/settings_toggle_button.js';
 import {castExists} from '../assert_extras.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {FocusConfig} from '../focus_config.js';
 import {recordSettingChange} from '../metrics_recorder.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route, Router} from '../router.js';
+import {Route, Router, routes} from '../router.js';
 
 import {hasOptionsPageInSettings} from './input_method_util.js';
 import {getTemplate} from './input_page.html.js';
@@ -305,9 +304,14 @@ class OsSettingsInputPageElement extends OsSettingsInputPageElementBase {
    *     method ID.
    */
   private hasOptionsPageInSettings_(id: string): boolean {
-    return hasOptionsPageInSettings(
-        id, loadTimeData.getBoolean('allowPredictiveWriting'),
-        loadTimeData.getBoolean('systemJapanesePhysicalTyping'));
+    return hasOptionsPageInSettings(id, {
+      isPhysicalKeyboardAutocorrectAllowed:
+          loadTimeData.getBoolean('isPhysicalKeyboardAutocorrectAllowed'),
+      isPhysicalKeyboardPredictiveWritingAllowed:
+          loadTimeData.getBoolean('isPhysicalKeyboardPredictiveWritingAllowed'),
+      isJapaneseSettingsAllowed:
+          loadTimeData.getBoolean('systemJapanesePhysicalTyping'),
+    });
   }
 
   private navigateToOptionsPageInSettings_(

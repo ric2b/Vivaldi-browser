@@ -12,7 +12,7 @@ import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import 'chrome://resources/cr_components/localized_link/localized_link.js';
-import '../../settings_shared.css.js';
+import '../settings_shared.css.js';
 import './os_powerwash_dialog_esim_item.js';
 
 import {LifetimeBrowserProxy, LifetimeBrowserProxyImpl} from '/shared/settings/lifetime_browser_proxy.js';
@@ -23,8 +23,7 @@ import {NetworkType} from 'chrome://resources/mojo/chromeos/services/network_con
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {recordSettingChange} from '../metrics_recorder.js';
-import {routes} from '../os_settings_routes.js';
-import {Router} from '../router.js';
+import {Router, routes} from '../router.js';
 
 import {getTemplate} from './os_powerwash_dialog.html.js';
 import {OsResetBrowserProxy, OsResetBrowserProxyImpl} from './os_reset_browser_proxy.js';

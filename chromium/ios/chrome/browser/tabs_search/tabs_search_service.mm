@@ -15,14 +15,20 @@
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/sync_sessions/session_sync_service.h"
 #import "ios/chrome/browser/history/history_utils.h"
-#import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/main/browser_list.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/synced_sessions/distant_session.h"
 #import "ios/chrome/browser/synced_sessions/distant_tab.h"
 #import "ios/chrome/browser/synced_sessions/synced_sessions.h"
 #import "ios/chrome/browser/tabs/tab_title_util.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/web/public/web_state.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -123,11 +129,17 @@ void TabsSearchService::SearchRemoteTabs(
   DCHECK(!is_off_the_record_);
   std::vector<synced_sessions::DistantTabsSet> results;
 
+  // Vivaldi: This is a temporary solution. Google has a two level of consent
+  // system, one for SignIn and one for Sync. But, in our case its Sync only.
+  // It is quite important to find the better approach to solve this.
+  // TODO: - IMPORTANT! - @julien@vivaldi.com or @prio@vivaldi.com
+  if (!IsVivaldiRunning()) {
   if (!identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
     // There must be a primary account for synced sessions to be available.
     std::move(completion).Run(nullptr, results);
     return;
   }
+  } // End Vivaldi
 
   FixedPatternStringSearchIgnoringCaseAndAccents query_search(term);
   auto synced_sessions =

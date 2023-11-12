@@ -7,15 +7,17 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "base/time/time.h"
+#import "components/bookmarks/common/bookmark_features.h"
 #import "components/policy/policy_constants.h"
 #import "components/signin/internal/identity_manager/account_capabilities_constants.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/signin/public/base/signin_switches.h"
 #import "components/strings/grit/components_strings.h"
+#import "components/sync/base/features.h"
 #import "ios/chrome/browser/metrics/metrics_app_interface.h"
 #import "ios/chrome/browser/policy/policy_earl_grey_utils.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/ui/elements/elements_constants.h"
 #import "ios/chrome/browser/signin/capabilities_types.h"
 #import "ios/chrome/browser/signin/fake_system_identity.h"
@@ -30,9 +32,11 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey_ui.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
+#import "ios/chrome/browser/ui/ntp/new_tab_page_constants.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
+#import "ios/chrome/browser/ui/settings/signin_settings_app_interface.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -53,6 +57,7 @@
 using chrome_test_util::BookmarksNavigationBarDoneButton;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::GoogleServicesSettingsButton;
+using chrome_test_util::GoogleSyncSettingsButton;
 using chrome_test_util::IdentityCellMatcherForEmail;
 using chrome_test_util::PrimarySignInButton;
 using chrome_test_util::SecondarySignInButton;
@@ -63,6 +68,7 @@ using chrome_test_util::SettingsImportDataContinueButton;
 using chrome_test_util::SettingsImportDataImportButton;
 using chrome_test_util::SettingsImportDataKeepSeparateButton;
 using chrome_test_util::SettingsLink;
+using chrome_test_util::SettingsSignInRowMatcher;
 using chrome_test_util::StaticTextWithAccessibilityLabelId;
 using l10n_util::GetNSString;
 using l10n_util::GetNSStringF;
@@ -128,7 +134,9 @@ void ChooseImportOrKeepDataSepareteDialog(id<GREYMatcher> choiceButtonMatcher) {
 
   // Sign in with `fakeIdentity2`.
   [ChromeEarlGreyUI openSettingsMenu];
-  [[EarlGrey selectElementWithMatcher:SecondarySignInButton()]
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsSignInRowMatcher()];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kIdentityButtonControlIdentifier)]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:IdentityCellMatcherForEmail(
                                           fakeIdentity2.userEmail)]
@@ -186,15 +194,27 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 @implementation SigninCoordinatorTestCase
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
-  AppLaunchConfiguration config = [super appConfigurationForTestCase];
-  if ([self
-          isRunningTest:@selector
-          (testOpenManageSyncSettingsFromNTPWhenSigninIsNotAllowedByPolicy)] ||
-      [self isRunningTest:@selector
-            (testOpenManageSyncSettingsFromNTPWhenSyncDisabledByPolicy)] ||
-      [self isRunningTest:@selector(testOpenSignInFromNTP)]) {
-    config.features_enabled.push_back(switches::kIdentityStatusConsistency);
+  AppLaunchConfiguration config;
+  if ([self isRunningTest:@selector
+            (testDismissAdvancedSigninBookmarksFromAdvancedSigninSettings)] ||
+      [self isRunningTest:@selector(testDismissSigninFromBookmarks)] ||
+      [self isRunningTest:@selector(testSignInCancelFromBookmarks)] ||
+      [self isRunningTest:@selector(testSigninPromoClosedWhenSyncOff)] ||
+      [self isRunningTest:@selector(testSigninPromoWhenSyncOff)]) {
+    // TODO(crbug.com/1455018): Re-enable the flag for non-legacy tests.
+    config.features_disabled.push_back(
+        bookmarks::kEnableBookmarksAccountStorage);
   }
+
+  if ([self isRunningTest:@selector(testOpenSignInAndSyncFromNTP)]) {
+    config.features_disabled.push_back(
+        syncer::kReplaceSyncPromosWithSignInPromos);
+  }
+  if ([self isRunningTest:@selector(testOpenSignInFromNTPIfHasDeviceAccount)]) {
+    config.features_enabled.push_back(
+        syncer::kReplaceSyncPromosWithSignInPromos);
+  }
+
   return config;
 }
 
@@ -207,6 +227,8 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   [ChromeEarlGrey clearBookmarks];
   GREYAssertNil([MetricsAppInterface setupHistogramTester],
                 @"Failed to set up histogram tester.");
+  // TODO(crbug.com/1450472): Remove when kHideSettingsSyncPromo is launched.
+  [SigninSettingsAppInterface setSettingsSigninPromoDisplayedCount:INT_MAX];
 }
 
 - (void)tearDown {
@@ -377,8 +399,10 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [self openSigninFromView:OpenSigninMethodFromSettings tapSettingsLink:NO];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kIdentityButtonControlIdentifier)]
+      performAction:grey_tap()];
   // Waits until the UI is fully presented before opening an URL.
   [ChromeEarlGreyUI waitForAppToIdle];
 
@@ -390,8 +414,10 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [self openSigninFromView:OpenSigninMethodFromSettings tapSettingsLink:NO];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kIdentityButtonControlIdentifier)]
+      performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:IdentityCellMatcherForEmail(
                                           fakeIdentity.userEmail)]
       performAction:grey_tap()];
@@ -431,8 +457,9 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   [SigninEarlGreyUI
       signOutWithConfirmationChoice:SignOutConfirmationChoiceKeepData];
   // Sign in with `fakeIdentity1`.
-  [ChromeEarlGreyUI openSettingsMenu];
-  [[EarlGrey selectElementWithMatcher:SecondarySignInButton()]
+  [self openSigninFromView:OpenSigninMethodFromSettings tapSettingsLink:NO];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kIdentityButtonControlIdentifier)]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:IdentityCellMatcherForEmail(
                                           fakeIdentity1.userEmail)]
@@ -454,8 +481,10 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [self openSigninFromView:OpenSigninMethodFromSettings tapSettingsLink:NO];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kIdentityButtonControlIdentifier)]
+      performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:IdentityCellMatcherForEmail(
                                           fakeIdentity1.userEmail)]
       performAction:grey_tap()];
@@ -662,7 +691,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   switch (openSigninMethod) {
     case OpenSigninMethodFromSettings:
       [ChromeEarlGreyUI openSettingsMenu];
-      [ChromeEarlGreyUI tapSettingsMenuButton:PrimarySignInButton()];
+      [ChromeEarlGreyUI tapSettingsMenuButton:SettingsSignInRowMatcher()];
       break;
     case OpenSigninMethodFromBookmarks:
       [ChromeEarlGreyUI openToolsMenu];
@@ -722,8 +751,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 
 // Tests the "ADD ACCOUNT" button in the identity chooser view controller.
 - (void)testAddAccountAutomatically {
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:PrimarySignInButton()];
+  [self openSigninFromView:OpenSigninMethodFromSettings tapSettingsLink:NO];
   [ChromeEarlGreyUI waitForAppToIdle];
   // Tap on "ADD ACCOUNT".
   [SigninEarlGreyUI tapAddAccountButton];
@@ -752,8 +780,10 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   // Open the identity chooser.
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [self openSigninFromView:OpenSigninMethodFromSettings tapSettingsLink:NO];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kIdentityButtonControlIdentifier)]
+      performAction:grey_tap()];
   [ChromeEarlGrey
       waitForMatcher:IdentityCellMatcherForEmail(fakeIdentity.userEmail)];
 
@@ -774,8 +804,10 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [self openSigninFromView:OpenSigninMethodFromSettings tapSettingsLink:NO];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kIdentityButtonControlIdentifier)]
+      performAction:grey_tap()];
 
   // Open Add Account screen.
   id<GREYMatcher> add_account_matcher =
@@ -793,8 +825,10 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [self openSigninFromView:OpenSigninMethodFromSettings tapSettingsLink:NO];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kIdentityButtonControlIdentifier)]
+      performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:IdentityCellMatcherForEmail(
                                           fakeIdentity.userEmail)]
       performAction:grey_tap()];
@@ -823,8 +857,10 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
+  [self openSigninFromView:OpenSigninMethodFromSettings tapSettingsLink:NO];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kIdentityButtonControlIdentifier)]
+      performAction:grey_tap()];
 
   // Invalidate account after menu generation. If the underlying code does not
   // handle the race condition of removing an identity while showing menu is in
@@ -902,8 +938,8 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   SetSigninEnterprisePolicyValue(BrowserSigninMode::kDisabled);
 
   // Select the identity disc particle.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(GetNSString(
-                                          IDS_IOS_IDENTITY_DISC_SIGNED_OUT))]
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(kNTPFeedHeaderIdentityDisc)]
       performAction:grey_tap()];
 
   // Ensure the Settings menu is displayed.
@@ -923,8 +959,8 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
       performAction:grey_tap()];
 
   // Select the identity disc particle.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(GetNSString(
-                                          IDS_IOS_IDENTITY_DISC_SIGNED_OUT))]
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(kNTPFeedHeaderIdentityDisc)]
       performAction:grey_tap()];
 
   // Ensure the Settings menu is displayed.
@@ -932,19 +968,38 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 
-// Tests that a signed-out user can open "Sign in" screen from the NTP.
-- (void)testOpenSignInFromNTP {
+// Tests that a signed-out user can open "Sign in and sync" screen from the NTP.
+- (void)testOpenSignInAndSyncFromNTP {
   // Select the identity disc particle.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(GetNSString(
-                                          IDS_IOS_IDENTITY_DISC_SIGNED_OUT))]
+  [[EarlGrey
+      selectElementWithMatcher:
+          grey_accessibilityLabel(GetNSString(
+              IDS_IOS_IDENTITY_DISC_SIGNED_OUT_ACCESSIBILITY_LABEL_WITH_SYNC))]
       performAction:grey_tap()];
 
-  // Ensure the sign-in menu is displayed. The existence of the skip
+  // Ensure the sign-in and sync menu is displayed. The existence of the skip
   // accessibility button on screen verifies that tha sign-in screen was
   // shown.
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           kSkipSigninAccessibilityIdentifier)]
       performAction:grey_tap()];
+}
+
+// Tests that a signed-out user can open "Sign in" sheet from the NTP.
+- (void)testOpenSignInFromNTPIfHasDeviceAccount {
+  [SigninEarlGrey addFakeIdentity:[FakeSystemIdentity fakeIdentity1]];
+
+  // Select the identity disc particle.
+  [[EarlGrey selectElementWithMatcher:
+                 grey_accessibilityLabel(GetNSString(
+                     IDS_IOS_IDENTITY_DISC_SIGNED_OUT_ACCESSIBILITY_LABEL))]
+      performAction:grey_tap()];
+
+  // Ensure the sign-in sheet is displayed.
+  [[EarlGrey selectElementWithMatcher:
+                 grey_accessibilityLabel(l10n_util::GetNSString(
+                     IDS_IOS_IDENTITY_DISC_SIGNED_OUT_PROMO_LABEL))]
+      assertWithMatcher:grey_sufficientlyVisible()];
 }
 
 // Tests that opening the sign-in screen from the Settings and signing in works
@@ -1047,38 +1102,44 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   [ChromeEarlGreyUI waitForToolbarVisible:YES];
 }
 
-// Tests that the sign-in promo for no identities is displayed in Settings when
+// Tests that the sign-in promo for no identities is displayed in Bookmarks when
 // the user is signed out and has not added any identities to the device.
 - (void)testSigninPromoWithNoIdentitiesOnDevice {
-  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI openToolsMenu];
+  [ChromeEarlGreyUI
+      tapToolsMenuButton:chrome_test_util::BookmarksDestinationButton()];
 
   [SigninEarlGrey verifySignedOut];
   [SigninEarlGreyUI
       verifySigninPromoVisibleWithMode:SigninPromoViewModeNoAccounts];
 }
 
-// Tests that the sign-in promo with user name is displayed in Settings when the
-// user is signed out.
+// Tests that the sign-in promo with user name is displayed in Bookmarks when
+// the user is signed out.
 - (void)testSigninPromoWhenSignedOut {
   // Add identity to the device.
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
-  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI openToolsMenu];
+  [ChromeEarlGreyUI
+      tapToolsMenuButton:chrome_test_util::BookmarksDestinationButton()];
 
   [SigninEarlGrey verifySignedOut];
   [SigninEarlGreyUI
       verifySigninPromoVisibleWithMode:SigninPromoViewModeSigninWithAccount];
 }
 
-// Tests that the sign-in promo is removed from Settings when the user
+// Tests that the sign-in promo is removed from Bookmarks when the user
 // is signed out and has closed the sign-in promo with user name.
 - (void)testSigninPromoClosedWhenSignedOut {
   // Add identity to the device.
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
-  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI openToolsMenu];
+  [ChromeEarlGreyUI
+      tapToolsMenuButton:chrome_test_util::BookmarksDestinationButton()];
   [SigninEarlGreyUI
       verifySigninPromoVisibleWithMode:SigninPromoViewModeSigninWithAccount
                            closeButton:YES];
@@ -1101,7 +1162,9 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity enableSync:NO];
 
-  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI openToolsMenu];
+  [ChromeEarlGreyUI
+      tapToolsMenuButton:chrome_test_util::BookmarksDestinationButton()];
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
   [SigninEarlGreyUI
       verifySigninPromoVisibleWithMode:SigninPromoViewModeSigninWithAccount];
@@ -1116,7 +1179,9 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity enableSync:NO];
 
-  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI openToolsMenu];
+  [ChromeEarlGreyUI
+      tapToolsMenuButton:chrome_test_util::BookmarksDestinationButton()];
   [SigninEarlGreyUI
       verifySigninPromoVisibleWithMode:SigninPromoViewModeSigninWithAccount];
   // Tap on dismiss button.
@@ -1145,8 +1210,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:PrimarySignInButton()];
+  [self openSigninFromView:OpenSigninMethodFromSettings tapSettingsLink:NO];
   [SigninEarlGreyUI tapSigninConfirmationDialog];
 
   // Give the Sync state a chance to finish UI updates.
@@ -1199,7 +1263,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 
   // Open turn on sync dialog.
   [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:PrimarySignInButton()];
+  [ChromeEarlGreyUI tapSettingsMenuButton:GoogleSyncSettingsButton()];
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           kIdentityButtonControlIdentifier)]
       performAction:grey_tap()];
@@ -1222,8 +1286,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   policy_test_utils::SetPolicy(base::Value(std::move(list)),
                                policy::key::kSyncTypesListDisabled);
 
-  [ChromeEarlGreyUI openSettingsMenu];
-  [ChromeEarlGreyUI tapSettingsMenuButton:PrimarySignInButton()];
+  [self openSigninFromView:OpenSigninMethodFromSettings tapSettingsLink:NO];
   [ChromeEarlGreyUI waitForAppToIdle];
 
   NSString* policyText =

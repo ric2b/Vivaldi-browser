@@ -20,7 +20,6 @@ import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -64,7 +63,7 @@ public class PopupTest {
 
     @Before
     public void setUp() throws Exception {
-        SafeBrowsingApiBridge.setHandler(new MockSafeBrowsingApiHandler());
+        SafeBrowsingApiBridge.setHandler(new MockSafetyNetApiHandler());
         mActivityTestRule.startMainActivityOnBlankPage();
 
         PostTask.runOrPostTask(
@@ -78,7 +77,7 @@ public class PopupTest {
     @After
     public void tearDown() {
         mTestServer.stopAndDestroyServer();
-        MockSafeBrowsingApiHandler.clearMockResponses();
+        MockSafetyNetApiHandler.clearMockResponses();
     }
 
     @Test
@@ -114,7 +113,7 @@ public class PopupTest {
         final TabModelSelector selector = mActivityTestRule.getActivity().getTabModelSelector();
 
         String url = mTestServer.getURL("/chrome/test/data/android/popup_on_click.html");
-        MockSafeBrowsingApiHandler.addMockResponse(url, METADATA_FOR_ABUSIVE_ENFORCEMENT);
+        MockSafetyNetApiHandler.addMockResponse(url, METADATA_FOR_ABUSIVE_ENFORCEMENT);
 
         mActivityTestRule.loadUrl(url);
         CriteriaHelper.pollUiThread(
@@ -148,7 +147,6 @@ public class PopupTest {
     @Test
     @MediumTest
     @Feature({"Popup"})
-    @DisabledTest(message = "https://crbug.com/1262445")
     public void testPopupWindowsAppearWhenAllowed() {
         final TabModelSelector selector = mActivityTestRule.getActivity().getTabModelSelector();
 

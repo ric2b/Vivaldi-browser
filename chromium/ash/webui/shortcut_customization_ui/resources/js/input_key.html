@@ -21,10 +21,12 @@
     font-weight: 500;
     height: 32px;
     justify-content: center;
+    margin-bottom: 2px;
     margin-inline-end: 8px;
     min-width: 32px;
     padding-bottom: 6px;
     padding-top: 6px;
+    vertical-align: middle;
   }
 
   :host([narrow]) .key-container {
@@ -50,12 +52,13 @@
     box-shadow: 0 1px 1px var(--key-modifier-selected-shadow-color);
   }
 
-  :host([key-state='modifier-selected']:not([key='meta'])) .key-container {
+  :host([key-state='modifier-selected']:not([key='meta']):not([key='Meta'])) .key-container {
     min-width: 44px;
     padding-inline: 12px;
   }
 
-  :host([key-state='modifier-selected'][key='meta']) .key-container {
+  :host([key-state='modifier-selected'][key='meta']) .key-container,
+  :host([key-state='modifier-selected'][key='Meta']) .key-container {
     padding-inline: 6px;
   }
 
@@ -98,9 +101,12 @@
 
 <div id="key" class="key-container">
   <template is="dom-if" if="[[getIconIdForKey(key)]]">
-    <div aria-label$="[[getAriaLabelForIcon(key)]]" role="img">
-      <iron-icon icon="[[getIconIdForKey(key)]]" id="key-icon"></iron-icon>
-    </div>
+    <iron-icon
+        id="key-icon"
+        icon="[[getIconIdForKey(key)]]"
+        aria-label$="[[getAriaLabelForIcon(key)]]"
+        role="img">
+    </iron-icon>
   </template>
   <template is="dom-if" if="[[!getIconIdForKey(key)]]">
     <span id="key-text">[[key]]</span>

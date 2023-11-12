@@ -14,6 +14,7 @@
 #include "gn/desc_builder.h"
 #include "gn/input_file.h"
 #include "gn/parse_tree.h"
+#include "gn/resolved_target_data.h"
 #include "gn/runtime_deps.h"
 #include "gn/rust_variables.h"
 #include "gn/scope.h"
@@ -582,10 +583,12 @@ class TargetDescBuilder : public BaseDescBuilder {
     // currently implement a blame feature for this since the bottom-up
     // inheritance makes this difficult.
 
+    ResolvedTargetData resolved;
+
     // Libs can be part of any target and get recursively pushed up the chain,
     // so display them regardless of target type.
     if (what(variables::kLibs)) {
-      const UniqueVector<LibFile>& all_libs = target_->all_libs();
+      const auto& all_libs = resolved.GetLinkedLibraries(target_);
       if (!all_libs.empty()) {
         auto libs = std::make_unique<base::ListValue>();
         for (size_t i = 0; i < all_libs.size(); i++)
@@ -595,7 +598,7 @@ class TargetDescBuilder : public BaseDescBuilder {
     }
 
     if (what(variables::kLibDirs)) {
-      const UniqueVector<SourceDir>& all_lib_dirs = target_->all_lib_dirs();
+      const auto& all_lib_dirs = resolved.GetLinkedLibraryDirs(target_);
       if (!all_lib_dirs.empty()) {
         auto lib_dirs = std::make_unique<base::ListValue>();
         for (size_t i = 0; i < all_lib_dirs.size(); i++)
@@ -605,7 +608,7 @@ class TargetDescBuilder : public BaseDescBuilder {
     }
 
     if (what(variables::kFrameworks)) {
-      const auto& all_frameworks = target_->all_frameworks();
+      const auto& all_frameworks = resolved.GetLinkedFrameworks(target_);
       if (!all_frameworks.empty()) {
         auto frameworks = std::make_unique<base::ListValue>();
         for (size_t i = 0; i < all_frameworks.size(); i++)
@@ -615,7 +618,7 @@ class TargetDescBuilder : public BaseDescBuilder {
       }
     }
     if (what(variables::kWeakFrameworks)) {
-      const auto& weak_frameworks = target_->all_weak_frameworks();
+      const auto& weak_frameworks = resolved.GetLinkedWeakFrameworks(target_);
       if (!weak_frameworks.empty()) {
         auto frameworks = std::make_unique<base::ListValue>();
         for (size_t i = 0; i < weak_frameworks.size(); i++)
@@ -626,7 +629,7 @@ class TargetDescBuilder : public BaseDescBuilder {
     }
 
     if (what(variables::kFrameworkDirs)) {
-      const auto& all_framework_dirs = target_->all_framework_dirs();
+      const auto& all_framework_dirs = resolved.GetLinkedFrameworkDirs(target_);
       if (!all_framework_dirs.empty()) {
         auto framework_dirs = std::make_unique<base::ListValue>();
         for (size_t i = 0; i < all_framework_dirs.size(); i++)

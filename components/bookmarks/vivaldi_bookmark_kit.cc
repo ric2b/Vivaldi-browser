@@ -146,6 +146,7 @@ const std::string& GetMetaString(const BookmarkNode::MetaInfoMap& meta_info_map,
 
 const std::string& GetMetaString(const BookmarkNode* node,
                                  const std::string& key) {
+  DCHECK(node);
   if (const BookmarkNode::MetaInfoMap* meta_info_map = node->GetMetaInfoMap()) {
     return GetMetaString(*meta_info_map, key);
   }
@@ -223,7 +224,7 @@ void CustomMetaInfo::SetDescription(const std::string& description) {
   SetMetaString(&map_, GetMetaNames().description, description);
 }
 
-void CustomMetaInfo::SetPartner(const base::GUID& partner) {
+void CustomMetaInfo::SetPartner(const base::Uuid& partner) {
   SetMetaString(&map_, GetMetaNames().partner, partner.AsLowercaseString());
 }
 
@@ -247,27 +248,27 @@ const std::string& GetDescription(const BookmarkNode* node) {
   return GetMetaString(node, GetMetaNames().description);
 }
 
-const base::GUID GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map) {
-  base::GUID partner_id;
+const base::Uuid GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map) {
+  base::Uuid partner_id;
   const std::string& partner_string =
       GetMetaString(meta_info_map, GetMetaNames().partner);
   if (!partner_string.empty()) {
-    partner_id = base::GUID::ParseCaseInsensitive(partner_string);
+    partner_id = base::Uuid::ParseCaseInsensitive(partner_string);
     if (!partner_id.is_valid()) {
-      LOG(ERROR) << "Invalid GUID as a partner id - " << partner_string;
+      LOG(ERROR) << "Invalid Uuid as a partner id - " << partner_string;
     }
   }
   return partner_id;
 }
 
-const base::GUID GetPartner(const BookmarkNode* node) {
-  base::GUID partner_id;
+const base::Uuid GetPartner(const BookmarkNode* node) {
+  base::Uuid partner_id;
   const std::string& partner_string =
       GetMetaString(node, GetMetaNames().partner);
   if (!partner_string.empty()) {
-    partner_id = base::GUID::ParseCaseInsensitive(partner_string);
+    partner_id = base::Uuid::ParseCaseInsensitive(partner_string);
     if (!partner_id.is_valid()) {
-      LOG(ERROR) << "Invalid GUID as a partner id - " << partner_string;
+      LOG(ERROR) << "Invalid Uuid as a partner id - " << partner_string;
     }
   }
   return partner_id;

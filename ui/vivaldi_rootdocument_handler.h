@@ -12,8 +12,12 @@
 
 #include "base/memory/singleton.h"
 #include "base/no_destructor.h"
+#include "base/scoped_observation.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
+#include "chrome/browser/profiles/profile_manager.h"
+
+#include "chrome/browser/profiles/profile_manager_observer.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/navigation_handle.h"
@@ -66,6 +70,7 @@ class VivaldiRootDocumentHandlerFactory
 class VivaldiRootDocumentHandler : public KeyedService,
                                    public extensions::ExtensionRegistryObserver,
                                    public ProfileObserver,
+                                   public ProfileManagerObserver,
                                    protected content::WebContentsObserver {
   friend base::DefaultSingletonTraits<VivaldiRootDocumentHandler>;
 
@@ -75,6 +80,9 @@ class VivaldiRootDocumentHandler : public KeyedService,
   // ProfileObserver implementation.
   void OnOffTheRecordProfileCreated(Profile* off_the_record) override;
   void OnProfileWillBeDestroyed(Profile* profile) override;
+
+  // ProfileManagerObserver implementation.
+  void OnProfileMarkedForPermanentDeletion(Profile* profile) override;
 
   void AddObserver(VivaldiRootDocumentHandlerObserver* observer);
   void RemoveObserver(VivaldiRootDocumentHandlerObserver* observer);
@@ -128,6 +136,8 @@ class VivaldiRootDocumentHandler : public KeyedService,
   bool otr_document_loader_is_ready_ = false;
 
   base::ObserverList<VivaldiRootDocumentHandlerObserver>::Unchecked observers_;
+  base::ScopedObservation<ProfileManager, ProfileManagerObserver>
+      profile_manager_observation_{this};
 
   raw_ptr<const Extension> vivaldi_extension_ = nullptr;
   // The profile we observe.

@@ -14,6 +14,8 @@
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/ref_counted_memory.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -46,6 +48,7 @@ namespace printing {
 class PdfPrinterHandler;
 class PrinterHandler;
 class PrintPreviewUI;
+enum class UserActionBuckets;
 
 // The handler for Javascript messages related to the print preview dialog.
 class PrintPreviewHandler : public content::WebUIMessageHandler {
@@ -91,7 +94,8 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
 
   // Send the default page layout
   void SendPageLayoutReady(base::Value::Dict layout,
-                           bool has_custom_page_size_style,
+                           bool all_pages_have_custom_size,
+                           bool all_pages_have_custom_orientation,
                            int request_id);
 
   // Notify the WebUI that the page preview is ready.
@@ -117,6 +121,13 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
   // Gets the initiator for the print preview dialog.
   virtual content::WebContents* GetInitiator();
 
+  // Initiates print after any content analysis checks have been passed
+  // successfully.
+  virtual void FinishHandlePrint(UserActionBuckets user_action,
+                                 base::Value::Dict settings,
+                                 scoped_refptr<base::RefCountedMemory> data,
+                                 const std::string& callback_id);
+
  private:
   friend class PrintPreviewPdfGeneratedBrowserTest;
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewPdfGeneratedBrowserTest,
@@ -133,7 +144,8 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
   friend class PrintPreviewHandlerFailingTest;
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerFailingTest,
                            GetPrinterCapabilities);
-
+  FRIEND_TEST_ALL_PREFIXES(ContentAnalysisPrintPreviewHandlerTest,
+                           LocalScanBeforePrinting);
   content::WebContents* preview_web_contents();
 
   PrintPreviewUI* print_preview_ui();
@@ -255,6 +267,20 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
   void OnPrintResult(const std::string& callback_id,
                      const base::Value& error);
 
+#if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
+  // Called when enterprise policy returns a verdict.
+  // Calls FinishHandlePrint if it's allowed else calls OnPrintResult to report
+  // print not allowed.
+  void OnVerdictByEnterprisePolicy(UserActionBuckets user_action,
+                                   base::Value::Dict settings,
+                                   scoped_refptr<base::RefCountedMemory> data,
+                                   const std::string& callback_id,
+                                   bool allowed);
+
+  // Wrapper for OnHidePreviewDialog() from PrintPreviewUI.
+  void OnHidePreviewDialog();
+#endif  // BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
+
   // Whether we have already logged a failed print preview.
   bool reported_failed_preview_ = false;
 
@@ -294,7 +320,8 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
   // Note that this is not propagated to LocalPrinterHandlerLacros.
   // The pointer is constant - if ash crashes and the mojo connection is lost,
   // lacros will automatically be restarted.
-  raw_ptr<crosapi::mojom::LocalPrinter> local_printer_ = nullptr;
+  raw_ptr<crosapi::mojom::LocalPrinter, DanglingUntriaged> local_printer_ =
+      nullptr;
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -305,8 +332,8 @@ class PrintPreviewHandler : public content::WebUIMessageHandler {
   // Null if the interface is unavailable.
   // The pointer is constant - if ash crashes and the mojo connection is lost,
   // lacros will automatically be restarted.
-  raw_ptr<crosapi::mojom::DriveIntegrationService> drive_integration_service_ =
-      nullptr;
+  raw_ptr<crosapi::mojom::DriveIntegrationService, DanglingUntriaged>
+      drive_integration_service_ = nullptr;
 #endif
 
   base::WeakPtrFactory<PrintPreviewHandler> weak_factory_{this};

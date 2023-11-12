@@ -17,6 +17,10 @@ animationFillMode
 animationIterationCount
 animationName
 animationPlayState
+animationRange
+animationRangeEnd
+animationRangeStart
+animationTimeline
 animationTimingFunction
 appRegion
 appearance
@@ -282,8 +286,10 @@ objectFit
 objectPosition
 objectViewBox
 offset
+offsetAnchor
 offsetDistance
 offsetPath
+offsetPosition
 offsetRotate
 opacity
 order
@@ -370,6 +376,9 @@ scrollPaddingTop
 scrollSnapAlign
 scrollSnapStop
 scrollSnapType
+scrollTimeline
+scrollTimelineAxis
+scrollTimelineName
 scrollbarGutter
 setProperty
 shapeImageThreshold
@@ -421,6 +430,7 @@ textTransform
 textUnderlineOffset
 textUnderlinePosition
 textWrap
+timelineScope
 top
 touchAction
 transform
@@ -438,6 +448,10 @@ unicodeRange
 userSelect
 vectorEffect
 verticalAlign
+viewTimeline
+viewTimelineAxis
+viewTimelineInset
+viewTimelineName
 viewTransitionName
 visibility
 webkitAlignContent

@@ -11,30 +11,29 @@ import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
-import '../../settings_shared.css.js';
+import '../settings_shared.css.js';
 import '../os_settings_icons.html.js';
 
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {IronCollapseElement} from 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 import {DomRepeat, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import * as routesMojom from '../mojom-webui/routes.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
+import {OsPageAvailability} from '../os_page_availability.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route, Router} from '../router.js';
+import {isAdvancedRoute, Route, Router} from '../router.js';
 
 import {getTemplate} from './os_settings_menu.html.js';
 
 interface MenuItemData {
+  pageName: routesMojom.Section;
   path: string;
   icon: string;
   label: string;
-  hidden: boolean;
 }
 
-interface OsSettingsMenuElement {
+export interface OsSettingsMenuElement {
   $: {
     topMenu: IronSelectorElement,
     topMenuRepeat: DomRepeat,
@@ -45,7 +44,7 @@ interface OsSettingsMenuElement {
 
 const OsSettingsMenuElementBase = RouteObserverMixin(I18nMixin(PolymerElement));
 
-class OsSettingsMenuElement extends OsSettingsMenuElementBase {
+export class OsSettingsMenuElement extends OsSettingsMenuElementBase {
   static get is() {
     return 'os-settings-menu';
   }
@@ -56,34 +55,28 @@ class OsSettingsMenuElement extends OsSettingsMenuElementBase {
 
   static get properties() {
     return {
+      /**
+       * Determines which menu items are available for their respective pages
+       */
+      pageAvailability: {
+        type: Object,
+      },
+
       advancedOpened: {
         type: Boolean,
         value: false,
         notify: true,
       },
 
-      showKerberosSection: Boolean,
-
-      showReset: Boolean,
-
-      /**
-       * Whether the user is in guest mode.
-       */
-      isGuestMode_: {
-        type: Boolean,
-        value: loadTimeData.getBoolean('isGuest'),
-        readOnly: true,
-      },
-
       basicMenuItems_: {
         type: Array,
-        computed: 'computeBasicMenuItems_(isGuestMode_, showKerberosSection)',
+        computed: 'computeBasicMenuItems_(pageAvailability.*)',
         readOnly: true,
       },
 
       advancedMenuItems_: {
         type: Array,
-        computed: 'computeAdvancedMenuItems_(isGuestMode_, showReset)',
+        computed: 'computeAdvancedMenuItems_(pageAvailability.*)',
         readOnly: true,
       },
 
@@ -99,9 +92,7 @@ class OsSettingsMenuElement extends OsSettingsMenuElementBase {
   }
 
   advancedOpened: boolean;
-  showKerberosSection: boolean;
-  showReset: boolean;
-  private isGuestMode_: boolean;
+  pageAvailability: OsPageAvailability;
   private basicMenuItems_: MenuItemData[];
   private advancedMenuItems_: MenuItemData[];
   private selectedUrl_: string;
@@ -119,8 +110,7 @@ class OsSettingsMenuElement extends OsSettingsMenuElementBase {
         Router.getInstance().getQueryParameters().get('search');
     // If the route navigated to by a search result is in the advanced
     // section, the advanced menu will expand.
-    if (urlSearchQuery && routes.ADVANCED &&
-        routes.ADVANCED.contains(newRoute)) {
+    if (urlSearchQuery && isAdvancedRoute(newRoute)) {
       this.advancedOpened = true;
     }
 
@@ -147,115 +137,123 @@ class OsSettingsMenuElement extends OsSettingsMenuElementBase {
   }
 
   private computeBasicMenuItems_(): MenuItemData[] {
-    return [
+    const {Section} = routesMojom;
+    const basicMenuItems: MenuItemData[] = [
       {
+        pageName: Section.kNetwork,
         path: routesMojom.NETWORK_SECTION_PATH,
         icon: 'os-settings:network-wifi',
         label: this.i18n('internetPageTitle'),
-        hidden: false,
       },
       {
+        pageName: Section.kBluetooth,
         path: routesMojom.BLUETOOTH_SECTION_PATH,
         icon: 'cr:bluetooth',
         label: this.i18n('bluetoothPageTitle'),
-        hidden: false,
       },
       {
+        pageName: Section.kMultiDevice,
         path: routesMojom.MULTI_DEVICE_SECTION_PATH,
         icon: 'os-settings:multidevice-better-together-suite',
         label: this.i18n('multidevicePageTitle'),
-        hidden: this.isGuestMode_,
       },
       {
+        pageName: Section.kPeople,
         path: routesMojom.PEOPLE_SECTION_PATH,
         icon: 'cr:person',
         label: this.i18n('osPeoplePageTitle'),
-        hidden: this.isGuestMode_,
       },
       {
+        pageName: Section.kKerberos,
         path: routesMojom.KERBEROS_SECTION_PATH,
         icon: 'os-settings:auth-key',
         label: this.i18n('kerberosPageTitle'),
-        hidden: !this.showKerberosSection,
       },
       {
+        pageName: Section.kDevice,
         path: routesMojom.DEVICE_SECTION_PATH,
         icon: 'os-settings:laptop-chromebook',
         label: this.i18n('devicePageTitle'),
-        hidden: false,
       },
       {
+        pageName: Section.kPersonalization,
         path: routesMojom.PERSONALIZATION_SECTION_PATH,
         icon: 'os-settings:paint-brush',
         label: this.i18n('personalizationPageTitle'),
-        hidden: this.isGuestMode_,
       },
       {
+        pageName: Section.kSearchAndAssistant,
         path: routesMojom.SEARCH_AND_ASSISTANT_SECTION_PATH,
         icon: 'cr:search',
         label: this.i18n('osSearchPageTitle'),
-        hidden: false,
       },
       {
+        pageName: Section.kPrivacyAndSecurity,
         path: routesMojom.PRIVACY_AND_SECURITY_SECTION_PATH,
         icon: 'cr:security',
         label: this.i18n('privacyPageTitle'),
-        hidden: false,
       },
       {
+        pageName: Section.kApps,
         path: routesMojom.APPS_SECTION_PATH,
         icon: 'os-settings:apps',
         label: this.i18n('appsPageTitle'),
-        hidden: false,
       },
       {
+        pageName: Section.kAccessibility,
         path: routesMojom.ACCESSIBILITY_SECTION_PATH,
         icon: 'os-settings:accessibility',
         label: this.i18n('a11yPageTitle'),
-        hidden: false,
       },
     ];
+
+    return basicMenuItems.filter(
+        ({pageName}) => !!this.pageAvailability[pageName]);
   }
 
   private computeAdvancedMenuItems_(): MenuItemData[] {
-    return [
+    const {Section} = routesMojom;
+    const advancedMenuItems: MenuItemData[] = [
       {
+        pageName: Section.kDateAndTime,
         path: routesMojom.DATE_AND_TIME_SECTION_PATH,
         icon: 'os-settings:access-time',
         label: this.i18n('dateTimePageTitle'),
-        hidden: false,
       },
       {
+        pageName: Section.kLanguagesAndInput,
         path: routesMojom.LANGUAGES_AND_INPUT_SECTION_PATH,
         icon: 'os-settings:language',
         label: this.i18n('osLanguagesPageTitle'),
-        hidden: false,
       },
       {
+        pageName: Section.kFiles,
         path: routesMojom.FILES_SECTION_PATH,
         icon: 'os-settings:folder-outline',
         label: this.i18n('filesPageTitle'),
-        hidden: this.isGuestMode_,
       },
       {
+        pageName: Section.kPrinting,
         path: routesMojom.PRINTING_SECTION_PATH,
         icon: 'os-settings:print',
         label: this.i18n('printingPageTitle'),
-        hidden: false,
       },
       {
+        pageName: Section.kCrostini,
         path: routesMojom.CROSTINI_SECTION_PATH,
         icon: 'os-settings:developer-tags',
         label: this.i18n('crostiniPageTitle'),
-        hidden: false,
       },
       {
+        pageName: Section.kReset,
         path: routesMojom.RESET_SECTION_PATH,
         icon: 'os-settings:restore',
         label: this.i18n('resetPageTitle'),
-        hidden: !this.showReset,
       },
     ];
+
+    return advancedMenuItems.filter(
+        ({pageName}) => !!this.pageAvailability[pageName]);
   }
 
   private onAdvancedButtonToggle_() {

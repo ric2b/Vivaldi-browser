@@ -54,9 +54,9 @@
 #include "services/network/public/mojom/attribution.mojom-forward.h"
 #endif
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
 #include "media/mojo/mojom/stable/stable_video_decoder.mojom-forward.h"
-#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#endif  // BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
 
 #if BUILDFLAG(IS_FUCHSIA)
 #include "media/mojo/mojom/fuchsia_media.mojom-forward.h"
@@ -651,11 +651,11 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
       const blink::StorageKey& storage_key,
       mojo::PendingReceiver<blink::mojom::WebSocketConnector> receiver) = 0;
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
   virtual void CreateStableVideoDecoder(
       mojo::PendingReceiver<media::stable::mojom::StableVideoDecoder>
           receiver) = 0;
-#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#endif  // BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
 
   // Returns the current number of active views in this process.  Excludes
   // any RenderViewHosts that are swapped out.
@@ -700,14 +700,12 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
                                    base::ScopedFD log_file_descriptor) = 0;
 #endif
 
-#if BUILDFLAG(IS_ANDROID)
   // Sets whether web or OS-level Attribution Reporting is supported. This may
   // be called if the renderer process was created before the Measurement API
   // state is returned from the underlying platform. See
   // https://github.com/WICG/attribution-reporting-api/blob/main/app_to_web.md.
   virtual void SetAttributionReportingSupport(
       network::mojom::AttributionSupport) = 0;
-#endif
 
   // Static management functions -----------------------------------------------
 

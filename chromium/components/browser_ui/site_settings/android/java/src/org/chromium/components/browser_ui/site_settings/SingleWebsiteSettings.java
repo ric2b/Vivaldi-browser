@@ -35,11 +35,13 @@ import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.ManagedPreferencesUtils;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
+import org.chromium.components.browsing_data.DeleteBrowsingDataAction;
 import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.browser.ContentFeatureMap;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -76,6 +78,9 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
 
     // A boolean to configure whether the sound setting should be shown. Defaults to true.
     public static final String EXTRA_SHOW_SOUND = "org.chromium.chrome.preferences.show_sound";
+
+    // A boolean that indicates whether these settings were opened from GroupedWebsiteSettings.
+    public static final String EXTRA_FROM_GROUPED = "org.chromium.chrome.preferences.from_grouped";
 
     // Used to store mPreviousNotificationPermission when the activity is paused.
     private static final String PREVIOUS_NOTIFICATION_PERMISSION_KEY =
@@ -196,6 +201,9 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
 
     // The website this page is displaying details about.
     private Website mSite;
+
+    // Whether these settings were opened from GroupedWebsitesSettings.
+    private boolean mFromGrouped;
 
     // The Preference key for chooser object permissions.
     private static final String CHOOSER_PERMISSION_PREFERENCE_KEY = "chooser_permission_list";
@@ -329,6 +337,8 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             assert false : "Exactly one of EXTRA_SITE or EXTRA_SITE_ADDRESS must be provided.";
         }
 
+        mFromGrouped = getArguments().getBoolean(EXTRA_FROM_GROUPED, false);
+
         // Disable animations of preference changes.
         getListView().setItemAnimator(null);
     }
@@ -347,6 +357,10 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             }
             Callback<Boolean> onDialogClosed = (Boolean confirmed) -> {
                 if (confirmed) {
+                    RecordHistogram.recordEnumeratedHistogram("Privacy.DeleteBrowsingData.Action",
+                            DeleteBrowsingDataAction.SITES_SETTINGS_PAGE,
+                            DeleteBrowsingDataAction.MAX_VALUE);
+
                     SiteDataCleaner.clearData(getSiteSettingsDelegate().getBrowserContextHandle(),
                             mSite, mDataClearedCallback);
                 }
@@ -1095,7 +1109,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
 
     private void setUpDesktopSitePreference(Preference preference) {
         // Skip adding the desktop site preference if RDS exceptions support is removed.
-        if (!ContentFeatureList.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)
+        if (!ContentFeatureMap.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)
                 && SiteSettingsFeatureList.isEnabled(
                         SiteSettingsFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS_DOWNGRADE)) {
             return;
@@ -1130,6 +1144,10 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     private void popBackIfNoSettings() {
         if (!hasPermissionsPreferences() && !hasUsagePreferences() && getActivity() != null) {
             getActivity().finish();
+            if (mFromGrouped) {
+                Activity groupActivity = GroupedWebsitesActivityHolder.getInstance().getActivity();
+                if (groupActivity != null) groupActivity.finish();
+            }
         }
     }
 
@@ -1207,8 +1225,15 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         RecordHistogram.recordEnumeratedHistogram("SingleWebsitePreferences.NavigatedFromToReset",
                 navigationSource, SettingsNavigationSource.NUM_ENTRIES);
 
+        // Deletion horizontal product metrics
+        RecordHistogram.recordEnumeratedHistogram("Privacy.DeleteBrowsingData.Action",
+                DeleteBrowsingDataAction.SITES_SETTINGS_PAGE, DeleteBrowsingDataAction.MAX_VALUE);
         if (finishActivityImmediately) {
             getActivity().finish();
+            if (mFromGrouped) {
+                Activity groupActivity = GroupedWebsitesActivityHolder.getInstance().getActivity();
+                if (groupActivity != null) groupActivity.finish();
+            }
         }
     }
 
@@ -1262,7 +1287,12 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         View dialogView =
                 getActivity().getLayoutInflater().inflate(R.layout.clear_reset_dialog, null);
         TextView mainMessage = dialogView.findViewById(R.id.main_message);
-        mainMessage.setText(R.string.website_reset_confirmation);
+        if (SiteSettingsUtil.isSiteDataImprovementEnabled()) {
+            mainMessage.setText(getString(
+                    R.string.website_single_reset_confirmation, mSite.getAddress().getHost()));
+        } else {
+            mainMessage.setText(R.string.website_reset_confirmation);
+        }
         TextView signedOutText = dialogView.findViewById(R.id.signed_out_text);
         signedOutText.setText(R.string.webstorage_clear_data_dialog_sign_out_message);
         TextView offlineText = dialogView.findViewById(R.id.offline_text);

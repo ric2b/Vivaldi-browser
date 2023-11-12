@@ -18,11 +18,11 @@
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 
-namespace password_manager {
-
-namespace metrics_util {
+namespace password_manager::metrics_util {
 
 using IsUsernameChanged = base::StrongAlias<class IsUsernameChangedTag, bool>;
+using IsDisplayNameChanged =
+    base::StrongAlias<class IsDisplayNameChangedTag, bool>;
 using IsPasswordChanged = base::StrongAlias<class IsPasswordChangedTag, bool>;
 using IsPasswordNoteChanged =
     base::StrongAlias<class IsPasswordNoteChangedTag, bool>;
@@ -106,18 +106,6 @@ enum class LeakDialogDismissalReason {
   // This type has been deprecated as part of APC removal.
   // kClickedChangePasswordAutomatically = 4,
   kMaxValue = kClickedOk,
-};
-
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum FormDeserializationStatus {
-  LOGIN_DATABASE_SUCCESS = 0,
-  LOGIN_DATABASE_FAILURE = 1,
-  LIBSECRET_SUCCESS = 2,
-  LIBSECRET_FAILURE = 3,
-  GNOME_SUCCESS = 4,
-  GNOME_FAILURE = 5,
-  NUM_DESERIALIZATION_STATUSES
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -496,7 +484,8 @@ enum class AddCredentialFromSettingsUserInteractions {
 };
 
 // Metrics: PasswordManager.MoveToAccountStoreTrigger.
-// This must be kept in sync with the enum in password_move_to_account_dialog.js
+// This must be kept in sync with the enum in
+// password_move_multiple_passwords_to_account_dialog.ts
 // (in chrome/browser/resources/settings/autofill_page).
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -593,7 +582,7 @@ enum class PasswordViewPageInteractions {
   // The user opens the password view page to view an non-existing credential.
   // This will close the settings password view page.
   kCredentialNotFound = 2,
-  // The copy username button in settings password view page is clicked.
+  // The copy username button in settings password/passkey view page is clicked.
   kUsernameCopyButtonClicked = 3,
   // The copy password button in settings password view page is clicked.
   kPasswordCopyButtonClicked = 4,
@@ -615,7 +604,13 @@ enum class PasswordViewPageInteractions {
   kTimedOutInViewPage = 10,
   // The credential is requested by typing the URL.
   kCredentialRequestedByUrl = 11,
-  kMaxValue = kCredentialRequestedByUrl,
+  // The copy display name button in settings passkey view page is clicked.
+  kPasskeyDisplayNameCopyButtonClicked = 12,
+  // The delete button in a passkey view page is clicked.
+  kPasskeyDeleteButtonClicked = 13,
+  // The edit button in a passkey view page is clicked.
+  kPasskeyEditButtonClicked = 14,
+  kMaxValue = kPasskeyEditButtonClicked,
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -649,7 +644,27 @@ enum class PasswordManagementBubbleInteractions {
   kNoteEdited = 10,
   kNoteDeleted = 11,
   kCredentialRowWithNoteClicked = 12,
-  kMaxValue = kCredentialRowWithNoteClicked,
+  kNotePartiallySelected = 13,
+  kNoteFullySelected = 14,
+  kNotePartiallyCopied = 15,
+  kNoteFullyCopied = 16,
+  kMaxValue = kNoteFullyCopied,
+};
+
+// Represents different causes for showing the password migration warning.
+//
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused. Always keep this enum in sync with the
+// corresponding PasswordMigrationWarningTriggers in enums.xml.
+enum class PasswordMigrationWarningTriggers {
+  kChromeStartup = 0,
+  kPasswordSaveUpdateMessage = 1,
+  kPasswordSettings = 2,
+  kTouchToFill = 3,
+  kKeyboardAcessorySheet = 4,
+  kKeyboardAcessoryBar = 5,
+  kAllPasswords = 6,
+  kMaxValue = kAllPasswords,
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -737,11 +752,8 @@ void LogMoveUIDismissalReason(UIDismissalReason reason,
 // Log the appropriate display disposition.
 void LogUIDisplayDisposition(UIDisplayDisposition disposition);
 
-// Log if a saved FormData was deserialized correctly.
-void LogFormDataDeserializationStatus(FormDeserializationStatus status);
-
 // When a credential was filled, log whether it came from an Android app.
-void LogFilledCredentialIsFromAndroidApp(bool from_android);
+void LogFilledPasswordFromAndroidApp(bool from_android);
 
 // Log what's preventing passwords from syncing.
 void LogPasswordSyncState(PasswordSyncState state);
@@ -874,8 +886,6 @@ base::OnceCallback<R(Args...)> TimeCallback(
       histogram, base::ElapsedTimer(), std::move(callback));
 }
 
-}  // namespace metrics_util
-
-}  // namespace password_manager
+}  // namespace password_manager::metrics_util
 
 #endif  // COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_MANAGER_METRICS_UTIL_H_

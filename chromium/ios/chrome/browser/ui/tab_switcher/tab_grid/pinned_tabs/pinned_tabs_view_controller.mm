@@ -19,7 +19,7 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/pinned_tabs/pinned_tabs_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/pinned_tabs/pinned_tabs_layout.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu/tab_context_menu_provider.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/grid_transition_layout.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/legacy_grid_transition_layout.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_item.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -60,6 +60,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
   // Identifier of the selected item.
   NSString* _selectedItemID;
+
+  // Identifier of the lastest dragged item. This property is set when the item
+  // is long pressed which does not always result in a drag action.
+  NSString* _draggedItemID;
 
   // Identifier of the last item to be inserted. This is used to track if the
   // active tab was newly created when building the animation layout for
@@ -206,11 +210,11 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   [self dragSessionEnabled:NO];
 }
 
-- (GridTransitionLayout*)transitionLayout {
+- (LegacyGridTransitionLayout*)transitionLayout {
   [self.collectionView layoutIfNeeded];
 
-  GridTransitionActiveItem* activeItem;
-  GridTransitionItem* selectionItem;
+  LegacyGridTransitionActiveItem* activeItem;
+  LegacyGridTransitionItem* selectionItem;
 
   NSIndexPath* selectedItemIndexPath =
       self.collectionView.indexPathsForSelectedItems.firstObject;
@@ -227,23 +231,23 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
     PinnedTransitionCell* activeCell =
         [PinnedTransitionCell transitionCellFromCell:selectedCell];
-    activeItem = [GridTransitionActiveItem itemWithCell:activeCell
-                                                 center:attributes.center
-                                                   size:attributes.size];
+    activeItem = [LegacyGridTransitionActiveItem itemWithCell:activeCell
+                                                       center:attributes.center
+                                                         size:attributes.size];
     // If the active item is the last inserted item, it needs to be animated
     // differently.
     if ([selectedCell hasIdentifier:_lastInsertedItemID]) {
       activeItem.isAppearing = YES;
     }
 
-    selectionItem = [GridTransitionItem
+    selectionItem = [LegacyGridTransitionItem
         itemWithCell:[PinnedCell transitionSelectionCellFromCell:selectedCell]
               center:attributes.center];
   }
 
-  return [GridTransitionLayout layoutWithInactiveItems:@[]
-                                            activeItem:activeItem
-                                         selectionItem:selectionItem];
+  return [LegacyGridTransitionLayout layoutWithInactiveItems:@[]
+                                                  activeItem:activeItem
+                                               selectionItem:selectionItem];
 }
 
 - (BOOL)isCollectionEmpty {
@@ -473,6 +477,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (void)collectionView:(UICollectionView*)collectionView
     dragSessionWillBegin:(id<UIDragSession>)session {
+  [self.dragDropHandler dragWillBeginForItemWithID:_draggedItemID];
   _dragEndAtNewIndex = NO;
   _localDragActionInProgress = YES;
   base::UmaHistogramEnumeration(kUmaPinnedViewDragDropTabs,
@@ -484,7 +489,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 - (void)collectionView:(UICollectionView*)collectionView
      dragSessionDidEnd:(id<UIDragSession>)session {
   _localDragActionInProgress = NO;
-
   DragDropTabs dragEvent = _dragEndAtNewIndex
                                ? DragDropTabs::kDragEndAtNewIndex
                                : DragDropTabs::kDragEndAtSameIndex;
@@ -504,8 +508,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
            itemsForBeginningDragSession:(id<UIDragSession>)session
                             atIndexPath:(NSIndexPath*)indexPath {
   TabSwitcherItem* item = _items[indexPath.item];
+  _draggedItemID = item.identifier;
+
   UIDragItem* dragItem =
-      [self.dragDropHandler dragItemForItemWithID:item.identifier];
+      [self.dragDropHandler dragItemForItemWithID:_draggedItemID];
   return [NSArray arrayWithObjects:dragItem, nil];
 }
 

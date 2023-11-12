@@ -39,6 +39,9 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelAnimatorFactory;
 import org.chromium.ui.util.TokenHolder;
 
+// Vivaldi
+import org.vivaldi.browser.preferences.VivaldiPreferences;
+
 /**
  * Mediator for the MenuButton. Listens for MenuButton state changes and drives corresponding
  * changes to the property model that backs the MenuButton view.
@@ -141,6 +144,16 @@ class MenuButtonMediator implements AppMenuObserver {
             mFullscreenMenuToken =
                     mControlsVisibilityDelegate.showControlsPersistentAndClearOldToken(
                             mFullscreenMenuToken);
+
+            // Vivaldi
+            if (isAttentionBadgeShown()) {
+                VivaldiPreferences.getSharedPreferencesManager().writeBoolean(
+                        VivaldiPreferences.SET_AS_DEFAULT_MENU_HIGHLIGHT, false);
+                // Remove attention badge after the menu is clicked.
+                mPropertyModel.set(MenuButtonProperties.VIVALDI_ATTENTION_BADGE,
+                        new ShowBadgeProperty(false, false));
+            }
+
         } else {
             mControlsVisibilityDelegate.releasePersistentShowingToken(mFullscreenMenuToken);
         }
@@ -308,5 +321,11 @@ class MenuButtonMediator implements AppMenuObserver {
                 mPropertyModel, MenuButtonProperties.ALPHA, alpha);
         animatorSet.playTogether(translationAnimator, alphaAnimator);
         return animatorSet;
+    }
+
+    // Vivaldi
+    private boolean isAttentionBadgeShown() {
+        return VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                VivaldiPreferences.SET_AS_DEFAULT_MENU_HIGHLIGHT, true);
     }
 }

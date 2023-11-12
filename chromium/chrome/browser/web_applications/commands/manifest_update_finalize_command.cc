@@ -40,7 +40,10 @@ ManifestUpdateFinalizeCommand::ManifestUpdateFinalizeCommand(
       install_info_(std::move(install_info)),
       write_callback_(std::move(write_callback)),
       keep_alive_(std::move(keep_alive)),
-      profile_keep_alive_(std::move(profile_keep_alive)) {}
+      profile_keep_alive_(std::move(profile_keep_alive)) {
+  CHECK(install_info_.manifest_id.is_valid());
+  CHECK(install_info_.start_url.is_valid());
+}
 
 ManifestUpdateFinalizeCommand::~ManifestUpdateFinalizeCommand() = default;
 
@@ -67,6 +70,12 @@ void ManifestUpdateFinalizeCommand::StartWithLock(
   // Preserve the user's choice of form factor to open the app with.
   install_info_.user_display_mode =
       lock_->registrar().GetAppUserDisplayMode(app_id_);
+
+  // ManifestUpdateCheckCommand must have already done validation of origin
+  // association data needed by this app and set validated_scope_extensions even
+  // if it is empty.
+  CHECK(install_info_.validated_scope_extensions.has_value());
+
   lock_->install_finalizer().FinalizeUpdate(
       install_info_,
       base::BindOnce(&ManifestUpdateFinalizeCommand::OnInstallationComplete,

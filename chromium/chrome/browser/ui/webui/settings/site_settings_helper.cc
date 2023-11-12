@@ -27,6 +27,7 @@
 #include "chrome/browser/file_system_access/file_system_access_permission_context_factory.h"
 #include "chrome/browser/hid/hid_chooser_context.h"
 #include "chrome/browser/hid/hid_chooser_context_factory.h"
+#include "chrome/browser/permissions/notification_permission_review_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/serial/serial_chooser_context.h"
 #include "chrome/browser/serial/serial_chooser_context_factory.h"
@@ -34,9 +35,14 @@
 #include "chrome/browser/ui/url_identity.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
+#include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -49,6 +55,7 @@
 #include "components/permissions/permissions_client.h"
 #include "components/prefs/pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
+#include "components/site_engagement/content/site_engagement_service.h"
 #include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
@@ -60,8 +67,10 @@
 #include "content/public/common/url_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
+#include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "url/origin.h"
 
 namespace site_settings {
@@ -80,7 +89,7 @@ const char kBluetoothChooserDataGroupType[] = "bluetooth-devices-data";
 const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     // The following ContentSettingsTypes have UI in Content Settings
     // and require a mapping from their Javascript string representation in
-    // chrome/browser/resources/settings/site_settings/constants.js to their C++
+    // chrome/browser/resources/settings/site_settings/constants.ts to their C++
     // ContentSettingsType provided here. These group names are only used by
     // desktop webui.
     {ContentSettingsType::COOKIES, "cookies"},
@@ -125,6 +134,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::PRIVATE_NETWORK_CHOOSER_DATA,
      "private-network-devices-data"},
     {ContentSettingsType::ANTI_ABUSE, "anti-abuse"},
+    {ContentSettingsType::STORAGE_ACCESS, "storage-access"},
 
     // Add new content settings here if a corresponding Javascript string
     // representation for it is not required, for example if the content setting
@@ -155,7 +165,6 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::NFC, nullptr},
     {ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA, nullptr},
     {ContentSettingsType::FILE_SYSTEM_READ_GUARD, nullptr},
-    {ContentSettingsType::STORAGE_ACCESS, nullptr},
     {ContentSettingsType::CAMERA_PAN_TILT_ZOOM, nullptr},
     {ContentSettingsType::INSECURE_LOCAL_NETWORK, nullptr},
     {ContentSettingsType::PERMISSION_AUTOREVOCATION_DATA, nullptr},
@@ -169,7 +178,6 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::FEDERATED_IDENTITY_ACTIVE_SESSION, nullptr},
     {ContentSettingsType::AUTO_DARK_WEB_CONTENT, nullptr},
     {ContentSettingsType::REQUEST_DESKTOP_SITE, nullptr},
-    {ContentSettingsType::GET_DISPLAY_MEDIA_SET_SELECT_ALL_SCREENS, nullptr},
     {ContentSettingsType::NOTIFICATION_INTERACTIONS, nullptr},
     {ContentSettingsType::REDUCED_ACCEPT_LANGUAGE, nullptr},
     {ContentSettingsType::NOTIFICATION_PERMISSION_REVIEW, nullptr},
@@ -186,6 +194,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::FEDERATED_IDENTITY_IDENTITY_PROVIDER_REGISTRATION,
      nullptr},
     {ContentSettingsType::THIRD_PARTY_STORAGE_PARTITIONING, nullptr},
+    {ContentSettingsType::ALL_SCREEN_CAPTURE, nullptr},
 };
 
 static_assert(std::size(kContentSettingsTypeGroupNames) ==
@@ -420,16 +429,48 @@ const ChooserTypeNameEntry kChooserTypeGroupNames[] = {
     {&GetHidChooserContext, kHidChooserDataGroupType},
     {&GetBluetoothChooserContext, kBluetoothChooserDataGroupType}};
 
-// There are two FormatOptions to support both hostname-only and schemeful URL
-// formatting, both of which are used in Site Settings.
-constexpr UrlIdentity::FormatOptions kUrlIdentityOptionsWithScheme = {
+// These variables represent different formatting options for default (i.e. not
+// extension or IWA) URLs as well as fallbacks for when the IWA/extension is not
+// found in the registry.
+constexpr UrlIdentity::FormatOptions kUrlIdentityOptionsOmitHttps = {
     .default_options = {
         UrlIdentity::DefaultFormatOptions::kOmitCryptographicScheme}};
-constexpr UrlIdentity::FormatOptions kUrlIdentityOptionsHostnameOnly = {
+constexpr UrlIdentity::FormatOptions kUrlIdentityOptionsHostOnly = {
     .default_options = {UrlIdentity::DefaultFormatOptions::kHostname}};
+constexpr UrlIdentity::FormatOptions kUrlIdentityOptionsRawSpec = {
+    .default_options = {UrlIdentity::DefaultFormatOptions::kRawSpec}};
+
 constexpr UrlIdentity::TypeSet kUrlIdentityAllowedTypes = {
     UrlIdentity::Type::kDefault, UrlIdentity::Type::kFile,
     UrlIdentity::Type::kIsolatedWebApp, UrlIdentity::Type::kChromeExtension};
+
+bool ShouldAddToNotificationPermissionReviewList(
+    site_engagement::SiteEngagementService* service,
+    GURL url,
+    int notification_count) {
+  // The notification permission should be added to the list if one of the
+  // criteria below holds:
+  // - Site engagement level is NONE OR MINIMAL and average daily notification
+  // count is more than 0.
+  // - Site engamment level is LOW and average daily notification count is
+  // more than 3. Otherwise, the notification permission should not be added
+  // to review list.
+  double score = service->GetScore(url);
+  int low_engagement_notification_limit =
+      features::kSafetyCheckNotificationPermissionsLowEnagementLimit.Get();
+  bool is_low_engagement =
+      !site_engagement::SiteEngagementService::IsEngagementAtLeast(
+          score, blink::mojom::EngagementLevel::MEDIUM) &&
+      notification_count > low_engagement_notification_limit;
+  int min_engagement_notification_limit =
+      features::kSafetyCheckNotificationPermissionsMinEnagementLimit.Get();
+  bool is_minimal_engagement =
+      !site_engagement::SiteEngagementService::IsEngagementAtLeast(
+          score, blink::mojom::EngagementLevel::LOW) &&
+      notification_count > min_engagement_notification_limit;
+
+  return is_minimal_engagement || is_low_engagement;
+}
 
 }  // namespace
 
@@ -551,7 +592,7 @@ const std::vector<ContentSettingsType>& GetVisiblePermissionCategories() {
     }
 
     if (base::FeatureList::IsEnabled(
-            blink::features::kPrivateNetworkAccessPermissionPrompt)) {
+            network::features::kPrivateNetworkAccessPermissionPrompt)) {
       base_types->push_back(ContentSettingsType::PRIVATE_NETWORK_GUARD);
     }
 
@@ -646,19 +687,26 @@ base::Value::Dict GetExceptionForPage(
   return exception;
 }
 
-std::string GetDisplayNameForGURL(Profile* profile,
+UrlIdentity GetUrlIdentityForGURL(Profile* profile,
                                   const GURL& url,
                                   bool hostname_only) {
   auto origin = url::Origin::Create(url);
   if (origin.opaque()) {
-    return url.spec();
+    return {.type = UrlIdentity::Type::kDefault,
+            .name = base::UTF8ToUTF16(url.spec())};
   }
 
-  auto url_identity = UrlIdentity::CreateFromUrl(
+  return UrlIdentity::CreateFromUrl(
       profile, origin.GetURL(), kUrlIdentityAllowedTypes,
-      hostname_only ? kUrlIdentityOptionsHostnameOnly
-                    : kUrlIdentityOptionsWithScheme);
-  return base::UTF16ToUTF8(url_identity.name);
+      hostname_only ? kUrlIdentityOptionsHostOnly
+                    : kUrlIdentityOptionsOmitHttps);
+}
+
+std::string GetDisplayNameForGURL(Profile* profile,
+                                  const GURL& url,
+                                  bool hostname_only) {
+  return base::UTF16ToUTF8(
+      GetUrlIdentityForGURL(profile, url, hostname_only).name);
 }
 
 void GetExceptionsForContentType(ContentSettingsType type,
@@ -820,19 +868,17 @@ ContentSetting GetContentSettingForOrigin(Profile* profile,
                                           const HostContentSettingsMap* map,
                                           const GURL& origin,
                                           ContentSettingsType content_type,
-                                          std::string* source_string,
-                                          std::string* display_name) {
+                                          std::string* source_string) {
   // TODO(patricialor): In future, PermissionManager should know about all
   // content settings, not just the permissions, plus all the possible sources,
   // and the calls to HostContentSettingsMap should be removed.
   content_settings::SettingInfo info;
-  const base::Value value =
-      map->GetWebsiteSetting(origin, origin, content_type, &info);
+  ContentSetting setting =
+      map->GetContentSetting(origin, origin, content_type, &info);
 
   // Retrieve the content setting.
   permissions::PermissionResult result(
-      content_settings::ValueToContentSetting(value),
-      permissions::PermissionStatusSource::UNSPECIFIED);
+      setting, permissions::PermissionStatusSource::UNSPECIFIED);
   if (permissions::PermissionDecisionAutoBlocker::IsEnabledForContentSetting(
           content_type)) {
     if (permissions::PermissionUtil::IsPermission(content_type)) {
@@ -858,10 +904,9 @@ ContentSetting GetContentSettingForOrigin(Profile* profile,
   // Retrieve the source of the content setting.
   *source_string = SiteSettingSourceToString(
       CalculateSiteSettingSource(profile, content_type, origin, info, result));
-  *display_name =
-      GetDisplayNameForGURL(profile, origin, /*hostname_only=*/false);
 
-  if (info.metadata.session_model == content_settings::SessionModel::OneTime) {
+  if (info.metadata.session_model() ==
+      content_settings::SessionModel::OneTime) {
     DCHECK(
         permissions::PermissionUtil::CanPermissionBeAllowedOnce(content_type));
     DCHECK_EQ(result.content_setting, CONTENT_SETTING_ALLOW);
@@ -894,7 +939,7 @@ void GetFileSystemGrantedEntries(std::vector<base::Value::Dict>* exceptions,
 
   for (const auto& grant : grants) {
     const std::string url = grant->origin.spec();
-    auto* const optional_path = grant->value.GetDict().Find(
+    auto* const optional_path = grant->value.Find(
         ChromeFileSystemAccessPermissionContext::kPermissionPathKey);
 
     // Ensure that the file path is found for the given kPermissionPathKey.
@@ -949,23 +994,10 @@ base::Value::Dict CreateChooserExceptionObject(
     const std::string& source = std::get<1>(details);
     const bool incognito = std::get<2>(details);
 
-    std::string site_display_name = origin.spec();
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-    // Set the |site_display_name| to the extension's name which is more clear
-    // to the user if the |origin| is for an extension and the extension name
-    // can be found in the |profile|.
-    if (origin.SchemeIs(extensions::kExtensionScheme)) {
-      DCHECK(profile);
-      const auto* extension_registry =
-          extensions::ExtensionRegistry::Get(profile);
-      const extensions::Extension* extension =
-          extension_registry->GetExtensionById(
-              origin.host(), extensions::ExtensionRegistry::EVERYTHING);
-      if (extension) {
-        site_display_name = extension->name();
-      }
-    }
-#endif
+    std::string site_display_name = base::UTF16ToUTF8(
+        UrlIdentity::CreateFromUrl(profile, origin, kUrlIdentityAllowedTypes,
+                                   kUrlIdentityOptionsRawSpec)
+            .name);
 
     auto& this_provider_sites =
         all_provider_sites[HostContentSettingsMap::GetProviderTypeFromSource(
@@ -1034,8 +1066,8 @@ base::Value::List GetChooserExceptionListFromProfile(
       continue;
 
     std::u16string name = chooser_context->GetObjectDisplayName(object->value);
-    auto& chooser_exception_details =
-        all_chooser_objects[std::make_pair(name, object->value.Clone())];
+    auto& chooser_exception_details = all_chooser_objects[std::make_pair(
+        name, base::Value(object->value.Clone()))];
 
     std::string source = GetSourceStringForChooserException(
         profile, content_type, object->source);
@@ -1056,23 +1088,83 @@ base::Value::List GetChooserExceptionListFromProfile(
   return exceptions;
 }
 
-absl::optional<std::string> GetExtensionDisplayName(Profile* profile,
-                                                    GURL url) {
-  if (!url.SchemeIs(extensions::kExtensionScheme)) {
+std::vector<web_app::IsolatedWebAppUrlInfo> GetInstalledIsolatedWebApps(
+    Profile* profile) {
+  auto* web_app_provider = web_app::WebAppProvider::GetForWebApps(profile);
+  if (!web_app_provider) {
     return {};
   }
-  auto* extension_registry = extensions::ExtensionRegistry::Get(profile);
-  if (!extension_registry) {
-    return {};
+
+  std::vector<web_app::IsolatedWebAppUrlInfo> iwas;
+  web_app::WebAppRegistrar& registrar = web_app_provider->registrar_unsafe();
+  for (const web_app::WebApp& web_app : registrar.GetApps()) {
+    if (!registrar.IsIsolated(web_app.app_id())) {
+      continue;
+    }
+    base::expected<web_app::IsolatedWebAppUrlInfo, std::string> url_info =
+        web_app::IsolatedWebAppUrlInfo::Create(web_app.scope());
+    if (url_info.has_value()) {
+      iwas.push_back(*url_info);
+    }
   }
-  // For the extension scheme, the pattern must be a valid URL.
-  DCHECK(url.is_valid());
-  const extensions::Extension* extension = extension_registry->GetExtensionById(
-      url.host(), extensions::ExtensionRegistry::EVERYTHING);
-  if (!extension) {
-    return {};
+  return iwas;
+}
+
+// TODO(crbug.com/1444024): Migrate to NotificationPermissionsReviewService.
+base::Value::List PopulateNotificationPermissionReviewData(Profile* profile) {
+  base::Value::List result;
+  if (!base::FeatureList::IsEnabled(
+          features::kSafetyCheckNotificationPermissions)) {
+    return result;
   }
-  return extension->name();
+
+  auto* service =
+      NotificationPermissionsReviewServiceFactory::GetForProfile(profile);
+  if (!service) {
+    return result;
+  }
+
+  auto notification_permissions = service->GetNotificationSiteListForReview();
+
+  site_engagement::SiteEngagementService* engagement_service =
+      site_engagement::SiteEngagementService::Get(profile);
+
+  // Sort notification permissions by their priority for surfacing to the user.
+  auto notification_permission_ordering =
+      [](const permissions::NotificationPermissions& left,
+         const permissions::NotificationPermissions& right) {
+        return left.notification_count > right.notification_count;
+      };
+  std::sort(notification_permissions.begin(), notification_permissions.end(),
+            notification_permission_ordering);
+
+  for (const auto& notification_permission : notification_permissions) {
+    // Converting primary pattern to GURL should always be valid, since
+    // Notification Permission Review list only contains single origins. Those
+    // are filtered in
+    // NotificationPermissionsReviewService::GetNotificationSiteListForReview.
+    GURL url = GURL(notification_permission.primary_pattern.ToString());
+    DCHECK(url.is_valid());
+    if (!ShouldAddToNotificationPermissionReviewList(
+            engagement_service, url,
+            notification_permission.notification_count)) {
+      continue;
+    }
+
+    base::Value::Dict permission;
+    permission.Set(site_settings::kOrigin,
+                   notification_permission.primary_pattern.ToString());
+
+    std::string notification_info_string =
+        base::UTF16ToUTF8(l10n_util::GetPluralStringFUTF16(
+            IDS_SETTINGS_SAFETY_CHECK_REVIEW_NOTIFICATION_PERMISSIONS_COUNT_LABEL,
+            notification_permission.notification_count));
+    permission.Set(site_settings::kNotificationInfoString,
+                   notification_info_string);
+    result.Append(std::move(permission));
+  }
+
+  return result;
 }
 
 }  // namespace site_settings

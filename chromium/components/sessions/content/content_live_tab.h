@@ -61,7 +61,7 @@ class SESSIONS_EXPORT ContentLiveTab
     return web_contents_->GetController();
   }
 
-  raw_ptr<content::WebContents> web_contents_;
+  raw_ptr<content::WebContents, DanglingUntriaged> web_contents_;
 };
 
 }  // namespace sessions

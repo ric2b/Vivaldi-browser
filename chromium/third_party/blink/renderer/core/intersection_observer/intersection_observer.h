@@ -64,7 +64,8 @@ class CORE_EXPORT IntersectionObserver final
   // This value can be used to detect transitions between non-intersecting or
   // edge-adjacent (i.e., zero area) state, and intersecting by any non-zero
   // number of pixels.
-  static const float kMinimumThreshold;
+  static constexpr float kMinimumThreshold =
+      IntersectionGeometry::kMinimumThreshold;
 
   // Used to specify when callbacks should be invoked with new notifications.
   // Blink-internal users of IntersectionObserver will have their callbacks
@@ -117,6 +118,7 @@ class CORE_EXPORT IntersectionObserver final
       bool always_report_root_bounds = false,
       MarginTarget margin_target = kApplyMarginToRoot,
       bool use_overflow_clip_edge = false,
+      bool needs_initial_observation_with_detached_target = true,
       ExceptionState& = ASSERT_NO_EXCEPTION);
 
   explicit IntersectionObserver(IntersectionObserverDelegate&,
@@ -170,6 +172,7 @@ class CORE_EXPORT IntersectionObserver final
   // Returns the number of IntersectionObservations that recomputed geometry.
   int64_t ComputeIntersections(unsigned flags,
                                absl::optional<base::TimeTicks>& monotonic_time);
+  gfx::Vector2dF MinScrollDeltaToUpdate() const;
 
   bool IsInternal() const;
   LocalFrameUkmAggregator::MetricId GetUkmMetricId() const;
@@ -181,8 +184,7 @@ class CORE_EXPORT IntersectionObserver final
   // Returns false if this observer has an explicit root node which has been
   // deleted; true otherwise.
   bool RootIsValid() const;
-  bool CanUseCachedRects() const { return can_use_cached_rects_; }
-  void InvalidateCachedRects() { can_use_cached_rects_ = 0; }
+  void InvalidateCachedRects();
 
   bool UseOverflowClipEdge() const { return use_overflow_clip_edge_ == 1; }
 
@@ -219,7 +221,6 @@ class CORE_EXPORT IntersectionObserver final
   unsigned track_visibility_ : 1;
   unsigned track_fraction_of_root_ : 1;
   unsigned always_report_root_bounds_ : 1;
-  unsigned can_use_cached_rects_ : 1;
   unsigned use_overflow_clip_edge_ : 1;
 };
 

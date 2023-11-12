@@ -36,8 +36,8 @@ class PasswordManagerDriver
     : public base::SupportsWeakPtr<PasswordManagerDriver> {
  public:
 #if BUILDFLAG(IS_ANDROID)
-  using ShowVirtualKeyboard =
-      base::StrongAlias<class ShowVirtualKeyboardTag, bool>;
+  using ToShowVirtualKeyboard =
+      base::StrongAlias<class ToShowVirtualKeyboardTag, bool>;
 #endif
 
   PasswordManagerDriver() = default;
@@ -92,9 +92,11 @@ class PasswordManagerDriver
       const std::u16string& user_provided_credential) {}
 
 #if BUILDFLAG(IS_ANDROID)
-  // Informs the renderer that the Touch To Fill sheet has been closed.
-  // Indicates whether the virtual keyboard should be shown instead.
-  virtual void TouchToFillClosed(ShowVirtualKeyboard show_virtual_keyboard) {}
+  // Informs the renderer that the keyboard replacing surface (e.g. Touch To
+  // Fill sheet) has been closed. Indicates whether the virtual keyboard should
+  // be shown instead.
+  virtual void KeyboardReplacingSurfaceClosed(
+      ToShowVirtualKeyboard show_virtual_keyboard) {}
 
   // Triggers form submission on the last interacted web input element.
   virtual void TriggerFormSubmission() {}

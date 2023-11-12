@@ -1,0 +1,41 @@
+# Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/ios/asset_catalog.gni")
+
+group("resources") {
+  deps = [
+    ":vivaldi_autofill_passwords",
+    ":vivaldi_autofill_keyboards",
+    ":vivaldi_autofill_place",
+    ":vivaldi_autofill_credit_card",
+  ]
+}
+
+imageset("vivaldi_autofill_passwords") {
+  sources = [
+    "vivaldi_autofill_passwords.imageset/Contents.json",
+    "vivaldi_autofill_passwords.imageset/vivaldi_autofill_passwords.pdf",
+    "vivaldi_autofill_passwords.imageset/vivaldi_autofill_passwords_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_autofill_keyboards") {
+  sources = [
+    "vivaldi_autofill_keyboards.imageset/Contents.json",
+    "vivaldi_autofill_keyboards.imageset/vivaldi_autofill_keyboards.pdf",
+  ]
+}
+
+imageset("vivaldi_autofill_place") {
+  sources = [
+    "vivaldi_autofill_place.imageset/Contents.json",
+    "vivaldi_autofill_place.imageset/vivaldi_autofill_place.pdf",
+  ]
+}
+
+imageset("vivaldi_autofill_credit_card") {
+  sources = [
+    "vivaldi_autofill_credit_card.imageset/Contents.json",
+    "vivaldi_autofill_credit_card.imageset/vivaldi_autofill_credit_card.pdf",
+  ]
+}

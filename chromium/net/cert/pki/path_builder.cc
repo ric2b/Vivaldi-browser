@@ -4,6 +4,7 @@
 
 #include "net/cert/pki/path_builder.h"
 
+#include <cassert>
 #include <memory>
 #include <set>
 #include <unordered_set>
@@ -131,6 +132,7 @@ int TrustAndKeyIdentifierMatchToOrder(const ParsedCertificate* target,
         case kMismatch:
           return kTrustedAndKeyIdMismatch;
       }
+      break;
     case CertificateTrustType::UNSPECIFIED:
     case CertificateTrustType::TRUSTED_LEAF:
       switch (key_id_match) {
@@ -141,6 +143,7 @@ int TrustAndKeyIdentifierMatchToOrder(const ParsedCertificate* target,
         case kMismatch:
           return kKeyIdMismatch;
       }
+      break;
     case CertificateTrustType::DISTRUSTED:
       switch (key_id_match) {
         case kMatch:
@@ -150,7 +153,10 @@ int TrustAndKeyIdentifierMatchToOrder(const ParsedCertificate* target,
         case kMismatch:
           return kDistrustedAndKeyIdMismatch;
       }
+      break;
   }
+  assert(0);  // NOTREACHED
+  return -1;
 }
 
 // CertIssuersIter iterates through the intermediates from |cert_issuer_sources|
@@ -239,7 +245,7 @@ CertIssuersIter::CertIssuersIter(
     CertIssuerSources* cert_issuer_sources,
     TrustStore* trust_store,
     base::SupportsUserData* debug_data)
-    : cert_(in_cert),
+    : cert_(std::move(in_cert)),
       cert_issuer_sources_(cert_issuer_sources),
       trust_store_(trust_store),
       debug_data_(debug_data) {
@@ -268,7 +274,8 @@ void CertIssuersIter::GetNextIssuer(IssuerEntry* out) {
     while (!HasCurrentIssuer() &&
            cur_async_request_ < pending_async_requests_.size()) {
       ParsedCertificateList new_issuers;
-      pending_async_requests_[cur_async_request_]->GetNext(&new_issuers);
+      pending_async_requests_[cur_async_request_]->GetNext(&new_issuers,
+                                                           debug_data_);
       if (new_issuers.empty()) {
         // Request is exhausted, no more results pending from that
         // CertIssuerSource.

@@ -114,6 +114,9 @@ int MapAccountType(const AccountType& account_type) {
     case vivaldi::calendar::ACCOUNT_TYPE_ICAL:
       type = 4;
       break;
+    case vivaldi::calendar::ACCOUNT_TYPE_FASTMAIL:
+      type = 5;
+      break;
     case vivaldi::calendar::ACCOUNT_TYPE_NONE:
       type = 0;
       break;
@@ -135,6 +138,9 @@ AccountType MapAccountTypeFromDb(int type) {
       break;
     case calendar::ACCOUNT_TYPE_CALDAV:
       account_type = vivaldi::calendar::ACCOUNT_TYPE_CALDAV;
+      break;
+    case calendar::ACCOUNT_TYPE_FASTMAIL:
+      account_type = vivaldi::calendar::ACCOUNT_TYPE_FASTMAIL;
       break;
     case calendar::ACCOUNT_TYPE_ICAL:
       account_type = vivaldi::calendar::ACCOUNT_TYPE_ICAL;

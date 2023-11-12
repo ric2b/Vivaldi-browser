@@ -4,7 +4,7 @@
 <translation id="1014750484722996375">デスク</translation>
 <translation id="1018219910092211213">DNS を解決できません</translation>
 <translation id="1018656279737460067">キャンセルされました</translation>
-<translation id="1022433422498218992">一般設定</translation>
+<translation id="1020274983236703756"><ph name="PRODUCT_NAME" /> 限定アセットが利用可能</translation>
 <translation id="1022628058306505708">地球の動き</translation>
 <translation id="1047458377670401304"><ph name="CPU_NAME" />（スレッド数 <ph name="THREAD_COUNT" />、<ph name="CPU_MAX_CLOCK_SPEED" /> GHz）</translation>
 <translation id="1047773237499189053">新しい機能があります。上矢印キーで詳細を確認できます。</translation>
@@ -20,6 +20,7 @@
 <translation id="1128128132059598906">EAP-TTLS</translation>
 <translation id="1145018782460575098">外部デバイスのファームウェアを更新するためのウィンドウが開いています。<ph name="NUM_UPDATES" /> 件のアップデートがあります。</translation>
 <translation id="1145516343487477149">ヘルプ記事と Chromebook に関するよくある質問の回答を確認できます</translation>
+<translation id="1164939766849482256">「夜明けから夜更けまで」のスクリーン セーバー</translation>
 <translation id="1167755866710282443">メニューを開いてキーをカスタマイズします。メニューをドラッグして移動します。</translation>
 <translation id="1175697296044146566">この <ph name="DEVICE_TYPE" /> は <ph name="MANAGER" /> によって管理されています。</translation>
 <translation id="1175951029573070619">普通（<ph name="SIGNAL_STRENGTH" />）</translation>
@@ -58,12 +59,14 @@
 <translation id="1423591390236870726"><ph name="KEY_NAME" /> キーが押されていません</translation>
 <translation id="1435763214710588005">指定した日に毎月データ使用量が自動的にリセットされます</translation>
 <translation id="1442433966118452622">画像ソース</translation>
+<translation id="1449035143498573192">Google 検索で開く</translation>
 <translation id="1451536289672181509">デバイスの種類はキーボードです。</translation>
 <translation id="1459693405370120464">天気</translation>
 <translation id="1468664791493211953">クーポン</translation>
 <translation id="1476467821656042872"><ph name="MANAGER" /> はこのデバイスを管理しており、アクティビティを監視できる可能性があります。</translation>
 <translation id="1478594628797167447">スキャナ</translation>
 <translation id="1483493594462132177">送信</translation>
+<translation id="1488850966314959671">有効なカスタム APN を使用してこのネットワークとの接続を試みましたが接続できません。詳しくは、ご利用の携帯通信会社にお問い合わせください。</translation>
 <translation id="1491076385728777984">「<ph name="DEVICE_NAME" />」のファームウェアを更新中</translation>
 <translation id="1499041187027566160">音量を上げる</translation>
 <translation id="1499900233129743732">このユーザーは <ph name="MANAGER" /> によって管理されています。設定の管理とユーザー アクティビティの監視がリモートで行われることがあります。</translation>
@@ -92,6 +95,7 @@
 <translation id="1669047024429367828">表示設定</translation>
 <translation id="1672499492233627739">ウェブカメラの動画フィード</translation>
 <translation id="1676557873873341166">動画を撮影しています</translation>
+<translation id="1684279041537802716">アクセント カラー</translation>
 <translation id="1703835215927279855">Letter</translation>
 <translation id="1706391837335750954">DNS Resolver の存在</translation>
 <translation id="1708602061922134366">Google ブルー</translation>
@@ -111,11 +115,13 @@
 <translation id="1768959921651994223">認証タイプ</translation>
 <translation id="1776228893584526149">壁紙のトーン</translation>
 <translation id="1782199038061388045">翻訳</translation>
-<translation id="1790209694022261219">ウィンドウとデスク</translation>
 <translation id="1792647875738159689">スキャンをキャンセルしています</translation>
 <translation id="1801418420130173017">ダークモードを無効にする</translation>
 <translation id="1807246157184219062">明</translation>
 <translation id="1827738518074806965">アート ギャラリー</translation>
+<translation id="1836553715834333258">システムカラー</translation>
+<translation id="1838374766361614909">検索をクリア</translation>
+<translation id="1840474674287087346">デスクトップの色</translation>
 <translation id="1851218745569890714">ビデオ会議</translation>
 <translation id="1852934301711881861">ChromeOS Flex をインストール</translation>
 <translation id="1856388568474281774">下矢印</translation>
@@ -216,6 +222,7 @@
 <translation id="2638662041295312666">サインイン画像</translation>
 <translation id="2640549051766135490">アルバム「<ph name="TITLE" />」の <ph name="DESC" />を選択中</translation>
 <translation id="267442004702508783">更新</translation>
+<translation id="268270014981824665">キーボードを薄暗く</translation>
 <translation id="2712812801627182647">TLS 認証鍵</translation>
 <translation id="2713444072780614174">白</translation>
 <translation id="2717139507051041123">ダークカラー モードを有効にする</translation>
@@ -223,6 +230,7 @@
 <translation id="2744221223678373668">共有</translation>
 <translation id="2751739896257479635">EAP フェーズ 2 認証</translation>
 <translation id="2783010256799387990">合格</translation>
+<translation id="2787435249130282949">キーボードを明るくする</translation>
 <translation id="2789486458103222910">OK</translation>
 <translation id="2805756323405976993">アプリ</translation>
 <translation id="28232023175184696">インターネットに接続できません。クリックしてもう一度お試しください。</translation>
@@ -232,14 +240,12 @@
 <translation id="2873483161362553159">ブラウザ操作</translation>
 <translation id="2874939134665556319">前のトラック</translation>
 <translation id="2878387241690264070"><ph name="NUM_SECONDS" /> 秒で <ph name="RATE" /> 放電しました。</translation>
-<translation id="2902312830803030883">その他の操作</translation>
+<translation id="2880569433548999039">「雲の流れ」のスクリーン セーバー</translation>
 <translation id="2926057806159140518">ユーザー名とパスワードを入力するか、QR コードをスキャンしてください</translation>
 <translation id="2940811910881150316">デバイスをテストできません。テストするにはディスプレイをもう一度開きます。</translation>
-<translation id="2981143481017883351">Chromebook 限定のアセットが利用可能に</translation>
 <translation id="3008341117444806826">更新</translation>
 <translation id="3009958530611748826">保存先のフォルダを選択</translation>
 <translation id="3017079585324758401">背景</translation>
-<translation id="3020183492814296499">ショートカット</translation>
 <translation id="3027578600144895987">カメラを閉じる</translation>
 <translation id="3031560714565892478">デバイスの種類はビデオカメラです。</translation>
 <translation id="3054177598518735801"><ph name="CURRENT_VALUE" /> mA</translation>
@@ -257,6 +263,7 @@
 <translation id="315738237743207937">キャプティブ ポータルが検出されました</translation>
 <translation id="3160172848211257835"><ph name="BEGIN_LINK1" />システムとアプリの情報<ph name="END_LINK1" />と<ph name="BEGIN_LINK2" />指標<ph name="END_LINK2" />を送信する</translation>
 <translation id="3170673040743561620">スキャナにドキュメントを置いてください</translation>
+<translation id="3174321110679064523">「夜明けから夜更けまで」の壁紙</translation>
 <translation id="3188257591659621405">マイファイル</translation>
 <translation id="319101249942218879">アバター画像を変更しました</translation>
 <translation id="3192947282887913208">音声ファイル</translation>
@@ -266,12 +273,15 @@
 <translation id="3226405216343213872">スキャナを検索しています</translation>
 <translation id="3226657629376379887">レイアウトの操作メニュー</translation>
 <translation id="3246869037381808805">昨日より前の印刷ジョブは削除されます</translation>
+<translation id="3248223063252096240"><ph name="PRODUCT_NAME" />　限定</translation>
 <translation id="3268178239013324452">失敗 - 扉が開いています</translation>
 <translation id="3275729367986477355">アバターの画像</translation>
 <translation id="3283504360622356314">{0,plural, =1{ファイルを編集}other{ファイルを編集}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
 <translation id="3291996639387199448">鍵の方向</translation>
 <translation id="3294437725009624529">ゲスト</translation>
+<translation id="3303855915957856445">一致する結果は見つかりませんでした</translation>
+<translation id="3305294846493618482">続き</translation>
 <translation id="3310640316857623290">DNS の応答時間が許容値を大幅に超えています</translation>
 <translation id="3328783797891415197">テスト実行中</translation>
 <translation id="3340011300870565703">デバイスの右イヤフォンのバッテリー残量は <ph name="BATTERY_PERCENTAGE" />% です。</translation>
@@ -280,7 +290,7 @@
 <translation id="3360306038446926262">ウィンドウ</translation>
 <translation id="3368922792935385530">接続済み</translation>
 <translation id="3369013195428705271">印刷履歴をすべて削除してもよろしいですか？実行中の印刷ジョブは削除されません。</translation>
-<translation id="3386675685417744672">Chromebook 限定</translation>
+<translation id="3373141842870501561">「地球の動き」の壁紙</translation>
 <translation id="3404249063913988450">スクリーン セーバーを有効にする</translation>
 <translation id="3413935475507503304">更新を進めるには、[次へ] をクリックしてください。</translation>
 <translation id="3434107140712555581"><ph name="BATTERY_PERCENTAGE" />%</translation>
@@ -295,6 +305,7 @@
 <translation id="3484914941826596830">ファームウェアのアップデート中、この外部デバイスを電源から外したり、パソコンをシャットダウンしたりしないでください。このウィンドウは最小化できます。アップデートには数分かかることがあります。その間、外部デバイスは動作しない可能性があります。</translation>
 <translation id="3486220673238053218">定義</translation>
 <translation id="3488065109653206955">一部有効</translation>
+<translation id="3502426834823382181">すべてのアプリを表示</translation>
 <translation id="3510890413042482857"><ph name="BEGIN_LINK1" />パフォーマンス追跡データ<ph name="END_LINK1" />を送信する</translation>
 <translation id="3517001332549868749">ChromeOS の更新</translation>
 <translation id="3527036260304016759">失敗 - 不明なエラー</translation>
@@ -316,6 +327,8 @@
 <translation id="3632579075709132555">プライバシー画面の切り替え</translation>
 <translation id="3639846061339007994">上</translation>
 <translation id="3651050199673793219">温度の単位を選択してください</translation>
+<translation id="3663574643422533538"><ph name="PRODUCT_NAME" /> 限定アートワークを選択する</translation>
+<translation id="3668449597372804501">「雲の流れ」の壁紙</translation>
 <translation id="3689839747745352263"><ph name="TEST_NAME" /> テスト</translation>
 <translation id="370665806235115550">読み込んでいます...</translation>
 <translation id="3708186454126126312">以前に接続したデバイス</translation>
@@ -324,11 +337,14 @@
 <translation id="3749289110408117711">ファイル名</translation>
 <translation id="3771294271822695279">動画ファイル</translation>
 <translation id="3784455785234192852">ロック</translation>
+<translation id="380097101658023925">RGB 設定</translation>
 <translation id="38114475217616659">履歴をすべて消去</translation>
 <translation id="3820172043799983114">無効な PIN です。</translation>
+<translation id="382043424867370667">「日の入り」の壁紙</translation>
 <translation id="3824259034819781947">ファイルを添付</translation>
 <translation id="3838338534323494292">新しいパスワード</translation>
 <translation id="3845880861638660475"><ph name="ALT_SHORTCUT_START" />Alt<ph name="ALT_SHORTCUT_END" />+<ph name="ESC_SHORTCUT_START" />Esc<ph name="ESC_SHORTCUT_END" /> キーを押してダイアログを閉じます。</translation>
+<translation id="3848280697030027394">キーボードを暗く</translation>
 <translation id="385051799172605136">戻る</translation>
 <translation id="3858860766373142691">名前</translation>
 <translation id="3862598938296403232">説明は必須です</translation>
@@ -358,12 +374,12 @@
 <translation id="404928562651467259">警告</translation>
 <translation id="4054683689023980771">画像のダウンロード中</translation>
 <translation id="4060260348856573701">新しい APN</translation>
-<translation id="4079743696465895866">Chromebook 限定のアートワークを選択する</translation>
 <translation id="4093865285251893588">プロフィール画像</translation>
 <translation id="409427325554347132">テストの詳細を保存</translation>
 <translation id="4095829376260267438">WPA2 / WPA3</translation>
 <translation id="4110686435123617899">アルバム「<ph name="TITLE" />」の <ph name="DESC" />を選択</translation>
 <translation id="4111761024568264522">USB タッチパッド</translation>
+<translation id="4113067922640381334">新しい<ph name="BEGIN_LINK_WALLPAPER_SUBPAGE" />壁紙<ph name="END_LINK_WALLPAPER_SUBPAGE" />をご利用いただけます</translation>
 <translation id="4117637339509843559">ダークモード</translation>
 <translation id="4130035430755296270">カーソルを合わせると他のレイアウト オプションが表示されます</translation>
 <translation id="4131410914670010031">白黒</translation>
@@ -391,7 +407,7 @@
 <translation id="4289849978083912975">スライドショー</translation>
 <translation id="4297501883039923494">停止 - 不明なエラー</translation>
 <translation id="4300073214558989"><ph name="IMAGE_COUNT" /> 件の画像</translation>
-<translation id="4311195029067684288">100%</translation>
+<translation id="4311195029067684288">フル</translation>
 <translation id="4333390807948134856"><ph name="KEY_NAME" /> キーを押しました</translation>
 <translation id="435692326371619097">ネットワークの APN 設定を管理します。APN は、モバイル ネットワークとインターネットの間の接続を確立します。<ph name="BEGIN_LINK" />詳細<ph name="END_LINK" /></translation>
 <translation id="437294888293595148">すべてのショートカットをリセットする</translation>
@@ -400,6 +416,7 @@
 <translation id="4382484599443659549">PDF</translation>
 <translation id="4394049700291259645">無効にする</translation>
 <translation id="439429847087949098">「<ph name="DEVICE_NAME" />」を再起動しています</translation>
+<translation id="4395835743215824109">キーボードのカスタマイズ</translation>
 <translation id="4415951057168511744">現在のアバター</translation>
 <translation id="4422041425070339732">下矢印</translation>
 <translation id="4425149324548788773">マイドライブ</translation>
@@ -409,8 +426,10 @@
 <translation id="445059817448385655">古いパスワード</translation>
 <translation id="4453205916657964690">サブネット マスク</translation>
 <translation id="4454245904991689773">スキャンの保存先</translation>
+<translation id="4469288414739283461">「地球の動き」のスクリーン セーバー</translation>
 <translation id="4479639480957787382">イーサネット</translation>
 <translation id="4483049906298469269">デフォルト以外のネットワーク ゲートウェイに向けた ping が失敗しました</translation>
+<translation id="4500966230243561393">インターフェースの色</translation>
 <translation id="4503223151711056411">左矢印</translation>
 <translation id="4507392511610824664">明るさを上げる</translation>
 <translation id="4511264077854731334">ポータル</translation>
@@ -423,6 +442,7 @@
 <translation id="455835558791489930"><ph name="CHARGE_VALUE" /> mAh 電池</translation>
 <translation id="4561801978359312462">SIM のロックは解除されています</translation>
 <translation id="4562494484721939086">サービスなし</translation>
+<translation id="4573777384450697571">失敗 - 証明書が期限切れです</translation>
 <translation id="458794348635939462">すべてのホストを解決できませんでした</translation>
 <translation id="4593212453765072419">プロキシ認証が必要です</translation>
 <translation id="4609350030397390689">キーボードの明るさを下げる</translation>
@@ -439,6 +459,7 @@
 <translation id="4731797938093519117">保護者によるアクセス</translation>
 <translation id="473775607612524610">更新</translation>
 <translation id="4744944742468440486">選択した項目に関連する情報</translation>
+<translation id="4771607256327216405">キーボードを明るく</translation>
 <translation id="4773299976671772492">停止しました</translation>
 <translation id="4782311465517282004">テキストを右クリックまたは長押しすると、定義、翻訳、単位変換を確認できます</translation>
 <translation id="4791000909649665275"><ph name="NUMBER" /> 枚の写真</translation>
@@ -476,9 +497,8 @@
 <translation id="4921665434385737356"><ph name="NUM_SECONDS" /> 秒で <ph name="RATE" /> 充電しました。</translation>
 <translation id="4930320165497208503">接続を設定または更新するには、[<ph name="BEGIN_LINK" />設定<ph name="END_LINK" />] に移動します。</translation>
 <translation id="4932733599132424254">日付</translation>
-<translation id="4937657825850660613">半分</translation>
 <translation id="4950314376641394653"><ph name="DEVICE_NAME" /> のファームウェアがバージョン <ph name="VERSION" /> に更新されました</translation>
-<translation id="4971925105143343452">一部</translation>
+<translation id="4971925105143343452">分割（大小）</translation>
 <translation id="4972592110715526173">モード変更</translation>
 <translation id="498186245079027698">スキャナを確認して、もう一度お試しください。デバイスにスキャンしたファイルを保存するのに十分な容量があるかどうかも確認してください。</translation>
 <translation id="4985509611418653372">実行</translation>
@@ -488,6 +508,8 @@
 <translation id="500920857929044050">テストを停止</translation>
 <translation id="5017508259293544172">LEAP</translation>
 <translation id="5019310272469539976">画面がアイドル状態のときに、写真、時刻、天気、メディア情報を表示します。</translation>
+<translation id="5035083460461104704">テーマの色</translation>
+<translation id="5038292761217083259">キーボードをマルチカラーにする</translation>
 <translation id="5039804452771397117">許可する</translation>
 <translation id="5049856988445523908">SIM はロックされています（<ph name="LOCK_TYPE" />）</translation>
 <translation id="5050042263972837708">グループ名</translation>
@@ -516,8 +538,10 @@
 <translation id="5275828089655680674">ルーティンを再実行</translation>
 <translation id="5286252187236914003">L2TP/IPsec</translation>
 <translation id="5286263799730375393">バックライトの色</translation>
+<translation id="5292579816060236070">「日の出」の壁紙</translation>
 <translation id="5294769550414936029">バージョン <ph name="MILESTONE_VERSION" /></translation>
 <translation id="5300814202279832142">ウィンドウをデスクに移動</translation>
+<translation id="5303837385540978511"><ph name="PRODUCT_NAME" /> 限定の壁紙</translation>
 <translation id="5304899856529773394">EVDO</translation>
 <translation id="5315873049536339193">ID</translation>
 <translation id="5317780077021120954">保存</translation>
@@ -537,7 +561,6 @@
 <translation id="5423849171846380976">有効</translation>
 <translation id="5430931332414098647">インスタント テザリング</translation>
 <translation id="5431318178759467895">カラー</translation>
-<translation id="5456936324019847994">有効なカスタム APN に接続できません。詳しくは、ご利用の携帯通信会社にお問い合わせください。</translation>
 <translation id="5457599981699367932">ゲストとしてブラウジング</translation>
 <translation id="54609108002486618">管理対象</translation>
 <translation id="5478289488939624992">{ATTEMPTS_LEFT,plural, =1{あと {0} 回試行できます}other{あと {0} 回試行できます}}</translation>
@@ -553,6 +576,7 @@
 <translation id="5578477003638479617">UMTS</translation>
 <translation id="5578519639599103840">再スキャン</translation>
 <translation id="5583640892426849032">Backspace</translation>
+<translation id="5584044598279886848">この APN を無効化または削除できません。有効になっている接続済みの APN を無効化または削除しようとしていることを確認してください。</translation>
 <translation id="5600027863942488546"><ph name="KEY_NAME" /> キーをテストしました</translation>
 <translation id="5620281292257375798">内部専用</translation>
 <translation id="5649768706273821470">聴く</translation>
@@ -598,6 +622,7 @@
 <translation id="5972388717451707488">エンジンを更新</translation>
 <translation id="5984145644188835034">デフォルトの壁紙</translation>
 <translation id="6017514345406065928">緑</translation>
+<translation id="6019566113895157499">キー ショートカット</translation>
 <translation id="6034694447310538551">毎月の自動リセットを有効にする</translation>
 <translation id="6037291330010597344">スキャナの給紙トレイが空です。用紙を追加してから、もう一度お試しください。</translation>
 <translation id="6040143037577758943">閉じる</translation>
@@ -636,6 +661,8 @@
 <translation id="6278428485366576908">テーマ</translation>
 <translation id="6280912520669706465">ARC</translation>
 <translation id="6284632978374966585">ダークモードをオンにする</translation>
+<translation id="6285899124799306373">ランチャーを開く</translation>
+<translation id="629550705077076970">キーボードを薄暗くする</translation>
 <translation id="6302401976930124515"><ph name="TEST_NAME" /> テストがキャンセルされました</translation>
 <translation id="631063167932043783">アプリについてもっと知る</translation>
 <translation id="6319207335391420837"><ph name="DEVICE_NAME" /> のファームウェアをアップデート</translation>
@@ -651,8 +678,10 @@
 <translation id="6382182670717268353">スクリーンセーバーをプレビュー</translation>
 <translation id="6388847657025262518">スキャナの給紙トレイが詰まっています。トレイを確認してから、もう一度お試しください。</translation>
 <translation id="6394634179843537518">ファイルを追加</translation>
+<translation id="6401427872449207797">ブラウザ検索</translation>
 <translation id="6410257289063177456">画像ファイル</translation>
 <translation id="641081527798843608">件名の一致</translation>
+<translation id="6411934471898487866">キーボードの明るさ</translation>
 <translation id="6412715219990689313">デバイス内蔵キーボード</translation>
 <translation id="6417265370957905582">Google アシスタント</translation>
 <translation id="6423239382391657905">OpenVPN</translation>
@@ -662,6 +691,7 @@
 <translation id="6463239094587744704">{PAGE_NUMBER,plural, =0{ページを再スキャンしますか？}=1{ページ {PAGE_NUMBER} を再スキャンしますか？}other{ページ {PAGE_NUMBER} を再スキャンしますか？}}</translation>
 <translation id="6472207088655375767">OTP</translation>
 <translation id="6480327114083866287"><ph name="MANAGER" /> によって管理されています</translation>
+<translation id="6488559935020624631"><ph name="PRODUCT_NAME" /> 限定のスクリーン セーバー</translation>
 <translation id="649050271426829538">停止 - 紙詰まり</translation>
 <translation id="6494974875566443634">カスタマイズ</translation>
 <translation id="6500818810472529210">Google 検索で結果を見る</translation>
@@ -706,7 +736,6 @@
 <translation id="6798678288485555829">テキスト内の移動</translation>
 <translation id="680983167891198932">キー</translation>
 <translation id="6816797338148849397">選択した項目に関連する情報があります。上矢印キーでアクセスできます。</translation>
-<translation id="6838167112108853532">この APN を無効化または削除できません。有効になっている接続済みの APN を無効化または削除しようとしていることを確認します。</translation>
 <translation id="6853312040151791195">放電率</translation>
 <translation id="6889786074662672253">再起動中、この外部デバイスを電源から外したり、パソコンをシャットダウンしたりしないでください。このウィンドウは最小化できます。この処理には数分かかることがあります。その間、外部デバイスは動作しない可能性があります。</translation>
 <translation id="6900701049656042631">このアルバムには写真がありません。写真を追加するには、<ph name="LINK" /> にアクセスしてください</translation>
@@ -736,6 +765,7 @@
 <translation id="7130438335435247835">アクセス ポイント名（APN）</translation>
 <translation id="7131634559772719176">プリセットの確認</translation>
 <translation id="7134436342991564651">{0,plural, =1{ネームサーバー}other{ネームサーバー}}</translation>
+<translation id="7135814714616751706">ショートカットの検索</translation>
 <translation id="7143207342074048698">接続中</translation>
 <translation id="7144878232160441200">再読み込み</translation>
 <translation id="714876143603641390">LAN 接続</translation>
@@ -766,6 +796,7 @@
 <translation id="7319430975418800333">A3</translation>
 <translation id="7343581795491695942"><ph name="QUERY_TEXT" />; <ph name="RESULT_TEXT" />; Google 検索で結果を確認するには [検索]+Space キーを押してください。</translation>
 <translation id="7343649194310845056">ネットワーク デバイス</translation>
+<translation id="7353413232959255829"><ph name="SEARCH_RESULT_TEXT" /> の検索結果 <ph name="LIST_SIZE" /> 件中 <ph name="LIST_POSITION" /> 件目です。ショートカットに移動するには、Enter キーを押してください。</translation>
 <translation id="7359657277149375382">ファイル形式</translation>
 <translation id="73631062356239394">診断データを共有</translation>
 <translation id="7375053625150546623">EAP</translation>
@@ -781,6 +812,7 @@
 <translation id="7490813197707563893">MAC アドレス</translation>
 <translation id="7491478667760509108">フロート表示を終了</translation>
 <translation id="7497215489070763236">サーバーの CA 証明書</translation>
+<translation id="7501957181231305652">または</translation>
 <translation id="7502658306369382406">IPv6 アドレス</translation>
 <translation id="7515998400212163428">Android</translation>
 <translation id="7528507600602050979">ヘルプ コンテンツをご利用いただけません</translation>
@@ -796,14 +828,18 @@
 <translation id="7618774594543487847">中間色</translation>
 <translation id="7620771111601174153">詳しくはヘルプセンターをご覧ください</translation>
 <translation id="763165478673169849">前回のリセット時間</translation>
+<translation id="7633068090678117093">背景画像</translation>
 <translation id="7648838807254605802">HTTPS レイテンシが高くなっています</translation>
+<translation id="765159867434478292">分割（均等）</translation>
 <translation id="7656388927906093505">デバイスの種類はマウスです。</translation>
 <translation id="7658239707568436148">キャンセル</translation>
 <translation id="7665800271478495366">アバターを変更</translation>
+<translation id="7683228889864052081">キーボードの色調</translation>
 <translation id="7690294790491645610">新しいパスワードの確認入力</translation>
 <translation id="7701040980221191251">なし</translation>
 <translation id="7705524343798198388">VPN</translation>
 <translation id="7716280709122323042">WPA3</translation>
+<translation id="7718231387947923843">キーボード ライト</translation>
 <translation id="773153675489693198">サイクル回数</translation>
 <translation id="7747039790905080783">事前共有キー</translation>
 <translation id="7762130827864645708">パスワードを変更しました。今後は新しいパスワードを使用してください。</translation>
@@ -834,6 +870,7 @@
 <translation id="7953669802889559161">入力方法</translation>
 <translation id="7955587717700691983">Bluetooth キーボード</translation>
 <translation id="7960831585769876809">温度</translation>
+<translation id="7971535376154084247">一般設定</translation>
 <translation id="7977800524392185497"><ph name="NETWORK_NAME" /> ネットワークに接続するには、[設定] に移動します</translation>
 <translation id="7978412674231730200">秘密鍵</translation>
 <translation id="7994702968232966508">EAP 方式</translation>
@@ -847,6 +884,7 @@
 <translation id="8075838845814659848">バッテリー残量</translation>
 <translation id="8076492880354921740">タブ</translation>
 <translation id="8082366717211101304">Android アプリから DNS を解決できません</translation>
+<translation id="8082644724189923105">キーボード ゾーン</translation>
 <translation id="808894953321890993">パスワードの変更</translation>
 <translation id="8094062939584182041">この問題に関するメールの送信を Google に許可する</translation>
 <translation id="8104083085214006426">保護されていないオープン ネットワークを使用しています</translation>
@@ -875,6 +913,7 @@
 <translation id="8312330582793120272">メディアを再生する</translation>
 <translation id="8318753676953949627">0 件の画像</translation>
 <translation id="8329018942023753850">電卓アプリ</translation>
+<translation id="8335869473001018124">検索を開始</translation>
 <translation id="8336739000755212683">デバイスのアカウント画像を変更</translation>
 <translation id="8347227221149377169">印刷ジョブ</translation>
 <translation id="8351855506390808906">キーマッピングのタッチポイント</translation>
@@ -894,6 +933,8 @@
 <translation id="8456761643544401578">ダークモードを自動的に設定する</translation>
 <translation id="8461329675984532579">ホーム プロバイダ名</translation>
 <translation id="8475690821716466388">Wi-Fi ネットワークで安全性の低いプロトコル WEP PSK が使用されています</translation>
+<translation id="8476242415522716722">キーボードの光を抑える</translation>
+<translation id="8476942730579767658">ウィンドウとデスク</translation>
 <translation id="8477551185774834963">DNS の応答時間が許容値を少し超えています</translation>
 <translation id="8483248364096924578">IP アドレス</translation>
 <translation id="8491311378305535241">Android アプリからファイアウォールを介して HTTP ウェブサイトに接続できません</translation>
@@ -908,6 +949,7 @@
 <translation id="8576249514688522074">初期化が未完了</translation>
 <translation id="8593058461203131755">メディアを一時停止する</translation>
 <translation id="8620617069779373398">ローミング状態</translation>
+<translation id="8626489604350149811"><ph name="APN_NAME" /> に対するその他の操作</translation>
 <translation id="86356131183441916">ライトパープル</translation>
 <translation id="8651481478098336970">音量をミュート</translation>
 <translation id="8655295600908251630">チャンネル</translation>
@@ -916,7 +958,7 @@
 <translation id="8675354002693747642">事前共有キー</translation>
 <translation id="8677859815076891398">アルバムはありません。<ph name="LINK_BEGIN" />Google フォト<ph name="LINK_END" />でアルバムを作成してください。</translation>
 <translation id="8709616837707653427"><ph name="DESC_TEXT" /> 左右矢印キーでこの機能を管理できます。</translation>
-<translation id="8712637175834984815">閉じる</translation>
+<translation id="8712637175834984815">理解した</translation>
 <translation id="871560550817059752">失敗 - インクがありません</translation>
 <translation id="8723108084122415655">デフォルト以外のネットワークの応答時間がしきい値を超えています</translation>
 <translation id="8725066075913043281">やり直し</translation>
@@ -935,8 +977,10 @@
 <translation id="8820817407110198400">ブックマーク</translation>
 <translation id="8834539327799336565">現在接続中のデバイス</translation>
 <translation id="8845001906332463065">ヘルプ</translation>
+<translation id="8851859208664803097">停止しました - プリンタにアクセスできません</translation>
 <translation id="8855781559874488009">ファイアウォールを介して HTTP ウェブサイトに接続できません</translation>
 <translation id="885701979325669005">ストレージ</translation>
+<translation id="885704831271383379">キーボードを暗くする</translation>
 <translation id="8863170912498892583">ダークモードを有効にする</translation>
 <translation id="8863888432376731307">「<ph name="QUERY" />」の <ph name="INTENT" /> の取得など</translation>
 <translation id="8864415976656252616">コンテンツの候補はありません。関連するヘルプ コンテンツをご覧ください。</translation>
@@ -954,6 +998,7 @@
 <translation id="8930521118335213258">ピア</translation>
 <translation id="8930622219860340959">ワイヤレス</translation>
 <translation id="8936793075252196307">クライアント IP アドレス</translation>
+<translation id="8944651180182756621">ランチャーの色</translation>
 <translation id="894617464444543719">デバイスの種類はスマートフォンです。</translation>
 <translation id="8957423540740801332">右</translation>
 <translation id="8968751544471797276">充電率</translation>
@@ -987,8 +1032,10 @@
 <translation id="9149391708638971077">メモリテストを実行</translation>
 <translation id="9161276708550942948">スペース</translation>
 <translation id="9173638680043580060">残り 1 分未満</translation>
+<translation id="9174334653006917325">UI の色</translation>
 <translation id="917720651393141712">テスト</translation>
 <translation id="9188992814426075118">キーボードのバックライトの色を壁紙に合わせて自動調整できます</translation>
+<translation id="9189000703457422362">自動検出された APN を使用してこのネットワークとの接続を試みましたが接続できません。詳しくは、ご利用の携帯通信会社にお問い合わせください。</translation>
 <translation id="9193744392140377127">APN*</translation>
 <translation id="9204237731135241582">Android アプリからゲートウェイにアクセスできません</translation>
 <translation id="9211490828691860325">すべてのデスク</translation>

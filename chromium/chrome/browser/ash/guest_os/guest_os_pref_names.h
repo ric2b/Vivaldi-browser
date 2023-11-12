@@ -7,8 +7,7 @@
 
 class PrefRegistrySimple;
 
-namespace guest_os {
-namespace prefs {
+namespace guest_os::prefs {
 
 // GuestOsSharedPath
 extern const char kGuestOSPathsSharedToVms[];
@@ -32,6 +31,7 @@ extern const char kAppExecKey[];
 extern const char kAppExecutableFileNameKey[];
 extern const char kAppNameKey[];
 extern const char kAppNoDisplayKey[];
+extern const char kAppTerminalKey[];
 extern const char kAppScaledKey[];
 extern const char kAppPackageIdKey[];
 extern const char kAppStartupWMClassKey[];
@@ -58,7 +58,6 @@ extern const char kGuestOsTerminalSettings[];
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
-}  // namespace prefs
-}  // namespace guest_os
+}  // namespace guest_os::prefs
 
 #endif  // CHROME_BROWSER_ASH_GUEST_OS_GUEST_OS_PREF_NAMES_H_

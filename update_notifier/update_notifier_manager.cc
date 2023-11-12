@@ -254,7 +254,7 @@ std::wstring ReadLocaleStateLanguage() {
     LOG(WARNING) << "Failed to parse " << local_state_path << " as json";
     return std::wstring();
   }
-  base::Value* value = json->FindPath(language::prefs::kApplicationLocale);
+  base::Value* value = json->GetDict().Find(language::prefs::kApplicationLocale);
   if (!value || !value->is_string())
     return std::wstring();
   std::string language = value->GetString();

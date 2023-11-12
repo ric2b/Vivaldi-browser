@@ -35,6 +35,7 @@
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/apps/app_service/package_id.h"
 #include "chrome/browser/apps/app_service/promise_apps/promise_app.h"
+#include "chrome/browser/apps/app_service/promise_apps/promise_app_registry_cache.h"
 #include "chrome/browser/apps/app_service/publishers/arc_apps_factory.h"
 #include "chrome/browser/apps/app_service/webapk/webapk_manager.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_icon.h"
@@ -43,6 +44,7 @@
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
@@ -113,7 +115,8 @@ void OnArcAppIconCompletelyLoaded(apps::IconType icon_type,
 
       if (icon_effects != apps::IconEffects::kNone) {
         apps::ApplyIconEffects(
-            icon_effects, size_hint_in_dip, std::move(iv),
+            /*profile=*/nullptr, /*app_id=*/absl::nullopt, icon_effects,
+            size_hint_in_dip, std::move(iv),
             base::BindOnce(&UpdateIconImage, std::move(callback)));
         return;
       }
@@ -175,13 +178,23 @@ bool GetArcPermissionType(apps::PermissionType app_service_permission_type,
 
 apps::Permissions CreatePermissions(
     const base::flat_map<arc::mojom::AppPermission,
-                         arc::mojom::PermissionStatePtr>& new_permissions) {
+                         arc::mojom::PermissionStatePtr>& arc_permissions) {
   apps::Permissions permissions;
-  for (const auto& new_permission : new_permissions) {
+  for (const auto& [arc_permission_type, arc_permission_state] :
+       arc_permissions) {
+    apps::TriState value = arc_permission_state->granted
+                               ? apps::TriState::kAllow
+                               : apps::TriState::kBlock;
+    // Permissions in the one-time state will ask for permission again the next
+    // time they are used.
+    if (arc_permission_state->one_time) {
+      value = apps::TriState::kAsk;
+    }
+
     permissions.push_back(std::make_unique<apps::Permission>(
-        GetPermissionType(new_permission.first),
-        std::make_unique<apps::PermissionValue>(new_permission.second->granted),
-        new_permission.second->managed));
+        GetPermissionType(arc_permission_type),
+        std::make_unique<apps::PermissionValue>(value),
+        arc_permission_state->managed, arc_permission_state->details));
   }
   return permissions;
 }
@@ -446,11 +459,19 @@ bool IntentHasFilesAndMimeTypes(const apps::IntentPtr& intent) {
 }
 
 // Returns true if the app with the given |app_id| should open supported links
-// inside the browser by default.
-bool AppShouldDefaultHandleLinksInBrowser(const std::string& app_id) {
+// inside the app by default.
+bool AppShouldDefaultHandleLinksInApp(const std::string& app_id) {
   // Play Store provides core system functionality and should handle links
   // inside the app rather than in the browser.
-  return app_id != arc::kPlayStoreAppId;
+  return app_id == arc::kPlayStoreAppId;
+}
+
+// Returns true if the given `profile` should open supported links inside the
+// app by default.
+bool ProfileShouldDefaultHandleLinksInApp(Profile* profile) {
+  // TODO(crbug.com/1454381): Remove once we have policy control over link
+  // capturing behavior.
+  return profile->GetProfilePolicyConnector()->IsManaged();
 }
 
 // Returns the hard-coded Play Store intent filters. This is a stop-gap solution
@@ -476,9 +497,12 @@ std::vector<apps::IntentFilterPtr> GetHardcodedPlayStoreIntentFilters() {
   paths.emplace_back("/protect/home", arc::mojom::PatternType::PATTERN_PREFIX);
 
   std::vector<apps::IntentFilterPtr> intent_filters;
-  intent_filters.push_back(apps_util::CreateIntentFilterForArc(
+  apps::IntentFilterPtr filter = apps_util::CreateIntentFilterForArc(
       arc::IntentFilter(arc::kPlayStorePackage, actions, std::move(authorities),
-                        std::move(paths), schemes, mime_types)));
+                        std::move(paths), schemes, mime_types));
+  if (filter) {
+    intent_filters.push_back(std::move(filter));
+  }
   return intent_filters;
 }
 
@@ -980,8 +1004,15 @@ void ArcApps::OpenNativeSettings(const std::string& app_id) {
                << ". App is not found.";
     return;
   }
-  arc::ShowPackageInfo(app_info->package_name,
-                       arc::mojom::ShowPackageInfoPage::MAIN,
+  if (app_info->package_name.empty()) {
+    LOG(ERROR) << "Cannot open native settings for " << app_id
+               << ". Package name is empty.";
+    return;
+  }
+  const auto page = arc::IsReadOnlyPermissionsEnabled()
+                        ? arc::mojom::ShowPackageInfoPage::MANAGE_PERMISSIONS
+                        : arc::mojom::ShowPackageInfoPage::MAIN;
+  arc::ShowPackageInfo(app_info->package_name, page,
                        display::Screen::GetScreen()->GetPrimaryDisplay().id());
 }
 
@@ -1176,16 +1207,19 @@ void ArcApps::OnArcSupportedLinksChanged(
       continue;
     }
 
-    // Ignore any requests from the ARC system to set an app as handling
-    // supported links by default. We allow requests if they were initiated by
-    // user action, or if the app already has a non-default setting on the Ash
-    // side.
-    bool should_ignore_update =
-        AppShouldDefaultHandleLinksInBrowser(app_id) &&
-        source == arc::mojom::SupportedLinkChangeSource::kArcSystem &&
-        !proxy()->PreferredAppsList().IsPreferredAppForSupportedLinks(app_id);
+    // ARC apps may handle links by default on the ARC side, but do not handle
+    // links by default on the Ash side. Therefore, we ignore any requests from
+    // the ARC system to change the default setting. We allow changes if they
+    // were initiated by user action, if the app already has a non-default
+    // setting on the Ash side, or if the app/profile should have an exception
+    // to the default behavior.
+    bool allow_update =
+        source == arc::mojom::SupportedLinkChangeSource::kUserPreference ||
+        proxy()->PreferredAppsList().IsPreferredAppForSupportedLinks(app_id) ||
+        AppShouldDefaultHandleLinksInApp(app_id) ||
+        ProfileShouldDefaultHandleLinksInApp(profile_);
 
-    if (should_ignore_update) {
+    if (!allow_update) {
       continue;
     }
 
@@ -1347,8 +1381,9 @@ void ArcApps::LoadPlayStoreIcon(apps::IconType icon_type,
   int resource_id = (size_hint_in_px <= 32) ? IDR_ARC_SUPPORT_ICON_32_PNG
                                             : IDR_ARC_SUPPORT_ICON_192_PNG;
   constexpr bool is_placeholder_icon = false;
-  LoadIconFromResource(icon_type, size_hint_in_dip, resource_id,
-                       is_placeholder_icon, icon_effects, std::move(callback));
+  LoadIconFromResource(/*profile=*/nullptr, /*app_id=*/absl::nullopt, icon_type,
+                       size_hint_in_dip, resource_id, is_placeholder_icon,
+                       icon_effects, std::move(callback));
 }
 
 AppPtr ArcApps::CreateApp(ArcAppListPrefs* prefs,
@@ -1567,6 +1602,42 @@ void ArcApps::OnInstallationStarted(const std::string& package_name) {
 
     // All ARC installations start as "Pending".
     promise_app->status = PromiseStatus::kPending;
+    AppPublisher::PublishPromiseApp(std::move(promise_app));
+  }
+}
+
+void ArcApps::OnInstallationProgressChanged(const std::string& package_name,
+                                            float progress) {
+  if (ash::features::ArePromiseIconsEnabled()) {
+    if (!proxy()->PromiseAppRegistryCache()->HasPromiseApp(
+            PackageId(AppType::kArc, package_name))) {
+      LOG(ERROR) << "Cannot update installation progress value for "
+                 << package_name
+                 << ", as there is no promise app registered for this package.";
+      return;
+    }
+    PromiseAppPtr promise_app =
+        AppPublisher::MakePromiseApp(PackageId(AppType::kArc, package_name));
+    promise_app->progress = progress;
+    AppPublisher::PublishPromiseApp(std::move(promise_app));
+  }
+}
+
+void ArcApps::OnInstallationActiveChanged(const std::string& package_name,
+                                          bool active) {
+  if (ash::features::ArePromiseIconsEnabled()) {
+    PackageId package_id(AppType::kArc, package_name);
+    if (!proxy()->PromiseAppRegistryCache()->HasPromiseApp(
+            PackageId(AppType::kArc, package_name))) {
+      LOG(ERROR) << "Cannot update installation active status for "
+                 << package_name
+                 << ", as there is no promise app registered for this package.";
+      return;
+    }
+    PromiseAppPtr promise_app =
+        AppPublisher::MakePromiseApp(PackageId(AppType::kArc, package_name));
+    promise_app->status =
+        active ? PromiseStatus::kInstalling : PromiseStatus::kPending;
     AppPublisher::PublishPromiseApp(std::move(promise_app));
   }
 }

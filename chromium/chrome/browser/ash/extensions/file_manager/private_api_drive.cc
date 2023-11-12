@@ -724,6 +724,23 @@ FileManagerPrivateSearchDriveMetadataFunction::Run() {
     query->query_source =
         drivefs::mojom::QueryParameters::QuerySource::kLocalOnly;
   }
+  if (params->search_params.modified_timestamp.has_value()) {
+    query->modified_time =
+        base::Time::FromJsTime(*params->search_params.modified_timestamp);
+    query->modified_time_operator =
+        drivefs::mojom::QueryParameters::DateComparisonOperator::kGreaterThan;
+  }
+  ash::RecentSource::FileType file_type;
+  if (!file_manager::util::ToRecentSourceFileType(
+          params->search_params.category, &file_type)) {
+    return RespondNow(Error("Unable to convert file category"));
+  }
+  auto type_filters = ash::RecentDriveSource::CreateTypeFilters(file_type);
+  if (type_filters.size() == 1) {
+    query->mime_type = type_filters.front();
+  } else if (type_filters.size() > 1) {
+    query->mime_types = std::move(type_filters);
+  }
   query->page_size = params->search_params.max_results;
   bool filter_dirs = false;
   switch (params->search_params.types) {
@@ -860,102 +877,6 @@ FileManagerPrivateGetDriveConnectionStateFunction::Run() {
           result)));
 }
 
-FileManagerPrivateInternalGetDownloadUrlFunction::
-    FileManagerPrivateInternalGetDownloadUrlFunction() {
-  SetWarningThresholds(kDriveSlowOperationThreshold,
-                       kDriveVerySlowOperationThreshold);
-}
-
-FileManagerPrivateInternalGetDownloadUrlFunction::
-    ~FileManagerPrivateInternalGetDownloadUrlFunction() = default;
-
-ExtensionFunction::ResponseAction
-FileManagerPrivateInternalGetDownloadUrlFunction::Run() {
-  using extensions::api::file_manager_private_internal::GetDownloadUrl::Params;
-  const absl::optional<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  scoped_refptr<storage::FileSystemContext> file_system_context =
-      file_manager::util::GetFileSystemContextForRenderFrameHost(
-          Profile::FromBrowserContext(browser_context()), render_frame_host());
-  const GURL url = GURL(params->url);
-  const storage::FileSystemURL file_system_url =
-      file_system_context->CrackURLInFirstPartyContext(url);
-
-  switch (file_system_url.type()) {
-    case storage::kFileSystemTypeDriveFs:
-      return RunAsyncForDriveFs(file_system_url);
-    default:
-      return RespondNow(Error("Drive is disabled"));
-  }
-}
-
-void FileManagerPrivateInternalGetDownloadUrlFunction::OnGotDownloadUrl(
-    GURL download_url) {
-  if (download_url.is_empty()) {
-    // Intentionally returns a blank.
-    Respond(Error("Download Url for this item is not available."));
-    return;
-  }
-  download_url_ = std::move(download_url);
-
-  drive::DriveIntegrationService* integration_service =
-      drive::DriveIntegrationServiceFactory::FindForProfile(
-          Profile::FromBrowserContext(browser_context()));
-
-  // Integration service was used to fetch this download url, so should still be
-  // present, even if DriveFS has unmounted or experienced an error.
-  DCHECK(integration_service);
-  integration_service->GetReadOnlyAuthenticationToken(base::BindOnce(
-      &FileManagerPrivateInternalGetDownloadUrlFunction::OnTokenFetched, this));
-}
-
-void FileManagerPrivateInternalGetDownloadUrlFunction::OnTokenFetched(
-    google_apis::ApiErrorCode code,
-    const std::string& access_token) {
-  if (code != google_apis::HTTP_SUCCESS) {
-    // Intentionally returns a blank.
-    Respond(Error("Not able to fetch the token."));
-    return;
-  }
-
-  Respond(WithArguments(
-      download_url_.Resolve("?alt=media&access_token=" + access_token).spec()));
-}
-
-ExtensionFunction::ResponseAction
-FileManagerPrivateInternalGetDownloadUrlFunction::RunAsyncForDriveFs(
-    const storage::FileSystemURL& file_system_url) {
-  drive::DriveIntegrationService* integration_service =
-      drive::DriveIntegrationServiceFactory::FindForProfile(
-          Profile::FromBrowserContext(browser_context()));
-  base::FilePath path;
-  if (!integration_service || !integration_service->GetRelativeDrivePath(
-                                  file_system_url.path(), &path)) {
-    return RespondNow(Error("Drive not available"));
-  }
-
-  auto* drivefs_interface = integration_service->GetDriveFsInterface();
-  if (!drivefs_interface) {
-    return RespondNow(Error("Drive not available"));
-  }
-
-  drivefs_interface->GetMetadata(
-      path,
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(
-              &FileManagerPrivateInternalGetDownloadUrlFunction::OnGotMetadata,
-              this),
-          drive::FILE_ERROR_SERVICE_UNAVAILABLE, nullptr));
-  return RespondLater();
-}
-
-void FileManagerPrivateInternalGetDownloadUrlFunction::OnGotMetadata(
-    drive::FileError error,
-    drivefs::mojom::FileMetadataPtr metadata) {
-  OnGotDownloadUrl(metadata ? GURL(metadata->download_url) : GURL());
-}
-
 ExtensionFunction::ResponseAction
 FileManagerPrivateNotifyDriveDialogResultFunction::Run() {
   using api::file_manager_private::NotifyDriveDialogResult::Params;
@@ -1025,6 +946,24 @@ FileManagerPrivateOpenManageSyncSettingsFunction::Run() {
     ash::ManageMirrorSyncDialog::Show(
         Profile::FromBrowserContext(browser_context()));
   }
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+FileManagerPrivateCalculateBulkPinRequiredSpaceFunction::Run() {
+  Profile* const profile = Profile::FromBrowserContext(browser_context());
+  drive::DriveIntegrationService* integration_service =
+      drive::util::GetIntegrationServiceByProfile(profile);
+  if (!integration_service) {
+    return RespondNow(Error("Drive not available"));
+  }
+
+  drivefs::pinning::PinManager* const p = integration_service->GetPinManager();
+  if (!p) {
+    return RespondNow(Error("Pin Manager not available"));
+  }
+
+  p->CalculateRequiredSpace();
   return RespondNow(NoArguments());
 }
 

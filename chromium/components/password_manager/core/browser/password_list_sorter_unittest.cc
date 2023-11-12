@@ -7,7 +7,9 @@
 #include <vector>
 
 #include "base/strings/utf_string_conversions.h"
+#include "components/password_manager/core/browser/passkey_credential.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -234,6 +236,39 @@ TEST(PasswordListSorterTest, CreateUsernamePasswordSortKeyBlockedByUser) {
   form.blocked_by_user = true;
 
   EXPECT_EQ(CreateUsernamePasswordSortKey(form), "g.com");
+}
+
+TEST(PasswordListSorterTest, PasskeyVsPasswordSortKey) {
+  PasswordForm form;
+  form.signon_realm = "https://test.com/";
+  form.url = GURL(form.signon_realm);
+  form.username_value = u"lora";
+  CredentialUIEntry password(std::move(form));
+
+  PasskeyCredential passkey_credential(
+      PasskeyCredential::Source::kAndroidPhone,
+      PasskeyCredential::RpId("test.com"),
+      PasskeyCredential::CredentialId({1, 2, 3, 4}),
+      PasskeyCredential::UserId(), PasskeyCredential::Username("lora"));
+  CredentialUIEntry passkey(std::move(passkey_credential));
+
+  EXPECT_NE(CreateSortKey(password), CreateSortKey(passkey));
+}
+
+// Tests that two passkeys that are equal in everything but the display name
+// have different sort keys.
+TEST(PasswordListSorterTest, PasskeyDifferentSortKeyForDifferentDisplayName) {
+  PasskeyCredential passkey_credential(
+      PasskeyCredential::Source::kAndroidPhone,
+      PasskeyCredential::RpId("test.com"),
+      PasskeyCredential::CredentialId({1, 2, 3, 4}),
+      PasskeyCredential::UserId(), PasskeyCredential::Username("lora"),
+      PasskeyCredential::DisplayName("Display Name 1"));
+  CredentialUIEntry passkey1(std::move(passkey_credential));
+  CredentialUIEntry passkey2 = passkey1;
+  passkey2.user_display_name = u"Display Name 2";
+
+  EXPECT_NE(CreateSortKey(passkey1), CreateSortKey(passkey2));
 }
 
 }  // namespace password_manager

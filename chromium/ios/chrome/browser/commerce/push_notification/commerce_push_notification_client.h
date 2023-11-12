@@ -6,10 +6,10 @@
 #define IOS_CHROME_BROWSER_COMMERCE_PUSH_NOTIFICATION_COMMERCE_PUSH_NOTIFICATION_CLIENT_H_
 
 #import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/commerce/shopping_service_factory.h"
 #import "ios/chrome/browser/optimization_guide/optimization_guide_push_notification_client.h"
 #import "ios/chrome/browser/push_notification/push_notification_client.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 
 #import <Foundation/Foundation.h>
 #import <UserNotifications/UserNotifications.h>
@@ -42,15 +42,16 @@ class CommercePushNotificationClient
   UIBackgroundFetchResult HandleNotificationReception(
       NSDictionary<NSString*, id>* notification) override;
   NSArray<UNNotificationCategory*>* RegisterActionableNotifications() override;
-  void OnBrowserReady() override;
+  void OnSceneActiveForegroundBrowserReady() override;
 
  private:
   friend class ::CommercePushNotificationClientTest;
 
   commerce::ShoppingService* GetShoppingService();
   bookmarks::BookmarkModel* GetBookmarkModel();
-  // Returns the first active browser found
-  Browser* GetActiveBrowser();
+  // Returns the first active browser found with scene level
+  // SceneActivationLevelForegroundActive.
+  Browser* GetSceneLevelForegroundActiveBrowser();
 
   std::vector<const std::string> urls_delayed_for_loading_;
 

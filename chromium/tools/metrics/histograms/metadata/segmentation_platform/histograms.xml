@@ -70,12 +70,14 @@ chromium-metrics-reviews@google.com.
   <variant name="FeedUserSegment"/>
   <variant name="FrequentFeatureUser"/>
   <variant name="IntentionalUser"/>
+  <variant name="PasswordManagerUser"/>
   <variant name="PowerUser"/>
   <variant name="QueryTiles"/>
   <variant name="ResumeHeavyUser"/>
   <variant name="SearchUser"/>
   <variant name="ShoppingUser"/>
   <variant name="TabletProductivityUser"/>
+  <variant name="TabResumptionClassifier"/>
   <variant name="WebAppInstallationPromo"/>
 </variants>
 
@@ -93,6 +95,7 @@ chromium-metrics-reviews@google.com.
   <variant name="FrequentFeatureUserSegment"/>
   <variant name="IntentionalUser"/>
   <variant name="NewTab"/>
+  <variant name="PasswordManagerUser"/>
   <variant name="PowerUserSegment"/>
   <variant name="QueryTiles"/>
   <variant name="ResumeHeavyUserSegment"/>
@@ -100,6 +103,7 @@ chromium-metrics-reviews@google.com.
   <variant name="Share"/>
   <variant name="ShoppingUser"/>
   <variant name="TabletProductivityUser"/>
+  <variant name="TabResumptionClassifier"/>
   <variant name="Unknown"/>
   <variant name="Voice"/>
   <variant name="WebAppInstallationPromo"/>
@@ -133,7 +137,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SegmentationPlatform.AdaptiveToolbar.SegmentSelected.Startup"
-    enum="AdaptiveToolbarButtonVariant" expires_after="2023-10-01">
+    enum="AdaptiveToolbarButtonVariant" expires_after="2023-12-04">
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -144,7 +148,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="SegmentationPlatform.AdaptiveToolbar.SegmentSelection.Computed"
-    enum="AdaptiveToolbarButtonVariant" expires_after="2023-10-01">
+    enum="AdaptiveToolbarButtonVariant" expires_after="2023-12-17">
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -154,7 +158,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SegmentationPlatform.AdaptiveToolbar.SegmentSwitched"
-    enum="AdaptiveToolbarSegmentSwitch" expires_after="2023-10-01">
+    enum="AdaptiveToolbarSegmentSwitch" expires_after="2023-12-04">
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -272,7 +276,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="SegmentationPlatform.Init.ProcessCreationToServiceCreationLatency"
-    units="ms" expires_after="2023-10-01">
+    units="ms" expires_after="2023-12-04">
   <owner>ssid@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -385,7 +389,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SegmentationPlatform.ModelDelivery.Received"
-    enum="SegmentationPlatformSegmentationModel" expires_after="2023-10-01">
+    enum="SegmentationPlatformSegmentationModel" expires_after="2023-12-04">
   <owner>nyquist@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
@@ -621,7 +625,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SegmentationPlatform.SelectionFailedReason"
-    enum="SegmentationSelectionFailureReason" expires_after="2023-10-01">
+    enum="SegmentationSelectionFailureReason" expires_after="2023-12-17">
   <owner>ssid@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
   <summary>
@@ -650,7 +654,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="SegmentationPlatform.SignalDatabase.GetSamples.DatabaseEntryCount"
-    units="entries" expires_after="2023-10-01">
+    units="entries" expires_after="2023-12-04">
   <owner>nyquist@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <owner>chrome-segmentation-platform@google.com</owner>
@@ -714,6 +718,86 @@ chromium-metrics-reviews@google.com.
     fail to upload due to input size. Recorded immediately after the failure
     when an ML model is reporting structured metrics.
   </summary>
+</histogram>
+
+<histogram name="SegmentationPlatform.SyncSessions.RecordTabCountAtSyncUpdate"
+    units="tabs" expires_after="2023-12-04">
+  <owner>ritikagup@google.com</owner>
+  <owner>chrome-segmentation-platform@google.com</owner>
+  <summary>
+    Records the number of tabs that are opened and synced at the sync update.
+    Recorded every time on sync session update.
+  </summary>
+</histogram>
+
+<histogram name="SegmentationPlatform.SyncSessions.TabsCountAtStartup"
+    units="tabs" expires_after="2023-12-04">
+  <owner>ritikagup@google.com</owner>
+  <owner>chrome-segmentation-platform@google.com</owner>
+  <summary>
+    Records the number of tabs that are opened at startup. Recorded once, only
+    at startup of chrome.
+  </summary>
+</histogram>
+
+<histogram
+    name="SegmentationPlatform.SyncSessions.TimeFromStartupToFirstSyncUpdate"
+    units="ms" expires_after="2023-12-04">
+  <owner>ritikagup@google.com</owner>
+  <owner>chrome-segmentation-platform@google.com</owner>
+  <summary>
+    The time taken from chrome startup to the time first sync session update is
+    received. This includes the network delay for receiving the sync session
+    updates. The metric is recorded once after chrome startup if sync is enabled
+    and sync session is updated for the first time.
+  </summary>
+</histogram>
+
+<histogram name="SegmentationPlatform.SyncSessions.TimeFromStartupToSyncUpdate"
+    units="ms" expires_after="2023-12-04">
+  <owner>ritikagup@google.com</owner>
+  <owner>chrome-segmentation-platform@google.com</owner>
+  <summary>
+    The time taken from chrome startup to the time sync session update is
+    received. This is not recorded for first sync update. This includes the
+    network delay for receiving the sync session updates. The metric is recorded
+    at each sync update if chrome was started after the remote session was
+    updated.
+  </summary>
+</histogram>
+
+<histogram
+    name="SegmentationPlatform.SyncSessions.TimeFromTabLoadedToSyncUpdate"
+    units="ms" expires_after="2023-12-04">
+  <owner>ritikagup@google.com</owner>
+  <owner>chrome-segmentation-platform@google.com</owner>
+  <summary>
+    After chrome startup anytime if a tab is loaded, the time taken from tab
+    load time to the time next immediate sync session update is received. This
+    includes the network delay for receiving the sync session updates. The
+    metric is recorded everytime a tab is loaded and a sync session update is
+    recieved after it.
+  </summary>
+</histogram>
+
+<histogram
+    name="SegmentationPlatform.SyncSessions.{TimeInterval}TabCountAtFirstSyncUpdate"
+    units="tabs" expires_after="2023-10-01">
+  <owner>ritikagup@google.com</owner>
+  <owner>chrome-segmentation-platform@google.com</owner>
+  <summary>
+    Records total number of tabs that are opened and synced till the first sync
+    session update for the given {TimeInterval}. Recorded once, only if there is
+    sync session update for the first time.
+  </summary>
+  <token key="TimeInterval">
+    <variant name="Recent1Day"
+        summary="Tabs that are opened and synced since the recent 1 day."/>
+    <variant name="Recent1Hour"
+        summary="Tabs that are opened and synced since the recent 1 hour."/>
+    <variant name="Total"
+        summary="Tabs that are opened and synced till the first sync update"/>
+  </token>
 </histogram>
 
 <histogram

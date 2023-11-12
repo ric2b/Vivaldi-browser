@@ -15,6 +15,7 @@
 #include "base/scoped_observation.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/timer/mock_timer.h"
@@ -32,11 +33,14 @@
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/base/test_signin_client.h"
+#include "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
 #include "components/signin/public/identity_manager/set_accounts_in_cookie_result.h"
+#include "components/supervised_user/core/common/buildflags.h"
+#include "components/supervised_user/core/common/features.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "google_apis/gaia/core_account_id.h"
 #include "google_apis/gaia/gaia_constants.h"
@@ -55,7 +59,6 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
-#include "components/signin/core/browser/active_directory_account_reconcilor_delegate.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -1404,6 +1407,92 @@ TEST_F(AccountReconcilorDiceTest, DeleteCookie) {
   }
 }
 
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+class AccountReconcilorDiceTestForSupervisedUsers
+    : public AccountReconcilorDiceTest,
+      public ::testing::WithParamInterface<bool> {
+ public:
+  AccountReconcilorDiceTestForSupervisedUsers() {
+    if (is_signout_disallowed_on_cookies_cleared()) {
+      feature_list_.InitAndEnableFeature(
+          supervised_user::kClearingCookiesKeepsSupervisedUsersSignedIn);
+    } else {
+      feature_list_.InitAndDisableFeature(
+          supervised_user::kClearingCookiesKeepsSupervisedUsersSignedIn);
+    }
+  }
+
+  ~AccountReconcilorDiceTestForSupervisedUsers() override = default;
+
+  bool is_signout_disallowed_on_cookies_cleared() const { return GetParam(); }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(AccountReconcilorDiceTestForSupervisedUsers,
+                         AccountReconcilorDiceTestForSupervisedUsers,
+                         ::testing::Bool());
+
+TEST_P(AccountReconcilorDiceTestForSupervisedUsers,
+       DeleteCookieForNonSyncingSupervisedUsers) {
+  auto* identity_manager = identity_test_env()->identity_manager();
+  signin::SetListAccountsResponseOneAccount(kFakeEmail, kFakeGaiaId,
+                                            &test_url_loader_factory_);
+  AccountInfo account_info = identity_test_env()->MakePrimaryAccountAvailable(
+      kFakeEmail, signin::ConsentLevel::kSignin);
+
+  AccountCapabilitiesTestMutator mutator(&account_info.capabilities);
+  mutator.set_is_subject_to_parental_controls(true);
+  signin::UpdateAccountInfoForAccount(identity_manager, account_info);
+
+  ASSERT_TRUE(
+      identity_manager->HasAccountWithRefreshToken(account_info.account_id));
+  ASSERT_FALSE(
+      identity_manager->HasAccountWithRefreshTokenInPersistentErrorState(
+          account_info.account_id));
+
+  AccountReconcilor* reconcilor = GetMockReconcilor();
+  reconcilor->OnAccountsCookieDeletedByUserAction();
+
+  EXPECT_EQ(
+      is_signout_disallowed_on_cookies_cleared(),
+      identity_manager->HasAccountWithRefreshToken(account_info.account_id));
+  EXPECT_FALSE(
+      identity_manager->HasAccountWithRefreshTokenInPersistentErrorState(
+          account_info.account_id));
+}
+
+TEST_P(AccountReconcilorDiceTestForSupervisedUsers,
+       DeleteCookieForSyncingSupervisedUsers) {
+  auto* identity_manager = identity_test_env()->identity_manager();
+  signin::SetListAccountsResponseOneAccount(kFakeEmail, kFakeGaiaId,
+                                            &test_url_loader_factory_);
+  AccountInfo account_info = identity_test_env()->MakePrimaryAccountAvailable(
+      kFakeEmail, signin::ConsentLevel::kSync);
+
+  AccountCapabilitiesTestMutator mutator(&account_info.capabilities);
+  mutator.set_is_subject_to_parental_controls(true);
+  signin::UpdateAccountInfoForAccount(identity_manager, account_info);
+
+  ASSERT_TRUE(
+      identity_manager->HasAccountWithRefreshToken(account_info.account_id));
+  ASSERT_FALSE(
+      identity_manager->HasAccountWithRefreshTokenInPersistentErrorState(
+          account_info.account_id));
+
+  AccountReconcilor* reconcilor = GetMockReconcilor();
+
+  reconcilor->OnAccountsCookieDeletedByUserAction();
+
+  EXPECT_TRUE(
+      identity_manager->HasAccountWithRefreshToken(account_info.account_id));
+  EXPECT_NE(is_signout_disallowed_on_cookies_cleared(),
+            identity_manager->HasAccountWithRefreshTokenInPersistentErrorState(
+                account_info.account_id));
+}
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
+
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 // clang-format off
@@ -1476,75 +1565,6 @@ INSTANTIATE_TEST_SUITE_P(
     MirrorTableMultilogin,
     AccountReconcilorTestMirrorMultilogin,
     ::testing::ValuesIn(GenerateTestCasesFromParams(kMirrorParams)));
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-class AccountReconcilorTestActiveDirectory : public AccountReconcilorTestTable {
- public:
-  AccountReconcilorTestActiveDirectory() = default;
-
-  AccountReconcilorTestActiveDirectory(
-      const AccountReconcilorTestActiveDirectory&) = delete;
-  AccountReconcilorTestActiveDirectory& operator=(
-      const AccountReconcilorTestActiveDirectory&) = delete;
-
-  void SetUp() override {
-    SetAccountConsistency(signin::AccountConsistencyMethod::kMirror);
-  }
-
-  void CreateReconclior() override {
-    DeleteReconcilor();
-    CreateMockReconcilor(
-        std::make_unique<signin::ActiveDirectoryAccountReconcilorDelegate>());
-  }
-
- private:
-  ash::ScopedStubInstallAttributes install_attributes_{
-      ash::StubInstallAttributes::CreateActiveDirectoryManaged("realm.com",
-                                                               "device_id")};
-};
-
-// clang-format off
-const std::vector<AccountReconcilorTestTableParam> kActiveDirectoryParams = {
-// This table encodes the initial state and expectations of a reconcile.
-// See kDiceParams for documentation of the syntax.
-// -----------------------------------------------------------------------------
-// Tokens  |Cookies |First Run             |Gaia calls|Tokens aft.|Cookies aft |
-// -----------------------------------------------------------------------------
-{  "ABC",   "ABC",   IsFirstReconcile::kBoth, "" ,     "ABC",      "ABC"      },
-{  "ABC",   "",      IsFirstReconcile::kBoth, "UABC",  "ABC",      "ABC"      },
-{  "",      "ABC",   IsFirstReconcile::kBoth, "X",     "",         ""         },
-{  "",      "",      IsFirstReconcile::kBoth, "",      "",         ""         },
-// Order of Gaia accounts can be different from chrome accounts.
-{  "ABC",   "CBA",   IsFirstReconcile::kBoth, "" ,     "ABC",      "CBA"      },
-{  "ABC",   "CB",    IsFirstReconcile::kBoth, "UCBA",  "ABC",      "CBA"      },
-// Gaia accounts which are not present in chrome accounts should be removed. In
-// this case Gaia accounts are going to be in the same order as chrome accounts.
-{  "A",     "AB",    IsFirstReconcile::kBoth, "UA",    "A",        "A"        },
-{  "AB",    "CBA",   IsFirstReconcile::kBoth, "UAB",   "AB",       "AB"       },
-{  "AB",    "C",     IsFirstReconcile::kBoth, "UAB",   "AB",       "AB"       },
-// Cookies can be refreshed in pace, without logout.
-{  "AB",    "xAxB",  IsFirstReconcile::kBoth, "UAB",   "AB",       "AB"       },
-// Token error on the account - remove it from cookies
-{  "AxB",   "AB",    IsFirstReconcile::kBoth, "UA",    "AxB",      "A"        },
-{  "xAxB",  "AB",    IsFirstReconcile::kBoth, "X",     "xAxB",     ""         },
-// For idempotency checks.
-{  "A",     "A",     IsFirstReconcile::kBoth, "",      "A",        "A"        },
-{  "AB",    "AB",    IsFirstReconcile::kBoth, "",      "AB",       "AB"       },
-{  "AxB",   "A",     IsFirstReconcile::kBoth, "",      "AxB",      "A"        },
-{  "xAxB",  "",      IsFirstReconcile::kBoth, "",      "xAxB",     ""         },
-};
-// clang-format on
-
-TEST_P(AccountReconcilorTestActiveDirectory, TableRowTestMultilogin) {
-  CheckReconcileIdempotent(kActiveDirectoryParams, GetParam());
-  RunRowTest(GetParam());
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    ActiveDirectoryTable,
-    AccountReconcilorTestActiveDirectory,
-    ::testing::ValuesIn(GenerateTestCasesFromParams(kActiveDirectoryParams)));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Tests that reconcile cannot start before the tokens are loaded, and is
 // automatically started when tokens are loaded.

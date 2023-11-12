@@ -11,6 +11,10 @@
 #import "ios/chrome/browser/ui/ntp/logo_animation_controller.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_configuring.h"
 
+namespace web {
+class WebState;
+}
+
 @class BubblePresenter;
 @protocol NewTabPageComponentFactoryProtocol;
 @protocol NewTabPageControllerDelegate;
@@ -73,7 +77,7 @@
 - (void)reload;
 
 // Called when the user navigates to the NTP.
-- (void)didNavigateToNTP;
+- (void)didNavigateToNTPInWebState:(web::WebState*)webState;
 
 // Called when the user navigates away from the NTP.
 - (void)didNavigateAwayFromNTP;
@@ -97,6 +101,9 @@
 // Checks if there are any WebStates showing an NTP at this time. If not, then
 // stops the NTP.
 - (void)stopIfNeeded;
+
+// Checks if NTP is active for the current webState.
+- (BOOL)isNTPActiveForCurrentWebState;
 
 @end
 

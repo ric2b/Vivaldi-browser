@@ -1,0 +1,47 @@
+# Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+import("proxy_feature.gni")
+
+config("relayproxy_config") {
+  if (enable_relay_proxy) {
+    defines = [ "ENABLE_RELAY_PROXY" ]
+  }
+}
+
+if (enable_relay_proxy) {
+  if (is_android) {
+    import("//build/config/android/rules.gni")
+  }
+
+  static_library("proxy") {
+    sources = []
+    if (!is_android) {
+      sources += [
+        "launcher.cc",
+        "launcher.h",
+      ]
+    }
+    deps = [
+      ":copy-proxy-binary",
+      "//base:base",
+    ]
+    configs += [ ":relayproxy_config" ]
+  }
+
+  if (is_mac) {
+    copy("copy-proxy-binary") {
+      sources = [ "//vivaldi/relayproxy/mac/relayproxy-darwin" ]
+
+      outputs = [ "$root_out_dir/vivaldi-proxy/relayproxy-darwin"]
+    }
+  } else if (is_win && target_cpu == "x64") {
+    copy("copy-proxy-binary") {
+      sources = [ "//vivaldi/relayproxy/win/relayproxy.exe" ]
+
+      outputs = [ "$root_out_dir/relayproxy.exe" ]
+    }
+  } else {
+    group("copy-proxy-binary") {
+    }
+  }
+}

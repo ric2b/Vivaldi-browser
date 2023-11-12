@@ -8,6 +8,10 @@
 #include "components/autofill/core/browser/ui/autofill_popup_delegate.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using base::WeakPtr;
 
 namespace autofill {
@@ -45,12 +49,13 @@ AutofillPopupControllerImplMac::AutofillPopupControllerImplMac(
                                   web_contents,
                                   container_view,
                                   element_bounds,
-                                  text_direction),
+                                  text_direction,
+                                  base::DoNothing()),
       touch_bar_controller_(nil),
       is_credit_card_popup_(delegate->GetPopupType() ==
                             PopupType::kCreditCards) {}
 
-AutofillPopupControllerImplMac::~AutofillPopupControllerImplMac() {}
+AutofillPopupControllerImplMac::~AutofillPopupControllerImplMac() = default;
 
 void AutofillPopupControllerImplMac::Show(
     std::vector<autofill::Suggestion> suggestions,

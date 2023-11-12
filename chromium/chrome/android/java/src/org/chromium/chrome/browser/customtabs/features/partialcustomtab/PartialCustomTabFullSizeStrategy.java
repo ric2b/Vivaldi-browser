@@ -17,7 +17,9 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 
 import androidx.annotation.Px;
+import androidx.annotation.StringRes;
 
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider.ActivityLayoutState;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbar;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
@@ -43,6 +45,11 @@ public class PartialCustomTabFullSizeStrategy extends PartialCustomTabBaseStrate
     @Override
     public int getStrategyType() {
         return PartialCustomTabType.FULL_SIZE;
+    }
+
+    @Override
+    public @StringRes int getTypeStringId() {
+        return R.string.accessibility_partial_custom_tab_full_sheet;
     }
 
     @Override
@@ -104,8 +111,7 @@ public class PartialCustomTabFullSizeStrategy extends PartialCustomTabBaseStrate
     }
 
     @Override
-    @ActivityLayoutState
-    protected int getActivityLayoutState() {
+    protected @ActivityLayoutState int getActivityLayoutState() {
         return ACTIVITY_LAYOUT_STATE_FULL_SCREEN;
     }
 

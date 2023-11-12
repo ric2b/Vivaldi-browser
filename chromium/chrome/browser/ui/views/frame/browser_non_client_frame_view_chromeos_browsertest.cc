@@ -46,7 +46,7 @@
 #include "ash/shell.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
-#include "ash/wm/tablet_mode/tablet_mode_multitask_menu_event_handler.h"
+#include "ash/wm/tablet_mode/tablet_mode_multitask_menu_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_window_manager.h"
 #include "base/functional/callback_helpers.h"
 #include "base/ranges/algorithm.h"
@@ -66,6 +66,7 @@
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/ash/multi_user/test_multi_user_window_manager.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
+#include "chrome/browser/ui/ash/window_pin_util.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
@@ -207,6 +208,11 @@ class BrowserNonClientFrameViewChromeOSThemeChangeTest
         delegate->SetPreferManifestBackgroundColor(
             PreferManifestBackgroundColor());
         delegate->SetShouldAnimateThemeChanges(ShouldAnimateThemeChanges());
+        // When system colored SWAs were introduced for Jelly,
+        // `UseSystemThemeColor()` overrode other styling information in the
+        // manifest. This test now verifies behavior for SWAs that are opted out
+        // of the system styling (by setting it to false).
+        delegate->SetUseSystemThemeColor(false);
         break;
       }
       case ThemeChangeTestMode::kNonSWA:
@@ -1340,7 +1346,7 @@ IN_PROC_BROWSER_TEST_P(FloatBrowserNonClientFrameViewChromeOSTest,
   auto* multitask_menu_event_handler =
       ash::TabletModeControllerTestApi()
           .tablet_mode_window_manager()
-          ->tablet_mode_multitask_menu_event_handler();
+          ->tablet_mode_multitask_menu_controller();
   EXPECT_TRUE(multitask_menu_event_handler->multitask_menu());
 
   if (browser_view->webui_tab_strip()) {
@@ -1643,6 +1649,47 @@ IN_PROC_BROWSER_TEST_P(KioskBrowserNonClientFrameViewChromeOSTest,
   EXPECT_FALSE(immersive_controller->IsEnabled());
 }
 
+namespace {
+
+class LockedFullscreenBrowserNonClientFrameViewChromeOSTest
+    : public TopChromeMdParamTest<InProcessBrowserTest> {
+ public:
+  LockedFullscreenBrowserNonClientFrameViewChromeOSTest() = default;
+  LockedFullscreenBrowserNonClientFrameViewChromeOSTest(
+      const LockedFullscreenBrowserNonClientFrameViewChromeOSTest&) = delete;
+  LockedFullscreenBrowserNonClientFrameViewChromeOSTest& operator=(
+      const LockedFullscreenBrowserNonClientFrameViewChromeOSTest&) = delete;
+  ~LockedFullscreenBrowserNonClientFrameViewChromeOSTest() override = default;
+};
+
+}  // namespace
+
+IN_PROC_BROWSER_TEST_P(LockedFullscreenBrowserNonClientFrameViewChromeOSTest,
+                       ToggleTabletMode) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  // Set locked fullscreen state.
+  PinWindow(browser_view->GetWidget()->GetNativeWindow(), /*trusted=*/true);
+
+  // We're fullscreen, immersive is disabled in locked fullscreen, and while
+  // we're at it, also make sure that the shelf is hidden.
+  EXPECT_TRUE(browser_view->GetWidget()->IsFullscreen());
+  EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
+  EXPECT_FALSE(IsShelfVisible());
+
+  auto* widget = browser_view->GetWidget();
+  auto* immersive_controller = chromeos::ImmersiveFullscreenController::Get(
+      views::Widget::GetWidgetForNativeView(widget->GetNativeWindow()));
+  EXPECT_FALSE(immersive_controller->IsEnabled());
+
+  // Enter tablet mode.
+  ASSERT_NO_FATAL_FAILURE(
+      ash::ShellTestApi().SetTabletModeEnabledForTest(true));
+
+  EXPECT_TRUE(browser_view->GetWidget()->IsFullscreen());
+  EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
+  EXPECT_FALSE(IsShelfVisible());
+}
+
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #define INSTANTIATE_TEST_SUITE(name) \
@@ -1658,4 +1705,5 @@ INSTANTIATE_TEST_SUITE(FloatBrowserNonClientFrameViewChromeOSTest);
 INSTANTIATE_TEST_SUITE(HomeLauncherBrowserNonClientFrameViewChromeOSTest);
 INSTANTIATE_TEST_SUITE(TabSearchFrameCaptionButtonTest);
 INSTANTIATE_TEST_SUITE(KioskBrowserNonClientFrameViewChromeOSTest);
+INSTANTIATE_TEST_SUITE(LockedFullscreenBrowserNonClientFrameViewChromeOSTest);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)

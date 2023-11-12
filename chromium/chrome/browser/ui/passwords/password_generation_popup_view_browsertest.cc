@@ -60,28 +60,18 @@ const ui::AXPlatformNodeDelegate* FindNode(
 
 class PasswordGenerationPopupViewTest : public InProcessBrowserTest {};
 
-class PasswordGenerationPopupViewWithStrengthIndicatorTest
-    : public InProcessBrowserTest {
+// The test parameter controls the value of kPasswordGenerationExperiment
+// feature param.
+class PasswordGenerationPopupViewWithContentExperimentTest
+    : public InProcessBrowserTest,
+      public testing::WithParamInterface<std::string> {
  public:
-  PasswordGenerationPopupViewWithStrengthIndicatorTest() {
-    feature_list_.InitWithFeatures(
-        /*enabled_features=*/{password_manager::features::
-                                  kPasswordStrengthIndicator},
-        /*disabled_features=*/{});
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-class PasswordGenerationPopupViewWithMinimizedStrengthIndicatorTest
-    : public InProcessBrowserTest {
- public:
-  PasswordGenerationPopupViewWithMinimizedStrengthIndicatorTest() {
+  PasswordGenerationPopupViewWithContentExperimentTest() {
     feature_list_.InitWithFeaturesAndParameters(
         /*enabled_features=*/{{password_manager::features::
-                                   kPasswordStrengthIndicator,
-                               {{"strength_indicator_minimized", "true"}}}},
+                                   kPasswordGenerationExperiment,
+                               {{"password_generation_variation",
+                                 GetParam()}}}},
         /*disabled_features=*/{});
   }
 
@@ -99,8 +89,7 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationPopupViewTest,
       gfx::RectF(web_contents->GetContainerBounds().x(),
                  web_contents->GetContainerBounds().y(), 10, 10),
       /*max_length=*/10,
-      /*generation_element=*/std::u16string(),
-      /*user_typed_password=*/std::u16string(), FieldRendererId(100),
+      /*generation_element=*/std::u16string(), FieldRendererId(100),
       /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
       FormData());
 
@@ -135,8 +124,7 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationPopupViewTest,
       gfx::RectF(web_contents->GetContainerBounds().x(),
                  web_contents->GetContainerBounds().y(), 10, 10),
       /*max_length=*/10,
-      /*generation_element=*/std::u16string(),
-      /*user_typed_password=*/std::u16string(), FieldRendererId(100),
+      /*generation_element=*/std::u16string(), FieldRendererId(100),
       /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
       FormData());
 
@@ -166,8 +154,7 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationPopupViewTest,
       gfx::RectF(web_contents->GetContainerBounds().x(),
                  web_contents->GetContainerBounds().y() - 20, 10, 10),
       /*max_length=*/10,
-      /*generation_element=*/std::u16string(),
-      /*user_typed_password=*/std::u16string(), FieldRendererId(100),
+      /*generation_element=*/std::u16string(), FieldRendererId(100),
       /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
       FormData());
 
@@ -186,208 +173,6 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationPopupViewTest,
   EXPECT_FALSE(controller);
 }
 
-IN_PROC_BROWSER_TEST_F(PasswordGenerationPopupViewWithStrengthIndicatorTest,
-                       ShowsPopupWithEmptyPasswordField) {
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  password_generation::PasswordGenerationUIData ui_data(
-      gfx::RectF(web_contents->GetContainerBounds().x(),
-                 web_contents->GetContainerBounds().y(), 10, 10),
-      /*max_length=*/10,
-      /*generation_element=*/std::u16string(),
-      /*user_typed_password=*/std::u16string(), FieldRendererId(100),
-      /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
-      FormData());
-
-  base::WeakPtr<PasswordGenerationPopupControllerImpl> controller =
-      PasswordGenerationPopupControllerImpl::GetOrCreate(
-          /*previous=*/nullptr, ui_data.bounds, ui_data,
-          password_manager::ContentPasswordManagerDriverFactory::
-              FromWebContents(web_contents)
-                  ->GetDriverForFrame(web_contents->GetPrimaryMainFrame())
-                  ->AsWeakPtr(),
-          /*observer=*/nullptr, web_contents,
-          web_contents->GetPrimaryMainFrame());
-
-  EXPECT_FALSE(controller->IsVisible());
-  controller->UpdatePopupBasedOnTypedPasswordStrength();
-  EXPECT_TRUE(controller->IsVisible());
-
-  web_contents->Close();
-}
-
-IN_PROC_BROWSER_TEST_F(PasswordGenerationPopupViewWithStrengthIndicatorTest,
-                       ShowsPopupWithWeakPasswordTyped) {
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  password_generation::PasswordGenerationUIData ui_data(
-      gfx::RectF(web_contents->GetContainerBounds().x(),
-                 web_contents->GetContainerBounds().y(), 10, 10),
-      /*max_length=*/10,
-      /*generation_element=*/std::u16string(),
-      /*user_typed_password=*/std::u16string(), FieldRendererId(100),
-      /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
-      FormData());
-
-  TestGenerationPopupObserver observer;
-  base::WeakPtr<PasswordGenerationPopupControllerImpl> controller =
-      PasswordGenerationPopupControllerImpl::GetOrCreate(
-          /*previous=*/nullptr, ui_data.bounds, ui_data,
-          password_manager::ContentPasswordManagerDriverFactory::
-              FromWebContents(web_contents)
-                  ->GetDriverForFrame(web_contents->GetPrimaryMainFrame())
-                  ->AsWeakPtr(),
-          &observer, web_contents, web_contents->GetPrimaryMainFrame());
-
-  EXPECT_FALSE(controller->IsVisible());
-  controller->UpdateTypedPassword(u"weak");
-  controller->UpdatePopupBasedOnTypedPasswordStrength();
-  observer.WaitForStatus(TestGenerationPopupObserver::GenerationPopup::kShown);
-  EXPECT_TRUE(controller->IsVisible());
-
-  web_contents->Close();
-}
-
-IN_PROC_BROWSER_TEST_F(PasswordGenerationPopupViewWithStrengthIndicatorTest,
-                       HidesPopupWithStrongPasswordTyped) {
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  password_generation::PasswordGenerationUIData ui_data(
-      gfx::RectF(web_contents->GetContainerBounds().x(),
-                 web_contents->GetContainerBounds().y(), 10, 10),
-      /*max_length=*/10,
-      /*generation_element=*/std::u16string(),
-      /*user_typed_password=*/std::u16string(), FieldRendererId(100),
-      /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
-      FormData());
-
-  TestGenerationPopupObserver observer;
-  base::WeakPtr<PasswordGenerationPopupControllerImpl> controller =
-      PasswordGenerationPopupControllerImpl::GetOrCreate(
-          /*previous=*/nullptr, ui_data.bounds, ui_data,
-          password_manager::ContentPasswordManagerDriverFactory::
-              FromWebContents(web_contents)
-                  ->GetDriverForFrame(web_contents->GetPrimaryMainFrame())
-                  ->AsWeakPtr(),
-          &observer, web_contents, web_contents->GetPrimaryMainFrame());
-
-  // Make the popup visible first.
-  EXPECT_FALSE(controller->IsVisible());
-  controller->UpdatePopupBasedOnTypedPasswordStrength();
-  EXPECT_TRUE(controller->IsVisible());
-
-  // Popup should be hidden and controller destroyed with strong password typed.
-  controller->UpdateTypedPassword(u"fnxsr4@cm^mdls#fkbhisg3d");
-  controller->UpdatePopupBasedOnTypedPasswordStrength();
-  observer.WaitForStatus(TestGenerationPopupObserver::GenerationPopup::kHidden);
-  EXPECT_FALSE(controller);
-}
-
-IN_PROC_BROWSER_TEST_F(
-    PasswordGenerationPopupViewWithStrengthIndicatorTest,
-    ShowsFullPopupWithWeakPasswordTypedInNonMinimizedExperiment) {
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  password_generation::PasswordGenerationUIData ui_data(
-      gfx::RectF(web_contents->GetContainerBounds().x(),
-                 web_contents->GetContainerBounds().y(), 10, 10),
-      /*max_length=*/10,
-      /*generation_element=*/std::u16string(),
-      /*user_typed_password=*/std::u16string(), FieldRendererId(100),
-      /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
-      FormData());
-
-  TestGenerationPopupObserver observer;
-  base::WeakPtr<PasswordGenerationPopupControllerImpl> controller =
-      PasswordGenerationPopupControllerImpl::GetOrCreate(
-          /*previous=*/nullptr, ui_data.bounds, ui_data,
-          password_manager::ContentPasswordManagerDriverFactory::
-              FromWebContents(web_contents)
-                  ->GetDriverForFrame(web_contents->GetPrimaryMainFrame())
-                  ->AsWeakPtr(),
-          &observer, web_contents, web_contents->GetPrimaryMainFrame());
-
-  EXPECT_FALSE(controller->IsVisible());
-  controller->UpdateTypedPassword(u"weak123");
-  controller->UpdatePopupBasedOnTypedPasswordStrength();
-  observer.WaitForStatus(TestGenerationPopupObserver::GenerationPopup::kShown);
-  EXPECT_TRUE(controller->IsVisible());
-  EXPECT_FALSE(PasswordGenerationPopupViewTester::For(controller->view())
-                   ->IsPopupMinimized());
-
-  web_contents->Close();
-}
-
-IN_PROC_BROWSER_TEST_F(
-    PasswordGenerationPopupViewWithMinimizedStrengthIndicatorTest,
-    ShowsFullPopupWithMoreThanFiveCharWeakPasswordTyped) {
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  password_generation::PasswordGenerationUIData ui_data(
-      gfx::RectF(web_contents->GetContainerBounds().x(),
-                 web_contents->GetContainerBounds().y(), 10, 10),
-      /*max_length=*/10,
-      /*generation_element=*/std::u16string(),
-      /*user_typed_password=*/std::u16string(), FieldRendererId(100),
-      /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
-      FormData());
-
-  TestGenerationPopupObserver observer;
-  base::WeakPtr<PasswordGenerationPopupControllerImpl> controller =
-      PasswordGenerationPopupControllerImpl::GetOrCreate(
-          /*previous=*/nullptr, ui_data.bounds, ui_data,
-          password_manager::ContentPasswordManagerDriverFactory::
-              FromWebContents(web_contents)
-                  ->GetDriverForFrame(web_contents->GetPrimaryMainFrame())
-                  ->AsWeakPtr(),
-          &observer, web_contents, web_contents->GetPrimaryMainFrame());
-
-  EXPECT_FALSE(controller->IsVisible());
-  controller->UpdateTypedPassword(u"weak12");
-  controller->UpdatePopupBasedOnTypedPasswordStrength();
-  observer.WaitForStatus(TestGenerationPopupObserver::GenerationPopup::kShown);
-  EXPECT_TRUE(controller->IsVisible());
-  EXPECT_TRUE(PasswordGenerationPopupViewTester::For(controller->view())
-                  ->IsPopupMinimized());
-
-  web_contents->Close();
-}
-
-IN_PROC_BROWSER_TEST_F(
-    PasswordGenerationPopupViewWithMinimizedStrengthIndicatorTest,
-    ShowsFullPopupWithFiveCharWeakPasswordTyped) {
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  password_generation::PasswordGenerationUIData ui_data(
-      gfx::RectF(web_contents->GetContainerBounds().x(),
-                 web_contents->GetContainerBounds().y(), 10, 10),
-      /*max_length=*/10,
-      /*generation_element=*/std::u16string(),
-      /*user_typed_password=*/std::u16string(), FieldRendererId(100),
-      /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
-      FormData());
-
-  TestGenerationPopupObserver observer;
-  base::WeakPtr<PasswordGenerationPopupControllerImpl> controller =
-      PasswordGenerationPopupControllerImpl::GetOrCreate(
-          /*previous=*/nullptr, ui_data.bounds, ui_data,
-          password_manager::ContentPasswordManagerDriverFactory::
-              FromWebContents(web_contents)
-                  ->GetDriverForFrame(web_contents->GetPrimaryMainFrame())
-                  ->AsWeakPtr(),
-          &observer, web_contents, web_contents->GetPrimaryMainFrame());
-
-  EXPECT_FALSE(controller->IsVisible());
-  controller->UpdateTypedPassword(u"weak1");
-  controller->UpdatePopupBasedOnTypedPasswordStrength();
-  observer.WaitForStatus(TestGenerationPopupObserver::GenerationPopup::kShown);
-  EXPECT_TRUE(controller->IsVisible());
-  EXPECT_FALSE(PasswordGenerationPopupViewTester::For(controller->view())
-                   ->IsPopupMinimized());
-
-  web_contents->Close();
-}
-
 using PasswordGenerationPopupViewAxTest = InProcessBrowserTest;
 
 IN_PROC_BROWSER_TEST_F(PasswordGenerationPopupViewAxTest, PopupInAxTree) {
@@ -401,8 +186,7 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationPopupViewAxTest, PopupInAxTree) {
   password_generation::PasswordGenerationUIData ui_data(
       gfx::RectF(container_bounds.x(), container_bounds.y(), 10, 10),
       /*max_length=*/10,
-      /*generation_element=*/std::u16string(),
-      /*user_typed_password=*/std::u16string(), FieldRendererId(100),
+      /*generation_element=*/std::u16string(), FieldRendererId(100),
       /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
       FormData());
 
@@ -420,7 +204,7 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationPopupViewAxTest, PopupInAxTree) {
                                        "PasswordGenerationPopupViewViews");
   controller->Show(GenerationUIState::kOfferGeneration);
 
-  gfx::NativeWindow window = gfx::kNullNativeWindow;
+  gfx::NativeWindow window = gfx::NativeWindow();
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   // On Mac and Linux the whole ax tree grows from the main root windows
   // and the popup node can be found there. This gives more confidence
@@ -458,5 +242,42 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationPopupViewAxTest, PopupInAxTree) {
   GTEST_SKIP() << "Accessibility reflection is not supported on this platform.";
 #endif
 }
+
+IN_PROC_BROWSER_TEST_P(PasswordGenerationPopupViewWithContentExperimentTest,
+                       DoesNotCrashShowingGenerationOfferWithModifiedContent) {
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  password_generation::PasswordGenerationUIData ui_data(
+      gfx::RectF(web_contents->GetContainerBounds().x(),
+                 web_contents->GetContainerBounds().y(), 10, 10),
+      /*max_length=*/10,
+      /*generation_element=*/std::u16string(), FieldRendererId(100),
+      /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
+      FormData());
+
+  base::WeakPtr<PasswordGenerationPopupControllerImpl> controller =
+      PasswordGenerationPopupControllerImpl::GetOrCreate(
+          /*previous=*/nullptr, ui_data.bounds, ui_data,
+          password_manager::ContentPasswordManagerDriverFactory::
+              FromWebContents(web_contents)
+                  ->GetDriverForFrame(web_contents->GetPrimaryMainFrame())
+                  ->AsWeakPtr(),
+          /*observer=*/nullptr, web_contents,
+          web_contents->GetPrimaryMainFrame());
+
+  controller->Show(PasswordGenerationPopupController::kOfferGeneration);
+  EXPECT_TRUE(controller->IsVisible());
+
+  // This hides the popup and destroys the controller.
+  web_contents->Close();
+}
+
+INSTANTIATE_TEST_SUITE_P(ContentExperiment,
+                         PasswordGenerationPopupViewWithContentExperimentTest,
+                         testing::Values("trusted_advice",
+                                         "safety_first",
+                                         "try_something_new",
+                                         "convenience",
+                                         "cross_device"));
 
 }  // namespace autofill

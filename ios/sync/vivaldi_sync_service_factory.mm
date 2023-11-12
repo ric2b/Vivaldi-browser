@@ -16,13 +16,12 @@
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/command_line_switches.h"
 #include "components/sync/base/sync_util.h"
-#include "components/sync/driver/sync_service_impl.h"
-#include "components/sync/driver/sync_service.h"
-#include "ios/chrome/browser/application_context/application_context.h"
+#include "components/sync/service/sync_service_impl.h"
+#include "components/sync/service/sync_service.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
+#include "ios/chrome/browser/bookmarks/bookmark_undo_service_factory.h"
 #include "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_sync_service_factory.h"
 #include "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/consent_auditor/consent_auditor_factory.h"
 #include "ios/chrome/browser/favicon/favicon_service_factory.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
@@ -30,13 +29,14 @@
 #include "ios/chrome/browser/policy/browser_state_policy_connector.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#include "ios/chrome/browser/shared/model/application_context/application_context.h"
+#include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
 #include "ios/chrome/browser/sync/device_info_sync_service_factory.h"
 #include "ios/chrome/browser/sync/ios_user_event_service_factory.h"
 #include "ios/chrome/browser/sync/model_type_store_service_factory.h"
 #include "ios/chrome/browser/sync/session_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_invalidations_service_factory.h"
-#include "ios/chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "ios/chrome/browser/webdata_services/web_data_service_factory.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/notes/notes_factory.h"
@@ -95,7 +95,6 @@ VivaldiSyncServiceFactory::BuildServiceInstanceFor(
   syncer::SyncServiceImpl::InitParams init_params;
   init_params.identity_manager =
       IdentityManagerFactory::GetForBrowserState(browser_state);
-  init_params.start_behavior = syncer::SyncServiceImpl::MANUAL_START;
   init_params.sync_client =
       std::make_unique<VivaldiSyncClient>(browser_state);
   init_params.url_loader_factory = browser_state->GetSharedURLLoaderFactory();

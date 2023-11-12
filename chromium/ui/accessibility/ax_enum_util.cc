@@ -1297,6 +1297,8 @@ const char* ToString(ax::mojom::StringAttribute string_attribute) {
       return "keyShortcuts";
     case ax::mojom::StringAttribute::kLanguage:
       return "language";
+    case ax::mojom::StringAttribute::kLinkTarget:
+      return "linkTarget";
     case ax::mojom::StringAttribute::kName:
       return "name";
     case ax::mojom::StringAttribute::kLiveRelevant:
@@ -1742,10 +1744,12 @@ const char* ToString(ax::mojom::BoolAttribute bool_attribute) {
       return "isPageBreakingObject";
     case ax::mojom::BoolAttribute::kHasAriaAttribute:
       return "hasAriaAttribute";
-    case ax::mojom::BoolAttribute::kTouchPassthrough:
+    case ax::mojom::BoolAttribute::OBSOLETE_kTouchPassthrough:
       return "touchPassthrough";
     case ax::mojom::BoolAttribute::kLongClickable:
       return "longClickable";
+    case ax::mojom::BoolAttribute::kHasHiddenOffscreenNodes:
+      return "hasHiddenOffscreenNodes";
   }
 
   return "";
@@ -1793,8 +1797,8 @@ ax::mojom::BoolAttribute StringToBoolAttribute(
     return ax::mojom::BoolAttribute::kIsPageBreakingObject;
   } else if (bool_attribute == "kHasAriaAttribute") {
     return ax::mojom::BoolAttribute::kHasAriaAttribute;
-  } else if (bool_attribute == "kTouchPassthrough") {
-    return ax::mojom::BoolAttribute::kTouchPassthrough;
+  } else if (bool_attribute == "OBSOLETE_kTouchPassthrough") {
+    return ax::mojom::BoolAttribute::OBSOLETE_kTouchPassthrough;
   } else if (bool_attribute == "kLongClickable") {
     return ax::mojom::BoolAttribute::kLongClickable;
   } else {

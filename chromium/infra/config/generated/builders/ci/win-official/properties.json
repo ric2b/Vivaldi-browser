@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "win-official",
-              "project": "chromium-m114"
+              "project": "chromium-m116"
             },
             "builder_spec": {
               "builder_group": "chromium",
@@ -33,7 +33,7 @@
         {
           "bucket": "ci",
           "builder": "win-official",
-          "project": "chromium-m114"
+          "project": "chromium-m116"
         }
       ],
       "mirroring_builder_group_and_names": [

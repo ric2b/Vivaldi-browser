@@ -107,8 +107,8 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
             setStartIconDrawable(mBlockedVisitDrawable);
             mTitleView.setTextColor(getContext().getColor(R.color.default_red));
         } else {
-            setStartIconDrawable(mFaviconHelper.getDefaultFaviconDrawable(
-                    getContext().getResources(), item.getUrl(), true));
+            setStartIconDrawable(
+                    mFaviconHelper.getDefaultFaviconDrawable(getContext(), item.getUrl(), true));
             requestIcon();
 
             if (!ChromeApplicationImpl.isVivaldi())

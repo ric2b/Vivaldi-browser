@@ -4,25 +4,25 @@
 
 #import "ios/chrome/browser/ui/settings/password/passwords_coordinator.h"
 
-#import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "components/keyed_service/core/service_access_type.h"
-#import "components/password_manager/core/browser/password_manager_metrics_util.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_check_manager.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_check_manager_factory.h"
+#import "ios/chrome/browser/passwords/password_checkup_metrics.h"
 #import "ios/chrome/browser/passwords/password_checkup_utils.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
@@ -128,10 +128,8 @@ using password_manager::WarningType;
 
 - (void)checkSavedPasswords {
   [self.mediator startPasswordCheck];
-  base::UmaHistogramEnumeration(
-      "PasswordManager.BulkCheck.UserAction",
-      password_manager::metrics_util::PasswordCheckInteraction::
-          kAutomaticPasswordCheck);
+
+  password_manager::LogStartPasswordCheckAutomatically();
 }
 
 - (UIViewController*)viewController {
@@ -154,9 +152,11 @@ using password_manager::WarningType;
                                        browserState)];
   self.reauthModule = [[ReauthenticationModule alloc]
       initWithSuccessfulReauthTimeAccessor:self.mediator];
-
-  self.passwordsViewController =
-      [[PasswordManagerViewController alloc] initWithBrowser:self.browser];
+  ChromeAccountManagerService* accountManagerService =
+      ChromeAccountManagerServiceFactory::GetForBrowserState(browserState);
+  self.passwordsViewController = [[PasswordManagerViewController alloc]
+      initWithChromeAccountManagerService:accountManagerService
+                              prefService:browserState->GetPrefs()];
 
   self.passwordsViewController.handler = self;
   self.passwordsViewController.delegate = self.mediator;
@@ -217,8 +217,9 @@ using password_manager::WarningType;
   [self.passwordCheckupCoordinator start];
 }
 
+// TODO(crbug.com/1464966): Make sure there aren't mutiple active
+// `passwordIssuesCoordinator`s at once.
 - (void)showPasswordIssues {
-  DCHECK(!self.passwordIssuesCoordinator);
   self.passwordIssuesCoordinator = [[PasswordIssuesCoordinator alloc]
             initForWarningType:WarningType::kCompromisedPasswordsWarning
       baseNavigationController:self.baseNavigationController
@@ -236,7 +237,7 @@ using password_manager::WarningType;
                                browser:self.browser
                             credential:credential
                           reauthModule:self.reauthModule
-                               context:DetailsContext::kGeneral];
+                               context:DetailsContext::kPasswordSettings];
   self.passwordDetailsCoordinator.delegate = self;
   [self.passwordDetailsCoordinator start];
 }
@@ -249,7 +250,7 @@ using password_manager::WarningType;
                                browser:self.browser
                        affiliatedGroup:affiliatedGroup
                           reauthModule:self.reauthModule
-                               context:DetailsContext::kGeneral];
+                               context:DetailsContext::kPasswordSettings];
   self.passwordDetailsCoordinator.delegate = self;
   [self.passwordDetailsCoordinator start];
 }

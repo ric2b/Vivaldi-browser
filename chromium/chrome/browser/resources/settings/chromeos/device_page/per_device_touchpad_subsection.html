@@ -1,31 +1,39 @@
 <style include="settings-shared input-device-settings-shared">
 </style>
 <div id="touchpad">
-  <h2 class="device-name">[[getTouchpadName(touchpad.name)]]</h2>
+  <h2 class="subsection-header"
+      id="touchpadName">[[getTouchpadName(touchpad.name)]]</h2>
   <div class="subsection">
     <settings-toggle-button id="enableTapToClick"
         pref="{{enableTapToClickPref}}"
         label="$i18n{touchpadTapToClickEnabledLabel}"
-        aria-label=
-            "[[getTouchpadName(touchpad.name)]]
-             $i18n{touchpadTapToClickEnabledLabel}"
+        aria-describedby="touchpadName"
         deep-link-focus-id$="[[Setting.kTouchpadTapToClick]]">
     </settings-toggle-button>
+    <template is="dom-if" if="[[isAltClickAndSixPackCustomizationEnabled]]">
+      <div id="simulateRightClickContainer" class="settings-box">
+        <div id="simulateRightClickLabel" class="start settings-box-text">
+          $i18n{touchpadSimulateRightClickLabel}
+        </div>
+        <settings-dropdown-menu id="simulateRightClickDropdown"
+            label="[[touchpadSimulateRightClickLabel]]"
+            pref="{{simulateRightClickPref}}"
+            menu-options="[[simulateRightClickOptions]]">
+        </settings-dropdown-menu>
+      </div>
+    </template>
     <settings-toggle-button id="enableTapDragging"
         class="hr"
         pref="{{enableTapDraggingPref}}"
         label="$i18n{tapDraggingLabel}"
-        aria-label=
-            "[[getTouchpadName(touchpad.name)]] $i18n{tapDraggingLabel}"
+        aria-describedby="touchpadName"
         deep-link-focus-id$="[[Setting.kTouchpadTapDragging]]">
     </settings-toggle-button>
     <settings-toggle-button id="touchpadAcceleration"
         class="hr"
         pref="{{accelerationPref}}"
         label="$i18n{touchpadAccelerationLabel}"
-        aria-label=
-            "[[getTouchpadName(touchpad.name)]]
-             $i18n{touchpadAccelerationLabel}"
+        aria-describedby="touchpadName"
         deep-link-focus-id$="[[Setting.kTouchpadAcceleration]]">
     </settings-toggle-button>
     <div class="settings-box">
@@ -35,8 +43,8 @@
         <settings-slider id="touchpadSensitivity"
             pref="{{sensitivityPref}}"
             ticks="[[sensitivityValues_]]"
-            label-aria=
-                "[[getTouchpadName(touchpad.name)]] $i18n{touchpadSpeed}"
+            aria-describedby="touchpadName"
+            label-aria="$i18n{touchpadSpeed}"
             label-min="$i18n{pointerSlow}"
             label-max="$i18n{pointerFast}"
             deep-link-focus-id$="[[Setting.kTouchpadSpeed]]">
@@ -47,9 +55,7 @@
           class="hr"
           pref="{{scrollAccelerationPref}}"
           label="$i18n{touchpadScrollAccelerationLabel}"
-          aria-label=
-              "[[getTouchpadName(touchpad.name)]]
-               $i18n{touchpadScrollAccelerationLabel}"
+          aria-describedby="touchpadName"
           deep-link-focus-id$="[[Setting.kTouchpadScrollAcceleration]]">
       </settings-toggle-button>
       <div class="settings-box">
@@ -59,8 +65,8 @@
         <settings-slider id="touchpadScrollSpeedSlider"
             pref="{{scrollSensitivityPref}}"
             ticks="[[sensitivityValues_]]"
-            label-aria=
-                "[[getTouchpadName(touchpad.name)]] $i18n{touchpadScrollSpeed}"
+            aria-describedby="touchpadName"
+            label-aria="$i18n{touchpadScrollSpeed}"
             label-min="$i18n{pointerSlow}"
             label-max="$i18n{pointerFast}">
         </settings-slider>
@@ -75,9 +81,8 @@
         <settings-slider id="touchpadHapticClickSensitivity"
             pref="{{hapticClickSensitivityPref}}"
             ticks="[[hapticClickSensitivityValues_]]"
-            label-aria=
-                "[[getTouchpadName(touchpad.name)]]
-                 $i18n{touchpadHapticClickSensitivityLabel}"
+            aria-describedby="touchpadName"
+            label-aria="$i18n{touchpadHapticClickSensitivityLabel}"
             label-min="$i18n{touchpadHapticLightClickLabel}"
             label-max="$i18n{touchpadHapticFirmClickLabel}"
             deep-link-focus-id$=
@@ -90,25 +95,28 @@
           <div>$i18n{touchpadHapticFeedbackTitle}</div>
           <div class="secondary">
             <localized-link
-              on-click="onLearnMoreLinkClicked_"
-              id="touchpadHapticFeedbackSecondary"
-              localized-string="$i18n{touchpadHapticFeedbackSecondaryText}"
-              link-url="$i18n{hapticFeedbackLearnMoreLink}">
+                aria-describedby="touchpadName"
+                on-click="onLearnMoreLinkClicked_"
+                id="touchpadHapticFeedbackSecondary"
+                localized-string="$i18n{touchpadHapticFeedbackSecondaryText}"
+                link-url="$i18n{hapticFeedbackLearnMoreLink}">
             </localized-link>
           </div>
         </div>
         <cr-toggle id="touchpadHapticFeedbackToggle"
             checked="{{hapticFeedbackValue}}"
+            aria-describedby="touchpadName"
             aria-label=
-                "[[getTouchpadName(touchpad.name)]] $i18n{learnMoreLabel}"
+                "[[getLabelWithoutLearnMore('touchpadHapticFeedbackTitle')]]"
             deep-link-focus-id$="[[Setting.kTouchpadHapticFeedback]]">
         </cr-toggle>
       </div>
     </template>
-    <div class="settings-box" id="reverseScrollRow"
+    <div class="settings-box bottom-divider" id="reverseScrollRow"
           on-click="onTouchpadReverseScrollRowClicked_">
       <div class="start settings-box-text">
         <localized-link
+            aria-describedby="touchpadName"
             on-click="onLearnMoreLinkClicked_"
             id="enableReverseScrollingLabel"
             localized-string="$i18n{touchPadScrollLabel}"
@@ -117,7 +125,9 @@
       </div>
       <cr-toggle id="enableReverseScrollingToggle"
           checked="{{reverseScrollValue}}"
-          aria-label="[[getTouchpadName(touchpad.name)]] $i18n{learnMoreLabel}"
+          aria-describedby="touchpadName"
+          aria-label=
+              "[[getLabelWithoutLearnMore('touchPadScrollLabel')]]"
           deep-link-focus-id$="[[Setting.kTouchpadReverseScrolling]]">
       </cr-toggle>
     </div>

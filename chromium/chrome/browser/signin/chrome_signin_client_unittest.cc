@@ -30,6 +30,7 @@
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
+#include "components/supervised_user/core/common/buildflags.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/test/browser_task_environment.h"
 #include "services/network/test/test_network_connection_tracker.h"
@@ -304,6 +305,7 @@ bool IsAlwaysAllowedSignoutSources(
     case signin_metrics::ProfileSignout::kUserClickedSignoutProfileMenu:
     case signin_metrics::ProfileSignout::kAccountEmailUpdated:
     case signin_metrics::ProfileSignout::kSigninManagerUpdateUPA:
+    case signin_metrics::ProfileSignout::kUserTappedUndoRightAfterSignIn:
       return false;
 
     case signin_metrics::ProfileSignout::kAccountRemovedFromDevice:
@@ -452,6 +454,7 @@ const signin_metrics::ProfileSignout kSignoutSources[] = {
     signin_metrics::ProfileSignout::kGaiaCookieUpdated,
     signin_metrics::ProfileSignout::kAccountReconcilorReconcile,
     signin_metrics::ProfileSignout::kSigninManagerUpdateUPA,
+    signin_metrics::ProfileSignout::kUserTappedUndoRightAfterSignIn,
 };
 // kNumberOfObsoleteSignoutSources should be updated when a ProfileSignout
 // value is deprecated.

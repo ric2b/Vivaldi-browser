@@ -24,6 +24,8 @@
 class PrefChangeRegistrar;
 
 namespace extensions {
+typedef std::vector<vivaldi::extension_action_utils::ExtensionInfo>
+    ToolbarExtensionInfoList;
 
 class ExtensionActionUtil;
 
@@ -65,6 +67,9 @@ class ExtensionActionUtil : public KeyedService,
   void FillInfoForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
                         ExtensionAction* action,
                         int tab_id);
+
+  void GetExtensionsInfo(const ExtensionSet& extensions,
+                         extensions::ToolbarExtensionInfoList* extension_list);
 
   void NotifyTabSelectionChange(content::WebContents* selected_contents);
 

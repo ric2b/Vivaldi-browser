@@ -33,7 +33,7 @@ import org.chromium.chrome.browser.omnibox.LocationBarMediator.SaveOfflineButton
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator.PageInfoAction;
 import org.chromium.chrome.browser.omnibox.status.StatusView;
-import org.chromium.chrome.browser.omnibox.suggestions.ActionChipsDelegate;
+import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteControllerProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteDelegate;
@@ -50,6 +50,7 @@ import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
+import org.chromium.components.omnibox.action.OmniboxActionDelegate;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -170,7 +171,7 @@ public class LocationBarCoordinator
             @NonNull BooleanSupplier isToolbarMicEnabledSupplier,
             @Nullable Supplier<MerchantTrustSignalsCoordinator>
                     merchantTrustSignalsCoordinatorSupplier,
-            @NonNull ActionChipsDelegate actionChipsDelegate,
+            @NonNull OmniboxActionDelegate omniboxActionDelegate,
             BrowserStateBrowserControlsVisibilityDelegate browserControlsVisibilityDelegate,
             Callback<Throwable> reportExceptionCallback,
             @Nullable BackPressManager backPressManager,
@@ -213,7 +214,7 @@ public class LocationBarCoordinator
                 mOmniboxDropdownEmbedderImpl, mUrlCoordinator, modalDialogManagerSupplier,
                 activityTabSupplier, shareDelegateSupplier, locationBarDataProvider,
                 profileObservableSupplier, bringTabToFrontCallback, tabWindowManagerSupplier,
-                bookmarkState, actionChipsDelegate, omniboxSuggestionsDropdownScrollListener,
+                bookmarkState, omniboxActionDelegate, omniboxSuggestionsDropdownScrollListener,
                 openHistoryClustersDelegate);
         StatusView statusView = mLocationBarLayout.findViewById(R.id.location_bar_status);
         mStatusCoordinator = new StatusCoordinator(isTabletWindow(), statusView, mUrlCoordinator,
@@ -256,7 +257,7 @@ public class LocationBarCoordinator
                 : R.color.omnibox_dropdown_bg_incognito;
         mDropdownIncognitoBackgroundColor = context.getColor(incognitoBgColorRes);
         mSuggestionStandardBackgroundColor =
-                ChromeColors.getSurfaceColor(context, R.dimen.omnibox_suggestion_bg_elevation);
+                OmniboxResourceProvider.getStandardSuggestionBackgroundColor(context);
         mSuggestionIncognitoBackgroundColor =
                 context.getColor(R.color.omnibox_suggestion_bg_incognito);
 
@@ -497,8 +498,7 @@ public class LocationBarCoordinator
      * @throws ClassCastException if this coordinator holds a {@link SubCoordinator} of a different
      *         type.
      */
-    @NonNull
-    public LocationBarCoordinatorPhone getPhoneCoordinator() {
+    public @NonNull LocationBarCoordinatorPhone getPhoneCoordinator() {
         assert mSubCoordinator != null;
         return (LocationBarCoordinatorPhone) mSubCoordinator;
     }
@@ -509,8 +509,7 @@ public class LocationBarCoordinator
      * @throws ClassCastException if this coordinator holds a {@link SubCoordinator} of a different
      *         type.
      */
-    @NonNull
-    public LocationBarCoordinatorTablet getTabletCoordinator() {
+    public @NonNull LocationBarCoordinatorTablet getTabletCoordinator() {
         assert mSubCoordinator != null;
         return (LocationBarCoordinatorTablet) mSubCoordinator;
     }

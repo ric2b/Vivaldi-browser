@@ -27,6 +27,13 @@
 - (void)setShareMenuEnabled:(BOOL)enabled;
 // Sets whether the toolbar is displaying for an NTP.
 - (void)setIsNTP:(BOOL)isNTP;
+// Sets the page theme color.
+- (void)setPageThemeColor:(UIColor*)themeColor;
+// Sets the IPH highlighted state of the tab grid button.
+- (void)setTabGridButtonIPHHighlighted:(BOOL)iphHighlighted;
+// Sets the IPH highlighted state of the new tab button.
+- (void)setNewTabButtonIPHHighlighted:(BOOL)iphHighlighted;
+
 
 // Vivaldi
 // Sets whether search or new tab button to show on the secondary toolbar for

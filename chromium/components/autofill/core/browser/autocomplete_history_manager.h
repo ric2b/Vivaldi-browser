@@ -46,7 +46,7 @@ class AutocompleteHistoryManager : public SingleFieldFormFiller,
 
   // SingleFieldFormFiller overrides:
   [[nodiscard]] bool OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion autoselect_first_suggestion,
+      AutofillSuggestionTriggerSource trigger_source,
       const FormFieldData& field,
       const AutofillClient& client,
       base::WeakPtr<SuggestionsHandler> handler,
@@ -56,9 +56,9 @@ class AutocompleteHistoryManager : public SingleFieldFormFiller,
   void CancelPendingQueries(const SuggestionsHandler* handler) override;
   void OnRemoveCurrentSingleFieldSuggestion(const std::u16string& field_name,
                                             const std::u16string& value,
-                                            int frontend_id) override;
+                                            PopupItemId popup_item_id) override;
   void OnSingleFieldSuggestionSelected(const std::u16string& value,
-                                       int frontend_id) override;
+                                       PopupItemId popup_item_id) override;
 
   // Initializes the instance with the given parameters.
   // |profile_database_| is a profile-scope DB used to access autocomplete data.

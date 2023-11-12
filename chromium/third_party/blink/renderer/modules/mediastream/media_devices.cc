@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "base/guid.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
@@ -80,8 +80,8 @@ class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
 
   void OnSuccess(const MediaStreamVector& streams,
                  CaptureController* capture_controller) override {
-    if (media_type_ == UserMediaRequestType::kDisplayMediaSet) {
-      OnSuccessGetDisplayMediaSet(streams);
+    if (media_type_ == UserMediaRequestType::kAllScreensMedia) {
+      OnSuccessGetAllScreensMedia(streams);
       return;
     }
 
@@ -127,9 +127,9 @@ class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
   }
 
  private:
-  void OnSuccessGetDisplayMediaSet(const MediaStreamVector& streams) {
+  void OnSuccessGetAllScreensMedia(const MediaStreamVector& streams) {
     DCHECK(!streams.empty());
-    DCHECK_EQ(UserMediaRequestType::kDisplayMediaSet, media_type_);
+    DCHECK_EQ(UserMediaRequestType::kAllScreensMedia, media_type_);
     resolver_->Resolve(streams);
   }
 
@@ -234,27 +234,10 @@ bool TransientActivationRequirementSatisfied(LocalDOMWindow* window) {
   return false;
 }
 
-void RecordEnumerateDevicesLatency(base::TimeTicks start_time) {
-  const base::TimeDelta elapsed = base::TimeTicks::Now() - start_time;
-  base::UmaHistogramTimes("WebRTC.EnumerateDevices.Latency", elapsed);
-}
-
 #if !BUILDFLAG(IS_ANDROID)
-// Killswitch for remotely shutting off new functionality in case
-// anything goes wrong.
-// TODO(crbug.com/1382329): Remove this flag.
-BASE_FEATURE(kAllowCaptureControllerForGetUserMediaScreenCapture,
-             "AllowCaptureControllerForGetUserMediaScreenCapture",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 bool IsExtensionScreenSharingFunctionCall(const MediaStreamConstraints* options,
                                           ExceptionState& exception_state) {
   DCHECK(!exception_state.HadException());
-
-  if (!base::FeatureList::IsEnabled(
-          kAllowCaptureControllerForGetUserMediaScreenCapture)) {
-    return false;
-  }
 
   if (!options) {
     return false;
@@ -388,8 +371,7 @@ ScriptPromise MediaDevices::enumerateDevices(ScriptState* script_state,
       script_state, "Media.MediaDevices.EnumerateDevices", base::Seconds(4));
   const ScriptPromise promise = result_tracker->Promise();
 
-  enumerate_device_requests_.Set(
-      result_tracker, RequestMetadata{.start_time = base::TimeTicks::Now()});
+  enumerate_device_requests_.insert(result_tracker);
 
   LocalFrame* frame = LocalDOMWindow::From(script_state)->GetFrame();
   GetDispatcherHost(frame).EnumerateDevices(
@@ -540,33 +522,8 @@ ScriptPromise MediaDevices::getAllScreensMedia(
   constraints->setVideo(
       MakeGarbageCollected<V8UnionBooleanOrMediaTrackConstraints>(true));
   constraints->setAutoSelectAllScreens(true);
-  return SendUserMediaRequest(UserMediaRequestType::kDisplayMediaSet, resolver,
+  return SendUserMediaRequest(UserMediaRequestType::kAllScreensMedia, resolver,
                               constraints, exception_state);
-}
-
-ScriptPromise MediaDevices::getDisplayMediaSet(
-    ScriptState* script_state,
-    const DisplayMediaStreamOptions* options,
-    ExceptionState& exception_state) {
-  // This timeout of base::Seconds(6) is an initial value and based on the data
-  // in Media.MediaDevices.GetDisplayMediaSet.Latency, it should be iterated
-  // upon.
-  auto* resolver = MakeGarbageCollected<
-      ScriptPromiseResolverWithTracker<UserMediaRequestResult>>(
-      script_state, "Media.MediaDevices.GetDisplayMediaSet", base::Seconds(6));
-
-  ExecutionContext* const context = GetExecutionContext();
-  if (!context) {
-    resolver->RecordAndThrowDOMException(
-        exception_state, DOMExceptionCode::kInvalidStateError,
-        "No media device client available; is this a detached window?",
-        UserMediaRequestResult::kContextDestroyed);
-    return ScriptPromise();
-  }
-
-  return SendUserMediaRequest(UserMediaRequestType::kDisplayMediaSet, resolver,
-                              ToMediaStreamConstraints(options),
-                              exception_state);
 }
 
 ScriptPromise MediaDevices::getDisplayMedia(
@@ -626,9 +583,10 @@ ScriptPromise MediaDevices::getDisplayMedia(
     if (capture_controller->IsBound()) {
       resolver->RecordAndThrowDOMException(
           exception_state, DOMExceptionCode::kInvalidStateError,
-          "setFocusBehavior() can only be called before getDisplayMedia() or"
-          "immediately after.",
+          "A CaptureController object may only be used with a single "
+          "getDisplayMedia() invocation.",
           UserMediaRequestResult::kInvalidStateError);
+
       return ScriptPromise();
     }
     capture_controller->SetIsBound(true);
@@ -938,8 +896,6 @@ void MediaDevices::DevicesEnumerated(
     return;
   }
 
-  const RequestMetadata request_metadata =
-      enumerate_device_requests_.at(result_tracker);
   enumerate_device_requests_.erase(result_tracker);
 
   ScriptState* script_state = result_tracker->GetScriptState();
@@ -1001,10 +957,6 @@ void MediaDevices::DevicesEnumerated(
   }
 
   RecordEnumeratedDevices(result_tracker->GetScriptState(), media_devices);
-  // TODO(crbug.com/1395324): Remove this custom EnumerateDevices latency
-  // tracking by reverting crrev.com/c/3944912/ once the
-  // ScriptPromiseResolverWithTracker based latency monitoring reaches stable.
-  RecordEnumerateDevicesLatency(request_metadata.start_time);
 
   if (enumerate_devices_test_callback_) {
     std::move(enumerate_devices_test_callback_).Run(media_devices);
@@ -1014,12 +966,8 @@ void MediaDevices::DevicesEnumerated(
 }
 
 void MediaDevices::OnDispatcherHostConnectionError() {
-  for (auto& entry : enumerate_device_requests_) {
-    ScriptPromiseResolverWithTracker<EnumerateDevicesResult>* result_tracker =
-        entry.key;
-    RequestMetadata& metadata = entry.value;
-
-    RecordEnumerateDevicesLatency(metadata.start_time);
+  for (ScriptPromiseResolverWithTracker<EnumerateDevicesResult>*
+           result_tracker : enumerate_device_requests_) {
     result_tracker->Reject(
         MakeGarbageCollected<DOMException>(DOMExceptionCode::kAbortError,
                                            "enumerateDevices() failed."),
@@ -1130,7 +1078,7 @@ void MediaDevices::ResolveProduceCropIdPromise(Element* element,
     resolver->Reject();
     RecordUma(ProduceCropTargetPromiseResult::kPromiseRejected);
   } else {
-    const base::GUID guid = base::GUID::ParseLowercase(crop_id.Ascii());
+    const base::Uuid guid = base::Uuid::ParseLowercase(crop_id.Ascii());
     DCHECK(guid.is_valid());
     element->SetRegionCaptureCropId(
         std::make_unique<RegionCaptureCropId>(blink::GUIDToToken(guid)));

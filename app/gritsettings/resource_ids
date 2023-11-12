@@ -127,5 +127,8 @@
   },
   "app/resources/profile_picker/vivaldi_profile_picker.grd": {
     "includes": [93000],
+  },
+  "app/resources/signin/vivaldi_signin.grd": {
+    "includes": [93100],
   }
 }

@@ -43,7 +43,9 @@ WebAppUiManagerImpl* FakeWebAppUiManager::AsImpl() {
 }
 
 size_t FakeWebAppUiManager::GetNumWindowsForApp(const AppId& app_id) {
-  DCHECK(base::Contains(app_id_to_num_windows_map_, app_id));
+  if (!app_id_to_num_windows_map_.contains(app_id)) {
+    return 0;
+  }
   return app_id_to_num_windows_map_[app_id];
 }
 
@@ -127,5 +129,12 @@ base::Value FakeWebAppUiManager::LaunchWebApp(
 void FakeWebAppUiManager::MaybeTransferAppAttributes(
     const AppId& from_extension_or_app,
     const AppId& to_app) {}
+
+content::WebContents* FakeWebAppUiManager::CreateNewTab() {
+  return nullptr;
+}
+
+void FakeWebAppUiManager::TriggerInstallDialog(
+    content::WebContents* web_contents) {}
 
 }  // namespace web_app

@@ -326,7 +326,7 @@ void PermissionBubbleMediaAccessHandler::OnMediaStreamRequestResponse(
   }
 
   // At most one stream is expected as this function is not used with the
-  // getDisplayMediaSet API (only used with getUserMedia).
+  // getAllScreensMedia API (only used with getUserMedia).
   DCHECK_LE(stream_devices_set.stream_devices.size(), 1u);
   blink::mojom::StreamDevices devices;
   if (!stream_devices_set.stream_devices.empty()) {
@@ -455,7 +455,8 @@ void PermissionBubbleMediaAccessHandler::OnAccessRequestResponse(
         FROM_HERE,
         base::BindOnce(
             &PermissionBubbleMediaAccessHandler::ProcessQueuedAccessRequest,
-            base::Unretained(this), web_contents));
+            base::Unretained(this),
+            base::UnsafeDanglingUntriaged(web_contents)));
   }
 
   std::move(callback).Run(stream_devices_set, final_result, std::move(ui));

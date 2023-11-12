@@ -8,7 +8,7 @@
 
 #include <string>
 
-#include "components/sync/driver/sync_auth_manager.h"
+#include "components/sync/service/sync_auth_manager.h"
 #include "vivaldi_account/vivaldi_account_manager.h"
 
 namespace vivaldi {

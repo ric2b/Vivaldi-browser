@@ -12,13 +12,12 @@
  * and the other to a Learn More page for Wifi Sync.
  */
 
-import '../../settings_shared.css.js';
+import '../settings_shared.css.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {castExists} from '../assert_extras.js';
-import {routes} from '../os_settings_routes.js';
-import {Router} from '../router.js';
+import {Router, routes} from '../router.js';
 
 import {MultiDeviceFeatureMixin} from './multidevice_feature_mixin.js';
 import {getTemplate} from './multidevice_wifi_sync_disabled_link.html.js';
@@ -26,7 +25,7 @@ import {getTemplate} from './multidevice_wifi_sync_disabled_link.html.js';
 const SettingsMultideviceWifiSyncDisabledLinkElementBase =
     MultiDeviceFeatureMixin(PolymerElement);
 
-class SettingsMultideviceWifiSyncDisabledLinkElement extends
+export class SettingsMultideviceWifiSyncDisabledLinkElement extends
     SettingsMultideviceWifiSyncDisabledLinkElementBase {
   static get is() {
     return 'settings-multidevice-wifi-sync-disabled-link' as const;

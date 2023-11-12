@@ -36,6 +36,7 @@ class DualLayerUserPrefStore : public PersistentPrefStore {
  public:
   DualLayerUserPrefStore(
       scoped_refptr<PersistentPrefStore> local_pref_store,
+      scoped_refptr<PersistentPrefStore> account_pref_store,
       const PrefModelAssociatorClient* pref_model_associator_client);
 
   DualLayerUserPrefStore(const DualLayerUserPrefStore&) = delete;
@@ -85,6 +86,9 @@ class DualLayerUserPrefStore : public PersistentPrefStore {
   void SchedulePendingLossyWrites() override;
   void OnStoreDeletionFromDisk() override;
 
+  // Return the set of active pref types.
+  base::flat_set<syncer::ModelType> GetActiveTypesForTest() const;
+
  protected:
   ~DualLayerUserPrefStore() override;
 
@@ -104,13 +108,20 @@ class DualLayerUserPrefStore : public PersistentPrefStore {
     void OnPrefValueChanged(const std::string& key) override;
     void OnInitializationCompleted(bool succeeded) override;
 
+    bool initialization_succeeded() const;
+
    private:
     const raw_ptr<DualLayerUserPrefStore> outer_;
     const bool is_account_store_;
+    // Start with `initialization_succeeded_` as true as some persistent
+    // stores do not issue OnInitializationCompleted().
+    bool initialization_succeeded_ = true;
   };
 
-  // Returns whether the pref with the given `key` is registered as syncable.
-  bool IsPrefKeySyncable(const std::string& key) const;
+  bool IsInitializationSuccessful() const;
+
+  // Returns whether the pref with the given `key` should be synced.
+  bool ShouldSyncPref(const std::string& key) const;
 
   // Returns whether the pref with the given `key` is mergeable.
   // TODO(crbug.com/1416479): This does not cover prefs with custom merge logic
@@ -134,10 +145,13 @@ class DualLayerUserPrefStore : public PersistentPrefStore {
                                                    base::Value value,
                                                    uint32_t flags) const;
 
+  // Get all prefs currently present in the account store.
+  std::vector<std::string> GetPrefNamesInAccountStore() const;
+
   // The two underlying pref stores, scoped to this device/profile and to the
   // user's signed-in account, respectively.
   const scoped_refptr<PersistentPrefStore> local_pref_store_;
-  const scoped_refptr<ValueMapPrefStore> account_pref_store_;
+  const scoped_refptr<PersistentPrefStore> account_pref_store_;
 
   // This stores the merged value of a mergeable pref, if required - i.e. if the
   // pref is queried while it exists on both the stores. This is needed to
@@ -151,6 +165,8 @@ class DualLayerUserPrefStore : public PersistentPrefStore {
   // notifications the this class's own observers.
   UnderlyingPrefStoreObserver local_pref_store_observer_;
   UnderlyingPrefStoreObserver account_pref_store_observer_;
+
+  std::unique_ptr<PersistentPrefStore::ReadErrorDelegate> read_error_delegate_;
 
   // List of preference types currently syncing.
   base::flat_set<syncer::ModelType> active_types_;

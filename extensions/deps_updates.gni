@@ -1,3 +1,4 @@
+import ("//vivaldi/testing/testing.gni")
 
 update_template_instance("//chrome:packed_resources") {
   if (!defined(additional_extra_paks)) {
@@ -67,7 +68,10 @@ update_target("//components/zoom:zoom") {
 }
 
 update_target("//components/history/core/browser:browser") {
-  public_deps += [ "//vivaldi/db" ]
+  public_deps += [
+    "//vivaldi/db",
+    "//vivaldi/extensions/schema",
+  ]
 }
 
 update_target("//content/common:common") {
@@ -82,4 +86,10 @@ update_template_instance("//third_party/blink/renderer/platform:platform") {
   visibility += [
     "//vivaldi/extensions/api:apis",
   ]
+}
+
+if (vivaldi_build_tests) {
+  update_target("//components:components_unittests") {
+    assert_no_deps = [] # //components/history/core/browser depends on extensions and chrome
+  }
 }

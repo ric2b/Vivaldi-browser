@@ -5,8 +5,6 @@
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 
 #include "build/build_config.h"
-#include "chrome/browser/browsing_data/access_context_audit_service.h"
-#include "chrome/browser/browsing_data/access_context_audit_service_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_file_system_util.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_model_delegate.h"
 #include "chrome/browser/browsing_data/cookies_tree_model.h"
@@ -33,29 +31,11 @@
 #include "content/public/browser/render_process_host.h"
 #include "ipc/ipc_channel_proxy.h"
 
+#include "app/vivaldi_apptools.h"
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #endif
-
-#include "app/vivaldi_apptools.h"
-
-namespace {
-
-void RecordOriginStorageAccess(const url::Origin& origin,
-                               AccessContextAuditDatabase::StorageAPIType type,
-                               content::Page& page) {
-  if (page.GetMainDocument().IsFencedFrameRoot())
-    return;
-  auto* access_context_audit_service =
-      AccessContextAuditServiceFactory::GetForProfile(
-          Profile::FromBrowserContext(
-              page.GetMainDocument().GetBrowserContext()));
-  if (access_context_audit_service)
-    access_context_audit_service->RecordStorageAPIAccess(
-        origin, type, page.GetMainDocument().GetLastCommittedOrigin());
-}
-
-}  // namespace
 
 using content_settings::PageSpecificContentSettings;
 
@@ -63,16 +43,7 @@ namespace chrome {
 
 PageSpecificContentSettingsDelegate::PageSpecificContentSettingsDelegate(
     content::WebContents* web_contents)
-    : WebContentsObserver(web_contents) {
-  auto* access_context_audit_service =
-      AccessContextAuditServiceFactory::GetForProfile(
-          Profile::FromBrowserContext(web_contents->GetBrowserContext()));
-  if (access_context_audit_service) {
-    cookie_access_helper_ =
-        std::make_unique<AccessContextAuditService::CookieAccessHelper>(
-            access_context_audit_service);
-  }
-}
+    : WebContentsObserver(web_contents) {}
 
 PageSpecificContentSettingsDelegate::~PageSpecificContentSettingsDelegate() =
     default;
@@ -302,7 +273,7 @@ void PageSpecificContentSettingsDelegate::OnContentAllowed(
   GetSettingsMap()->GetWebsiteSetting(web_contents()->GetLastCommittedURL(),
                                       web_contents()->GetLastCommittedURL(),
                                       type, &setting_info);
-  const base::Time grant_time = setting_info.metadata.last_modified;
+  const base::Time grant_time = setting_info.metadata.last_modified();
   if (grant_time.is_null())
     return;
   permissions::PermissionUmaUtil::RecordTimeElapsedBetweenGrantAndUse(
@@ -326,50 +297,6 @@ void PageSpecificContentSettingsDelegate::OnContentBlocked(
     static_cast<extensions::WebViewGuest*>(guest)->OnContentBlocked(type);
   }
 #endif //ENABLE_EXTENSIONS
-}
-
-void PageSpecificContentSettingsDelegate::OnCookieAccessAllowed(
-    const net::CookieList& accessed_cookies,
-    content::Page& page) {
-  if (page.GetMainDocument().IsFencedFrameRoot())
-    return;
-  if (cookie_access_helper_) {
-    cookie_access_helper_->RecordCookieAccess(
-        accessed_cookies, page.GetMainDocument().GetLastCommittedOrigin());
-  }
-}
-
-void PageSpecificContentSettingsDelegate::OnServiceWorkerAccessAllowed(
-    const url::Origin& origin,
-    content::Page& page) {
-  RecordOriginStorageAccess(
-      origin, AccessContextAuditDatabase::StorageAPIType::kServiceWorker, page);
-}
-
-void PageSpecificContentSettingsDelegate::OnStorageAccessAllowed(
-    content_settings::mojom::ContentSettingsManager::StorageType storage_type,
-    const url::Origin& origin,
-    content::Page& page) {
-  AccessContextAuditDatabase::StorageAPIType out_type = ([storage_type]() {
-    switch (storage_type) {
-      case StorageType::CACHE:
-        return AccessContextAuditDatabase::StorageAPIType::kCacheStorage;
-      case StorageType::DATABASE:
-        return AccessContextAuditDatabase::StorageAPIType::kWebDatabase;
-      case StorageType::FILE_SYSTEM:
-        return AccessContextAuditDatabase::StorageAPIType::kFileSystem;
-      case StorageType::INDEXED_DB:
-        return AccessContextAuditDatabase::StorageAPIType::kIndexedDB;
-      case StorageType::LOCAL_STORAGE:
-        return AccessContextAuditDatabase::StorageAPIType::kLocalStorage;
-      case StorageType::SESSION_STORAGE:
-        return AccessContextAuditDatabase::StorageAPIType::kSessionStorage;
-      case StorageType::WEB_LOCKS:
-        NOTREACHED();
-        return AccessContextAuditDatabase::StorageAPIType::kCacheStorage;
-    }
-  })();
-  RecordOriginStorageAccess(origin, out_type, page);
 }
 
 void PageSpecificContentSettingsDelegate::PrimaryPageChanged(

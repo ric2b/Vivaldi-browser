@@ -9,6 +9,12 @@ import android.content.res.Configuration;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
 
+// Vivaldi
+import android.os.Build;
+import androidx.appcompat.app.AppCompatDelegate;
+import org.chromium.base.Log;
+import org.chromium.build.BuildConfig;
+
 /**
  * Observes and keeps a record of the system night mode state (i.e. the night mode from
  * the application).
@@ -70,6 +76,13 @@ public class SystemNightModeMonitor {
     }
 
     private void calculateSystemNightMode() {
+        // Vivaldi
+        if (BuildConfig.IS_OEM_LYNKCO_BUILD && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            final int defaultNightMode = AppCompatDelegate.getDefaultNightMode();
+            Log.d("SystemNightModeMonitor", "< API29 defaultNightMode = " + defaultNightMode);
+            mSystemNightModeOn = (defaultNightMode == AppCompatDelegate.MODE_NIGHT_UNSPECIFIED);
+            return;
+        }
         final int uiMode =
                 ContextUtils.getApplicationContext().getResources().getConfiguration().uiMode;
         mSystemNightModeOn =

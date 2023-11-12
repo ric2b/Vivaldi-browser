@@ -15,7 +15,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/renderer/autofill/fake_mojo_password_manager_driver.h"
 #include "chrome/renderer/autofill/fake_password_generation_driver.h"
@@ -32,6 +31,7 @@
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "content/public/renderer/render_frame.h"
+#include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -65,6 +65,82 @@ const FormFieldData* FindFieldById(const FormData& form, base::StringPiece id) {
                                &FormFieldData::id_attribute);
   return it != form.fields.end() ? &*it : nullptr;
 }
+
+class FakeContentAutofillDriver : public mojom::AutofillDriver {
+ public:
+  FakeContentAutofillDriver() = default;
+  ~FakeContentAutofillDriver() override = default;
+
+  void BindReceiver(
+      mojo::PendingAssociatedReceiver<mojom::AutofillDriver> receiver) {
+    receivers_.Add(this, std::move(receiver));
+  }
+
+  void WaitForFormsSeen() {
+    forms_seen_run_loop_->Run();
+    forms_seen_run_loop_ = std::make_unique<base::RunLoop>();
+  }
+
+ private:
+  // mojom::AutofillDriver:
+  void SetFormToBeProbablySubmitted(
+      const absl::optional<FormData>& form) override {}
+
+  void FormsSeen(const std::vector<FormData>& updated_forms,
+                 const std::vector<FormRendererId>& removed_forms) override {
+    forms_seen_run_loop_->Quit();
+  }
+
+  void FormSubmitted(const FormData& form,
+                     bool known_success,
+                     mojom::SubmissionSource source) override {}
+
+  void TextFieldDidChange(const FormData& form,
+                          const FormFieldData& field,
+                          const gfx::RectF& bounding_box,
+                          base::TimeTicks timestamp) override {}
+
+  void TextFieldDidScroll(const FormData& form,
+                          const FormFieldData& field,
+                          const gfx::RectF& bounding_box) override {}
+
+  void SelectControlDidChange(const FormData& form,
+                              const FormFieldData& field,
+                              const gfx::RectF& bounding_box) override {}
+
+  void JavaScriptChangedAutofilledValue(
+      const FormData& form,
+      const FormFieldData& field,
+      const std::u16string& old_value) override {}
+
+  void AskForValuesToFill(
+      const FormData& form,
+      const FormFieldData& field,
+      const gfx::RectF& bounding_box,
+      AutofillSuggestionTriggerSource trigger_source) override {}
+
+  void HidePopup() override {}
+
+  void FocusNoLongerOnForm(bool had_interacted_form) override {}
+
+  void FocusOnFormField(const FormData& form,
+                        const FormFieldData& field,
+                        const gfx::RectF& bounding_box) override {}
+
+  void DidFillAutofillFormData(const FormData& form,
+                               base::TimeTicks timestamp) override {}
+
+  void DidPreviewAutofillFormData() override {}
+
+  void DidEndTextFieldEditing() override {}
+
+  void SelectFieldOptionsDidChange(const autofill::FormData& form) override {}
+
+  std::unique_ptr<base::RunLoop> forms_seen_run_loop_ =
+      std::make_unique<base::RunLoop>();
+
+  mojo::AssociatedReceiverSet<mojom::AutofillDriver> receivers_;
+};
 
 }  // namespace
 
@@ -197,6 +273,7 @@ class PasswordGenerationAgentTest : public ChromeRenderViewTest {
                        base::StringPiece attribute,
                        base::StringPiece expected_value);
 
+  void BindAutofillDriver(mojo::ScopedInterfaceEndpointHandle handle);
   void BindPasswordManagerDriver(mojo::ScopedInterfaceEndpointHandle handle);
   void BindPasswordManagerClient(mojo::ScopedInterfaceEndpointHandle handle);
 
@@ -205,6 +282,7 @@ class PasswordGenerationAgentTest : public ChromeRenderViewTest {
                void(const absl::optional<
                     autofill::password_generation::PasswordGenerationUIData>&));
 
+  FakeContentAutofillDriver fake_autofill_driver_;
   FakeMojoPasswordManagerDriver fake_driver_;
   testing::StrictMock<FakePasswordGenerationDriver> fake_pw_client_;
 };
@@ -214,6 +292,10 @@ void PasswordGenerationAgentTest::RegisterMainFrameRemoteInterfaces() {
   // the fake password client is only used for the main frame.
   blink::AssociatedInterfaceProvider* remote_associated_interfaces =
       GetMainRenderFrame()->GetRemoteAssociatedInterfaces();
+  remote_associated_interfaces->OverrideBinderForTesting(
+      mojom::AutofillDriver::Name_,
+      base::BindRepeating(&PasswordGenerationAgentTest::BindAutofillDriver,
+                          base::Unretained(this)));
   remote_associated_interfaces->OverrideBinderForTesting(
       mojom::PasswordGenerationDriver::Name_,
       base::BindRepeating(
@@ -358,6 +440,13 @@ void PasswordGenerationAgentTest::ExpectAttribute(
       blink::WebString::FromUTF8(attribute.data(), attribute.size()));
   ASSERT_FALSE(actual_value.IsNull());
   EXPECT_EQ(expected_value, actual_value.Ascii());
+}
+
+void PasswordGenerationAgentTest::BindAutofillDriver(
+    mojo::ScopedInterfaceEndpointHandle handle) {
+  fake_autofill_driver_.BindReceiver(
+      mojo::PendingAssociatedReceiver<mojom::AutofillDriver>(
+          std::move(handle)));
 }
 
 void PasswordGenerationAgentTest::BindPasswordManagerDriver(
@@ -710,46 +799,6 @@ TEST_F(PasswordGenerationAgentTest, MaximumCharsForGenerationOffer) {
       autofill::password_generation::GENERATION_POPUP_SHOWN, 1);
 }
 
-TEST_F(PasswordGenerationAgentTest,
-       MaximumCharsForGenerationOfferIgnoredWithEnabledStrengthIndicator) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      password_manager::features::kPasswordStrengthIndicator);
-
-  LoadHTMLWithUserGesture(kAccountCreationFormHTML);
-  SetFoundFormEligibleForGeneration(
-      password_generation_, GetMainFrame()->GetDocument(),
-      /*new_password_id=*/"first_password", /*confirm_password_id=*/nullptr);
-  ExpectAutomaticGenerationAvailable("first_password", kAvailable);
-
-  WebDocument document = GetMainFrame()->GetDocument();
-  WebElement element =
-      document.GetElementById(WebString::FromUTF8("first_password"));
-  ASSERT_FALSE(element.IsNull());
-  WebInputElement first_password_element = element.To<WebInputElement>();
-
-  // Dropdown should not be hidden with more characters than maximum for
-  // generation when strength indicator feature is enabled.
-  EXPECT_CALL(fake_pw_client_, AutomaticGenerationAvailable(_))
-      .Times(AtMost(1));
-  SimulateUserInputChangeForElement(
-      &first_password_element,
-      std::string(PasswordGenerationAgent::kMaximumCharsForGenerationOffer + 1,
-                  'a'));
-  testing::Mock::VerifyAndClearExpectations(&fake_pw_client_);
-
-  // Dropdown should be hidden when focus changes.
-  EXPECT_CALL(fake_pw_client_, GenerationElementLostFocus());
-  FocusField("username");
-  fake_pw_client_.Flush();
-
-  // Focusing the password field should bring the generation dropdown again.
-  EXPECT_CALL(fake_pw_client_, AutomaticGenerationAvailable(_));
-  FocusField("first_password");
-  fake_pw_client_.Flush();
-  testing::Mock::VerifyAndClearExpectations(&fake_pw_client_);
-}
-
 TEST_F(PasswordGenerationAgentTest, MinimumLengthForEditedPassword) {
   LoadHTMLWithUserGesture(kAccountCreationFormHTML);
   SetFoundFormEligibleForGeneration(
@@ -802,6 +851,7 @@ TEST_F(PasswordGenerationAgentTest, MinimumLengthForEditedPassword) {
 
 TEST_F(PasswordGenerationAgentTest, DynamicFormTest) {
   LoadHTMLWithUserGesture(kSigninFormHTML);
+  fake_autofill_driver_.WaitForFormsSeen();
 
   ExecuteJavaScriptForTests(
       "var form = document.createElement('form');"
@@ -821,7 +871,7 @@ TEST_F(PasswordGenerationAgentTest, DynamicFormTest) {
       "form.appendChild(first_password);"
       "form.appendChild(second_password);"
       "document.body.appendChild(form);");
-  WaitForAutofillDidAddOrRemoveFormRelatedElements();
+  fake_autofill_driver_.WaitForFormsSeen();
 
   // This needs to come after the DOM has been modified.
   SetFoundFormEligibleForGeneration(
@@ -1018,6 +1068,21 @@ TEST_F(PasswordGenerationAgentTest, FallbackForSaving) {
   EXPECT_EQ(2, fake_driver_.called_inform_about_user_input_count());
 }
 
+TEST_F(PasswordGenerationAgentTest, AcceptAfterNavigation) {
+  LoadHTMLWithUserGesture(kAccountCreationFormHTML);
+  SetFoundFormEligibleForGeneration(
+      password_generation_, GetMainFrame()->GetDocument(),
+      /*new_password_id=*/"first_password", /*confirm_password_id=*/nullptr);
+  ExpectAutomaticGenerationAvailable("first_password", kAvailable);
+
+  // Navigation happens. Then browser UI accepts the generated password. It
+  // should not crash.
+  EXPECT_CALL(fake_pw_client_, GenerationElementLostFocus());
+  LoadHTMLWithUserGesture(kSigninFormHTML);
+  EXPECT_CALL(fake_pw_client_, PresaveGeneratedPassword).Times(0);
+  password_generation_->GeneratedPasswordAccepted(u"random_password");
+}
+
 TEST_F(PasswordGenerationAgentTest, FormClassifierDisabled) {
   LoadHTMLWithUserGesture(kSigninFormHTML);
   ExpectFormClassifierVoteReceived(false /* vote is not expected */,
@@ -1082,6 +1147,27 @@ TEST_F(PasswordGenerationAgentTest, JavascriptClearedTheField) {
       "document.getElementById('first_password').value = '';");
   FocusField(kGenerationElementId);
   base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(PasswordGenerationAgentTest, JavascriptClearedThePassword_TypeUsername) {
+  LoadHTMLWithUserGesture(kAccountCreationFormHTML);
+  constexpr char kGenerationElementId[] = "first_password";
+  SetFoundFormEligibleForGeneration(password_generation_,
+                                    GetMainFrame()->GetDocument(),
+                                    /*new_password_id=*/kGenerationElementId,
+                                    /*confirm_password_id=*/nullptr);
+
+  ExpectAutomaticGenerationAvailable(kGenerationElementId, kAvailable);
+  std::u16string password = u"long_pwd";
+  EXPECT_CALL(fake_pw_client_, PresaveGeneratedPassword(_, Eq(password)));
+  password_generation_->GeneratedPasswordAccepted(password);
+
+  // Edit some other field.
+  EXPECT_CALL(fake_pw_client_, PasswordNoLongerGenerated(testing::_));
+  ExecuteJavaScriptForTests(
+      "document.getElementById('first_password').value = '';");
+  FocusField("username");
+  SimulateUserTypingASCIICharacter('a', true);
 }
 
 TEST_F(PasswordGenerationAgentTest, GenerationFallback_NoFocusedElement) {
@@ -1253,10 +1339,6 @@ TEST_F(PasswordGenerationAgentTest, GenerationAvailableByRendererIds) {
 }
 
 TEST_F(PasswordGenerationAgentTest, SuggestionPreviewTest) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      password_manager::features::kPasswordGenerationPreviewOnHover);
-
   LoadHTMLWithUserGesture(kAccountCreationFormHTML);
   WebDocument document = GetMainFrame()->GetDocument();
   SetFoundFormEligibleForGeneration(password_generation_,

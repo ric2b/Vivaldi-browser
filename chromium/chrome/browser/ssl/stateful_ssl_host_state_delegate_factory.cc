@@ -32,7 +32,8 @@ StatefulSSLHostStateDelegateFactory::GetForProfile(Profile* profile) {
 // static
 StatefulSSLHostStateDelegateFactory*
 StatefulSSLHostStateDelegateFactory::GetInstance() {
-  return base::Singleton<StatefulSSLHostStateDelegateFactory>::get();
+  static base::NoDestructor<StatefulSSLHostStateDelegateFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -44,7 +45,12 @@ StatefulSSLHostStateDelegateFactory::GetDefaultFactoryForTesting() {
 StatefulSSLHostStateDelegateFactory::StatefulSSLHostStateDelegateFactory()
     : ProfileKeyedServiceFactory(
           "StatefulSSLHostStateDelegate",
-          ProfileSelections::BuildForRegularAndIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {
   DependsOn(HostContentSettingsMapFactory::GetInstance());
 }
 

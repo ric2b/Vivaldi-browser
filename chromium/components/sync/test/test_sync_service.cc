@@ -7,12 +7,13 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/contains.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/sync/base/progress_marker_map.h"
-#include "components/sync/driver/sync_token_status.h"
 #include "components/sync/engine/cycle/model_neutral_state.h"
 #include "components/sync/model/type_entities_count.h"
+#include "components/sync/service/sync_token_status.h"
 
 namespace syncer {
 
@@ -61,6 +62,13 @@ void TestSyncService::SetHasSyncConsent(bool has_sync_consent) {
   has_sync_consent_ = has_sync_consent;
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+void TestSyncService::SetSyncFeatureDisabledViaDashboard(
+    bool disabled_via_dashboard) {
+  sync_feature_disabled_via_dashboard_ = disabled_via_dashboard;
+}
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 void TestSyncService::SetPersistentAuthError() {
   transport_state_ = TransportState::PAUSED;
 }
@@ -71,11 +79,13 @@ void TestSyncService::ClearAuthError() {
   }
 }
 
-void TestSyncService::SetFirstSetupComplete(bool first_setup_complete) {
-  if (first_setup_complete)
-    user_settings_.SetFirstSetupComplete();
-  else
-    user_settings_.ClearFirstSetupComplete();
+void TestSyncService::SetInitialSyncFeatureSetupComplete(
+    bool initial_sync_feature_setup_complete) {
+  if (initial_sync_feature_setup_complete) {
+    user_settings_.SetInitialSyncFeatureSetupComplete();
+  } else {
+    user_settings_.ClearInitialSyncFeatureSetupComplete();
+  }
 }
 
 void TestSyncService::SetFailedDataTypes(const ModelTypeSet& types) {
@@ -126,6 +136,14 @@ void TestSyncService::SetIsUsingExplicitPassphrase(bool enabled) {
   user_settings_.SetIsUsingExplicitPassphrase(enabled);
 }
 
+void TestSyncService::SetDownloadStatusFor(
+    const ModelTypeSet& types,
+    ModelTypeDownloadStatus download_status) {
+  for (const auto type : types) {
+    download_statuses_[type] = download_status;
+  }
+}
+
 void TestSyncService::FireStateChanged() {
   for (SyncServiceObserver& observer : observers_)
     observer.OnStateChanged(this);
@@ -136,8 +154,16 @@ void TestSyncService::FireSyncCycleCompleted() {
     observer.OnSyncCycleCompleted(this);
 }
 
+#if BUILDFLAG(IS_ANDROID)
+base::android::ScopedJavaLocalRef<jobject> TestSyncService::GetJavaObject() {
+  return base::android::ScopedJavaLocalRef<jobject>();
+}
+#endif  // BUILDFLAG(IS_ANDROID)
+
 void TestSyncService::SetSyncFeatureRequested() {
-  disable_reasons_.Remove(SyncService::DISABLE_REASON_USER_CHOICE);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  sync_feature_disabled_via_dashboard_ = false;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 TestSyncUserSettings* TestSyncService::GetUserSettings() {
@@ -192,6 +218,12 @@ bool TestSyncService::RequiresClientUpgrade() const {
          syncer::UPGRADE_CLIENT;
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+bool TestSyncService::IsSyncFeatureDisabledViaDashboard() const {
+  return sync_feature_disabled_via_dashboard_;
+}
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 std::unique_ptr<SyncSetupInProgressHandle>
 TestSyncService::GetSetupInProgressHandle() {
   return nullptr;
@@ -214,6 +246,8 @@ ModelTypeSet TestSyncService::GetActiveDataTypes() const {
 
 ModelTypeSet TestSyncService::GetTypesWithPendingDownloadForInitialSync()
     const {
+  DCHECK_NE(transport_state_, TransportState::INITIALIZING)
+      << "Realistic behavior not implemented for INITIALIZING";
   if (transport_state_ != TransportState::CONFIGURING) {
     return ModelTypeSet();
   }
@@ -290,6 +324,14 @@ void TestSyncService::RemoveProtocolEventObserver(
 void TestSyncService::GetAllNodesForDebugging(
     base::OnceCallback<void(base::Value::List)> callback) {}
 
+SyncService::ModelTypeDownloadStatus TestSyncService::GetDownloadStatusFor(
+    ModelType type) const {
+  if (base::Contains(download_statuses_, type)) {
+    return download_statuses_.at(type);
+  }
+  return ModelTypeDownloadStatus::kUpToDate;
+}
+
 void TestSyncService::SetInvalidationsForSessionsEnabled(bool enabled) {}
 
 void TestSyncService::AddTrustedVaultDecryptionKeysFromWeb(
@@ -302,6 +344,10 @@ void TestSyncService::AddTrustedVaultRecoveryMethodFromWeb(
     const std::vector<uint8_t>& public_key,
     int method_type_hint,
     base::OnceClosure callback) {}
+
+bool TestSyncService::IsSyncFeatureConsideredRequested() const {
+  return HasSyncConsent();
+}
 
 void TestSyncService::Shutdown() {
   for (SyncServiceObserver& observer : observers_)

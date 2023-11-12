@@ -4,6 +4,7 @@
 
 #include "components/embedder_support/user_agent_utils.h"
 
+#include <string>
 #include <vector>
 
 #include "base/command_line.h"
@@ -232,11 +233,9 @@ const std::string& GetReducedMajorInMinorVersionNumber() {
 
 std::string GetVersionNumber(const UserAgentOptions& options) {
   // Force major version to 99.
-  if (ShouldForceMajorVersionToMinorPosition(options.force_major_to_minor))
-    return GetMajorInMinorVersionNumber();
-
-  const std::string& version_str = vivaldi::GetBrandFullVersion();
-  return version_str;
+  return ShouldForceMajorVersionToMinorPosition(options.force_major_to_minor)
+             ? GetMajorInMinorVersionNumber()
+             : std::string(vivaldi::GetBrandFullVersion());
 }
 
 const blink::UserAgentBrandList GetUserAgentBrandList(
@@ -277,7 +276,7 @@ const blink::UserAgentBrandList GetUserAgentBrandMajorVersionList(
     bool enable_updated_grease_by_policy) {
   return GetUserAgentBrandList(version_info::GetMajorVersionNumber(),
                                enable_updated_grease_by_policy,
-                               version_info::GetVersionNumber(),
+                               std::string(version_info::GetVersionNumber()),
                                blink::UserAgentBrandVersionType::kMajorVersion);
 }
 
@@ -295,7 +294,7 @@ blink::UserAgentBrandList GetUserAgentBrandFullVersionList(
     bool enable_updated_grease_by_policy) {
   return GetUserAgentBrandList(version_info::GetMajorVersionNumber(),
                                enable_updated_grease_by_policy,
-                               version_info::GetVersionNumber(),
+                               std::string(version_info::GetVersionNumber()),
                                blink::UserAgentBrandVersionType::kFullVersion);
 }
 
@@ -337,17 +336,6 @@ blink::UserAgentBrandList GetBrandFullVersionList(
   return GetUserAgentBrandFullVersionList(enable_updated_grease_by_policy);
 }
 
-// Returns a string representing the major version number of the user agent
-// string for Chrome, potentially overridden by policy.
-std::string GetMajorVersionForUserAgentString(
-    ForceMajorVersionToMinorPosition force_major_to_minor) {
-  // Force major version to 99.
-  if (ShouldForceMajorVersionToMinorPosition(force_major_to_minor))
-    return kVersion99;
-
-  return version_info::GetMajorVersionNumber();
-}
-
 }  // namespace
 
 std::string GetProductAndVersion(
@@ -355,19 +343,15 @@ std::string GetProductAndVersion(
     UserAgentReductionEnterprisePolicyState user_agent_reduction) {
   if (ShouldForceMajorVersionToMinorPosition(force_major_to_minor)) {
     // Force major version to 99 and major version to minor version position.
-    if (ShouldReduceUserAgentMinorVersion(user_agent_reduction)) {
-      return "Chrome/" + GetReducedMajorInMinorVersionNumber();
-    } else {
-      return "Chrome/" + GetMajorInMinorVersionNumber();
-    }
-  } else {
-    if (ShouldReduceUserAgentMinorVersion(user_agent_reduction)) {
-      return version_info::GetProductNameAndVersionForReducedUserAgent(
-          blink::features::kUserAgentFrozenBuildVersion.Get().data());
-    } else {
-      return version_info::GetProductNameAndVersionForUserAgent();
-    }
+    return "Chrome/" + (ShouldReduceUserAgentMinorVersion(user_agent_reduction)
+                            ? GetReducedMajorInMinorVersionNumber()
+                            : GetMajorInMinorVersionNumber());
   }
+  return ShouldReduceUserAgentMinorVersion(user_agent_reduction)
+             ? version_info::GetProductNameAndVersionForReducedUserAgent(
+                   blink::features::kUserAgentFrozenBuildVersion.Get())
+             : std::string(
+                   version_info::GetProductNameAndVersionForUserAgent());
 }
 
 // Internal function to handle return the full or "reduced" user agent string,
@@ -412,38 +396,7 @@ std::string GetUserAgent(
     return custom_ua.value();
   }
 
-  if (base::FeatureList::IsEnabled(blink::features::kFullUserAgent))
-    return GetFullUserAgent(force_major_to_minor);
-
-  if (base::FeatureList::IsEnabled(blink::features::kReduceUserAgent))
-    return GetReducedUserAgent(force_major_to_minor);
-
   return GetUserAgentInternal(force_major_to_minor, user_agent_reduction);
-}
-
-std::string GetReducedUserAgent(
-    ForceMajorVersionToMinorPosition force_major_to_minor) {
-  absl::optional<std::string> custom_ua = GetUserAgentFromCommandLine();
-  if (custom_ua.has_value()) {
-    return custom_ua.value();
-  }
-
-  return content::GetReducedUserAgent(
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kUseMobileUserAgent),
-      GetMajorVersionForUserAgentString(force_major_to_minor));
-}
-
-std::string GetFullUserAgent(
-    ForceMajorVersionToMinorPosition force_major_to_minor) {
-  absl::optional<std::string> custom_ua = GetUserAgentFromCommandLine();
-  if (custom_ua.has_value()) {
-    return custom_ua.value();
-  }
-
-  return GetUserAgentInternal(
-      force_major_to_minor,
-      UserAgentReductionEnterprisePolicyState::kForceDisabled);
 }
 
 // Generate a pseudo-random permutation of the following brand/version pairs:
@@ -598,7 +551,7 @@ std::string GetPlatformForUAMetadata() {
   return "Chromium OS";
 # endif
 #else
-  return version_info::GetOSType();
+  return std::string(version_info::GetOSType());
 #endif
 }
 

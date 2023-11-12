@@ -174,11 +174,17 @@ testing::AssertionResult PayloadContentsEqual(
            << ", actual: " << actual.aggregation_mode;
   }
 
-  if (expected.aggregation_coordinator != actual.aggregation_coordinator) {
+  if (expected.aggregation_coordinator_origin !=
+      actual.aggregation_coordinator_origin) {
     return testing::AssertionFailure()
-           << "Expected aggregation_coordinator "
-           << expected.aggregation_coordinator
-           << ", actual: " << actual.aggregation_coordinator;
+           << "Expected aggregation_coordinator_origin "
+           << (expected.aggregation_coordinator_origin
+                   ? expected.aggregation_coordinator_origin->Serialize()
+                   : "null")
+           << ", actual: "
+           << (actual.aggregation_coordinator_origin
+                   ? actual.aggregation_coordinator_origin->Serialize()
+                   : "null");
   }
 
   return testing::AssertionSuccess();
@@ -230,26 +236,24 @@ testing::AssertionResult SharedInfoEqual(
 AggregatableReportRequest CreateExampleRequest(
     blink::mojom::AggregationServiceMode aggregation_mode,
     int failed_send_attempts,
-    ::aggregation_service::mojom::AggregationCoordinator
-        aggregation_coordinator) {
+    absl::optional<url::Origin> aggregation_coordinator_origin) {
   return CreateExampleRequestWithReportTime(
       /*report_time=*/base::Time::Now(), aggregation_mode, failed_send_attempts,
-      aggregation_coordinator);
+      std::move(aggregation_coordinator_origin));
 }
 
 AggregatableReportRequest CreateExampleRequestWithReportTime(
     base::Time report_time,
     blink::mojom::AggregationServiceMode aggregation_mode,
     int failed_send_attempts,
-    ::aggregation_service::mojom::AggregationCoordinator
-        aggregation_coordinator) {
+    absl::optional<url::Origin> aggregation_coordinator_origin) {
   return AggregatableReportRequest::Create(
              AggregationServicePayloadContents(
                  AggregationServicePayloadContents::Operation::kHistogram,
                  {blink::mojom::AggregatableReportHistogramContribution(
                      /*bucket=*/123,
                      /*value=*/456)},
-                 aggregation_mode, aggregation_coordinator),
+                 aggregation_mode, std::move(aggregation_coordinator_origin)),
              AggregatableReportSharedInfo(
                  /*scheduled_report_time=*/report_time,
                  /*report_id=*/
@@ -284,7 +288,7 @@ AggregatableReport CloneAggregatableReport(const AggregatableReport& report) {
 
   return AggregatableReport(std::move(payloads), report.shared_info(),
                             report.debug_key(), report.additional_fields(),
-                            report.aggregation_coordinator());
+                            report.aggregation_coordinator_origin());
 }
 
 TestHpkeKey GenerateKey(std::string key_id) {
@@ -305,43 +309,30 @@ TestHpkeKey GenerateKey(std::string key_id) {
   return hpke_key;
 }
 
-absl::optional<PublicKeyset> ReadAndParsePublicKeys(const base::FilePath& file,
-                                                    base::Time now,
-                                                    std::string* error_msg) {
+base::expected<PublicKeyset, std::string> ReadAndParsePublicKeys(
+    const base::FilePath& file,
+    base::Time now) {
   if (!base::PathExists(file)) {
-    if (error_msg)
-      *error_msg = base::StrCat({"Failed to open file: ", file.MaybeAsASCII()});
-
-    return absl::nullopt;
+    return base::unexpected("Failed to open file: " + file.MaybeAsASCII());
   }
 
   std::string contents;
   if (!base::ReadFileToString(file, &contents)) {
-    if (error_msg)
-      *error_msg = base::StrCat({"Failed to read file: ", file.MaybeAsASCII()});
-
-    return absl::nullopt;
+    return base::unexpected("Failed to read file: " + file.MaybeAsASCII());
   }
 
   auto value_with_error =
       base::JSONReader::ReadAndReturnValueWithError(contents);
   if (!value_with_error.has_value()) {
-    if (error_msg) {
-      *error_msg =
-          base::StrCat({"Failed to parse \"", contents,
-                        "\" as JSON: ", value_with_error.error().message});
-    }
-    return absl::nullopt;
+    return base::unexpected(
+        base::StrCat({"Failed to parse \"", contents,
+                      "\" as JSON: ", value_with_error.error().message}));
   }
 
   std::vector<PublicKey> keys = GetPublicKeys(*value_with_error);
   if (keys.empty()) {
-    if (error_msg) {
-      *error_msg =
-          base::StrCat({"Failed to parse public keys from \"", contents, "\""});
-    }
-
-    return absl::nullopt;
+    return base::unexpected(
+        base::StrCat({"Failed to parse public keys from \"", contents, "\""}));
   }
 
   return PublicKeyset(std::move(keys), /*fetch_time=*/now,

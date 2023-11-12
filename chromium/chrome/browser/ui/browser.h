@@ -423,6 +423,8 @@ class Browser : public TabStripModelObserver,
   }
   CreationSource creation_source() const { return creation_source_; }
 
+  bool is_delete_scheduled() const { return is_delete_scheduled_; }
+
   // |window()| will return NULL if called before |CreateBrowserWindow()|
   // is done.
   BrowserWindow* window() const { return window_; }
@@ -794,6 +796,15 @@ class Browser : public TabStripModelObserver,
                            bool proceed,
                            bool* proceed_to_fire_unload);
   void DoCloseContents(content::WebContents* source);
+
+  void AddNewContentsVivaldi(
+      content::WebContents* source,
+      std::unique_ptr<content::WebContents> new_contents,
+      const GURL& target_url,
+      WindowOpenDisposition disposition,
+      const blink::mojom::WindowFeatures& window_features,
+      bool user_gesture,
+      bool* was_blocked);
 
  private:
   friend class BrowserTest;
@@ -1215,7 +1226,7 @@ class Browser : public TabStripModelObserver,
   std::unique_ptr<ScopedProfileKeepAlive> profile_keep_alive_;
 
   // This Browser's window.
-  raw_ptr<BrowserWindow> window_;
+  raw_ptr<BrowserWindow, DanglingUntriaged> window_;
 
   std::unique_ptr<TabStripModelDelegate> const tab_strip_model_delegate_;
   std::unique_ptr<TabStripModel> const tab_strip_model_;
@@ -1357,6 +1368,10 @@ class Browser : public TabStripModelObserver,
   raw_ptr<Browser> opener_browser_ = nullptr;
 
   WebContentsCollection web_contents_collection_{this};
+
+  // If true, the Browser window has been closed and this will be deleted
+  // shortly (after a PostTask).
+  bool is_delete_scheduled_ = false;
 
   // Vivaldi
   // True if this is Vivaldi browser object.

@@ -137,6 +137,7 @@ class TestPdfAccessibilityActionHandler
       const chrome_pdf::AccessibilityActionData& action_data) override {
     received_action_data_ = action_data;
   }
+  void LoadOrReloadAccessibility() override {}
 
   chrome_pdf::AccessibilityActionData received_action_data() {
     return received_action_data_;
@@ -1957,8 +1958,6 @@ TEST_F(PdfAccessibilityTreeTest, TestEmptyPdfAxActions) {
   EXPECT_EQ(point.x(), 0);
   EXPECT_EQ(point.y(), 0);
 
-  EXPECT_FALSE(pdf_action_target->SetSelected(true));
-  EXPECT_FALSE(pdf_action_target->SetSelected(false));
   EXPECT_FALSE(pdf_action_target->ScrollToMakeVisible());
 }
 
@@ -2200,7 +2199,12 @@ TEST_F(PdfAccessibilityTreeTest, TestTransformFromOnOcrDataReceived) {
   EXPECT_EQ(ax::mojom::Role::kPdfRoot, root_node->GetRole());
   ASSERT_EQ(2u, root_node->children().size());
 
-  ui::AXNode* status_node = root_node->children()[0];
+  ui::AXNode* status_node_wrapper = root_node->children()[0];
+  ASSERT_TRUE(status_node_wrapper);
+  EXPECT_EQ(ax::mojom::Role::kBanner, status_node_wrapper->GetRole());
+  ASSERT_EQ(1u, status_node_wrapper->children().size());
+
+  ui::AXNode* status_node = status_node_wrapper->children()[0];
   ASSERT_TRUE(status_node);
   EXPECT_EQ(ax::mojom::Role::kStatus, status_node->GetRole());
   ASSERT_EQ(0u, status_node->children().size());
@@ -2222,7 +2226,8 @@ TEST_F(PdfAccessibilityTreeTest, TestTransformFromOnOcrDataReceived) {
   EXPECT_EQ(image.bounds, image_node->data().relative_bounds.bounds);
 
   // Simulate creating a child tree using OCR results.
-  pdf_accessibility_tree.IncrementNumberOfRemainingOcrRequests();
+  pdf_accessibility_tree.CreateOcrService();
+
   // Text bounds before applying the transform.
   constexpr gfx::RectF kTextBoundsBeforeTransform1 = {{8.0f, 8.0f},
                                                       {80.0f, 24.0f}};
@@ -2257,7 +2262,12 @@ TEST_F(PdfAccessibilityTreeTest, TestTransformFromOnOcrDataReceived) {
   ASSERT_TRUE(root_node);
   ASSERT_EQ(2u, root_node->children().size());
 
-  status_node = root_node->children()[0];
+  status_node_wrapper = root_node->children()[0];
+  ASSERT_TRUE(status_node_wrapper);
+  EXPECT_EQ(ax::mojom::Role::kBanner, status_node_wrapper->GetRole());
+  ASSERT_EQ(1u, status_node_wrapper->children().size());
+
+  status_node = status_node_wrapper->children()[0];
   ASSERT_TRUE(status_node);
   EXPECT_EQ(ax::mojom::Role::kStatus, status_node->GetRole());
 

@@ -55,8 +55,10 @@ VivaldiTranslateLanguageList::VivaldiTranslateLanguageList()
           switches::kDisableBackgroundNetworking,
           base::BindOnce(&content::GetNetworkConnectionTracker)),
       weak_factory_(this) {
-  resource_request_allowed_notifier_.Init(this, true /* leaky */);
-
+  // "Set |leaky| to true if this class will not be destructed before shutdown."
+  // This is an object created in main-extra-parts and not a singleton service.
+  // Must not be leaky. VB-98009.
+  resource_request_allowed_notifier_.Init(this, false /* leaky */);
   // See if we can kick it off right now.
   OnResourceRequestsAllowed();
 

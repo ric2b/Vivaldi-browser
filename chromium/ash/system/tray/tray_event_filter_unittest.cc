@@ -4,14 +4,21 @@
 
 #include "ash/system/tray/tray_event_filter.h"
 
+#include "ash/constants/ash_features.h"
+#include "ash/ime/ime_controller_impl.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
+#include "ash/system/ime_menu/ime_menu_tray.h"
 #include "ash/system/message_center/ash_message_popup_collection.h"
+#include "ash/system/message_center/ash_notification_expand_button.h"
+#include "ash/system/message_center/ash_notification_view.h"
 #include "ash/system/message_center/unified_message_center_bubble.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/system/unified/date_tray.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
+#include "base/test/scoped_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -22,9 +29,8 @@ using message_center::Notification;
 
 namespace ash {
 
-namespace {
-
-class TrayEventFilterTest : public AshTestBase {
+class TrayEventFilterTest : public AshTestBase,
+                            public testing::WithParamInterface<bool> {
  public:
   TrayEventFilterTest() = default;
 
@@ -35,6 +41,8 @@ class TrayEventFilterTest : public AshTestBase {
 
   // AshTestBase:
   void SetUp() override {
+    scoped_feature_list_.InitWithFeatureState(features::kQsRevamp,
+                                              /*enabled=*/IsQsRevampEnabed());
     AshTestBase::SetUp();
   }
 
@@ -60,6 +68,8 @@ class TrayEventFilterTest : public AshTestBase {
   }
 
  protected:
+  bool IsQsRevampEnabed() { return GetParam(); }
+
   std::string AddNotification() {
     std::string notification_id = base::NumberToString(notification_id_++);
     MessageCenter::Get()->AddNotification(std::make_unique<Notification>(
@@ -100,11 +110,26 @@ class TrayEventFilterTest : public AshTestBase {
     return GetMessageCenterBubble()->GetBubbleView()->GetBoundsInScreen();
   }
 
+  void AnimatePopupAnimationUntilIdle() {
+    AshMessagePopupCollection* popup_collection =
+        GetPrimaryUnifiedSystemTray()->GetMessagePopupCollection();
+
+    while (popup_collection->animation()->is_animating()) {
+      popup_collection->animation()->SetCurrentValue(1.0);
+      popup_collection->animation()->End();
+    }
+  }
+
  private:
   int notification_id_ = 0;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-TEST_F(TrayEventFilterTest, ClickingOutsideCloseBubble) {
+INSTANTIATE_TEST_SUITE_P(IsQsRevampEnabled,
+                         TrayEventFilterTest,
+                         testing::Bool());
+
+TEST_P(TrayEventFilterTest, ClickingOutsideCloseBubble) {
   ShowSystemTrayMainView();
   EXPECT_TRUE(IsBubbleShown());
 
@@ -114,7 +139,7 @@ TEST_F(TrayEventFilterTest, ClickingOutsideCloseBubble) {
   EXPECT_FALSE(IsBubbleShown());
 }
 
-TEST_F(TrayEventFilterTest, ClickingInsideDoesNotCloseBubble) {
+TEST_P(TrayEventFilterTest, ClickingInsideDoesNotCloseBubble) {
   ShowSystemTrayMainView();
   EXPECT_TRUE(IsBubbleShown());
 
@@ -124,7 +149,7 @@ TEST_F(TrayEventFilterTest, ClickingInsideDoesNotCloseBubble) {
   EXPECT_TRUE(IsBubbleShown());
 }
 
-TEST_F(TrayEventFilterTest, DraggingInsideDoesNotCloseBubble) {
+TEST_P(TrayEventFilterTest, DraggingInsideDoesNotCloseBubble) {
   ShowSystemTrayMainView();
   EXPECT_TRUE(IsBubbleShown());
 
@@ -144,7 +169,7 @@ TEST_F(TrayEventFilterTest, DraggingInsideDoesNotCloseBubble) {
   EXPECT_TRUE(IsBubbleShown());
 }
 
-TEST_F(TrayEventFilterTest, ClickingOnMenuContainerDoesNotCloseBubble) {
+TEST_P(TrayEventFilterTest, ClickingOnMenuContainerDoesNotCloseBubble) {
   // Create a menu window and place it in the menu container window.
   std::unique_ptr<aura::Window> menu_window = CreateTestWindow();
   menu_window->set_owned_by_parent(false);
@@ -162,35 +187,38 @@ TEST_F(TrayEventFilterTest, ClickingOnMenuContainerDoesNotCloseBubble) {
   EXPECT_TRUE(IsBubbleShown());
 }
 
-TEST_F(TrayEventFilterTest, ClickingOnPopupClosesBubble) {
-  // Set up a popup window.
-  auto popup_widget = std::make_unique<views::Widget>();
-  views::Widget::InitParams popup_params;
-  popup_params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  auto ash_message_center_popup_collection =
-      std::make_unique<AshMessagePopupCollection>(GetPrimaryShelf());
-  ash_message_center_popup_collection->ConfigureWidgetInitParamsForContainer(
-      popup_widget.get(), &popup_params);
-  popup_widget->Init(std::move(popup_params));
-
-  std::unique_ptr<aura::Window> popup_window =
-      CreateTestWindow(gfx::Rect(), aura::client::WINDOW_TYPE_POPUP);
-  popup_window->set_owned_by_parent(false);
-  popup_widget->GetNativeView()->AddChild(popup_window.get());
-  popup_widget->GetNativeView()->SetProperty(aura::client::kZOrderingKey,
-                                             ui::ZOrderLevel::kFloatingWindow);
-
+TEST_P(TrayEventFilterTest, ClickingOnPopupWhenBubbleOpen) {
   ShowSystemTrayMainView();
   EXPECT_TRUE(IsBubbleShown());
 
-  // Clicking on the popup should close the bubble.
-  ui::MouseEvent event = outside_event();
-  ui::Event::DispatcherApi(&event).set_target(popup_window.get());
-  GetTrayEventFilter()->OnMouseEvent(&event);
-  EXPECT_FALSE(IsBubbleShown());
+  auto notification_id = AddNotification();
+  auto* popup_view = GetPrimaryUnifiedSystemTray()
+                         ->GetMessagePopupCollection()
+                         ->GetMessageViewForNotificationId(notification_id);
+
+  if (!IsQsRevampEnabed()) {
+    // When QsRevamp is not enabled, the popup will not be shown when Quick
+    // Settings is open.
+    EXPECT_FALSE(popup_view);
+    return;
+  }
+
+  auto* ash_notification_popup = static_cast<AshNotificationView*>(popup_view);
+
+  AnimatePopupAnimationUntilIdle();
+
+  // Collapsing the popup should not close the bubble.
+  LeftClickOn(ash_notification_popup->expand_button_for_test());
+  EXPECT_FALSE(ash_notification_popup->IsExpanded());
+  EXPECT_TRUE(IsBubbleShown());
+
+  // Expanding the popup should not close the bubble.
+  LeftClickOn(ash_notification_popup->expand_button_for_test());
+  EXPECT_TRUE(ash_notification_popup->IsExpanded());
+  EXPECT_TRUE(IsBubbleShown());
 }
 
-TEST_F(TrayEventFilterTest, ClickingOnKeyboardContainerDoesNotCloseBubble) {
+TEST_P(TrayEventFilterTest, ClickingOnKeyboardContainerDoesNotCloseBubble) {
   // Simulate the virtual keyboard being open. In production the virtual
   // keyboard container only exists while the keyboard is open.
   std::unique_ptr<aura::Window> keyboard_container =
@@ -210,7 +238,7 @@ TEST_F(TrayEventFilterTest, ClickingOnKeyboardContainerDoesNotCloseBubble) {
   EXPECT_TRUE(IsBubbleShown());
 }
 
-TEST_F(TrayEventFilterTest, DraggingOnTrayClosesBubble) {
+TEST_P(TrayEventFilterTest, DraggingOnTrayClosesBubble) {
   ShowSystemTrayMainView();
   EXPECT_TRUE(IsBubbleShown());
 
@@ -224,7 +252,31 @@ TEST_F(TrayEventFilterTest, DraggingOnTrayClosesBubble) {
   EXPECT_FALSE(IsBubbleShown());
 }
 
-TEST_F(TrayEventFilterTest, MessageCenterAndSystemTrayStayOpenTogether) {
+TEST_P(TrayEventFilterTest, ClickOnCalendarBubbleClosesOtherTrays) {
+  Shell::Get()->ime_controller()->ShowImeMenuOnShelf(true);
+  auto* status_area = GetPrimaryShelf()->GetStatusAreaWidget();
+  auto* ime_tray = status_area->ime_menu_tray();
+
+  LeftClickOn(ime_tray);
+  EXPECT_TRUE(ime_tray->GetBubbleWidget());
+
+  auto* date_tray = status_area->date_tray();
+  LeftClickOn(date_tray);
+
+  // When opening the calendar, the unified system tray bubble should be open
+  // with the calendar view, and the IME bubble should be closed.
+  EXPECT_TRUE(IsBubbleShown());
+  EXPECT_FALSE(ime_tray->GetBubbleWidget());
+}
+
+using TrayEventFilterQsRevampDisabledTest = TrayEventFilterTest;
+
+INSTANTIATE_TEST_SUITE_P(QsRevampDisabled,
+                         TrayEventFilterQsRevampDisabledTest,
+                         testing::Values(false));
+
+TEST_P(TrayEventFilterQsRevampDisabledTest,
+       MessageCenterAndSystemTrayStayOpenTogether) {
   AddNotification();
 
   ShowSystemTrayMainView();
@@ -244,7 +296,8 @@ TEST_F(TrayEventFilterTest, MessageCenterAndSystemTrayStayOpenTogether) {
   EXPECT_TRUE(IsBubbleShown());
 }
 
-TEST_F(TrayEventFilterTest, MessageCenterAndSystemTrayCloseTogether) {
+TEST_P(TrayEventFilterQsRevampDisabledTest,
+       MessageCenterAndSystemTrayCloseTogether) {
   AddNotification();
 
   ShowSystemTrayMainView();
@@ -258,5 +311,4 @@ TEST_F(TrayEventFilterTest, MessageCenterAndSystemTrayCloseTogether) {
   EXPECT_FALSE(IsBubbleShown());
 }
 
-}  // namespace
 }  // namespace ash

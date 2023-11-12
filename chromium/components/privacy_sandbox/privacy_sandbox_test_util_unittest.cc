@@ -11,6 +11,8 @@
 #include "components/content_settings/core/test/content_settings_mock_provider.h"
 #include "components/content_settings/core/test/content_settings_test_utils.h"
 #include "components/privacy_sandbox/mock_privacy_sandbox_settings.h"
+#include "components/privacy_sandbox/privacy_sandbox_attestations/privacy_sandbox_attestations.h"
+#include "components/privacy_sandbox/privacy_sandbox_attestations/scoped_privacy_sandbox_attestations.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -48,7 +50,9 @@ class PrivacySandboxTestUtilTest : public testing::Test {
  public:
   PrivacySandboxTestUtilTest()
       : browser_task_environment_(
-            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME),
+        scoped_attestations_(
+            privacy_sandbox::PrivacySandboxAttestations::CreateForTesting()) {
     content_settings::CookieSettings::RegisterProfilePrefs(prefs()->registry());
     HostContentSettingsMap::RegisterProfilePrefs(prefs()->registry());
     privacy_sandbox::RegisterProfilePrefs(prefs()->registry());
@@ -82,7 +86,8 @@ class PrivacySandboxTestUtilTest : public testing::Test {
     privacy_sandbox_test_util::ApplyTestState(
         key, value, task_environment(), prefs(), host_content_settings_map(),
         mock_delegate(), mock_privacy_sandbox_service(),
-        mock_browsing_topics_service(), user_provider_, managed_provider_);
+        mock_browsing_topics_service(), mock_privacy_sandbox_settings(),
+        user_provider_, managed_provider_);
   }
 
   void ProvideInput(InputKey key, TestCaseItemValue value) {
@@ -136,6 +141,7 @@ class PrivacySandboxTestUtilTest : public testing::Test {
   MockPrivacySandboxSettings mock_privacy_sandbox_settings_;
   raw_ptr<content_settings::MockProvider> user_provider_;
   raw_ptr<content_settings::MockProvider> managed_provider_;
+  privacy_sandbox::ScopedPrivacySandboxAttestations scoped_attestations_;
 };
 
 TEST_F(PrivacySandboxTestUtilTest, StateKey_M1TopicsEnabledUserPrefValue) {
@@ -177,9 +183,9 @@ TEST_F(PrivacySandboxTestUtilTest, StateKey_SiteDataUserDefault) {
 
     EXPECT_TRUE(user_rule_iterator->HasNext());
     auto rule = user_rule_iterator->Next();
-    EXPECT_EQ(ContentSettingsPattern::Wildcard(), rule.primary_pattern);
-    EXPECT_EQ(ContentSettingsPattern::Wildcard(), rule.secondary_pattern);
-    EXPECT_EQ(base::Value(state), rule.value);
+    EXPECT_EQ(ContentSettingsPattern::Wildcard(), rule->primary_pattern);
+    EXPECT_EQ(ContentSettingsPattern::Wildcard(), rule->secondary_pattern);
+    EXPECT_EQ(base::Value(state), rule->value());
 
     // Nothing should have ended up in the managed provider, which will present
     // as a null iterator.
@@ -202,9 +208,9 @@ TEST_F(PrivacySandboxTestUtilTest, StateKey_SiteDataUserExceptions) {
 
   EXPECT_TRUE(user_rule_iterator->HasNext());
   auto rule = user_rule_iterator->Next();
-  EXPECT_EQ(kException, rule.primary_pattern.ToString());
-  EXPECT_EQ(ContentSettingsPattern::Wildcard(), rule.secondary_pattern);
-  EXPECT_EQ(base::Value(CONTENT_SETTING_BLOCK), rule.value);
+  EXPECT_EQ(kException, rule->primary_pattern.ToString());
+  EXPECT_EQ(ContentSettingsPattern::Wildcard(), rule->secondary_pattern);
+  EXPECT_EQ(base::Value(CONTENT_SETTING_BLOCK), rule->value());
 
   // Nothing should have ended up in the managed provider, which will present
   // as a null iterator.

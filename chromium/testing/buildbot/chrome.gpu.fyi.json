@@ -40,13 +40,11 @@
         "swarming": {
           "can_use_on_swarming_builders": true,
           "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "device_type": "jacuzzi",
-              "os": "ChromeOS",
-              "pool": "chrome.tests"
-            }
-          ],
+          "dimensions": {
+            "device_type": "jacuzzi",
+            "os": "ChromeOS",
+            "pool": "chrome.tests"
+          },
           "expiration": 21600,
           "idempotent": false,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -91,13 +89,11 @@
         "swarming": {
           "can_use_on_swarming_builders": true,
           "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "device_type": "jacuzzi",
-              "os": "ChromeOS",
-              "pool": "chrome.tests"
-            }
-          ],
+          "dimensions": {
+            "device_type": "jacuzzi",
+            "os": "ChromeOS",
+            "pool": "chrome.tests"
+          },
           "expiration": 21600,
           "idempotent": false,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -118,8 +114,7 @@
           "--stable-jobs",
           "--extra-browser-args=--log-level=0 --js-flags=--expose-gc --use-gl=angle --use-angle=gles --use-cmd-decoder=passthrough --force_high_performance_gpu",
           "--webgl-conformance-version=2.0.1",
-          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl2_conformance_tests_output.json",
-          "--test-filter=conformance/rendering/*::conformance2/rendering/*",
+          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl2_conformance_linux_runtimes.json",
           "--jobs=1",
           "--deploy-lacros",
           "--remote=variable_chromeos_device_hostname"
@@ -137,13 +132,11 @@
         "swarming": {
           "can_use_on_swarming_builders": true,
           "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "device_type": "jacuzzi",
-              "os": "ChromeOS",
-              "pool": "chrome.tests"
-            }
-          ],
+          "dimensions": {
+            "device_type": "jacuzzi",
+            "os": "ChromeOS",
+            "pool": "chrome.tests"
+          },
           "expiration": 21600,
           "idempotent": false,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -163,8 +156,7 @@
           "-v",
           "--stable-jobs",
           "--extra-browser-args=--log-level=0 --js-flags=--expose-gc --use-gl=angle --use-angle=gles --use-cmd-decoder=passthrough --force_high_performance_gpu",
-          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl_conformance_tests_output.json",
-          "--test-filter=conformance/rendering/*",
+          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl1_conformance_linux_runtimes.json",
           "--jobs=1",
           "--deploy-lacros",
           "--remote=variable_chromeos_device_hostname"
@@ -182,13 +174,11 @@
         "swarming": {
           "can_use_on_swarming_builders": true,
           "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "device_type": "jacuzzi",
-              "os": "ChromeOS",
-              "pool": "chrome.tests"
-            }
-          ],
+          "dimensions": {
+            "device_type": "jacuzzi",
+            "os": "ChromeOS",
+            "pool": "chrome.tests"
+          },
           "expiration": 21600,
           "idempotent": false,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -240,13 +230,11 @@
         "swarming": {
           "can_use_on_swarming_builders": true,
           "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "device_type": "octopus",
-              "os": "ChromeOS",
-              "pool": "chrome.tests"
-            }
-          ],
+          "dimensions": {
+            "device_type": "octopus",
+            "os": "ChromeOS",
+            "pool": "chrome.tests"
+          },
           "expiration": 21600,
           "idempotent": false,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -291,13 +279,11 @@
         "swarming": {
           "can_use_on_swarming_builders": true,
           "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "device_type": "octopus",
-              "os": "ChromeOS",
-              "pool": "chrome.tests"
-            }
-          ],
+          "dimensions": {
+            "device_type": "octopus",
+            "os": "ChromeOS",
+            "pool": "chrome.tests"
+          },
           "expiration": 21600,
           "idempotent": false,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -318,8 +304,7 @@
           "--stable-jobs",
           "--extra-browser-args=--log-level=0 --js-flags=--expose-gc --use-gl=angle --use-angle=gles --use-cmd-decoder=passthrough --force_high_performance_gpu",
           "--webgl-conformance-version=2.0.1",
-          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl2_conformance_tests_output.json",
-          "--test-filter=conformance/rendering/*::conformance2/rendering/*",
+          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl2_conformance_linux_runtimes.json",
           "--jobs=1",
           "--deploy-lacros",
           "--remote=variable_chromeos_device_hostname"
@@ -337,13 +322,11 @@
         "swarming": {
           "can_use_on_swarming_builders": true,
           "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "device_type": "octopus",
-              "os": "ChromeOS",
-              "pool": "chrome.tests"
-            }
-          ],
+          "dimensions": {
+            "device_type": "octopus",
+            "os": "ChromeOS",
+            "pool": "chrome.tests"
+          },
           "expiration": 21600,
           "idempotent": false,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -363,8 +346,7 @@
           "-v",
           "--stable-jobs",
           "--extra-browser-args=--log-level=0 --js-flags=--expose-gc --use-gl=angle --use-angle=gles --use-cmd-decoder=passthrough --force_high_performance_gpu",
-          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl_conformance_tests_output.json",
-          "--test-filter=conformance/rendering/*",
+          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl1_conformance_linux_runtimes.json",
           "--jobs=1",
           "--deploy-lacros",
           "--remote=variable_chromeos_device_hostname"
@@ -382,13 +364,11 @@
         "swarming": {
           "can_use_on_swarming_builders": true,
           "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "device_type": "octopus",
-              "os": "ChromeOS",
-              "pool": "chrome.tests"
-            }
-          ],
+          "dimensions": {
+            "device_type": "octopus",
+            "os": "ChromeOS",
+            "pool": "chrome.tests"
+          },
           "expiration": 21600,
           "idempotent": false,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"

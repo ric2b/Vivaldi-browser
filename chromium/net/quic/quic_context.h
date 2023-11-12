@@ -12,6 +12,7 @@
 #include "base/time/time.h"
 #include "net/base/features.h"
 #include "net/base/host_port_pair.h"
+#include "net/third_party/quiche/src/quiche/quic/core/crypto/quic_crypto_client_config.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_connection.h"
 
 namespace net {
@@ -31,9 +32,9 @@ DefaultSupportedQuicVersions() {
 // QUIC shared code but that Chrome refuses to use because modern clients
 // should only use versions at least as recent as the oldest default version.
 inline NET_EXPORT_PRIVATE quic::ParsedQuicVersionVector ObsoleteQuicVersions() {
-  return quic::ParsedQuicVersionVector{
-      quic::ParsedQuicVersion::Q043(), quic::ParsedQuicVersion::Q046(),
-      quic::ParsedQuicVersion::Q050(), quic::ParsedQuicVersion::Draft29()};
+  return quic::ParsedQuicVersionVector{quic::ParsedQuicVersion::Q046(),
+                                       quic::ParsedQuicVersion::Q050(),
+                                       quic::ParsedQuicVersion::Draft29()};
 }
 
 // All of the QUIC versions that Chrome can support. This is the subset of
@@ -177,9 +178,6 @@ struct NET_EXPORT QuicParams {
   // If true, allows QUIC to use alternative services with a different
   // hostname from the origin.
   bool allow_remote_alt_svc = true;
-  // If true, the quic stream factory may race connection from stale dns
-  // result with the original dns resolution
-  bool race_stale_dns_on_connection = false;
   // If true, estimate the initial RTT for QUIC connections based on network.
   bool estimate_initial_rtt = false;
   // The initial rtt that will be used in crypto handshake if no cached
@@ -237,6 +235,10 @@ class NET_EXPORT_PRIVATE QuicContext {
 
 // Initializes QuicConfig based on the specified parameters.
 quic::QuicConfig InitializeQuicConfig(const QuicParams& params);
+
+// Configures QuicCryptoClientConfig with Chromium-specific settings.
+void ConfigureQuicCryptoClientConfig(
+    quic::QuicCryptoClientConfig& crypto_config);
 
 }  // namespace net
 

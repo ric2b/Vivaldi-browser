@@ -10,7 +10,7 @@
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/system_identity.h"
@@ -146,6 +146,7 @@ constexpr NSInteger kSigninTimeoutDurationSeconds = 10;
           _accessPoint);
       break;
     }
+    case SigninCoordinatorResultDisabled:
     case SigninCoordinatorResultInterrupted: {
       RecordConsistencyPromoUserAction(
           signin_metrics::AccountConsistencyPromoAction::DISMISSED_OTHER,

@@ -222,7 +222,7 @@ void ArCoreGl::Initialize(
 
   // Get the activity context.
   base::android::ScopedJavaLocalRef<jobject> application_context =
-      session_utils->GetApplicationContext();
+      session_utils->GetCurrentActivityContext();
   if (!application_context.obj()) {
     DLOG(ERROR) << "Unable to retrieve the Java context/activity!";
     std::move(callback).Run(
@@ -1421,13 +1421,6 @@ void ArCoreGl::GetEnvironmentIntegrationProvider(
   environment_receiver_.Bind(std::move(environment_provider));
   environment_receiver_.set_disconnect_handler(base::BindOnce(
       &ArCoreGl::OnBindingDisconnect, weak_ptr_factory_.GetWeakPtr()));
-}
-
-void ArCoreGl::SetInputSourceButtonListener(
-    mojo::PendingAssociatedRemote<device::mojom::XRInputSourceButtonListener>) {
-  // Input eventing is not supported. This call should not
-  // be made on this device.
-  frame_data_receiver_.ReportBadMessage("Input eventing is not supported.");
 }
 
 void ArCoreGl::SubscribeToHitTest(

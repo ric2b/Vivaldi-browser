@@ -11,8 +11,8 @@
 #import "components/password_manager/core/browser/well_known_change_password_util.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/ukm/test_ukm_recorder.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/passwords/ios_chrome_affiliation_service_factory.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_client.h"
 #import "ios/web/public/test/fakes/fake_web_state_delegate.h"
@@ -172,9 +172,7 @@ class WellKnownChangePasswordTabHelperTest : public PlatformTest {
 };
 
 GURL WellKnownChangePasswordTabHelperTest::GetNavigatedUrl() const {
-  web::URLVerificationTrustLevel trust_level =
-      web::URLVerificationTrustLevel::kAbsolute;
-  GURL url = web_state()->GetCurrentURL(&trust_level);
+  GURL url = web_state()->GetLastCommittedURL();
   // When redirecting with WebState::OpenURL() `web_state_` is not
   // updated, we only see the registered request in
   // FakeWebStateDelegate::last_open_url_request().

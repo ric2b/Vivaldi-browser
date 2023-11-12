@@ -89,8 +89,8 @@ void NinjaCreateBundleTargetWriter::Run() {
   WriteCompileAssetsCatalogStep(order_only_deps, &output_files);
   WriteCodeSigningStep(code_signing_rule_name, order_only_deps, &output_files);
 
-  for (const auto& pair : target_->data_deps())
-    order_only_deps.push_back(pair.ptr->dependency_output_file());
+  for (const Target* data_dep : resolved().GetDataDeps(target_))
+    order_only_deps.push_back(data_dep->dependency_output_file());
   WriteStampForTarget(output_files, order_only_deps);
 
   // Write a phony target for the outer bundle directory. This allows other

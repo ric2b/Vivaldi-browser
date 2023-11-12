@@ -7,6 +7,7 @@ import("//build/config/android/rules.gni")
 import("//chrome/browser/buildflags.gni")
 
 android_library("java") {
+  srcjar_deps = [ ":jni_headers" ]
   sources = [
     "java/src/org/chromium/chrome/browser/omnibox/AutocompleteEditText.java",
     "java/src/org/chromium/chrome/browser/omnibox/AutocompleteEditTextModelBase.java",
@@ -28,6 +29,7 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/omnibox/NewTabPageDelegate.java",
     "java/src/org/chromium/chrome/browser/omnibox/OmniboxFeatures.java",
     "java/src/org/chromium/chrome/browser/omnibox/OmniboxFocusReason.java",
+    "java/src/org/chromium/chrome/browser/omnibox/OmniboxMetrics.java",
     "java/src/org/chromium/chrome/browser/omnibox/OmniboxPrerender.java",
     "java/src/org/chromium/chrome/browser/omnibox/OmniboxStub.java",
     "java/src/org/chromium/chrome/browser/omnibox/OmniboxSuggestionsDropdownEmbedderImpl.java",
@@ -57,7 +59,6 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/omnibox/status/StatusView.java",
     "java/src/org/chromium/chrome/browser/omnibox/status/StatusViewBinder.java",
     "java/src/org/chromium/chrome/browser/omnibox/styles/OmniboxResourceProvider.java",
-    "java/src/org/chromium/chrome/browser/omnibox/suggestions/ActionChipsDelegate.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/AutocompleteController.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/AutocompleteControllerProvider.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/AutocompleteCoordinator.java",
@@ -70,19 +71,23 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/DropdownItemViewInfoListBuilder.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/DropdownItemViewInfoListManager.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/FaviconFetcher.java",
-    "java/src/org/chromium/chrome/browser/omnibox/suggestions/OmniboxSuggestionUiType.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/OmniboxSuggestionsDropdown.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/OmniboxSuggestionsDropdownAdapter.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/OmniboxSuggestionsDropdownEmbedder.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/OmniboxSuggestionsDropdownScrollListener.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/PreWarmingRecycledViewPool.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/SuggestionCommonProperties.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/SuggestionHorizontalDivider.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/SuggestionHost.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/SuggestionListProperties.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/SuggestionListViewBinder.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/SuggestionProcessor.java",
-    "java/src/org/chromium/chrome/browser/omnibox/suggestions/SuggestionsMetrics.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/UrlBarDelegate.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/action/HistoryClustersAction.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/action/OmniboxActionDelegateImpl.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/action/OmniboxActionFactoryImpl.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/action/OmniboxActionInSuggest.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/action/OmniboxPedal.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/answer/AnswerSuggestionProcessor.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/answer/AnswerSuggestionViewBinder.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/answer/AnswerSuggestionViewProperties.java",
@@ -132,7 +137,6 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/tail/TailSuggestionView.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/tail/TailSuggestionViewBinder.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/tail/TailSuggestionViewProperties.java",
-    "java/src/org/chromium/chrome/browser/omnibox/voice/AssistantVoiceSearchService.java",
     "java/src/org/chromium/chrome/browser/omnibox/voice/VoiceRecognitionHandler.java",
   ]
 
@@ -177,6 +181,7 @@ android_library("java") {
     "//chrome/browser/user_education:java",
     "//chrome/browser/util:java",
     "//components/browser_ui/bottomsheet/android:java",
+    "//components/browser_ui/settings/android:java",
     "//components/browser_ui/share/android:java",
     "//components/browser_ui/site_settings/android:java",
     "//components/browser_ui/styles/android:java",
@@ -189,6 +194,7 @@ android_library("java") {
     "//components/favicon/android:java",
     "//components/feature_engagement/public:public_java",
     "//components/image_fetcher:java",
+    "//components/omnibox/browser:browser_java",
     "//components/omnibox/browser:browser_java",
     "//components/page_info/android:java",
     "//components/permissions/android:java",
@@ -215,7 +221,7 @@ android_library("java") {
     "//ui/base/mojom:mojom_java",
     "//url:gurl_java",
   ]
-  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+
   resources_package = "org.chromium.chrome.browser.omnibox"
 }
 
@@ -247,6 +253,7 @@ android_library("javatests") {
     "//chrome/test/android:chrome_java_unit_test_support",
     "//content/public/test/android:content_java_test_support",
     "//third_party/android_sdk:android_test_mock_java",
+    "//third_party/androidx:androidx_test_core_java",
     "//third_party/androidx:androidx_test_monitor_java",
     "//third_party/androidx:androidx_test_runner_java",
     "//third_party/junit",
@@ -308,7 +315,6 @@ android_resources("java_resources") {
     "java/res/drawable-xxxhdpi/ic_history_googblue_24dp.png",
     "java/res/drawable-xxxhdpi/ic_suggestion_magnifier.png",
     "java/res/drawable/ic_book_round.xml",
-    "java/res/drawable/ic_colorful_mic.xml",
     "java/res/drawable/ic_content_copy_black.xml",
     "java/res/drawable/ic_equals_sign_round.xml",
     "java/res/drawable/ic_event_round.xml",
@@ -367,6 +373,7 @@ android_library("unit_device_javatests") {
     ":java_resources",
     "//base:base_java_test_support",
     "//chrome/android:chrome_app_java_resources",
+    "//chrome/browser/flags:java",
     "//chrome/browser/ui/android/toolbar:java",
     "//chrome/test/android:chrome_java_test_support_common",
     "//components/browser_ui/site_settings/android:java",
@@ -417,6 +424,12 @@ robolectric_library("junit") {
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/FaviconFetcherUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/OmniboxSuggestionsDropdownUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/PreWarmingRecycledViewPoolTest.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/SuggestionHorizontalDividerTest.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/action/HistoryClustersActionUnitTest.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/action/OmniboxActionDelegateImplUnitTest.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/action/OmniboxActionFactoryImplUnitTest.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/action/OmniboxActionInSuggestUnitTest.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/action/OmniboxPedalUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/answer/AnswerSuggestionProcessorUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/answer/AnswerTextNewLayoutUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/base/ActionChipsAdapterUnitTest.java",
@@ -440,10 +453,8 @@ robolectric_library("junit") {
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/header/HeaderViewBinderUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/mostvisited/MostVisitedTilesProcessorUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/tail/AlignmentManagerUnitTest.java",
+    "java/src/org/chromium/chrome/browser/omnibox/suggestions/tail/TailSuggestionProcessorUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/suggestions/tail/TailSuggestionViewBinderUnitTest.java",
-    "java/src/org/chromium/chrome/browser/omnibox/voice/AssistantActionsHandlerUnitTest.java",
-    "java/src/org/chromium/chrome/browser/omnibox/voice/AssistantVoiceRecognitionHandlerUnitTest.java",
-    "java/src/org/chromium/chrome/browser/omnibox/voice/AssistantVoiceSearchServiceUnitTest.java",
     "java/src/org/chromium/chrome/browser/omnibox/voice/RecognitionTestHelper.java",
     "java/src/org/chromium/chrome/browser/omnibox/voice/VoiceRecognitionHandlerUnitTest.java",
   ]
@@ -476,6 +487,7 @@ robolectric_library("junit") {
     "//chrome/browser/ui/android/toolbar:java",
     "//chrome/browser/util:java",
     "//chrome/test/android:chrome_java_unit_test_support",
+    "//components/browser_ui/settings/android:java",
     "//components/browser_ui/site_settings/android:java",
     "//components/browser_ui/styles/android:java",
     "//components/browser_ui/theme/android:java_resources",
@@ -518,6 +530,5 @@ robolectric_library("junit") {
     "//url:gurl_junit_shadows",
     "//url:gurl_junit_test_support",
   ]
-  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   resources_package = "org.chromium.chrome.browser.omnibox.test"
 }

@@ -81,13 +81,17 @@
 #include "base/dcheck_is_on.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/safe_ref_traits.h"
 #include "base/sequence_checker.h"
 #include "base/synchronization/atomic_flag.h"
+#include "base/types/pass_key.h"
 
 namespace base {
 
-template <typename T>
-class SafeRef;
+namespace sequence_manager::internal {
+class TaskQueueImpl;
+}
+
 template <typename T> class SupportsWeakPtr;
 template <typename T> class WeakPtr;
 
@@ -110,6 +114,7 @@ class BASE_EXPORT TRIVIAL_ABI WeakReference {
 
 #if DCHECK_IS_ON()
     void DetachFromSequence();
+    void BindToCurrentSequence();
 #endif
 
    private:
@@ -159,6 +164,7 @@ class BASE_EXPORT WeakReferenceOwner {
   bool HasRefs() const { return !flag_->HasOneRef(); }
 
   void Invalidate();
+  void BindToCurrentSequence();
 
  private:
   scoped_refptr<WeakReference::Flag> flag_;
@@ -410,6 +416,14 @@ class WeakPtrFactory : public internal::WeakPtrFactoryBase {
   bool HasWeakPtrs() const {
     DCHECK(ptr_);
     return weak_reference_owner_.HasRefs();
+  }
+
+  // Rebind the factory to the current sequence. This allows creating a task
+  // queue and associated weak pointers on a different thread from the one they
+  // are used on.
+  void BindToCurrentSequence(
+      PassKey<sequence_manager::internal::TaskQueueImpl>) {
+    weak_reference_owner_.BindToCurrentSequence();
   }
 };
 

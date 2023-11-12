@@ -26,14 +26,14 @@
 <translation id="1973351931613083086">自動播放</translation>
 <translation id="1985669426322966465">軟體更新</translation>
 <translation id="2079036669923635404">按這裡升級為Vivaldi <ph name="VERSION" /> 版。</translation>
-<translation id="2141974047387702305">下載檔案時發生錯誤，請檢查你的網路連線並稍後再試。</translation>
+<translation id="2141974047387702305">下載檔案時發生錯誤，請檢查您的網路連線並稍後再試。</translation>
 <translation id="2339641773402824483">檢查更新中...</translation>
 <translation id="2441056087170876076">怪獸 2</translation>
 <translation id="2444387452209867610">插入筆記</translation>
 <translation id="2486841023299517366">動物 4</translation>
-<translation id="2612127540243995147">已準備好安裝。Vivaldi將被關閉並重新啟動。</translation>
+<translation id="2612127540243995147">已準備好安裝。Vivaldi 將被關閉並重新啟動。</translation>
 <translation id="2613387515621326337">顯示更新網站</translation>
-<translation id="2647368062414805334">很抱歉，無法在 Edge瀏覽器執行時使用你的設定，要匯入設定至 Vivaldi，請先儲存你的工作並關閉所有 Edge視窗，然後點選繼續。</translation>
+<translation id="2647368062414805334">很抱歉，無法在 Edge 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Edge 視窗，然後點選繼續。</translation>
 <translation id="2721334646575696520">Microsoft Edge瀏覽器</translation>
 <translation id="2848085334714181751">動物 3</translation>
 <translation id="2873951654529031587">垃圾桶</translation>
@@ -42,9 +42,9 @@
 <translation id="2953943267837858202">不允許自動播放影音</translation>
 <translation id="2977472760057091832">在無痕視窗開啟連結</translation>
 <translation id="2989805286512600854">在新分頁開啟</translation>
-<translation id="3027988479108856431">真遺憾，您的 Yandex 設定在瀏覽器運行時不可用。 要將這些設定導入 Vivaldi，請保存您的工作並關閉所有 Yandex 視窗， 然後點擊繼續。</translation>
+<translation id="3027988479108856431">很抱歉，無法在 Yandex 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Yandex 視窗，然後點選繼續。</translation>
 <translation id="3084011186245865060">風景 6</translation>
-<translation id="3093931836425623631">Chromium開放原始碼專案及其他開源軟體讓 Vivaldi成為可能。</translation>
+<translation id="3093931836425623631">Vivaldi 是基於 Chromium 開放原始碼專案及其他開放原始碼軟體而實現的。</translation>
 <translation id="3127383884976966729">動物 7</translation>
 <translation id="3156398087075132709">新增書籤</translation>
 <translation id="3255747772218936245">安裝更新</translation>
@@ -53,7 +53,7 @@
 <translation id="3302905971452834934">怪獸 1</translation>
 <translation id="3334610655141903168">（無標題）</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" />現在是最新版本。</translation>
-<translation id="3383198080133834965">你已經更新到最新版！</translation>
+<translation id="3383198080133834965">您已經更新到最新版！</translation>
 <translation id="3402602684546832928">選取 Opera 書籤檔案</translation>
 <translation id="3451317331714872347">風景 8</translation>
 <translation id="3457498675806041407">確認結束</translation>
@@ -70,7 +70,7 @@
 <translation id="3732157130969736834">新增連結為書籤</translation>
 <translation id="3732388226447288666">動物 2</translation>
 <translation id="3732439195215136813">動物 5</translation>
-<translation id="3795800845758778870">很抱歉，無法在 Brave瀏覽器執行時使用你的設定，要匯入設定至 Vivaldi，請先儲存你的工作並關閉所有 Brave視窗，然後點選繼續。</translation>
+<translation id="3795800845758778870">很抱歉，無法在 Brave 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Brave 視窗，然後點選繼續。</translation>
 <translation id="3822431842304177896">新增分隔線</translation>
 <translation id="3832132597516774400">風景 5</translation>
 <translation id="3914946330804881301">從 Opera 匯入</translation>
@@ -109,15 +109,15 @@
 <translation id="5416008465899576639">有新版本的 Vivaldi。</translation>
 <translation id="5497042274492038489">確認視窗關閉</translation>
 <translation id="5594602170491763400">怪獸 5</translation>
-<translation id="5615637589913244581">Opera 15+ (Beta) 瀏覽器</translation>
+<translation id="5615637589913244581">Opera 15+（Beta）瀏覽器</translation>
 <translation id="5648110075441906505">在新視窗開啟圖片</translation>
 <translation id="5656371807944747581">更新錯誤！</translation>
 <translation id="5716238312826274098">停用訊息通知</translation>
-<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> 版已經可以使用（你正在使用 <ph name="OLD_VERSION" />版）。你想要立即下載嗎？</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> 版已經可以使用（您正在使用 <ph name="OLD_VERSION" />版）。您想要立即下載嗎？</translation>
 <translation id="5770433027661640693">風景 10</translation>
-<translation id="5857090052475505287">新增檔案夾</translation>
+<translation id="5857090052475505287">新增資料夾</translation>
 <translation id="588258955323874662">全螢幕模式</translation>
-<translation id="5916080360077521750">真遺憾，您的 Chrome 設定在瀏覽器運行時不可用。 要將這些設定導入 Vivaldi，請保存您的工作並關閉所有 Chrome 視窗， 然後點擊繼續。</translation>
+<translation id="5916080360077521750">很抱歉，無法在 Chrome 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Chrome 視窗，然後點選繼續。</translation>
 <translation id="6040143037577758943">關閉</translation>
 <translation id="6229528619562190452">點此更新 Vivaldi。</translation>
 <translation id="6234173136417926046">使用圖片作為起始頁背景</translation>
@@ -132,7 +132,7 @@
 <translation id="6635049669875534328">更新事項：</translation>
 <translation id="6693585104974197539">選擇匯入 Edge 設定檔目錄</translation>
 <translation id="6726279523566323394">選擇匯入 Brave設定檔目錄</translation>
-<translation id="6804831687363620480">真遺憾，您的 Opera 15+ 設定在瀏覽器運行時不可用。 要將這些設定導入 Vivaldi，請保存您的工作並關閉所有 Opera 15+ 視窗， 然後點擊繼續。</translation>
+<translation id="6804831687363620480">很抱歉，無法在 Opera 15+ 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Opera 15+ 視窗，然後點選繼續。</translation>
 <translation id="6892812721183419409">開啟連結為<ph name="USER" /></translation>
 <translation id="6896758677409633944">複製</translation>
 <translation id="7086554968911045110">風景 7</translation>
@@ -161,10 +161,10 @@
 <translation id="8439034818057146672">已經準備好安裝新版的 Vivaldi。</translation>
 <translation id="8446668873108041390">已停用 AppleScript 執行 JavaScript。啟用「設定 &gt; 隱私 &gt; Apple Events」選項以允許執行來自 Apple Events 的 JavaScript 。</translation>
 <translation id="8539196077526389150">風景 13</translation>
-<translation id="8562339533180097902">關閉 Vivaldi並立即安裝</translation>
+<translation id="8562339533180097902">關閉 Vivaldi 並立即安裝</translation>
 <translation id="8567452685425968223">解壓縮更新中...</translation>
 <translation id="8624587806981488221">重新載入圖片(&amp;R)</translation>
-<translation id="864444594187862076">Opera 15+ (開發者版本) 瀏覽器</translation>
+<translation id="864444594187862076">Opera 15+（開發者版本）瀏覽器</translation>
 <translation id="8651348004684669199">新增現用分頁</translation>
 <translation id="8669345741879513971">怪獸 10</translation>
 <translation id="867544375504146191">Yandex 瀏覽器</translation>
@@ -184,6 +184,6 @@
 <translation id="912022491595344261">開啟圖片為 <ph name="USER" /></translation>
 <translation id="9157539936604258187">開啟連結</translation>
 <translation id="9169060351863393881">Opera 12.x 瀏覽器</translation>
-<translation id="939305735877869636">Brave瀏覽器</translation>
+<translation id="939305735877869636">Brave 瀏覽器</translation>
 <translation id="970294721402795299">風景 16</translation>
 </translationbundle>

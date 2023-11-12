@@ -9,15 +9,15 @@
 
 #import "ios/chrome/browser/app_launcher/app_launcher_tab_helper.h"
 #import "ios/chrome/browser/app_launcher/fake_app_launcher_abuse_detector.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/overlays/public/overlay_callback_manager.h"
 #import "ios/chrome/browser/overlays/public/overlay_request.h"
 #import "ios/chrome/browser/overlays/public/overlay_request_queue.h"
 #import "ios/chrome/browser/overlays/public/overlay_response.h"
 #import "ios/chrome/browser/overlays/public/web_content_area/app_launcher_overlay.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/web_state_list/web_state_opener.h"
+#import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "ios/web/public/test/web_task_environment.h"
@@ -129,7 +129,7 @@ TEST_F(AppLauncherBrowserAgentTest, AppStoreUrlShowsAlert) {
   // expecting that the application will open the URL.
   OCMExpect([application_ openURL:net::NSURLWithGURL(kAppStoreUrl)
                           options:@{}
-                completionHandler:nil]);
+                completionHandler:[OCMArg isNotNil]]);
   queue->CancelAllRequests();
 
   // Verify that the application attempts to open the URL.
@@ -148,7 +148,7 @@ TEST_F(AppLauncherBrowserAgentTest, MailToUrlLaunchesApp) {
   // the application will open the URL.
   OCMExpect([application_ openURL:net::NSURLWithGURL(kMailToUrl)
                           options:@{}
-                completionHandler:nil]);
+                completionHandler:[OCMArg isNotNil]]);
   AppLauncherTabHelper::FromWebState(web_state)->RequestToLaunchApp(
       kMailToUrl, kSourcePageUrl, /*link_transition=*/true);
 
@@ -168,7 +168,7 @@ TEST_F(AppLauncherBrowserAgentTest, AppUrlLaunchesApp) {
   // the application will open the URL.
   OCMExpect([application_ openURL:net::NSURLWithGURL(kAppUrl)
                           options:@{}
-                completionHandler:nil]);
+                completionHandler:[OCMArg isNotNil]]);
   AppLauncherTabHelper::FromWebState(web_state)->RequestToLaunchApp(
       kAppUrl, kSourcePageUrl, /*link_transition=*/true);
 
@@ -204,7 +204,7 @@ TEST_F(AppLauncherBrowserAgentTest, RepeatedRequestShowsAlert) {
   // expecting that the application will open the URL.
   OCMExpect([application_ openURL:net::NSURLWithGURL(kAppUrl)
                           options:@{}
-                completionHandler:nil]);
+                completionHandler:[OCMArg isNotNil]]);
   queue->CancelAllRequests();
 
   // Verify that the application attempts to open the URL.
@@ -236,7 +236,7 @@ TEST_F(AppLauncherBrowserAgentTest, AppUrlWithoutLinkShowsAlert) {
   // expecting that the application will open the URL.
   OCMExpect([application_ openURL:net::NSURLWithGURL(kAppUrl)
                           options:@{}
-                completionHandler:nil]);
+                completionHandler:[OCMArg isNotNil]]);
   queue->CancelAllRequests();
 
   // Verify that the application attempts to open the URL.

@@ -37,13 +37,19 @@ PushMessagingServiceImpl* PushMessagingServiceFactory::GetForProfile(
 
 // static
 PushMessagingServiceFactory* PushMessagingServiceFactory::GetInstance() {
-  return base::Singleton<PushMessagingServiceFactory>::get();
+  static base::NoDestructor<PushMessagingServiceFactory> instance;
+  return instance.get();
 }
 
 PushMessagingServiceFactory::PushMessagingServiceFactory()
     : ProfileKeyedServiceFactory(
           "PushMessagingProfileService",
-          ProfileSelections::BuildForRegularAndIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {
   DependsOn(gcm::GCMProfileServiceFactory::GetInstance());
   DependsOn(instance_id::InstanceIDProfileServiceFactory::GetInstance());
   DependsOn(HostContentSettingsMapFactory::GetInstance());
@@ -56,7 +62,7 @@ PushMessagingServiceFactory::PushMessagingServiceFactory()
 #endif
 }
 
-PushMessagingServiceFactory::~PushMessagingServiceFactory() {}
+PushMessagingServiceFactory::~PushMessagingServiceFactory() = default;
 
 void PushMessagingServiceFactory::RestoreFactoryForTests(
     content::BrowserContext* context) {

@@ -13,6 +13,7 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/typography.h"
 #include "ash/system/model/enterprise_domain_model.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/supervised/supervised_icon_string.h"
@@ -42,9 +43,8 @@ namespace ash {
 namespace {
 
 // Constants used with QsRevamp.
-constexpr int kManagedStateHighlightRadius = 16;
-constexpr SkScalar kManagedStateCornerRadii[] = {16, 16, 16, 16,
-                                                 16, 16, 16, 16};
+constexpr int kManagedStateCornerRadius = 16;
+constexpr float kManagedStateStrokeWidth = 1.0f;
 constexpr auto kManagedStateBorderInsets = gfx::Insets::TLBR(0, 12, 0, 12);
 constexpr gfx::Size kManagedStateImageSize(20, 20);
 
@@ -94,6 +94,9 @@ ManagedStateView::ManagedStateView(PressedCallback callback,
 
   if (features::IsQsRevampEnabled()) {
     image_->SetPreferredSize(kManagedStateImageSize);
+    label_->SetEnabledColorId(cros_tokens::kCrosSysOnSurfaceVariant);
+    ash::TypographyProvider::Get()->StyleLabel(ash::TypographyToken::kCrosBody2,
+                                               *label_);
   } else {
     image_->SetPreferredSize(
         gfx::Size(kUnifiedSystemInfoHeight, kUnifiedSystemInfoHeight));
@@ -107,7 +110,7 @@ ManagedStateView::ManagedStateView(PressedCallback callback,
   if (features::IsQsRevampEnabled()) {
     views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::ON);
     views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
-                                                  kManagedStateHighlightRadius);
+                                                  kManagedStateCornerRadius);
   } else {
     views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::OFF);
   }
@@ -121,16 +124,20 @@ views::View* ManagedStateView::GetTooltipHandlerForPoint(
 
 void ManagedStateView::OnThemeChanged() {
   views::Button::OnThemeChanged();
+  if (features::IsQsRevampEnabled()) {
+    const std::pair<SkColor, float> base_color_and_opacity =
+        AshColorProvider::Get()->GetInkDropBaseColorAndOpacity();
+    views::InkDrop::Get(this)->SetBaseColor(base_color_and_opacity.first);
+    image_->SetImage(gfx::CreateVectorIcon(
+        *icon_,
+        GetColorProvider()->GetColor(cros_tokens::kCrosSysOnSurfaceVariant)));
+    return;
+  }
   label_->SetEnabledColor(GetContentLayerColor(
       AshColorProvider::ContentLayerType::kTextColorSecondary));
   image_->SetImage(gfx::CreateVectorIcon(
       *icon_, GetContentLayerColor(
                   AshColorProvider::ContentLayerType::kIconColorSecondary)));
-  if (features::IsQsRevampEnabled()) {
-    const std::pair<SkColor, float> base_color_and_opacity =
-        AshColorProvider::Get()->GetInkDropBaseColorAndOpacity();
-    views::InkDrop::Get(this)->SetBaseColor(base_color_and_opacity.first);
-  }
 }
 
 void ManagedStateView::PaintButtonContents(gfx::Canvas* canvas) {
@@ -140,14 +147,14 @@ void ManagedStateView::PaintButtonContents(gfx::Canvas* canvas) {
   // Draw a button outline similar to ChannelIndicatorQuickSettingsView's
   // VersionButton outline.
   cc::PaintFlags flags;
-  flags.setColor(AshColorProvider::Get()->GetContentLayerColor(
-      ColorProvider::ContentLayerType::kSeparatorColor));
+  flags.setColor(GetColorProvider()->GetColor(cros_tokens::kCrosSysSeparator));
   flags.setStyle(cc::PaintFlags::kStroke_Style);
+  flags.setStrokeWidth(kManagedStateStrokeWidth);
   flags.setAntiAlias(true);
-  canvas->DrawPath(
-      SkPath().addRoundRect(gfx::RectToSkRect(GetLocalBounds()),
-                            kManagedStateCornerRadii, SkPathDirection::kCW),
-      flags);
+  const float half_stroke_width = kManagedStateStrokeWidth / 2.0f;
+  gfx::RectF bounds(GetLocalBounds());
+  bounds.Inset(half_stroke_width);
+  canvas->DrawRoundRect(bounds, kManagedStateCornerRadius, flags);
 }
 
 BEGIN_METADATA(ManagedStateView, views::Button)

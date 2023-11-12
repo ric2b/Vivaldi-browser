@@ -5,8 +5,6 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/notes/note_navigation_controller.h"
-
 class Browser;
 
 // The Panel Controller

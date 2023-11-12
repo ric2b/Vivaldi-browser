@@ -9,7 +9,6 @@
 #include <memory>
 #include <vector>
 
-#include "ash/components/arc/mojom/accessibility_helper.mojom.h"
 #include "ash/webui/eche_app_ui/proto/accessibility_mojom.pb.h"
 #include "base/check.h"
 #include "base/containers/flat_map.h"
@@ -18,6 +17,8 @@
 #include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
 #include "mojo/public/cpp/bindings/struct_ptr.h"
+#include "services/accessibility/android/public/mojom/accessibility_helper.mojom.h"
+#include "ui/accessibility/ax_enums.mojom-shared.h"
 
 namespace ash::eche_app {
 AccessibilityTreeConverter::AccessibilityTreeConverter() = default;
@@ -164,6 +165,138 @@ AccessibilityTreeConverter::ConvertEventDataProtoToMojom(
   return out_data;
 }
 
+absl::optional<proto::AccessibilityActionType> ConvertType(
+    ax::mojom::Action action_type) {
+  switch (action_type) {
+    case ax::mojom::Action::kDoDefault:
+      return proto::AccessibilityActionType::ACTION_CLICK;
+    case ax::mojom::Action::kFocus:
+      return proto::AccessibilityActionType::ACTION_ACCESSIBILITY_ACTION_FOCUS;
+    case ax::mojom::Action::kSetSequentialFocusNavigationStartingPoint:
+      return proto::AccessibilityActionType::ACTION_ACCESSIBILITY_FOCUS;
+    case ax::mojom::Action::kScrollToMakeVisible:
+      return proto::AccessibilityActionType::ACTION_SHOW_ON_SCREEN;
+    case ax::mojom::Action::kScrollBackward:
+      return proto::AccessibilityActionType::ACTION_SCROLL_BACKWARD;
+    case ax::mojom::Action::kScrollForward:
+      return proto::AccessibilityActionType::ACTION_SCROLL_FORWARD;
+    case ax::mojom::Action::kScrollUp:
+      return proto::AccessibilityActionType::ACTION_SCROLL_UP;
+    case ax::mojom::Action::kScrollDown:
+      return proto::AccessibilityActionType::ACTION_SCROLL_DOWN;
+    case ax::mojom::Action::kScrollLeft:
+      return proto::AccessibilityActionType::ACTION_SCROLL_LEFT;
+    case ax::mojom::Action::kScrollRight:
+      return proto::AccessibilityActionType::ACTION_SCROLL_RIGHT;
+    case ax::mojom::Action::kScrollToPositionAtRowColumn:
+      return proto::AccessibilityActionType::ACTION_SCROLL_TO_POSITION;
+    case ax::mojom::Action::kCustomAction:
+      return proto::AccessibilityActionType::ACTION_CUSTOM_ACTION;
+    case ax::mojom::Action::kSetAccessibilityFocus:
+      return proto::AccessibilityActionType::ACTION_ACCESSIBILITY_FOCUS;
+    case ax::mojom::Action::kClearAccessibilityFocus:
+      return proto::AccessibilityActionType::ACTION_CLEAR_ACCESSIBILITY_FOCUS;
+    case ax::mojom::Action::kGetTextLocation:
+      return proto::AccessibilityActionType::ACTION_GET_TEXT_LOCATION;
+    case ax::mojom::Action::kShowTooltip:
+      return proto::AccessibilityActionType::ACTION_SHOW_TOOLTIP;
+    case ax::mojom::Action::kHideTooltip:
+      return proto::AccessibilityActionType::ACTION_HIDE_TOOLTIP;
+    case ax::mojom::Action::kCollapse:
+      return proto::AccessibilityActionType::ACTION_COLLAPSE;
+    case ax::mojom::Action::kExpand:
+      return proto::AccessibilityActionType::ACTION_EXPAND;
+    case ax::mojom::Action::kLongClick:
+      return proto::AccessibilityActionType::ACTION_LONG_CLICK;
+    default:
+      return absl::nullopt;
+  }
+}
+
+void PopulateActionParameters(const ui::AXActionData& chrome_data,
+                              proto::AccessibilityActionData& action_data) {
+  switch (action_data.action_type()) {
+    case proto::AccessibilityActionType::ACTION_SCROLL_TO_POSITION: {
+      const auto [row, column] = chrome_data.row_column;
+      auto* row_kvp = action_data.add_int_parameters();
+      row_kvp->set_key(proto::ActionIntArgumentType::TYPE_ROW_INT);
+      row_kvp->set_value(row);
+      auto* col_kvp = action_data.add_int_parameters();
+      col_kvp->set_key(proto::ActionIntArgumentType::TYPE_COLUMN_INT);
+      col_kvp->set_value(column);
+      break;
+    }
+    case proto::AccessibilityActionType::ACTION_CUSTOM_ACTION:
+      action_data.set_custom_action_id(chrome_data.custom_action_id);
+      break;
+    case proto::AccessibilityActionType::ACTION_NEXT_HTML_ELEMENT:
+    case proto::AccessibilityActionType::ACTION_PREVIOUS_HTML_ELEMENT:
+    case proto::AccessibilityActionType::ACTION_ACCESSIBILITY_ACTION_FOCUS:
+    case proto::AccessibilityActionType::ACTION_CLEAR_FOCUS:
+    case proto::AccessibilityActionType::ACTION_SELECT:
+    case proto::AccessibilityActionType::ACTION_CLEAR_SELECTION:
+    case proto::AccessibilityActionType::ACTION_CLICK:
+    case proto::AccessibilityActionType::ACTION_LONG_CLICK:
+    case proto::AccessibilityActionType::ACTION_ACCESSIBILITY_FOCUS:
+    case proto::AccessibilityActionType::ACTION_CLEAR_ACCESSIBILITY_FOCUS:
+    case proto::AccessibilityActionType::ACTION_NEXT_AT_MOVEMENT_GRANULARITY:
+    case proto::AccessibilityActionType::
+        ACTION_PREVIOUS_AT_MOVEMENT_GRANULARITY:
+    case proto::AccessibilityActionType::ACTION_SCROLL_FORWARD:
+    case proto::AccessibilityActionType::ACTION_SCROLL_BACKWARD:
+    case proto::AccessibilityActionType::ACTION_COPY:
+    case proto::AccessibilityActionType::ACTION_PASTE:
+    case proto::AccessibilityActionType::ACTION_CUT:
+    case proto::AccessibilityActionType::ACTION_SET_SELECTION:
+    case proto::AccessibilityActionType::ACTION_EXPAND:
+    case proto::AccessibilityActionType::ACTION_COLLAPSE:
+    case proto::AccessibilityActionType::ACTION_DISMISS:
+    case proto::AccessibilityActionType::ACTION_SET_TEXT:
+    case proto::AccessibilityActionType::ACTION_CONTEXT_CLICK:
+    case proto::AccessibilityActionType::ACTION_SCROLL_DOWN:
+    case proto::AccessibilityActionType::ACTION_SCROLL_LEFT:
+    case proto::AccessibilityActionType::ACTION_SCROLL_RIGHT:
+    case proto::AccessibilityActionType::ACTION_SCROLL_UP:
+    case proto::AccessibilityActionType::ACTION_SET_PROGRESS:
+    case proto::AccessibilityActionType::ACTION_SHOW_ON_SCREEN:
+    case proto::AccessibilityActionType::ACTION_GET_TEXT_LOCATION:
+    case proto::AccessibilityActionType::ACTION_SHOW_TOOLTIP:
+    case proto::AccessibilityActionType::ACTION_HIDE_TOOLTIP:
+    case proto::AccessibilityActionType::
+        AccessibilityActionType_INT_MIN_SENTINEL_DO_NOT_USE_:
+    case proto::AccessibilityActionType::
+        AccessibilityActionType_INT_MAX_SENTINEL_DO_NOT_USE_:
+      break;
+  }
+}
+
+absl::optional<proto::AccessibilityActionData>
+AccessibilityTreeConverter::ConvertActionDataToProto(
+    const ui::AXActionData& data) {
+  proto::AccessibilityActionData action_data;
+  // TODO(francisjp/282044350) window_id - We may not actually end up having a
+  // window id since there is only one window at a time.
+  auto action_type = ConvertType(data.action);
+  if (!action_type.has_value()) {
+    return absl::nullopt;
+  }
+  action_data.set_action_type(action_type.value());
+  action_data.set_node_id(data.target_node_id);
+  PopulateActionParameters(data, action_data);
+
+  if (action_type == proto::AccessibilityActionType::ACTION_GET_TEXT_LOCATION) {
+    action_data.set_start_index(data.start_index);
+    action_data.set_end_index(data.end_index);
+    // TODO(francisjp/282044350) Refresh with Extra Data here
+    bool refresh_success = true;
+    if (!refresh_success) {
+      return absl::nullopt;
+    }
+  }
+
+  return action_data;
+}
+
 // Object converters
 mojo::StructPtr<AXWindowData> AccessibilityTreeConverter::ToMojomWindowData(
     const proto::AccessibilityWindowInfoData& proto_in) {
@@ -234,8 +367,8 @@ mojo::StructPtr<AXNodeData> AccessibilityTreeConverter::ToMojomNodeData(
       mojom_out->spannable_string_properties,
       base::BindRepeating(
           [](AccessibilityTreeConverter* converter, proto::SpanEntry entry,
-             arc::mojom::SpanEntryPtr* out_entry_ptr) {
-            auto result_ptr = arc::mojom::SpanEntry::New();
+             ax::android::mojom::SpanEntryPtr* out_entry_ptr) {
+            auto result_ptr = ax::android::mojom::SpanEntry::New();
             if (entry.start() >= entry.end()) {
               return false;
             }
@@ -274,7 +407,7 @@ mojo::StructPtr<AXNodeData> AccessibilityTreeConverter::ToMojomNodeData(
   if (proto_in.has_collection_item_info()) {
     const auto& proto_collection_item_info = proto_in.collection_item_info();
     mojom_out->collection_item_info =
-        arc::mojom::AccessibilityCollectionItemInfoData::New();
+        ax::android::mojom::AccessibilityCollectionItemInfoData::New();
     mojom_out->collection_item_info->row_index =
         proto_collection_item_info.row_index();
     mojom_out->collection_item_info->column_index =
@@ -312,7 +445,8 @@ mojo::StructPtr<AXNodeData> AccessibilityTreeConverter::ToMojomNodeData(
   CopyRepeatedPtrFieldToOptionalVector(
       proto_in.standard_actions(), mojom_out->standard_actions,
       base::BindRepeating([](proto::AccessibilityActionInHost proto_action) {
-        auto result_ptr = arc::mojom::AccessibilityActionInAndroid::New();
+        auto result_ptr =
+            ax::android::mojom::AccessibilityActionInAndroid::New();
         result_ptr->id = proto_action.id();
         result_ptr->label = proto_action.label();
         return result_ptr;
@@ -321,7 +455,8 @@ mojo::StructPtr<AXNodeData> AccessibilityTreeConverter::ToMojomNodeData(
   CopyRepeatedPtrFieldToOptionalVector(
       proto_in.custom_actions(), mojom_out->custom_actions,
       base::BindRepeating([](proto::AccessibilityActionInHost proto_action) {
-        auto result_ptr = arc::mojom::AccessibilityActionInAndroid::New();
+        auto result_ptr =
+            ax::android::mojom::AccessibilityActionInAndroid::New();
         result_ptr->id = proto_action.id();
         result_ptr->label = proto_action.label();
         return result_ptr;

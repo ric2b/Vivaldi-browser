@@ -13,7 +13,7 @@
 <translation id="1480046233931937785">Créditos</translation>
 <translation id="1526344461589023948">Se ha producido un error al intentar guardar una actualización descargada. Por favor, comprueba que tu equipo tenga suficiente espacio en disco e inténtalo de nuevo más tarde.</translation>
 <translation id="1657174850639146440">Monstruo 9</translation>
-<translation id="1676595396635191120">Ventana privada nueva</translation>
+<translation id="1676595396635191120">Nueva ventana privada</translation>
 <translation id="1702758681952953055">Si el error persiste, por favor repórtalo e incluye los siguientes detalles:</translation>
 <translation id="1728549374069268714">Pegar e ir</translation>
 <translation id="1756026472674246267">Abrir enlace en una pestaña nueva</translation>
@@ -44,7 +44,7 @@
 <translation id="2989805286512600854">Abrir en pestaña nueva</translation>
 <translation id="3027988479108856431">Lamentablemente, las preferencias de Yandex no estarán disponibles mientras dicho navegador esté ejecutándose. Para poder importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Yandex y después haz clic en «Continuar».</translation>
 <translation id="3084011186245865060">Paisaje 6</translation>
-<translation id="3093931836425623631">Vivaldi ha sido hecho posible gracias al proyecto de código abierto Chromium y a otros programas de código abierto.</translation>
+<translation id="3093931836425623631">Vivaldi es posible gracias al proyecto de código abierto Chromium y a otros programas de código abierto.</translation>
 <translation id="3127383884976966729">Animal 7</translation>
 <translation id="3156398087075132709">Marcador nuevo</translation>
 <translation id="3255747772218936245">Instalar actualización</translation>
@@ -115,7 +115,7 @@
 <translation id="5716238312826274098">Desactivando notificaciones</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> está disponible (actualmente tienes instalada la versión <ph name="OLD_VERSION" />). ¿Quieres descargarla ahora?</translation>
 <translation id="5770433027661640693">Paisaje 10</translation>
-<translation id="5857090052475505287">Carpeta nueva</translation>
+<translation id="5857090052475505287">Nueva carpeta</translation>
 <translation id="588258955323874662">Pantalla completa</translation>
 <translation id="5916080360077521750">Lamentablemente, las preferencias de Chrome no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Chrome y después haz clic en «Continuar».</translation>
 <translation id="6040143037577758943">Cerrar</translation>

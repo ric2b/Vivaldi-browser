@@ -1,0 +1,5 @@
+# Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+declare_args() {
+  enable_relay_proxy = false
+}

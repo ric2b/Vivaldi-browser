@@ -52,6 +52,9 @@ config("features") {
   if (is_vivaldi_volvo) {
     defines += [ "OEM_VOLVO_BUILD" ]
   }
+  if (is_vivaldi_gas) {
+    defines += [ "OEM_GAS_BUILD" ]
+  }
 }
 
 config("linux_386_linking") {

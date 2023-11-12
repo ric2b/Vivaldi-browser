@@ -5,6 +5,7 @@
 module auction_worklet.mojom;
 
 import "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom";
+import "content/services/auction_worklet/public/mojom/reject_reason.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "services/network/public/mojom/url_loader_factory.mojom";
 import "third_party/blink/public/mojom/devtools/devtools_agent.mojom";
@@ -55,17 +56,20 @@ struct ComponentAuctionReportResultParams {
   bool has_modified_bid;
 };
 
-// The reason a bid was rejected by an auction.
-enum RejectReason {
-  kNotAvailable = 0,
-  kInvalidBid = 1,
-  kBidBelowAuctionFloor = 2,
-  kPendingApprovalByExchange = 3,
-  kDisapprovedByExchange = 4,
-  kBlockedByPublisher = 5,
-  kLanguageExclusions = 6,
-  kCategoryExclusions = 7,
-  kBelowKAnonThreshold = 8,
+// Represents the time between SellerWorklet::ScoreAd and each of the
+// dependencies to SellerWorklet::ScoreAdIfReady, which can help to identify
+// the slowest dependency, both in absolute terms and relative to other
+// dependencies. Each of the latencies recorded here may be null if that
+// dependency didn't apply for this call to ScoreAd.
+struct ScoreAdDependencyLatencies {
+  // Load of Script
+  mojo_base.mojom.TimeDelta? code_ready_latency;
+
+  // Download of DirectFromSellerSignals
+  mojo_base.mojom.TimeDelta? direct_from_seller_signals_latency;
+
+  // Download of TrustedScoringSignals
+  mojo_base.mojom.TimeDelta? trusted_scoring_signals_latency;
 };
 
 // Interface for returning ScoreAd results. The advantage of having an interface
@@ -109,6 +113,12 @@ interface ScoreAdClient {
   //
   // `pa_requests` The various requests made to the Private Aggregation API.
   //
+  // `scoring_latency` How long it took to execute the scoreAd() JavaScript,
+  //  (including the top-level).
+  //
+  // `trusted_signals_fetch_latency` How long it took to fetch the trusted
+  //  scoring signals, if any. 0 if there weren't any.
+  //
   // `errors` are various error messages to be used for debugging. These are too
   //  sensitive for the renderers to see. `errors` should not be assumed to be
   //  empty if `score` is positive, nor should it be assumed to be non-empty if
@@ -122,6 +132,8 @@ interface ScoreAdClient {
                     url.mojom.Url? debug_loss_report_url,
                     url.mojom.Url? debug_win_report_url,
                     array<PrivateAggregationRequest> pa_requests,
+                    mojo_base.mojom.TimeDelta scoring_latency,
+                    ScoreAdDependencyLatencies score_ad_dependency_latencies,
                     array<string> errors);
 };
 
@@ -261,6 +273,12 @@ interface SellerWorklet {
   // `browser_signal_interest_group_owner` The owner of the interest group
   //  that offered the winning bid.
   //
+  //  `browser_signal_buyer_and_seller_reporting_id`. If the winning ad
+  //  specified buyerAndSellerReportingId, and that ID passed the appropriate
+  //  k-anonymity check, a value to set as
+  //  browserSignals.buyerAndSellerReportingId will be included here; otherwise
+  //  it is nullopt.
+  //
   // `browser_signal_render_url` The render URL provided by the winning bid.
   //
   // `browser_signal_bid` The numeric value of the winning bid.
@@ -308,6 +326,9 @@ interface SellerWorklet {
   //
   // `pa_requests` The various requests made to the Private Aggregation API.
   //
+  // `reporting_latency` How long it took to run `reportResult()` JS, including
+  //  the top-level.
+  //
   // `errors` are various error messages to be used for debugging. These are too
   //  sensitive for the renderers to see. `errors` should not be assumed to be
   //  empty if the other values are populated, nor should it be assumed to be
@@ -319,6 +340,7 @@ interface SellerWorklet {
       url.mojom.Url? direct_from_seller_auction_signals,
       ComponentAuctionOtherSeller? browser_signals_other_seller,
       url.mojom.Origin browser_signal_interest_group_owner,
+      string? browser_signal_buyer_and_seller_reporting_id,
       url.mojom.Url browser_signal_render_url,
       double browser_signal_bid,
       blink.mojom.AdCurrency? browser_signal_bid_currency,
@@ -334,6 +356,7 @@ interface SellerWorklet {
            url.mojom.Url? report_url,
            map<string, url.mojom.Url> ad_beacon_map,
            array<PrivateAggregationRequest> pa_requests,
+           mojo_base.mojom.TimeDelta reporting_latency,
            array<string> error_msgs);
 
   // Establishes a debugger connection to the worklet.

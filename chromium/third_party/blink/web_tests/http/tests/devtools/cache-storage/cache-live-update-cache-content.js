@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {TestRunner} from 'test_runner';
+import {ApplicationTestRunner} from 'application_test_runner';
+
 (async function() {
   TestRunner.addResult(`Tests that cache view updates when the cache is changed.\n`);
-  await TestRunner.loadLegacyModule('console'); await TestRunner.loadTestModule('application_test_runner');
+  await TestRunner.loadLegacyModule('console');
     // Note: every test that uses a storage API must manually clean-up state from previous tests.
   await ApplicationTestRunner.resetState();
 
@@ -13,7 +16,6 @@
   var cacheStorageModel = TestRunner.mainTarget.model(SDK.ServiceWorkerCacheModel);
   cacheStorageModel.enable();
 
-  await new Promise(resolve => ApplicationTestRunner.waitForCacheRefresh(resolve));
   await ApplicationTestRunner.clearAllCaches();
   await ApplicationTestRunner.dumpCacheTree();
   await ApplicationTestRunner.createCache('testCache1');

@@ -13,7 +13,9 @@
 #include "services/network/shared_dictionary/shared_dictionary_manager.h"
 #include "services/network/shared_dictionary/shared_dictionary_storage.h"
 #include "services/network/shared_dictionary/shared_dictionary_storage_in_memory.h"
+#include "services/network/test/client_security_state_builder.h"
 #include "services/network/test/test_url_loader_client.h"
+#include "url/scheme_host_port.h"
 
 namespace network::cors {
 namespace {
@@ -39,19 +41,25 @@ class CorsURLLoaderSharedDictionaryTest : public CorsURLLoaderTestBase {
       const CorsURLLoaderSharedDictionaryTest&) = delete;
 
  protected:
-  void ResetFactory() {
+  void ResetFactory(bool is_web_secure_context = true) {
     ResetFactoryParams factory_params;
     factory_params.isolation_info = isolation_info_;
+    factory_params.client_security_state =
+        ClientSecurityStateBuilder()
+            .WithIsSecureContext(is_web_secure_context)
+            .Build();
     CorsURLLoaderTestBase::ResetFactory(isolation_info_.frame_origin(),
                                         kRendererProcessId, factory_params);
   }
 
-  ResourceRequest CreateResourceRequest() {
+  ResourceRequest CreateResourceRequest(
+      bool shared_dictionary_writer_enabled = true) {
     ResourceRequest request;
     request.method = "GET";
     request.mode = mojom::RequestMode::kCors;
     request.url = GURL("https://origin.test/test");
     request.request_initiator = isolation_info_.frame_origin();
+    request.shared_dictionary_writer_enabled = shared_dictionary_writer_enabled;
     return request;
   }
 
@@ -92,8 +100,8 @@ class CorsURLLoaderSharedDictionaryTest : public CorsURLLoaderTestBase {
       bool expect_exists,
       const GURL& dictionary_url = GURL("https://origin.test/test")) {
     ASSERT_TRUE(isolation_info_.frame_origin());
-    absl::optional<SharedDictionaryStorageIsolationKey> isolation_key =
-        SharedDictionaryStorageIsolationKey::MaybeCreate(isolation_info_);
+    absl::optional<net::SharedDictionaryIsolationKey> isolation_key =
+        net::SharedDictionaryIsolationKey::MaybeCreate(isolation_info_);
     ASSERT_TRUE(isolation_key);
     scoped_refptr<SharedDictionaryStorage> storage =
         network_context()->GetSharedDictionaryManager()->GetStorage(
@@ -105,7 +113,7 @@ class CorsURLLoaderSharedDictionaryTest : public CorsURLLoaderTestBase {
     }
 
     ASSERT_EQ(1u, dictionary_map.size());
-    EXPECT_EQ(url::Origin::Create(dictionary_url),
+    EXPECT_EQ(url::SchemeHostPort(dictionary_url),
               dictionary_map.begin()->first);
 
     ASSERT_EQ(1u, dictionary_map.begin()->second.size());
@@ -115,18 +123,18 @@ class CorsURLLoaderSharedDictionaryTest : public CorsURLLoaderTestBase {
     EXPECT_EQ(dictionary_url, dictionary_info.url());
     EXPECT_EQ(shared_dictionary::kDefaultExpiration,
               dictionary_info.expiration());
-    EXPECT_EQ("/path*", dictionary_info.path_pattern());
+    EXPECT_EQ("/path*", dictionary_info.match());
     EXPECT_EQ(kTestData.size(), dictionary_info.size());
     EXPECT_EQ(kTestData, std::string(dictionary_info.data()->data(),
                                      dictionary_info.size()));
   }
 
   const std::map<
-      url::Origin,
+      url::SchemeHostPort,
       std::map<std::string, SharedDictionaryStorageInMemory::DictionaryInfo>>&
   GetInMemoryDictionaryMap(SharedDictionaryStorage* storage) {
     return static_cast<SharedDictionaryStorageInMemory*>(storage)
-        ->GetDictionaryMapForTesting();
+        ->GetDictionaryMap();
   }
 
   net::IsolationInfo isolation_info_;
@@ -377,6 +385,45 @@ TEST_F(CorsURLLoaderSharedDictionaryTest,
   // When the request was aborted from the network side after OnComplete() is
   // called, the response should be stored to the dictionary storage.
   CheckDictionaryInStorage(/*expect_exists=*/true);
+}
+
+TEST_F(CorsURLLoaderSharedDictionaryTest, InsecureContext) {
+  ResetFactory(/*is_web_secure_context=*/false);
+
+  ResourceRequest request = CreateResourceRequest();
+  EXPECT_EQ(mojom::RequestMode::kCors, request.mode);
+  CreateLoaderAndStart(request);
+  RunUntilCreateLoaderAndStartCalled();
+
+  CreateDataPipeAndWriteTestData();
+  CallOnReceiveResponseAndOnCompleteAndFinishBody();
+
+  RunUntilComplete();
+  EXPECT_EQ(net::OK, client().completion_status().error_code);
+
+  // The response of should be stored to the dictionary storage because the web
+  // context is not secure.
+  CheckDictionaryInStorage(/*expect_exists=*/false);
+}
+
+TEST_F(CorsURLLoaderSharedDictionaryTest, SharedDictionaryWriterDisabled) {
+  ResetFactory();
+
+  ResourceRequest request =
+      CreateResourceRequest(/*shared_dictionary_writer_enabled=*/false);
+  EXPECT_EQ(mojom::RequestMode::kCors, request.mode);
+  CreateLoaderAndStart(request);
+  RunUntilCreateLoaderAndStartCalled();
+
+  CreateDataPipeAndWriteTestData();
+  CallOnReceiveResponseAndOnCompleteAndFinishBody();
+
+  RunUntilComplete();
+  EXPECT_EQ(net::OK, client().completion_status().error_code);
+
+  // The response of should be stored to the dictionary storage because shared
+  // dictionary writer is disabled.
+  CheckDictionaryInStorage(/*expect_exists=*/false);
 }
 
 }  // namespace network::cors

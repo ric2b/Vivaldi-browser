@@ -10,10 +10,9 @@ import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 
 import {assertExhaustive} from '../assert_extras.js';
-import {routes} from '../os_settings_routes.js';
-import {Route} from '../router.js';
+import {Route, routes} from '../router.js';
 
-import {getInputMethodSettings, SettingsType} from './input_method_settings.js';
+import {getInputMethodSettings, SettingsContext, SettingsType} from './input_method_settings.js';
 import {JapaneseInputMode, JapaneseKeymapStyle, JapanesePunctuationStyle, JapaneseSectionShortcut, JapaneseShiftKeyModeStyle, JapaneseSpaceInputStyle, JapaneseSymbolStyle} from './input_method_types.js';
 
 /**
@@ -254,12 +253,6 @@ export enum SettingsHeaders {
 const Settings = {
   [SettingsType.LATIN_SETTINGS]: [
     {
-      title: SettingsHeaders.PHYSICAL_KEYBOARD,
-      optionNames: [{
-        name: OptionType.PHYSICAL_KEYBOARD_AUTO_CORRECTION_LEVEL,
-      }],
-    },
-    {
       title: SettingsHeaders.VIRTUAL_KEYBOARD,
       optionNames: [
         {name: OptionType.ENABLE_SOUND_ON_KEYPRESS},
@@ -387,6 +380,12 @@ const Settings = {
     optionNames:
         [{name: OptionType.PHYSICAL_KEYBOARD_ENABLE_PREDICTIVE_WRITING}],
   }],
+  [SettingsType.LATIN_PHYSICAL_KEYBOARD_SETTINGS]: [{
+    title: SettingsHeaders.PHYSICAL_KEYBOARD,
+    optionNames: [{
+      name: OptionType.PHYSICAL_KEYBOARD_AUTO_CORRECTION_LEVEL,
+    }],
+  }],
 } satisfies Record<SettingsType, Array<{
                      title: SettingsHeaders,
                      optionNames: Array<{
@@ -410,15 +409,12 @@ export function getFirstPartyInputMethodEngineId(id: string): string {
  * @return true if the input method's options page is implemented.
  */
 export function hasOptionsPageInSettings(
-    id: string, predictiveWritingEnabled: boolean,
-    isJapaneseSettingsEnabled: boolean): boolean {
+    id: string, context: SettingsContext): boolean {
   if (!isFirstPartyInputMethodId(id)) {
     return false;
   }
   const engineId = getFirstPartyInputMethodEngineId(id);
-
-  const inputMethodSettings = getInputMethodSettings(
-      predictiveWritingEnabled, isJapaneseSettingsEnabled);
+  const inputMethodSettings = getInputMethodSettings(context);
   return !!inputMethodSettings[engineId];
 }
 
@@ -428,8 +424,7 @@ export function hasOptionsPageInSettings(
  * @return the options to be displayed.
  */
 export function generateOptions(
-    engineId: string, predictiveWritingEnabled: boolean,
-    isJapaneseSettingsEnabled: boolean): Array<{
+    engineId: string, context: SettingsContext): Array<{
   title: SettingsHeaders,
   optionNames: Array<{name: OptionType, dependentOptions?: OptionType[]}>,
 }> {
@@ -437,8 +432,7 @@ export function generateOptions(
     title: SettingsHeaders,
     optionNames: Array<{name: OptionType, dependentOptions?: OptionType[]}>,
   }> = [];
-  const inputMethodSettings = getInputMethodSettings(
-      predictiveWritingEnabled, isJapaneseSettingsEnabled);
+  const inputMethodSettings = getInputMethodSettings(context);
   const engineSettings = inputMethodSettings[engineId];
   if (engineSettings) {
     const pushedOptions = new Map<SettingsHeaders, number>();

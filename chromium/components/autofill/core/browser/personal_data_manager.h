@@ -49,7 +49,7 @@
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/base/user_selectable_type.h"
-#include "components/sync/driver/sync_service_observer.h"
+#include "components/sync/service/sync_service_observer.h"
 #include "components/webdata/common/web_data_service_consumer.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -368,6 +368,9 @@ class PersonalDataManager : public KeyedService,
   std::vector<const AutofillOfferData*>
   GetActiveAutofillPromoCodeOffersForOrigin(GURL origin) const;
 
+  // Return the URL for the card art image, if available.
+  GURL GetCardArtURL(const CreditCard& credit_card) const;
+
   // Returns the customized credit card art image for the |card_art_url|. If no
   // image has been cached, an asynchronous request will be sent to fetch the
   // image and this function will return nullptr.
@@ -462,6 +465,16 @@ class PersonalDataManager : public KeyedService,
   // card duplicate.
   static void DedupeCreditCardToSuggest(
       std::list<CreditCard*>* cards_to_suggest);
+
+  // Check if `credit_card` has a duplicate card present in either Local or
+  // Server card lists.
+  bool IsCardPresentAsBothLocalAndServerCards(const CreditCard& credit_card);
+
+  // Returns a pointer to the server card that has duplicate information of the
+  // `local_card`. It is not guaranteed that a server card is found. If not,
+  // nullptr is returned.
+  const CreditCard* GetServerCardForLocalCard(
+      const CreditCard* local_card) const;
 
   // Cancels any pending queries to the server web database.
   void CancelPendingServerQueries();
@@ -593,8 +606,27 @@ class PersonalDataManager : public KeyedService,
   // Returns true if Sync is enabled for `data_type`.
   bool IsSyncEnabledFor(syncer::UserSelectableType data_type) const;
 
-  // Returns true if payments mandatory re-auth is enabled.
-  bool IsAutofillPaymentMethodsMandatoryReauthEnabled();
+  // The functions below are related to the payments mandatory re-auth feature.
+  // All of this functionality is done through per-profile per-device prefs.
+  // `SetPaymentMethodsMandatoryReauthEnabled()` is used to update the opt-in
+  // status of the feature, and is called when a user successfully completes a
+  // full re-auth opt-in flow (with a successful authentication).
+  // `IsPaymentMethodsMandatoryReauthEnabled()` is checked before triggering the
+  // re-auth feature during a payments autofill flow.
+  // `ShouldShowPaymentMethodsMandatoryReauthPromo()` is used to check whether
+  // we should show the re-auth opt-in promo once a user submits a form, and
+  // there was no interactive authentication for the most recent payments
+  // autofill flow. `IncrementPaymentMethodsMandatoryReauthPromoShownCounter()`
+  // increments the counter that denotes the number of times that the promo has
+  // been shown, and this counter is used very similarly to a strike database
+  // when it comes time to check whether we should show the promo.
+  void SetPaymentMethodsMandatoryReauthEnabled(bool enabled);
+  virtual bool IsPaymentMethodsMandatoryReauthEnabled();
+  bool ShouldShowPaymentMethodsMandatoryReauthPromo();
+  void IncrementPaymentMethodsMandatoryReauthPromoShownCounter();
+
+  // Returns true if the user pref to store and autofill CVC is enabled.
+  virtual bool IsPaymentCvcStorageAndFillingEnabled();
 
   // Used to automatically import addresses without a prompt. Should only be
   // set to true in tests.

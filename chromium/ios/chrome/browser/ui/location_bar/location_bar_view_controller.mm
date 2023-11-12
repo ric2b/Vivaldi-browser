@@ -35,13 +35,6 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/shared/public/commands/popup_menu_commands.h"
-#import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
-#import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
-#import "ios/ui/helpers/vivaldi_colors_helper.h"
-#import "ios/ui/helpers/vivaldi_global_helpers.h"
-#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -112,28 +105,6 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 
 // Displays the long press menu.
 - (void)showLongPressMenu:(UILongPressGestureRecognizer*)sender;
-
-// Vivaldi
-// Button for trigerring vivaldi menu.
-@property(nonatomic, assign) UIButton* vivaldiMenuButton;
-// Button for shield item.
-@property(nonatomic, assign) UIButton* vivaldiShieldButton;
-// Location bar steady view leading constraint when shield button is not
-// visible
-@property(nonatomic, strong) NSLayoutConstraint*
-    locationBarSteadyViewLeadingConstraintNoShield;
-// Location bar steady view leading constraint when shield button is visible
-@property(nonatomic, strong) NSLayoutConstraint*
-    locationBarSteadyViewLeadingConstraint;
-// Location bar steady view trailing constraint when no menu button visible
-@property(nonatomic, strong) NSLayoutConstraint*
-    locationBarSteadyViewTrailingConstraintNoMenu;
-// Location bar steady view trailing constraint when menu button visible
-@property(nonatomic, strong) NSLayoutConstraint*
-    locationBarSteadyViewTrailingConstraint;
-@property(nonatomic, assign) ATBSettingType atbSettingType;
-// End Vivaldi
-
 @end
 
 @implementation LocationBarViewController
@@ -148,18 +119,6 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
     _hideShareButtonWhileOnIncognitoNTP;
 @synthesize shareButtonEnabled = _shareButtonEnabled;
 @synthesize offsetProvider = _offsetProvider;
-
-// Vivaldi
-@synthesize locationBarSteadyViewLeadingConstraint =
-  _locationBarSteadyViewLeadingConstraint;
-@synthesize locationBarSteadyViewLeadingConstraintNoShield =
- _locationBarSteadyViewLeadingConstraintNoShield;
-@synthesize locationBarSteadyViewTrailingConstraint =
-  _locationBarSteadyViewTrailingConstraint;
-@synthesize locationBarSteadyViewTrailingConstraintNoMenu =
-  _locationBarSteadyViewTrailingConstraintNoMenu;
-@synthesize atbSettingType = _atbSettingType;
-// End Vivaldi
 
 #pragma mark - public
 
@@ -182,8 +141,20 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 }
 
 - (void)switchToEditing:(BOOL)editing {
+
+  // Note:(prio@vivaldi.com): We will manipulate the alpha property instead of
+  // hiding and showing the view. This gives much smoother transition effect.
+  if (IsVivaldiRunning()) {
+    self.editView.hidden = NO;
+    self.locationBarSteadyView.hidden = NO;
+
+    self.editView.alpha = editing ? 1 : 0;
+    self.locationBarSteadyView.alpha = editing ? 0 : 1;
+  } else {
   self.editView.hidden = !editing;
   self.locationBarSteadyView.hidden = editing;
+  } // End Vivaldi
+
 }
 
 - (void)setIncognito:(BOOL)incognito {
@@ -196,7 +167,6 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
                           BrowserCoordinatorCommands,
                           ApplicationCommands,
                           LoadQueryCommands,
-                          PopupMenuCommands, // Vivaldi
                           OmniboxCommands>)dispatcher {
   _dispatcher = dispatcher;
 }
@@ -277,14 +247,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 
   [self.view addSubview:self.locationBarSteadyView];
   self.locationBarSteadyView.translatesAutoresizingMaskIntoConstraints = NO;
-
-  if (IsVivaldiRunning()) {
-    [self setUpVivaldiCommon];
-    [self setUpLocationBarConstraintsVivaldi];
-  } else {
   AddSameConstraints(self.locationBarSteadyView, self.view);
-  } // End Vivaldi
-
   [self updateTrailingButtonState];
   [self switchToEditing:NO];
 }
@@ -306,11 +269,6 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [self updateTrailingButtonState];
   [super traitCollectionDidChange:previousTraitCollection];
-
-  // Vivaldi
-  [self handleVivaldiMenuButtonVisibility];
-  // End Vivaldi
-
 }
 
 #pragma mark - FullscreenUIElement
@@ -318,23 +276,23 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 - (void)updateForFullscreenProgress:(CGFloat)progress {
   CGFloat alphaValue = fmax((progress - 0.85) / 0.15, 0);
   CGFloat scaleValue = 0.79 + 0.21 * progress;
-
-  // Vivaldi
-  self.vivaldiMenuButton.alpha = alphaValue;
-  self.vivaldiShieldButton.alpha = alphaValue;
-  self.locationBarSteadyView.backgroundColor =
-    [[UIColor colorNamed:vSearchbarBackgroundColor]
-      colorWithAlphaComponent:alphaValue];
-  self.locationBarSteadyView.alpha = alphaValue;
-  // End Vivaldi
-
   self.locationBarSteadyView.trailingButton.alpha = alphaValue;
   BOOL badgeViewShouldCollapse =
       progress <= kFullscreenProgressBadgeViewThreshold;
   [self.locationBarSteadyView
       setFullScreenCollapsedMode:badgeViewShouldCollapse];
+
+  // Note: (prio@vivaldi.com): We will fade the steady bar view instead of
+  // scaling it. This allows a nice transition altogether for tab strip view
+  // fake status bar view and primary toolbar view.
+  if (IsVivaldiRunning()) {
+    [self.locationBarSteadyView
+        fadeSteadyViewContentsWithAlpha:alphaValue];
+  } else {
   self.locationBarSteadyView.transform =
       CGAffineTransformMakeScale(scaleValue, scaleValue);
+  } // End Vivaldi
+
 }
 
 - (void)updateForFullscreenEnabled:(BOOL)enabled {
@@ -437,17 +395,6 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 }
 - (void)setSteadyViewHidden:(BOOL)hidden {
   self.locationBarSteadyView.hidden = hidden;
-
-  // Vivaldi
-  if (self.hideVivaldiTopToolbarButtons) {
-    self.vivaldiMenuButton.hidden = YES;
-    self.vivaldiShieldButton.hidden = YES;
-  } else {
-    self.vivaldiMenuButton.hidden = hidden;
-    self.vivaldiShieldButton.hidden = hidden;
-  }
-  // End Vivaldi
-
 }
 
 - (void)resetTransforms {
@@ -783,21 +730,11 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
                           (UIContextMenuInteraction*)interaction
     previewForHighlightingMenuWithConfiguration:
         (UIContextMenuConfiguration*)configuration {
-
-  // Vivaldi: We will preview the steady view only since Vivaldi Menu button
-  // is part of location bar and we don't want to show it on the context preview
-  if (IsVivaldiRunning()) {
-    return [[UITargetedPreview alloc]
-        initWithView:self.locationBarSteadyView
-          parameters:[[UIPreviewParameters alloc] init]];
-  } else {
   // Use the location bar's container view because that's the view that has the
   // background color and corner radius.
   return [[UITargetedPreview alloc]
       initWithView:self.view.superview
         parameters:[[UIPreviewParameters alloc] init]];
-  } // End Vivaldi
-
 }
 
 - (UIContextMenuConfiguration*)contextMenuInteraction:
@@ -911,172 +848,8 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   self.isUpdatingCachedClipboardState = NO;
 }
 
-
-#pragma mark - VIVALDI
-
-- (void)viewWillTransitionToSize:(CGSize)size
-       withTransitionCoordinator:
-  (id<UIViewControllerTransitionCoordinator>)coordinator {
-  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
-  [self handleVivaldiMenuButtonVisibility];
-}
-
-/// Set up common UI changes for both iPhone and iPads.
-- (void)setUpVivaldiCommon {
-  self.editView.backgroundColor =
-      [UIColor colorNamed:vSearchbarBackgroundColor];
-  self.editView.layer.cornerRadius = vNTPSearchBarCornerRadius;
-
-  self.locationBarSteadyView.layer.cornerRadius = vNTPSearchBarCornerRadius;
-}
-
-/// Set up Vivaldi menu button and make changes to the UI and constraints for
-/// iPhone. iPad is not affected by this since the menu button is already part
-/// of the tool bar on iPad.
-- (void)setUpLocationBarConstraintsVivaldi {
-
-  UIButton* vivaldiMenuButton = [UIButton new];
-  _vivaldiMenuButton = vivaldiMenuButton;
-  UIImage* menuImage = [UIImage imageNamed:@"toolbar_menu"];
-  [vivaldiMenuButton setImage:menuImage forState:UIControlStateNormal];
-  [vivaldiMenuButton addTarget:self.dispatcher
-                        action:@selector(showToolsMenuPopup)
-              forControlEvents:UIControlEventTouchUpInside];
-  [self.view addSubview:vivaldiMenuButton];
-  [vivaldiMenuButton anchorTop:nil
-                       leading:nil
-                        bottom:nil
-                      trailing:self.view.trailingAnchor
-                          size:vLocationBarVivaldiMenuItemSize];
-  [vivaldiMenuButton centerYInSuperview];
-
-  UIButton* vivaldiShieldButton = [UIButton new];
-  _vivaldiShieldButton = vivaldiShieldButton;
-  vivaldiShieldButton.tintColor = UIColor.vTopToolbarTintColor;
-  [vivaldiShieldButton addTarget:self.dispatcher
-                          action:@selector(showTrackerBlockerManager)
-                forControlEvents:UIControlEventTouchUpInside];
-  [self.view addSubview:vivaldiShieldButton];
-  [vivaldiShieldButton anchorTop:nil
-                         leading:self.view.leadingAnchor
-                          bottom:nil
-                        trailing:nil
-                            size:vLocationBarVivaldiMenuItemSize];
-  [vivaldiShieldButton centerYInSuperview];
-  [self updateVivaldiShieldState:_atbSettingType];
-
-  self.locationBarSteadyView.backgroundColor =
-      [UIColor colorNamed:vSearchbarBackgroundColor];
-  [self.locationBarSteadyView anchorTop:self.view.topAnchor
-                                leading:nil
-                                 bottom:self.view.bottomAnchor
-                               trailing:nil];
-
-  self.locationBarSteadyViewLeadingConstraint =
-    [self.locationBarSteadyView.leadingAnchor
-     constraintEqualToAnchor:vivaldiShieldButton.trailingAnchor
-                    constant:vLocationBarSteadyViewLeadingPadding];
-
-  self.locationBarSteadyViewTrailingConstraint =
-    [self.locationBarSteadyView.trailingAnchor
-     constraintEqualToAnchor:vivaldiMenuButton.leadingAnchor
-                    constant:vLocationBarSteadyViewTrailingPadding];
-
-  self.locationBarSteadyViewLeadingConstraintNoShield =
-    [self.locationBarSteadyView.leadingAnchor
-     constraintEqualToAnchor:self.view.leadingAnchor];
-
-  self.locationBarSteadyViewTrailingConstraintNoMenu =
-    [self.locationBarSteadyView.trailingAnchor
-     constraintEqualToAnchor:self.view.trailingAnchor];
-
-  [self handleVivaldiMenuButtonVisibility];
-}
-
-/// Device orientation change handler for Vivaldi.
-/// In landscape mode for iPhone, we won't show the Vivaldi menu and tracker
-/// blocker shield as they are part of toolbar more menu.
-- (void)handleVivaldiMenuButtonVisibility {
-  if (self.hideVivaldiTopToolbarButtons) {
-    self.vivaldiMenuButton.hidden = YES;
-    self.vivaldiShieldButton.hidden = YES;
-
-    [NSLayoutConstraint deactivateConstraints:@[
-      self.locationBarSteadyViewLeadingConstraint,
-      self.locationBarSteadyViewTrailingConstraint
-    ]];
-
-    [NSLayoutConstraint activateConstraints:@[
-      self.locationBarSteadyViewLeadingConstraintNoShield,
-      self.locationBarSteadyViewTrailingConstraintNoMenu
-    ]];
-  } else {
-    self.vivaldiMenuButton.hidden = NO;
-    self.vivaldiShieldButton.hidden = NO;
-
-    [NSLayoutConstraint deactivateConstraints:@[
-      self.locationBarSteadyViewLeadingConstraintNoShield,
-      self.locationBarSteadyViewTrailingConstraintNoMenu
-    ]];
-
-    [NSLayoutConstraint activateConstraints:@[
-      self.locationBarSteadyViewLeadingConstraint,
-      self.locationBarSteadyViewTrailingConstraint
-    ]];
-  }
-}
-
+#pragma mark VIVALDI
 - (LocationBarSteadyView*)steadyView {
   return self.locationBarSteadyView;
 }
-
-- (void)updateVivaldiShieldState:(ATBSettingType)setting {
-  _atbSettingType = setting;
-  switch (setting) {
-    case ATBSettingNoBlocking: {
-      UIImage* noBlocking =
-        [[UIImage imageNamed:vATBShieldNone]
-            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-      [_vivaldiShieldButton setImage:noBlocking forState:UIControlStateNormal];
-      break;
-    }
-    case ATBSettingBlockTrackers: {
-      UIImage* trackersBlocking =
-        [[UIImage imageNamed:vATBShieldTrackers]
-            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-      [_vivaldiShieldButton setImage:trackersBlocking
-                            forState:UIControlStateNormal];
-      break;
-    }
-    case ATBSettingBlockTrackersAndAds: {
-      UIImage* allBlocking =
-        [[UIImage imageNamed:vATBShieldTrackesAndAds]
-            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-      [_vivaldiShieldButton setImage:allBlocking forState:UIControlStateNormal];
-      break;
-    }
-    default: {
-      UIImage* trackersBlocking =
-        [[UIImage imageNamed:vATBShieldTrackers]
-            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-      [_vivaldiShieldButton setImage:trackersBlocking
-                            forState:UIControlStateNormal];
-      break;
-    }
-  }
-}
-
-/// Returns true on iPad full screen or 2/3, and iPhone landscape.
-- (BOOL)hideVivaldiTopToolbarButtons {
-  if (VivaldiGlobalHelpers.isDeviceTablet) {
-    return VivaldiGlobalHelpers.isVerticalTraitRegular &&
-        VivaldiGlobalHelpers.isHorizontalTraitRegular;
-  } else {
-    return VivaldiGlobalHelpers.isVerticalTraitCompact ||
-        VivaldiGlobalHelpers.isHorizontalTraitRegular;
-  }
-}
-
-// End Vivaldi
-
 @end

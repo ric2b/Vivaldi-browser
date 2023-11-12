@@ -394,8 +394,7 @@ public abstract class ToolbarLayout
     /**
      * @return The {@link ProgressBar} this layout uses.
      */
-    @Nullable
-    protected ToolbarProgressBar getProgressBar() {
+    protected @Nullable ToolbarProgressBar getProgressBar() {
         return mProgressBar;
     }
 
@@ -618,8 +617,7 @@ public abstract class ToolbarLayout
      *                       finished (which can be detected by a call to
      *                       {@link #onTabSwitcherTransitionFinished()}).
      */
-    void setTabSwitcherMode(boolean inTabSwitcherMode, boolean showToolbar, boolean delayAnimation,
-            MenuButtonCoordinator menuButtonCoordinator) {}
+    void setTabSwitcherMode(boolean inTabSwitcherMode) {}
 
     /**
      * Gives inheriting classes the chance to update their state when the TabSwitcher transition has

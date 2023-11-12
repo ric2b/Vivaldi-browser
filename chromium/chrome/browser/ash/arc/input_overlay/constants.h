@@ -26,6 +26,8 @@ constexpr int kAxisSize = 2;
 // Total key size for ActionMoveKey.
 constexpr size_t kActionMoveKeysSize = 4;
 
+constexpr char16_t kUnknownBind[] = u"?";
+
 // Directions from up, left, down, right.
 constexpr int kDirection[kActionMoveKeysSize][kAxisSize] = {{0, -1},
                                                             {-1, 0},
@@ -108,6 +110,16 @@ enum class TapLabelPosition {
   kBottomRight = 3,
   // Undefined label position. Starts to use in AlphaV2.
   kNone = 4,
+};
+
+// The UI state related to user operations.
+enum class UIState {
+  // UI is not hovered or dragged.
+  kDefault = 0,
+  // UI is under dragging.
+  kDrag,
+  // UI is mouse hovered.
+  kHover,
 };
 
 // These values are about how the reposition is achieved for the metrics record.

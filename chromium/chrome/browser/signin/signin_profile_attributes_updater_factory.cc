@@ -20,23 +20,17 @@ SigninProfileAttributesUpdaterFactory::GetForProfile(Profile* profile) {
 // static
 SigninProfileAttributesUpdaterFactory*
 SigninProfileAttributesUpdaterFactory::GetInstance() {
-  return base::Singleton<SigninProfileAttributesUpdaterFactory>::get();
+  static base::NoDestructor<SigninProfileAttributesUpdaterFactory> instance;
+  return instance.get();
 }
 
 SigninProfileAttributesUpdaterFactory::SigninProfileAttributesUpdaterFactory()
-    : ProfileKeyedServiceFactory(
-          "SigninProfileAttributesUpdater",
-          ProfileSelections::Builder()
-              .WithRegular(ProfileSelection::kOriginalOnly)
-              // TODO(crbug.com/1418376): Check if this service is needed in
-              // Guest mode.
-              .WithGuest(ProfileSelection::kOriginalOnly)
-              .Build()) {
+    : ProfileKeyedServiceFactory("SigninProfileAttributesUpdater") {
   DependsOn(IdentityManagerFactory::GetInstance());
 }
 
 SigninProfileAttributesUpdaterFactory::
-    ~SigninProfileAttributesUpdaterFactory() {}
+    ~SigninProfileAttributesUpdaterFactory() = default;
 
 KeyedService* SigninProfileAttributesUpdaterFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {

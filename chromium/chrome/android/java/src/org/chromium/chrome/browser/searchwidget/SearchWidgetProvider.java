@@ -34,8 +34,11 @@ import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityPreferen
 
 import java.util.function.Consumer;
 
+import android.widget.Toast;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.common.VivaldiIntentHandler;
+import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.prompts.AddWidgetBottomSheet;
 
 /**
  * Widget that lets the user search using their default search engine.
@@ -167,10 +170,15 @@ public class SearchWidgetProvider extends AppWidgetProvider {
         String text = TextUtils.isEmpty(engineName) || !shouldShowFullString()
                 ? context.getString(R.string.search_widget_default)
                 : context.getString(R.string.search_with_product, engineName);
+        if (ChromeApplicationImpl.isVivaldi())
+            text = context.getString(R.string.search_widget_hint);
         views.setCharSequence(R.id.title, "setHint", text);
 
         // Vivaldi
         views.setOnClickPendingIntent(R.id.qrcode_icon, createVivaldiQrCodeScanIntent(context));
+        views.setInt(R.id.vivaldi_icon, "setColorFilter",
+                context.getColor(VivaldiUtils.getAppIconTint(context)));
+        views.setImageViewResource(R.id.vivaldi_icon, R.drawable.vivaldi_icon_48dp);
 
         return views;
     }
@@ -252,5 +260,15 @@ public class SearchWidgetProvider extends AppWidgetProvider {
                 PendingIntent.FLAG_UPDATE_CURRENT
                         | IntentUtils.getPendingIntentMutabilityFlag(false),
                 optionsBundle);
+    }
+
+    /** Vivaldi */
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        super.onReceive(context, intent);
+        // Check if request is from add widget to home screen
+        boolean showFeedback = intent.getBooleanExtra(AddWidgetBottomSheet.SHOW_REPLY, false);
+        String text = context.getString(R.string.widget_added_to_homescreen);
+        if (showFeedback) Toast.makeText(context, text, Toast.LENGTH_SHORT).show();
     }
 }

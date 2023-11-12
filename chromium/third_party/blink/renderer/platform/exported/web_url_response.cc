@@ -32,13 +32,14 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/ranges/algorithm.h"
 #include "net/ssl/ssl_info.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
-#include "services/network/public/cpp/trigger_attestation.h"
+#include "services/network/public/cpp/trigger_verification.h"
 #include "services/network/public/mojom/cors.mojom-shared.h"
 #include "services/network/public/mojom/ip_address_space.mojom-shared.h"
 #include "services/network/public/mojom/load_timing_info.mojom.h"
@@ -49,6 +50,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_timing.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
+#include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
 
@@ -201,7 +203,7 @@ WebURLResponse WebURLResponse::Create(
   response.SetWasCookieInRequest(head.was_cookie_in_request);
   response.SetRecursivePrefetchToken(head.recursive_prefetch_token);
   response.SetWebBundleURL(KURL(head.web_bundle_url));
-  response.SetTriggerAttestation(head.trigger_attestation);
+  response.SetTriggerVerifications(head.trigger_verifications);
 
   SetSecurityStyleAndDetails(GURL(KURL(url)), head, &response,
                              report_security_info);
@@ -343,9 +345,13 @@ void WebURLResponse::SetLoadTiming(
   resource_response_->SetResourceLoadTiming(std::move(timing));
 }
 
-void WebURLResponse::SetTriggerAttestation(
-    const absl::optional<network::TriggerAttestation>& trigger_attestation) {
-  resource_response_->SetTriggerAttestation(trigger_attestation);
+void WebURLResponse::SetTriggerVerifications(
+    const std::vector<network::TriggerVerification>& trigger_verifications) {
+  WTF::Vector<network::TriggerVerification> verifications;
+  for (const auto& verification : trigger_verifications) {
+    verifications.push_back(verification);
+  }
+  resource_response_->SetTriggerVerifications(std::move(verifications));
 }
 
 base::Time WebURLResponse::ResponseTime() const {

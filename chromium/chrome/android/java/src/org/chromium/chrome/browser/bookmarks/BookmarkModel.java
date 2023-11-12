@@ -14,7 +14,9 @@ import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
@@ -143,9 +145,13 @@ public class BookmarkModel extends BookmarkBridge {
             }
             return;
         }
+
+        Set<BookmarkId> existingChildren = new HashSet<>(getChildIds(newParentId));
         int appendIndex = getChildCount(newParentId);
-        for (int i = 0; i < bookmarkIds.size(); ++i) {
-            moveBookmark(bookmarkIds.get(i), newParentId, appendIndex + i);
+        for (BookmarkId child : bookmarkIds) {
+            if (!existingChildren.contains(child)) {
+                moveBookmark(child, newParentId, appendIndex++);
+            }
         }
     }
 
@@ -178,6 +184,12 @@ public class BookmarkModel extends BookmarkBridge {
      * @return The id of the default folder to save bookmarks/folders to.
      */
     public BookmarkId getDefaultFolder() {
+        /*
+          Vivaldi: Vivaldi uses the Desktop folder aka the "Bookmark bar node" as
+          the root shown in Bookmarks manager/panel
+         */
+        if (ChromeApplicationImpl.isVivaldi())
+            return getDesktopFolderId();
         return getMobileFolderId();
     }
 
@@ -185,6 +197,12 @@ public class BookmarkModel extends BookmarkBridge {
      * @return The id of the default folder to view bookmarks.
      */
     public BookmarkId getDefaultFolderViewLocation() {
+        /*
+          Vivaldi: Vivaldi uses the Desktop folder aka the "Bookmark bar node" as
+          the root shown in Bookmarks manager/panel
+         */
+        if (ChromeApplicationImpl.isVivaldi())
+            return getDesktopFolderId();
         return getRootFolderId();
     }
 

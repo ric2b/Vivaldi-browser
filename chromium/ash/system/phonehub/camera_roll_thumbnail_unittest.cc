@@ -7,7 +7,6 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/style/ash_color_provider.h"
 #include "base/logging.h"
-#include "camera_roll_thumbnail.h"
 #include "chromeos/ash/components/phonehub/camera_roll_item.h"
 #include "chromeos/ash/components/phonehub/fake_camera_roll_manager.h"
 #include "chromeos/ash/components/phonehub/fake_user_action_recorder.h"
@@ -161,7 +160,7 @@ class CameraRollThumbnailTest : public views::ViewsTestBase {
 
   // This is required in order for the context to find color provider
   AshColorProvider color_provider_;
-  raw_ptr<views::Widget> widget_ = nullptr;
+  raw_ptr<views::Widget, DanglingUntriaged> widget_ = nullptr;
   std::unique_ptr<CameraRollThumbnail> camera_roll_thumbnail_;
   std::unique_ptr<phonehub::FakeUserActionRecorder> fake_user_action_recorder_;
   std::unique_ptr<phonehub::FakeCameraRollManager> fake_camera_roll_manager_;

@@ -13,11 +13,17 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/engagement/site_engagement_service_factory.h"
 #include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
 #include "chrome/browser/file_system_access/file_system_access_permission_context_factory.h"
+#include "chrome/browser/permissions/notifications_engagement_service_factory.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
+#include "chrome/browser/ui/web_applications/test/isolated_web_app_test_utils.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
+#include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/test/web_app_test_utils.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
@@ -32,6 +38,7 @@
 #include "components/permissions/test/permission_test_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
+#include "components/site_engagement/content/site_engagement_score.h"
 #include "content/public/test/browser_task_environment.h"
 #include "extensions/browser/extension_registry.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -46,7 +53,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/unloaded_extension_reason.h"
 #include "extensions/test/test_extension_dir.h"
-#endif
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 namespace site_settings {
 
@@ -88,6 +95,20 @@ class SiteSettingsHelperTest : public testing::Test {
     map->SetContentSettingCustomScope(
         ContentSettingsPattern::FromString(pattern),
         ContentSettingsPattern::Wildcard(), kContentType, setting);
+  }
+
+  void RecordNotification(permissions::NotificationsEngagementService* service,
+                          GURL url,
+                          int daily_average_count) {
+    // This many notifications were recorded during the past week in total.
+    int total_count = daily_average_count * 7;
+    service->RecordNotificationDisplayed(url, total_count);
+  }
+
+  base::Time GetReferenceTime() {
+    base::Time time;
+    EXPECT_TRUE(base::Time::FromString("Sat, 1 Sep 2018 11:00:00 GMT", &time));
+    return time;
   }
 
  private:
@@ -432,34 +453,33 @@ TEST_F(SiteSettingsHelperTest, ContentSettingSource) {
 
   GURL origin("https://www.example.com/");
   std::string source;
-  std::string display_name;
   ContentSetting content_setting;
 
   // Built in Chrome default.
-  content_setting = GetContentSettingForOrigin(
-      &profile, map, origin, kContentType, &source, &display_name);
+  content_setting =
+      GetContentSettingForOrigin(&profile, map, origin, kContentType, &source);
   EXPECT_EQ(SiteSettingSourceToString(SiteSettingSource::kDefault), source);
   EXPECT_EQ(CONTENT_SETTING_ASK, content_setting);
 
   // User-set global default.
   map->SetDefaultContentSetting(kContentType, CONTENT_SETTING_ALLOW);
-  content_setting = GetContentSettingForOrigin(
-      &profile, map, origin, kContentType, &source, &display_name);
+  content_setting =
+      GetContentSettingForOrigin(&profile, map, origin, kContentType, &source);
   EXPECT_EQ(SiteSettingSourceToString(SiteSettingSource::kDefault), source);
   EXPECT_EQ(CONTENT_SETTING_ALLOW, content_setting);
 
   // User-set pattern.
   AddSetting(map, "https://*", CONTENT_SETTING_BLOCK);
-  content_setting = GetContentSettingForOrigin(
-      &profile, map, origin, kContentType, &source, &display_name);
+  content_setting =
+      GetContentSettingForOrigin(&profile, map, origin, kContentType, &source);
   EXPECT_EQ(SiteSettingSourceToString(SiteSettingSource::kPreference), source);
   EXPECT_EQ(CONTENT_SETTING_BLOCK, content_setting);
 
   // User-set origin setting.
   map->SetContentSettingDefaultScope(origin, origin, kContentType,
                                      CONTENT_SETTING_ALLOW);
-  content_setting = GetContentSettingForOrigin(
-      &profile, map, origin, kContentType, &source, &display_name);
+  content_setting =
+      GetContentSettingForOrigin(&profile, map, origin, kContentType, &source);
   EXPECT_EQ(SiteSettingSourceToString(SiteSettingSource::kPreference), source);
   EXPECT_EQ(CONTENT_SETTING_ALLOW, content_setting);
 
@@ -473,8 +493,8 @@ TEST_F(SiteSettingsHelperTest, ContentSettingSource) {
   content_settings::TestUtils::OverrideProvider(
       map, std::move(extension_provider),
       HostContentSettingsMap::CUSTOM_EXTENSION_PROVIDER);
-  content_setting = GetContentSettingForOrigin(
-      &profile, map, origin, kContentType, &source, &display_name);
+  content_setting =
+      GetContentSettingForOrigin(&profile, map, origin, kContentType, &source);
   EXPECT_EQ(SiteSettingSourceToString(SiteSettingSource::kExtension), source);
   EXPECT_EQ(CONTENT_SETTING_BLOCK, content_setting);
 
@@ -487,15 +507,15 @@ TEST_F(SiteSettingsHelperTest, ContentSettingSource) {
   policy_provider->set_read_only(true);
   content_settings::TestUtils::OverrideProvider(
       map, std::move(policy_provider), HostContentSettingsMap::POLICY_PROVIDER);
-  content_setting = GetContentSettingForOrigin(
-      &profile, map, origin, kContentType, &source, &display_name);
+  content_setting =
+      GetContentSettingForOrigin(&profile, map, origin, kContentType, &source);
   EXPECT_EQ(SiteSettingSourceToString(SiteSettingSource::kPolicy), source);
   EXPECT_EQ(CONTENT_SETTING_ALLOW, content_setting);
 
   // Insecure origins.
   content_setting = GetContentSettingForOrigin(
       &profile, map, GURL("http://www.insecure_http_site.com/"), kContentType,
-      &source, &display_name);
+      &source);
   EXPECT_EQ(SiteSettingSourceToString(SiteSettingSource::kInsecureOrigin),
             source);
   EXPECT_EQ(CONTENT_SETTING_BLOCK, content_setting);
@@ -752,6 +772,89 @@ TEST_F(SiteSettingsHelperTest, CreateChooserExceptionObject) {
         /*source=*/kPreferenceSource,
         /*incognito=*/false);
   }
+}
+
+TEST_F(SiteSettingsHelperTest, PopulateNotificationPermissionReviewData) {
+  TestingProfile profile;
+  base::test::ScopedFeatureList scoped_feature;
+  scoped_feature.InitAndEnableFeature(
+      ::features::kSafetyCheckNotificationPermissions);
+
+  // Add a couple of notification permission and check they appear in review
+  // list.
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+  GURL urls[] = {GURL("https://google.com:443"),
+                 GURL("https://www.youtube.com:443"),
+                 GURL("https://www.example.com:443")};
+
+  map->SetContentSettingDefaultScope(urls[0], GURL(),
+                                     ContentSettingsType::NOTIFICATIONS,
+                                     CONTENT_SETTING_ALLOW);
+  map->SetContentSettingDefaultScope(urls[1], GURL(),
+                                     ContentSettingsType::NOTIFICATIONS,
+                                     CONTENT_SETTING_ALLOW);
+  map->SetContentSettingDefaultScope(urls[2], GURL(),
+                                     ContentSettingsType::NOTIFICATIONS,
+                                     CONTENT_SETTING_ALLOW);
+
+  // Record initial display date to enable comparing dictionaries for
+  // NotificationEngagementService.
+  auto* notification_engagement_service =
+      NotificationsEngagementServiceFactory::GetForProfile(&profile);
+  std::string displayedDate =
+      notification_engagement_service->GetBucketLabel(base::Time::Now());
+
+  auto* site_engagement_service =
+      site_engagement::SiteEngagementServiceFactory::GetForProfile(&profile);
+
+  // Set a host to have minimum engagement. This should be in review list.
+  RecordNotification(notification_engagement_service, urls[0], 1);
+  site_engagement::SiteEngagementScore score =
+      site_engagement_service->CreateEngagementScore(urls[0]);
+  score.Reset(0.5, GetReferenceTime());
+  score.Commit();
+  EXPECT_EQ(blink::mojom::EngagementLevel::MINIMAL,
+            site_engagement_service->GetEngagementLevel(urls[0]));
+
+  // Set a host to have large number of notifications, but low engagement. This
+  // should be in review list.
+  RecordNotification(notification_engagement_service, urls[1], 5);
+  site_engagement_service->AddPointsForTesting(urls[1], 1.0);
+  EXPECT_EQ(blink::mojom::EngagementLevel::LOW,
+            site_engagement_service->GetEngagementLevel(urls[1]));
+
+  // Set a host to have medium engagement and high notification count. This
+  // should not be in review list.
+  RecordNotification(notification_engagement_service, urls[2], 5);
+  site_engagement_service->AddPointsForTesting(urls[2], 50.0);
+  EXPECT_EQ(blink::mojom::EngagementLevel::MEDIUM,
+            site_engagement_service->GetEngagementLevel(urls[2]));
+
+  const auto& notification_permissions =
+      PopulateNotificationPermissionReviewData(&profile);
+  // Check if resulting list contains only the expected URLs. They should be in
+  // descending order of notification count.
+  EXPECT_EQ(2UL, notification_permissions.size());
+  EXPECT_EQ("https://www.youtube.com:443",
+            *notification_permissions[0].GetDict().FindString(
+                site_settings::kOrigin));
+  EXPECT_EQ("https://google.com:443",
+            *notification_permissions[1].GetDict().FindString(
+                site_settings::kOrigin));
+
+  // Increasing notification count also promotes host in the list.
+  RecordNotification(notification_engagement_service,
+                     GURL("https://google.com:443"), 10);
+  const auto& updated_notification_permissions =
+      PopulateNotificationPermissionReviewData(&profile);
+  EXPECT_EQ(2UL, updated_notification_permissions.size());
+  EXPECT_EQ("https://google.com:443",
+            *updated_notification_permissions[0].GetDict().FindString(
+                site_settings::kOrigin));
+  EXPECT_EQ("https://www.youtube.com:443",
+            *updated_notification_permissions[1].GetDict().FindString(
+                site_settings::kOrigin));
 }
 
 namespace {
@@ -1139,5 +1242,69 @@ TEST_F(SiteSettingsHelperExtensionTest,
   EXPECT_EQ(CHECK_DEREF(exception.FindString(kDisplayName)), extension_name);
 }
 #endif  // #if BUILDFLAG(ENABLE_EXTENSIONS)
+
+class SiteSettingsHelperIsolatedWebAppTest : public testing::Test {
+ protected:
+  void InstallIsolatedWebApp(const GURL& url, const std::string& name) {
+    web_app::test::AwaitStartWebAppProviderAndSubsystems(&testing_profile_);
+    web_app::AddDummyIsolatedAppToRegistry(&testing_profile_, url, name);
+  }
+
+  Profile* profile() { return &testing_profile_; }
+
+ private:
+  content::BrowserTaskEnvironment task_environment_;
+  TestingProfile testing_profile_;
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  web_app::test::ScopedSkipMainProfileCheck skip_main_profile_check_;
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+};
+
+TEST_F(SiteSettingsHelperIsolatedWebAppTest,
+       IsolatedWebAppsUseAppNameAsDisplayName) {
+  const GURL kAppUrl(
+      "isolated-app://"
+      "berugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaic");
+  const std::string kAppName("test IWA Name");
+
+  const std::string kUsbChooserGroupName(
+      ContentSettingsTypeToGroupName(ContentSettingsType::USB_CHOOSER_DATA));
+  const std::string& kPolicySource =
+      SiteSettingSourceToString(SiteSettingSource::kPolicy);
+  const std::string& kPreferenceSource =
+      SiteSettingSourceToString(SiteSettingSource::kPreference);
+  const std::u16string& kObjectName = u"Gadget";
+
+  InstallIsolatedWebApp(kAppUrl, kAppName);
+
+  // Create a chooser object for testing.
+  base::Value::Dict chooser_object;
+  chooser_object.Set("name", kObjectName);
+
+  // Add a user permission for an origin of |kAppUrl|.
+  ChooserExceptionDetails exception_details;
+  exception_details.insert({kAppUrl.DeprecatedGetOriginAsURL(),
+                            kPreferenceSource, /*incognito=*/false});
+  {
+    auto exception = CreateChooserExceptionObject(
+        /*display_name=*/kObjectName,
+        /*object=*/base::Value(chooser_object.Clone()),
+        /*chooser_type=*/kUsbChooserGroupName,
+        /*chooser_exception_details=*/exception_details,
+        /*profile=*/profile());
+    ExpectValidChooserExceptionObject(
+        exception, /*chooser_type=*/kUsbChooserGroupName,
+        /*display_name=*/kObjectName, chooser_object);
+
+    const auto& sites_list = exception.Find(kSites)->GetList();
+    ExpectValidSiteExceptionObject(
+        /*actual_site_object=*/sites_list[0],
+        /*display_name=*/kAppName,
+        /*origin=*/kAppUrl,
+        /*source=*/kPreferenceSource,
+        /*incognito=*/false);
+  }
+}
 
 }  // namespace site_settings

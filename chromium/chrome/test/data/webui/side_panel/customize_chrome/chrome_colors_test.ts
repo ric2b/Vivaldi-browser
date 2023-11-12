@@ -40,6 +40,7 @@ suite('ChromeColorsTest', () => {
         seed: {value: i},
         background: {value: i + 1},
         foreground: {value: i + 2},
+        base: {value: i + 3},
       });
     }
     handler.setResultFor('getChromeColors', Promise.resolve({colors}));
@@ -53,7 +54,7 @@ suite('ChromeColorsTest', () => {
     await setInitialSettings(0);
 
     const eventPromise = eventToPromise('back-click', chromeColorsElement);
-    chromeColorsElement.$.backButton.click();
+    chromeColorsElement.$.heading.getBackButton().click();
     const event = await eventPromise;
     assertTrue(!!event);
   });

@@ -21,9 +21,9 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "content/browser/browsing_topics/browsing_topics_url_loader_service.h"
 #include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
 #include "content/browser/loader/navigation_url_loader_delegate.h"
+#include "content/browser/loader/subresource_proxying_url_loader_service.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/browser/renderer_host/browsing_context_group_swap.h"
 #include "content/browser/renderer_host/commit_deferring_condition_runner.h"
@@ -61,6 +61,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/runtime_feature_state/runtime_feature_state_context.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
+#include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom.h"
 #include "third_party/blink/public/mojom/loader/mixed_content.mojom-forward.h"
 #include "third_party/blink/public/mojom/navigation/navigation_initiator_activation_and_ad_status.mojom.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom-forward.h"
@@ -92,7 +93,6 @@ class PrerenderHostRegistry;
 class RenderFrameHostCSPContext;
 class ServiceWorkerMainResourceHandle;
 class SubframeHistoryNavigationThrottle;
-class SubresourceWebBundleNavigationInfo;
 
 // The primary implementation of NavigationHandle.
 //
@@ -209,8 +209,6 @@ class CONTENT_EXPORT NavigationRequest
       blink::mojom::CommonNavigationParamsPtr common_params,
       blink::mojom::CommitNavigationParamsPtr commit_params,
       bool was_opener_suppressed,
-      const blink::LocalFrameToken* initiator_frame_token,
-      int initiator_process_id,
       const std::string& extra_headers,
       FrameNavigationEntry* frame_entry,
       NavigationEntryImpl* entry,
@@ -241,7 +239,7 @@ class CONTENT_EXPORT NavigationRequest
       blink::mojom::CommitNavigationParamsPtr commit_params,
       bool browser_initiated,
       bool was_opener_suppressed,
-      const blink::LocalFrameToken* initiator_frame_token,
+      const absl::optional<blink::LocalFrameToken>& initiator_frame_token,
       int initiator_process_id,
       const std::string& extra_headers,
       FrameNavigationEntry* frame_entry,
@@ -297,8 +295,6 @@ class CONTENT_EXPORT NavigationRequest
       const std::vector<GURL>& redirects,
       const GURL& original_url,
       std::unique_ptr<CrossOriginEmbedderPolicyReporter> coep_reporter,
-      std::unique_ptr<SubresourceWebBundleNavigationInfo>
-          subresource_web_bundle_navigation_info,
       int http_response_code);
 
   static NavigationRequest* From(NavigationHandle* handle);
@@ -372,6 +368,9 @@ class CONTENT_EXPORT NavigationRequest
                         const std::string& header_value) override;
   void SetCorsExemptRequestHeader(const std::string& header_name,
                                   const std::string& header_value) override;
+  void SetLCPPNavigationHint(
+      const blink::mojom::LCPCriticalPathPredictorNavigationTimeHint& hint)
+      override;
   const net::HttpResponseHeaders* GetResponseHeaders() override;
   net::HttpResponseInfo::ConnectionInfo GetConnectionInfo() override;
   const absl::optional<net::SSLInfo>& GetSSLInfo() override;
@@ -401,7 +400,7 @@ class CONTENT_EXPORT NavigationRequest
   const absl::optional<blink::Impression>& GetImpression() override;
   const absl::optional<blink::LocalFrameToken>& GetInitiatorFrameToken()
       override;
-  int GetInitiatorProcessID() override;
+  int GetInitiatorProcessId() override;
   const absl::optional<url::Origin>& GetInitiatorOrigin() override;
   const absl::optional<GURL>& GetInitiatorBaseUrl() override;
   const std::vector<std::string>& GetDnsAliases() override;
@@ -934,14 +933,6 @@ class CONTENT_EXPORT NavigationRequest
   // proceeding.
   bool IsWaitingForBeforeUnload();
 
-  // If the response is loaded from a WebBundle, returns the URL of the
-  // WebBundle. Otherwise, returns an empty URL.
-  GURL GetWebBundleURL();
-  // Creates a SubresourceWebBundleNavigationInfo if the response is loaded from
-  // a WebBundle.
-  std::unique_ptr<SubresourceWebBundleNavigationInfo>
-  GetSubresourceWebBundleNavigationInfo();
-
   // Returns the original request url:
   // - If this navigation resulted in an error page, this will return the URL
   // of the page that failed to load.
@@ -983,6 +974,45 @@ class CONTENT_EXPORT NavigationRequest
     return prerender_navigation_state_->prerender_main_frame_replication_state;
   }
 
+  // Origin-keyed Agent Cluster (OAC) state needs to be tracked for origins that
+  // opt-in or opt-out, so that a given origin is treated consistently within a
+  // given BrowsingInstance. This ensures that foo.example.com will have the
+  // same OAC state in a BrowsingInstance even if multiple documents in the
+  // origin have different headers.
+  //
+  // This function ensures that this OAC state is tracked in cases where it is
+  // not handled elsewhere. For example, OAC origins that end up in origin-keyed
+  // processes already track their OAC state during SiteInstance creation.
+  // However, SiteInstance does not track origin state in the following cases,
+  // which this function handles:
+  //
+  // 1) If process isolation for OAC is disabled (e.g., on low-memory Android
+  // devices), the origin will use a site-keyed SiteInstance that does not
+  // record OAC state for the origin.
+  //
+  // 2) If the origin has no header but ends up with OAC-by-default (and
+  // kOriginKeyedProcessesByDefault is not enabled), the origin will use a
+  // site-keyed SiteInstance.
+  //
+  // 3) If the origin opts-out of OAC using a header, it will use a site-keyed
+  // SiteInstance.
+  //
+  // 4)If the origin opts-in to OAC using a header, but it is first placed in a
+  // speculative RenderFrameHost before the header is received, it creates a
+  // SiteInfo with default isolation and an origin-keyed process (by default).
+  // In this case, the origin was not tracked when the SiteInstance was created,
+  // and needs to be tracked later when the opt-in header is observed.
+  //
+  // In all of these cases, this function updates the BrowsingInstance to keep
+  // track of the OAC state for this NavigationRequest's origin.
+  //
+  // TODO(wjmaclean): Cases 1 and 2 will not be necessary once we use
+  // origin-keyed SiteInstances within a site-keyed process, via
+  // SiteInstanceGroup. Cases 3 and 4 will still be needed at that point, but
+  // might become simpler.
+  void AddOriginAgentClusterStateIfNecessary(
+      const IsolationContext& isolation_context);
+
   // Store a console message, which will be sent to the final RenderFrameHost
   // immediately after requesting the navigation to commit.
   //
@@ -1021,9 +1051,6 @@ class CONTENT_EXPORT NavigationRequest
 
   const absl::optional<base::UnguessableToken> ComputeFencedFrameNonce() const;
 
-  const absl::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
-  ComputeDeprecatedFencedFrameMode() const;
-
   void RenderFallbackContentForObjectTag();
 
   // Returns the vector of web features used during the navigation, whose
@@ -1032,10 +1059,11 @@ class CONTENT_EXPORT NavigationRequest
   // Empties this instance's vector.
   std::vector<blink::mojom::WebFeature> TakeWebFeaturesToLog();
 
-  void set_topics_url_loader_service_bind_context(
-      base::WeakPtr<BrowsingTopicsURLLoaderService::BindContext> bind_context) {
-    DCHECK(!topics_url_loader_service_bind_context_);
-    topics_url_loader_service_bind_context_ = bind_context;
+  void set_subresource_proxying_url_loader_service_bind_context(
+      base::WeakPtr<SubresourceProxyingURLLoaderService::BindContext>
+          bind_context) {
+    DCHECK(!subresource_proxying_url_loader_service_bind_context_);
+    subresource_proxying_url_loader_service_bind_context_ = bind_context;
   }
 
   // Helper for logging crash keys related to a NavigationRequest (e.g.
@@ -1278,16 +1306,6 @@ class CONTENT_EXPORT NavigationRequest
   // Origin-Agent-Cluster header, and if so opts in the origin to be isolated.
   void CheckForIsolationOptIn(const GURL& url);
 
-  // Use to manually set Origin-keyed Agent Cluster (OAC) isolation state in
-  // the event that process-isolation isn't being used for OAC, or
-  // OAC-by-default means that we're tracking explicit opt-out requests (which
-  // by definition are same-process).
-  // TODO(wjmaclean): When we switch to using separate SiteInstances even for
-  // same-process OAC, then this function can be removed.
-  void AddSameProcessOriginAgentClusterStateIfNecessary(
-      const IsolationContext& isolation_context,
-      const GURL& url);
-
   // Returns whether this navigation request is requesting opt-in
   // origin-isolation.
   bool IsOriginAgentClusterOptInRequested();
@@ -1297,8 +1315,13 @@ class CONTENT_EXPORT NavigationRequest
   // AreOriginAgentClustersEnabledByDefault() is false.
   bool IsOriginAgentClusterOptOutRequested();
 
-  // Returns whether this navigation request should use an origin-keyed
-  // agent cluster (but not an origin-keyed process).
+  // Returns whether this NavigationRequest should use an origin-keyed agent
+  // cluster, specifically in cases where no Origin-Agent-Cluster header has
+  // been observed, either because no response has yet been received or because
+  // it had no such header. (Returns false if the header is observed.)
+  //
+  // Note that an origin-keyed process may be used if this returns true, if
+  // kOriginKeyedProcessesByDefault is enabled.
   bool IsIsolationImplied();
 
   // The Origin-Agent-Cluster end result is determined early in the lifecycle of
@@ -1340,8 +1363,11 @@ class CONTENT_EXPORT NavigationRequest
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
       bool is_download,
       absl::optional<SubresourceLoaderParams> subresource_loader_params);
-  // TODO(https://crbug.com/1220337): Implement this logic for
-  // OnRequestFailedInternal() and BeginNavigationImpl() as well.
+  void SelectFrameHostForOnRequestFailedInternal(
+      bool exists_in_cache,
+      bool skip_throttles,
+      const absl::optional<std::string>& error_page_content);
+  void SelectFrameHostForCrossDocumentNavigationWithNoUrlLoader();
 
   // To be called whenever a navigation request fails. If |skip_throttles| is
   // true, the registered NavigationThrottle(s) won't get a chance to intercept
@@ -1914,7 +1940,9 @@ class CONTENT_EXPORT NavigationRequest
   // picked for failed Back/Forward Cache restores.
   // Invariant: At least one of |loader_| or |render_frame_host_| is
   // null/absl::nullopt.
-  absl::optional<base::SafeRef<RenderFrameHostImpl>> render_frame_host_;
+  absl::optional<
+      base::SafeRef<RenderFrameHostImpl, base::SafeRefDanglingUntriaged>>
+      render_frame_host_;
 
   // Initialized on creation of the NavigationRequest. Sent to the renderer when
   // the navigation is ready to commit.
@@ -2473,13 +2501,14 @@ class CONTENT_EXPORT NavigationRequest
   // contain "Observe-Browsing-Topics: ?1", a topic observation will be stored.
   bool topics_eligible_ = false;
 
-  // A WeakPtr for the BindContext associated with topics loader factory for the
-  // committing document. This will be set in `CommitNavigation()`, and can
-  // become null if the corresponding factory is destroyed. Upon
-  // `DidCommitNavigation()`, `topics_url_loader_service_bind_context_` will
-  // be notified with the committed document.
-  base::WeakPtr<BrowsingTopicsURLLoaderService::BindContext>
-      topics_url_loader_service_bind_context_;
+  // A WeakPtr for the BindContext associated with the browser routing loader
+  // factory for the committing document. This will be set in
+  // `CommitNavigation()`, and can become null if the corresponding factory is
+  // destroyed. Upon `DidCommitNavigation()`,
+  // `subresource_proxying_url_loader_service_bind_context_` will be notified
+  // with the committed document.
+  base::WeakPtr<SubresourceProxyingURLLoaderService::BindContext>
+      subresource_proxying_url_loader_service_bind_context_;
 
   scoped_refptr<NavigationOrDocumentHandle> navigation_or_document_handle_;
 
@@ -2568,6 +2597,11 @@ class CONTENT_EXPORT NavigationRequest
   // See `RenderFrameHostImpl::CookieChangeListener`.
   std::unique_ptr<RenderFrameHostImpl::CookieChangeListener>
       cookie_change_listener_;
+
+  // LCP Critical Path Predictor managed hint data those were already available
+  // at the time of navigation. The hint is passed along to the renderer process
+  // on commit along with the other navigation params.
+  blink::mojom::LCPCriticalPathPredictorNavigationTimeHint lcpp_hint_;
 
   // The WebUI object to be used for this navigation. When a RenderFrameHost has
   // been picked for the navigation, the WebUI object will be moved to be owned

@@ -413,7 +413,7 @@ class AutoEnrollmentClientImplBaseTest : public testing::Test {
       DeviceManagementService::JobConfiguration::TYPE_INVALID;
 
   // Sets the final result of PSM protocol for testing.
-  base::raw_ptr<psm::FakeRlweDmserverClient>
+  raw_ptr<psm::FakeRlweDmserverClient, DanglingUntriaged>
       fake_psm_rlwe_dmserver_client_ptr_ = nullptr;
 
  private:

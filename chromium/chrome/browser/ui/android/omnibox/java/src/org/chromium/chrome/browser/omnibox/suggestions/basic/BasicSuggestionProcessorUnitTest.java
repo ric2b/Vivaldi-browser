@@ -4,8 +4,11 @@
 
 package org.chromium.chrome.browser.omnibox.suggestions.basic;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -57,8 +60,6 @@ import java.util.Map;
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE, shadows = {ShadowGURL.class, ShadowUrlBarData.class})
 public class BasicSuggestionProcessorUnitTest {
-    private static final GURL EXTERNAL_URL = JUnitTestGURLs.getGURL(JUnitTestGURLs.URL_1);
-    private static final GURL INTERNAL_URL = JUnitTestGURLs.getGURL(JUnitTestGURLs.NTP_URL);
     private static final @DrawableRes int ICON_BOOKMARK = R.drawable.btn_star;
     private static final @DrawableRes int ICON_GLOBE = R.drawable.ic_globe_24dp;
     private static final @DrawableRes int ICON_HISTORY = R.drawable.ic_history_googblue_24dp;
@@ -132,7 +133,7 @@ public class BasicSuggestionProcessorUnitTest {
     public void setUp() {
         doReturn("").when(mUrlBarText).getTextWithoutAutocomplete();
         mProcessor = new BasicSuggestionProcessor(ContextUtils.getApplicationContext(),
-                mSuggestionHost, null, mUrlBarText, mIconFetcher, mIsBookmarked);
+                mSuggestionHost, mUrlBarText, mIconFetcher, mIsBookmarked);
     }
 
     /**
@@ -368,6 +369,25 @@ public class BasicSuggestionProcessorUnitTest {
 
         Assert.assertNotEquals(icon1, icon2);
         Assert.assertEquals(mBitmap, ((BitmapDrawable) icon2.drawable).getBitmap());
+    }
+
+    @Test
+    @SmallTest
+    public void suggestionFavicons_doNotFetchForSearchSuggestions() {
+        mProcessor.onNativeInitialized();
+        createSearchSuggestion(OmniboxSuggestionType.SEARCH_WHAT_YOU_TYPED, "");
+
+        verify(mIconFetcher, never()).fetchFaviconWithBackoff(any(), anyBoolean(), any());
+    }
+
+    @Test
+    @SmallTest
+    public void suggestionFavicons_doNotFetchForBookmarked() {
+        mProcessor.onNativeInitialized();
+        mIsBookmarked.mState = true;
+        createUrlSuggestion(OmniboxSuggestionType.URL_WHAT_YOU_TYPED, "");
+
+        verify(mIconFetcher, never()).fetchFaviconWithBackoff(any(), anyBoolean(), any());
     }
 
     @Test

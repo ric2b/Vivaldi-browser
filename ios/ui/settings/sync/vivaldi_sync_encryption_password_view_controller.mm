@@ -228,6 +228,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [editCell.identifyingIconButton addTarget:self
                                          action:@selector(togglePasswordMasking)
                                forControlEvents:UIControlEventTouchUpInside];
+      editCell.textField.delegate = self;
       break;
     }
     default:
@@ -247,7 +248,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [[UIDocumentPickerViewController alloc]
         initForOpeningContentTypes:@[[UTType typeWithFilenameExtension:@"txt"]]];
   picker.directoryURL =
-      [NSURL fileURLWithPath:GetBackupEncryptionKeyPath() isDirectory:YES];
+      [NSURL fileURLWithPath:GetDocumentsFolderPath() isDirectory:YES];
   picker.delegate = self;
 
   [self presentViewController:picker animated:YES completion:nil];
@@ -256,6 +257,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
   return NO;
 }
 
+#pragma mark - UITextFieldDelegate
+
+- (BOOL)textFieldShouldReturn:(UITextField*)textField {
+  [self decryptButtonPressed:nil];
+  return NO;
+}
 
 #pragma mark - UIDocumentPickerDelegate
 

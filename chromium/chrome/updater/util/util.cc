@@ -239,13 +239,6 @@ std::string GetInstallDataIndexFromAppArgs(const std::string& app_id) {
       *base::CommandLine::ForCurrentProcess(), app_id);
 }
 
-base::CommandLine MakeElevated(base::CommandLine command_line) {
-#if BUILDFLAG(IS_MAC)
-  command_line.PrependWrapper("/usr/bin/sudo");
-#endif
-  return command_line;
-}
-
 // The log file is created in DIR_LOCAL_APP_DATA or DIR_ROAMING_APP_DATA.
 absl::optional<base::FilePath> GetLogFilePath(UpdaterScope scope) {
   const absl::optional<base::FilePath> log_dir = GetInstallDirectory(scope);
@@ -277,7 +270,7 @@ void InitLogging(UpdaterScope updater_scope) {
                        /*enable_timestamp=*/true,
                        /*enable_tickcount=*/false);
   VLOG(1) << "Log initialized for " <<
-      []() {
+      [] {
         base::FilePath file_exe;
         return base::PathService::Get(base::FILE_EXE, &file_exe)
                    ? file_exe
@@ -302,49 +295,6 @@ GURL AppendQueryParameter(const GURL& url,
   replacements.SetQueryStr(query);
   return url.ReplaceComponents(replacements);
 }
-
-#if BUILDFLAG(IS_POSIX)
-
-bool PathOwnedByUser(const base::FilePath& path) {
-  struct passwd* result = nullptr;
-  struct passwd user_info = {};
-  char pwbuf[2048] = {};
-  const uid_t user_uid = geteuid();
-
-  const int error =
-      getpwuid_r(user_uid, &user_info, pwbuf, sizeof(pwbuf), &result);
-
-  if (error) {
-    VLOG(1) << "Failed to get user info.";
-    return true;
-  }
-
-  if (result == nullptr) {
-    VLOG(1) << "No entry for user.";
-    return true;
-  }
-
-  base::stat_wrapper_t stat_info = {};
-  if (base::File::Lstat(path.value().c_str(), &stat_info) != 0) {
-    VPLOG(1) << "Failed to get information on path " << path.value();
-    return false;
-  }
-
-  if (S_ISLNK(stat_info.st_mode)) {
-    VLOG(1) << "Path " << path.value() << " is a symbolic link.";
-    return false;
-  }
-
-  if (stat_info.st_uid != user_uid) {
-    VLOG(1) << "Path " << path.value() << " is owned by the wrong user. (Was "
-            << stat_info.st_uid << ", expected " << user_uid << ".)";
-    return false;
-  }
-
-  return true;
-}
-
-#endif  // BUILDFLAG(IS_POSIX)
 
 #if BUILDFLAG(IS_WIN)
 

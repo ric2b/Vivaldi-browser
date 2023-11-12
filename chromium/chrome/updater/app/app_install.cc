@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/check.h"
-#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -131,8 +130,7 @@ void AppInstall::FirstTaskRun() {
   const tagging::TagArgs tag_args =
       tag_parsing_result.tag_args.value_or(tagging::TagArgs());
   if (!tag_args.apps.empty()) {
-    // TODO(crbug.com/1128631): support bundles. For now, assume one app.
-    CHECK_EQ(tag_args.apps.size(), size_t{1});
+    // Assume only one app is present since bundles are not supported.
     const tagging::AppArgs& app_args = tag_args.apps.front();
     app_id_ = app_args.app_id;
     app_name_ = app_args.app_name;
@@ -155,13 +153,11 @@ void AppInstall::FirstTaskRun() {
 
 void AppInstall::GetVersionDone(const base::Version& version) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  VLOG_IF(1, (version.IsValid()))
-      << "Found active version: " << version.GetString();
+  VLOG_IF(1, version.IsValid()) << "Active version: " << version.GetString();
   if (version.IsValid() && version >= base::Version(kUpdaterVersion)) {
     splash_screen_->Dismiss(base::BindOnce(&AppInstall::MaybeInstallApp, this));
     return;
   }
-
   InstallCandidate(
       updater_scope(),
       base::BindOnce(
@@ -188,8 +184,8 @@ void AppInstall::InstallCandidateDone(bool valid_version, int result) {
   }
 
   // It's possible that a previous updater existed but is nonresponsive. In
-  // this case, clear the active version in global prefs so that the system can
-  // recover.
+  // this case, set the active version in global prefs so that this instance
+  // will take over without qualification.
   base::ThreadPool::CreateSequencedTaskRunner(
       {base::MayBlock(), base::WithBaseSyncPrimitives()})
       ->PostTaskAndReply(
@@ -198,7 +194,8 @@ void AppInstall::InstallCandidateDone(bool valid_version, int result) {
               [](UpdaterScope scope) {
                 scoped_refptr<GlobalPrefs> prefs = CreateGlobalPrefs(scope);
                 if (prefs) {
-                  prefs->SetActiveVersion("");
+                  prefs->SetActiveVersion(kUpdaterVersion);
+                  prefs->SetSwapping(true);
                   PrefsCommitPendingWrites(prefs->GetPrefService());
                 }
               },

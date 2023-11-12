@@ -21,6 +21,7 @@ class BundleDataTargetGenerator : public TargetGenerator {
 
  private:
   bool FillOutputs();
+  bool FillProductType();
 
   bool EnsureSubstitutionIsInBundleDir(const SubstitutionPattern& pattern,
                                        const Value& original_value);

@@ -20,6 +20,7 @@
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
 #include "base/ranges/algorithm.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size.h"
@@ -39,6 +40,8 @@
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_subsurface.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
+#include "ui/ozone/platform/wayland/host/wayland_zaura_shell.h"
+#include "ui/ozone/platform/wayland/host/wayland_zaura_surface.h"
 #include "ui/ozone/platform/wayland/host/wayland_zcr_color_management_output.h"
 #include "ui/ozone/platform/wayland/host/wayland_zcr_color_management_surface.h"
 #include "ui/ozone/platform/wayland/host/wayland_zcr_color_manager.h"
@@ -103,6 +106,19 @@ WaylandSurface::~WaylandSurface() {
     std::move(release.second.explicit_release_callback)
         .Run(release.second.buffer.get(), base::ScopedFD());
   }
+}
+
+WaylandZAuraSurface* WaylandSurface::CreateZAuraSurface() {
+  auto* zaura_shell = connection_->zaura_shell();
+  if (!zaura_surface_ && zaura_shell) {
+    zaura_surface_ = std::make_unique<WaylandZAuraSurface>(
+        zaura_shell->wl_object(), surface(), connection_);
+  }
+  return zaura_surface_.get();
+}
+
+void WaylandSurface::ResetZAuraSurface() {
+  zaura_surface_.reset();
 }
 
 void WaylandSurface::RequestExplicitRelease(ExplicitReleaseCallback callback) {
@@ -684,9 +700,32 @@ void WaylandSurface::ApplyPendingState() {
     viewport_src_dip =
         gfx::ScaleRect(crop_transformed, bounds.width(), bounds.height());
     DCHECK(viewport());
-    if (wl_fixed_from_double(viewport_src_dip.width()) == 0 ||
-        wl_fixed_from_double(viewport_src_dip.height()) == 0 ||
-        wl_fixed_from_double(viewport_src_dip.x()) < 0 ||
+
+    // It not completely unexpected to stretch a texture more than the smallest
+    // fixed point can represent. The two cases here are solid color buffers
+    // (1x1 or 4x4) and something like 9-patch shadows (5x5) stretched to the
+    // entire window width/height.
+    {
+      constexpr wl_fixed_t kViewportSizeMin = 1;
+      const float kViewPortSizeMinFloat =
+          static_cast<float>(wl_fixed_to_double(kViewportSizeMin));
+
+      if (wl_fixed_from_double(viewport_src_dip.width()) <= 0) {
+        viewport_src_dip.set_width(kViewPortSizeMinFloat);
+        src_to_set[2] = kViewportSizeMin;
+      } else {
+        src_to_set[2] = wl_fixed_from_double(viewport_src_dip.width());
+      }
+
+      if (wl_fixed_from_double(viewport_src_dip.height()) <= 0) {
+        viewport_src_dip.set_height(kViewPortSizeMinFloat);
+        src_to_set[3] = kViewportSizeMin;
+      } else {
+        src_to_set[3] = wl_fixed_from_double(viewport_src_dip.height());
+      }
+    }
+
+    if (wl_fixed_from_double(viewport_src_dip.x()) < 0 ||
         wl_fixed_from_double(viewport_src_dip.y()) < 0) {
       LOG(ERROR) << "Sending viewport src with width/height zero or negative "
                     "origin will result in wayland disconnection";
@@ -697,23 +736,13 @@ void WaylandSurface::ApplyPendingState() {
                  << " bounds=" << bounds.ToString()
                  << "  pending_state_.buffer_size_px="
                  << pending_state_.buffer_size_px.ToString();
-      constexpr wl_fixed_t kViewportSizeMin = 1;
-      const float kViewPortSizeMinFloat =
-          static_cast<float>(wl_fixed_to_double(kViewportSizeMin));
-      LOG(ERROR)
-          << "Limiting viewport_src_dip size to be non zero with a minium of "
-          << kViewportSizeMin;
-      viewport_src_dip.set_width(
-          std::max(viewport_src_dip.width(), kViewPortSizeMinFloat));
-      viewport_src_dip.set_height(
-          std::max(viewport_src_dip.height(), kViewPortSizeMinFloat));
+
       viewport_src_dip.set_x(std::max(viewport_src_dip.x(), 0.f));
       viewport_src_dip.set_y(std::max(viewport_src_dip.y(), 0.f));
     }
+
     src_to_set[0] = wl_fixed_from_double(viewport_src_dip.x()),
     src_to_set[1] = wl_fixed_from_double(viewport_src_dip.y());
-    src_to_set[2] = wl_fixed_from_double(viewport_src_dip.width());
-    src_to_set[3] = wl_fixed_from_double(viewport_src_dip.height());
   }
   // Apply crop (wp_viewport.set_source).
   if (viewport() && !base::ranges::equal(src_to_set, src_set_)) {
@@ -766,42 +795,18 @@ void WaylandSurface::ApplyPendingState() {
   }
 
   DCHECK(pending_state_.buffer);
-  if (wl::get_version_of_object(surface_.get()) >=
-      WL_SURFACE_DAMAGE_BUFFER_SINCE_VERSION) {
-    // wl_surface_damage_buffer relies on compositor API version 4. See
-    // https://bit.ly/2u00lv6 for details.
-    // We don't need to apply any scaling because pending_state_.damage_px is
-    // already in buffer coordinates.
-    wl_surface_damage_buffer(surface_.get(),
-                             pending_state_.damage_px.back().x(),
-                             pending_state_.damage_px.back().y(),
-                             pending_state_.damage_px.back().width(),
-                             pending_state_.damage_px.back().height());
-  } else {
-    gfx::RectF damage_uv =
-        gfx::ScaleRect(gfx::RectF(pending_state_.damage_px.back()),
-                       1.0f / pending_state_.buffer_size_px.width(),
-                       1.0f / pending_state_.buffer_size_px.height());
 
-    if (!crop.IsEmpty()) {
-      damage_uv.Offset(-crop.OffsetFromOrigin());
-      damage_uv.InvScale(crop.width(), crop.height());
-    }
-    damage_uv.Intersect(gfx::RectF(1, 1));
+  // Lacros on Ash will always have a scale factory of 1, so damage will be
+  // unchanged on Ash, but that won't always be true on other compositors.
+  gfx::Rect damage = ScaleToEnclosingRect(
+      pending_state_.damage_px.back(), 1.f / GetWaylandScale(pending_state_));
 
-    gfx::RectF damage_uv_transformed = wl::ApplyWaylandTransform(
-        damage_uv, gfx::SizeF(1, 1),
-        wl::ToWaylandTransform(pending_state_.buffer_transform));
-
-    gfx::RectF damage_float =
-        gfx::ScaleRect(damage_uv_transformed, viewport_dst_dip.width(),
-                       viewport_dst_dip.height());
-    constexpr float kAcceptableSubDipDamageError = 0.001f;
-    gfx::Rect damage = gfx::ToEnclosingRectIgnoringError(
-        damage_float, kAcceptableSubDipDamageError);
-    wl_surface_damage(surface_.get(), damage.x(), damage.y(), damage.width(),
-                      damage.height());
-  }
+  // TODO(fangzhoug): The newer wl_surface_damage_buffer API is not currently
+  // supported by Ash. Damage is specified in viz::Display space, so if we want
+  // to use that API in the future, some math will be required to transform the
+  // damage into buffer space.
+  wl_surface_damage(surface_.get(), damage.x(), damage.y(), damage.width(),
+                    damage.height());
 
   pending_state_.damage_px.clear();
   state_ = pending_state_;
@@ -809,6 +814,14 @@ void WaylandSurface::ApplyPendingState() {
 
 void WaylandSurface::ForceImmediateStateApplication() {
   apply_state_immediately_ = true;
+}
+
+void WaylandSurface::EnableTrustedDamageIfPossible() {
+  if (get_augmented_surface() &&
+      augmented_surface_get_version(get_augmented_surface()) >=
+          AUGMENTED_SURFACE_SET_TRUSTED_DAMAGE_SINCE_VERSION) {
+    augmented_surface_set_trusted_damage(get_augmented_surface(), true);
+  }
 }
 
 void WaylandSurface::ExplicitRelease(
@@ -923,6 +936,12 @@ void WaylandSurface::RemoveEnteredOutput(uint32_t output_id) {
 void WaylandSurface::set_color_space(gfx::ColorSpace color_space) {
   if (!connection_->zcr_color_manager()) {
     return;
+  }
+  if (!color_space.IsValid() && pending_state_.contains_video) {
+    // Not all video content contains colorspace information.
+    // In this case, default to Rec709.
+    // Maybe use Rec601 for SD video if it becomes an issue.
+    color_space = gfx::ColorSpace::CreateREC709();
   }
   if (!color_space.IsValid()) {
     return;

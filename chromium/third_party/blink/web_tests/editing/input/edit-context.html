@@ -696,18 +696,19 @@ test(function() {
   const child = document.createElement("iframe");
   document.body.appendChild(child);
   const childDocument = child.contentDocument;
-  const textarea = childDocument.createElement('textarea');
-  childDocument.body.appendChild(textarea);
-  textarea.addEventListener("focusin", e => {
+  const editable = childDocument.createElement('div');
+  editable.contentEditable = true;
+  childDocument.body.appendChild(editable);
+  editable.addEventListener("focusin", e => {
     const childEditContext = new EditContext();
-    textarea.editContext = childEditContext;
+    editable.editContext = childEditContext;
     childEditContext.addEventListener("textupdate", e => {
       child.remove();
     });
     childEditContext.addEventListener("textformatupdate", e => {
     });
   });
-  textarea.focus();
+  editable.focus();
   child.contentWindow.focus();
   child.contentWindow.textInputController.setComposition("bar");
 }, 'Testing EditContext Iframe Document Delete');
@@ -723,6 +724,27 @@ test(function() {
   textInputController.setComposition("bar");
 
 }, 'Testing EditContext GC');
+
+test(() => {
+    let div = document.createElement("div");
+    document.body.appendChild(div);
+    let divText = "Hello World";
+    div.innerText = divText;
+    div.editContext = new EditContext();
+    div.focus();
+
+    let got_textupdate_event = false;
+    div.editContext.addEventListener("textupdate", e => {
+      got_textupdate_event = true;
+    });
+
+    div.editContext = null;
+    eventSender.keyDown("a");
+
+    assert_false(got_textupdate_event, "Shouldn't have received textupdate event after editContext was detached");
+
+    document.body.removeChild(div);
+  }, "EditContext should not receive events after being detached from element");
 
 </script>
 </body>

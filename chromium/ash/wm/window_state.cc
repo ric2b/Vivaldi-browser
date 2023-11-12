@@ -5,7 +5,6 @@
 #include "ash/wm/window_state.h"
 
 #include <absl/cleanup/cleanup.h>
-#include <memory>
 #include <utility>
 
 #include "ash/accessibility/accessibility_controller_impl.h"
@@ -37,15 +36,11 @@
 #include "ash/wm/window_state_observer.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
-#include "ash/wm/wm_metrics.h"
-#include "base/auto_reset.h"
 #include "base/containers/adapters.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/time/time.h"
 #include "chromeos/ui/base/window_properties.h"
-#include "chromeos/ui/base/window_state_type.h"
 #include "chromeos/ui/frame/caption_buttons/snap_controller.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu_metrics.h"
 #include "chromeos/ui/wm/features.h"
@@ -59,7 +54,6 @@
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
-#include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/painter.h"
@@ -458,9 +452,10 @@ bool WindowState::CanSnap() {
 }
 
 bool WindowState::CanSnapOnDisplay(display::Display display) const {
-  const bool can_resizable_snap = !IsPip() && CanResize() && CanMaximize();
+  const bool can_resize = CanResize();
+  const bool can_resizable_snap = !IsPip() && can_resize && CanMaximize();
   return can_resizable_snap ||
-         (!CanResize() && CanUnresizableSnapOnDisplay(display));
+         (!can_resize && CanUnresizableSnapOnDisplay(display));
 }
 
 bool WindowState::HasRestoreBounds() const {
@@ -537,7 +532,8 @@ void WindowState::OnWMEvent(const WMEvent* event) {
 
   if (event->IsSnapEvent()) {
     // Save `event` requested snap ratio.
-    const float target_snap_ratio = event->snap_ratio();
+    CHECK(event->AsSnapEvent());
+    const float target_snap_ratio = event->AsSnapEvent()->snap_ratio();
     snap_ratio_ = absl::make_optional(target_snap_ratio);
     if (IsPartial(target_snap_ratio)) {
       partial_start_time_ = base::TimeTicks::Now();
@@ -1357,6 +1353,16 @@ void WindowState::OnWindowPropertyChanged(aura::Window* window,
                                           const void* key,
                                           intptr_t old) {
   DCHECK_EQ(window_, window);
+  if (key == aura::client::kRestoreBoundsKey) {
+    // Updates the window bounds restore history after updating the restore
+    // bounds to keep them always aligned. This is necessary to avoid getting
+    // incorrect restore bounds from the outdated restore history stack.
+    if (HasRestoreBounds() && !window_state_restore_history_.empty()) {
+      window_state_restore_history_.back().restore_bounds_in_screen =
+          GetRestoreBoundsInScreen();
+    }
+    return;
+  }
   if (key == aura::client::kShowStateKey) {
     if (!ignore_property_change_) {
       WMEvent event(WMEventTypeFromShowState(GetShowState()));
@@ -1381,7 +1387,8 @@ void WindowState::OnWindowPropertyChanged(aura::Window* window,
     }
     return;
   }
-  if (key == aura::client::kWindowWorkspaceKey || key == kDeskGuidKey) {
+  if (key == aura::client::kWindowWorkspaceKey ||
+      key == aura::client::kDeskUuidKey) {
     // Save the window for window restore purposes unless
     // |ignore_property_change_| is true. Note that moving windows across
     // displays will also trigger a kWindowWorkspaceKey change, even if the
@@ -1503,16 +1510,10 @@ bool WindowState::CanUnresizableSnapOnDisplay(display::Display display) const {
   return true;
 }
 
-void WindowState::RecordAndResetWindowSnapActionSource(
-    chromeos::WindowStateType current_type,
-    chromeos::WindowStateType new_type) {
-  // Do not record the metrics if the window state snap type does not change.
-  if (current_type == new_type)
-    return;
-
+void WindowState::RecordWindowSnapActionSource(
+    WindowSnapActionSource snap_action_source) {
   base::UmaHistogramEnumeration(kWindowSnapActionSourceHistogram,
-                                snap_action_source_);
-  snap_action_source_ = WindowSnapActionSource::kOthers;
+                                snap_action_source);
 }
 
 void WindowState::CheckAndRecordDragMaximizedBehavior() {

@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
-#include "base/memory/raw_ptr_exclusion.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
@@ -370,9 +369,7 @@ class TestBluetoothDelegate : public BluetoothDelegate {
       FramePermissionObserver* observer) override {}
 
  private:
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #constexpr-ctor-field-initializer
-  RAW_PTR_EXCLUSION FakeBluetoothScanningPrompt* prompt_ = nullptr;
+  raw_ptr<FakeBluetoothScanningPrompt, DanglingUntriaged> prompt_ = nullptr;
 };
 
 class TestContentBrowserClient : public ContentBrowserClient {
@@ -652,7 +649,7 @@ class WebBluetoothServiceImplTest : public RenderViewHostImplTestHarness,
   }
 
   scoped_refptr<FakeBluetoothAdapter> adapter_;
-  raw_ptr<WebBluetoothServiceImpl> service_ptr_;
+  raw_ptr<WebBluetoothServiceImpl, DanglingUntriaged> service_ptr_;
   mojo::Remote<blink::mojom::WebBluetoothService> service_;
   TestContentBrowserClient browser_client_;
   raw_ptr<ContentBrowserClient> old_browser_client_ = nullptr;

@@ -210,7 +210,7 @@ class OptimizationGuideStoreTest : public testing::Test {
     db_ = db.get();
 
     guide_store_ = std::make_unique<OptimizationGuideStore>(
-        std::move(db), task_environment_.GetMainThreadTaskRunner(),
+        std::move(db), temp_dir(), task_environment_.GetMainThreadTaskRunner(),
         pref_service_.get());
   }
 
@@ -429,7 +429,7 @@ class OptimizationGuideStoreTest : public testing::Test {
  private:
   base::test::TaskEnvironment task_environment_;
   std::unique_ptr<TestingPrefServiceSimple> pref_service_;
-  raw_ptr<FakeDB<proto::StoreEntry>> db_;
+  raw_ptr<FakeDB<proto::StoreEntry>, DanglingUntriaged> db_;
   StoreEntryMap db_store_;
   std::unique_ptr<OptimizationGuideStore> guide_store_;
   base::ScopedTempDir temp_dir_;

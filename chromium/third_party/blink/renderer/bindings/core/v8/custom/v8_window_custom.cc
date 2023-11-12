@@ -65,7 +65,7 @@ namespace blink {
 template <typename CallbackInfo>
 static void LocationAttributeGet(const CallbackInfo& info) {
   v8::Local<v8::Object> holder = info.Holder();
-  DOMWindow* window = V8Window::ToImpl(holder);
+  DOMWindow* window = V8Window::ToWrappableUnsafe(holder);
   window->ReportCoopAccess("location");
   Location* location = window->location();
   DCHECK(location);
@@ -112,12 +112,12 @@ void V8Window::LocationAttributeGetterCustom(
 
 void V8Window::FrameElementAttributeGetterCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  LocalDOMWindow* impl = To<LocalDOMWindow>(V8Window::ToImpl(info.Holder()));
+  LocalDOMWindow* impl =
+      To<LocalDOMWindow>(V8Window::ToWrappableUnsafe(info.Holder()));
   Element* frameElement = impl->frameElement();
 
-  if (!BindingSecurity::ShouldAllowAccessTo(
-          CurrentDOMWindow(info.GetIsolate()), frameElement,
-          BindingSecurity::ErrorReportOption::kDoNotReport)) {
+  if (!BindingSecurity::ShouldAllowAccessTo(CurrentDOMWindow(info.GetIsolate()),
+                                            frameElement)) {
     V8SetReturnValueNull(info);
     return;
   }
@@ -186,7 +186,7 @@ void V8Window::OpenerAttributeSetterCustom(
 void V8Window::NamedPropertyGetterCustom(
     const AtomicString& name,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  DOMWindow* window = V8Window::ToImpl(info.Holder());
+  DOMWindow* window = V8Window::ToWrappableUnsafe(info.Holder());
   if (!window)
     return;
 
@@ -194,6 +194,33 @@ void V8Window::NamedPropertyGetterCustom(
   // window is detached from a frame.
   if (!frame)
     return;
+
+  // Verify that COOP: restrict-properties does not prevent this access.
+  // TODO(https://crbug.com/1370351): This will block all same-origin only
+  // properties accesses with a "Named property" access failure, because the
+  // properties will be tried here as part of the algorithm. See if we need to
+  // have a custom message in that case, possibly by actually printing the
+  // passed name.
+  if (UNLIKELY(
+          window->IsAccessBlockedByCoopRestrictProperties(info.GetIsolate()))) {
+    // We need to not throw an exception if we're dealing with the special
+    // "then" property but return undefined instead. See
+    // https://html.spec.whatwg.org/#crossoriginpropertyfallback-(-p-). This
+    // makes sure WindowProxy is thenable, see the original discussion here:
+    // https://github.com/whatwg/dom/issues/536.
+    if (name == "then") {
+      return info.GetReturnValue().SetUndefined();
+    }
+
+    ExceptionState exception_state(info.GetIsolate(),
+                                   ExceptionState::kNamedGetterContext,
+                                   "Window", name.Utf8().c_str());
+    exception_state.ThrowSecurityError(
+        "Cross-Origin-Opener-Policy: 'restrict-properties' blocked the access.",
+        "Cross-Origin-Opener-Policy: 'restrict-properties' blocked the "
+        "access.");
+    return info.GetReturnValue().SetNull();
+  }
 
   // Note that named access on WindowProxy is allowed in the cross-origin case.
   // 7.4.5 [[GetOwnProperty]] (P), step 6.
@@ -215,7 +242,8 @@ void V8Window::NamedPropertyGetterCustom(
     // active document's origin is not same origin with activeDocument's origin
     // and whose browsing context name does not match the name of its browsing
     // context container's name content attribute value.
-    if (BindingSecurity::ShouldAllowNamedAccessTo(window, child->DomWindow()) ||
+    if (frame->GetSecurityContext()->GetSecurityOrigin()->CanAccess(
+            child->GetSecurityContext()->GetSecurityOrigin()) ||
         name == child->Owner()->BrowsingContextContainerName()) {
       bindings::V8SetReturnValue(
           info, child->DomWindow(), window,
@@ -231,9 +259,8 @@ void V8Window::NamedPropertyGetterCustom(
 
   // This is a cross-origin interceptor. Check that the caller has access to the
   // named results.
-  if (!BindingSecurity::ShouldAllowAccessTo(
-          CurrentDOMWindow(info.GetIsolate()), window,
-          BindingSecurity::ErrorReportOption::kDoNotReport)) {
+  if (!BindingSecurity::ShouldAllowAccessTo(CurrentDOMWindow(info.GetIsolate()),
+                                            window)) {
     // HTML 7.2.3.3 CrossOriginGetOwnPropertyHelper ( O, P )
     // https://html.spec.whatwg.org/C/#crossorigingetownpropertyhelper-(-o,-p-)
     // step 3. If P is "then", @@toStringTag, @@hasInstance, or

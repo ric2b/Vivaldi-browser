@@ -164,24 +164,23 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
 
   // TODO(oshima): Remove this.
   virtual void AppendPlatformEditableItems() {}
-  virtual void ExecOpenInReadAnything() = 0;
 
   bool IsCustomItemChecked(int id) const;
   bool IsCustomItemEnabled(int id) const;
 
-  // Opens the specified URL string in a new tab.
+  // Opens the specified URL.
   void OpenURL(const GURL& url,
                const GURL& referrer,
                WindowOpenDisposition disposition,
                ui::PageTransition transition);
 
-  // Opens the specified URL string in a new tab with the extra headers.
-  void OpenURLWithExtraHeaders(const GURL& url,
-                               const GURL& referrer,
-                               WindowOpenDisposition disposition,
-                               ui::PageTransition transition,
-                               const std::string& extra_headers,
-                               bool started_from_context_menu);
+  // Opens the specified URL with extra headers.
+  virtual void OpenURLWithExtraHeaders(const GURL& url,
+                                       const GURL& referrer,
+                                       WindowOpenDisposition disposition,
+                                       ui::PageTransition transition,
+                                       const std::string& extra_headers,
+                                       bool started_from_context_menu);
 
   // Populates OpenURLParams for opening the specified URL string in a new tab
   // with the extra headers.

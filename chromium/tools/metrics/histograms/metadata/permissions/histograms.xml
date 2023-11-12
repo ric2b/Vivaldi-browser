@@ -23,6 +23,10 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <variants name="AllPermissionTypes">
+<!-- Should be kept in sync with variants SettingsAllPermissionTypes in
+  tools/metrics/histograms/metadata/settings/histograms.xml.
+-->
+
   <variant name="AR"/>
   <variant name="AudioAndVideoCapture"/>
   <variant name="AudioCapture"/>
@@ -196,7 +200,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.API.CreatedPermissionStatusObjects" units="units"
-    expires_after="2023-10-08">
+    expires_after="2023-12-10">
   <owner>andypaicu@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -208,7 +212,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.AutoBlocker.EmbargoPromptSuppression"
-    enum="PermissionEmbargoStatus" expires_after="2023-10-01">
+    enum="PermissionEmbargoStatus" expires_after="2023-12-04">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -319,7 +323,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.Chip.TimeToInteraction" units="ms"
-    expires_after="2023-10-01">
+    expires_after="2023-12-04">
   <owner>elklm@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -508,7 +512,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.Engagement.Accepted" units="%"
-    expires_after="2023-09-10">
+    expires_after="2023-11-12">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -539,7 +543,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.Engagement.Dismissed" units="%"
-    expires_after="2023-09-17">
+    expires_after="2023-11-19">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -633,7 +637,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.MissingOSLevelPermission.Action"
-    enum="PermissionAction" expires_after="2023-09-10">
+    enum="PermissionAction" expires_after="2023-11-12">
   <owner>andypaicu@chromium.org</owner>
   <owner>engedy@chromium.org</owner>
   <owner>hkamila@chromium.org</owner>
@@ -645,7 +649,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.MissingOSLevelPermission.ShouldShow"
-    enum="Boolean" expires_after="2023-09-10">
+    enum="Boolean" expires_after="2023-11-12">
   <owner>andypaicu@chromium.org</owner>
   <owner>engedy@chromium.org</owner>
   <owner>hkamila@chromium.org</owner>
@@ -679,13 +683,17 @@ chromium-metrics-reviews@google.com.
   <owner>fjacky@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
-    Logs granting, revocation, and expiry behaviors of one time permissions. It
-    records grant events, manual revoke events, expiry due to tab closure or
-    discards, and expiry in the background due to non-usage. Note that the
-    number of grants that expired due to the 24 hour maximum grant time limit
-    can be aproximated by calculating #(granted one time) - #(other events),
-    though this does not take into account one time permissions that are still
-    currently active.
+    Logs granting, revocation, and expiry behaviors of one time permissions.
+    Starting with M116, the lifetime limit is enforced actively instead of
+    lazily, and expiration is accurately captured in &quot;Expired after maximum
+    lifetime&quot;. M116 also added the functionality to expire on suspend. This
+    event is also captured in the new enum value &quot;Expired because the
+    device was suspended&quot;. Note that these buckets are only recorded for
+    clients &gt;= M116.
+
+    Warning: &quot;Revoked one time grant manually&quot; is only recorded
+    correctly for clients &gt;= M116 (and should be ignored for previous major
+    versions)
   </summary>
   <token key="PermissionType">
     <variant name="AudioCapture"/>
@@ -757,7 +765,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.PredictionService.PredictionSource"
-    enum="PermissionPredictionSource" expires_after="2023-10-08">
+    enum="PermissionPredictionSource" expires_after="2023-12-10">
   <owner>ravjit@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -806,7 +814,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.Prompt.Accepted" enum="PermissionRequestType"
-    expires_after="2023-09-10">
+    expires_after="2023-11-12">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -880,7 +888,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.Prompt.Denied" enum="PermissionRequestType"
-    expires_after="2023-09-10">
+    expires_after="2023-11-12">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -980,7 +988,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.Prompt.Notifications.EnabledAppLevel"
-    enum="Boolean" expires_after="2023-08-27">
+    enum="Boolean" expires_after="2023-11-12">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -993,7 +1001,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.Prompt.Shown" enum="PermissionRequestType"
-    expires_after="2023-09-10">
+    expires_after="2023-11-12">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -1182,7 +1190,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.QuietChip.TimeToInteraction" units="ms"
-    expires_after="2023-10-01">
+    expires_after="2023-12-04">
   <owner>elklm@chromium.org</owner>
   <owner>engedy@chromium.org</owner>
   <summary>
@@ -1196,7 +1204,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Permissions.QuietNotificationPrompts.DidEnableAdapativelyInPrefs"
-    enum="Boolean" expires_after="2023-10-08">
+    enum="Boolean" expires_after="2023-12-10">
   <owner>andypaicu@chromium.org</owner>
   <owner>engedy@chromium.org</owner>
   <owner>hkamila@chromium.org</owner>
@@ -1209,7 +1217,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Permissions.QuietNotificationPrompts.EnabledStateInPrefsChangedTo"
-    enum="BooleanEnabled" expires_after="2023-10-08">
+    enum="BooleanEnabled" expires_after="2023-12-10">
   <owner>andypaicu@chromium.org</owner>
   <owner>engedy@chromium.org</owner>
   <owner>hkamila@chromium.org</owner>
@@ -1285,7 +1293,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram base="true" name="Permissions.Revocation.ElapsedTimeSinceGrant"
-    units="seconds" expires_after="2023-10-08">
+    units="seconds" expires_after="2023-12-10">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -1316,7 +1324,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram base="true" name="Permissions.Usage.ElapsedTimeSinceGrant"
-    units="seconds" expires_after="2023-09-03">
+    units="seconds" expires_after="2023-11-12">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -1327,7 +1335,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Permissions.WebHid.ChooserClosed" enum="WebHidChooserClosed"
-    expires_after="2023-08-27">
+    expires_after="2023-11-12">
   <owner>mattreynolds@chromium.org</owner>
   <owner>deviceapi-team@google.com</owner>
   <summary>
@@ -1472,62 +1480,13 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebsiteSettings.AllSitesAction2"
-    enum="WebSiteSettingsAllSitesAction2" expires_after="2023-02-19">
-  <owner>ayui@chromium.org</owner>
-  <owner>mxcai@chromium.org</owner>
+    enum="WebSiteSettingsAllSitesAction2" expires_after="2023-11-01">
+  <owner>sauski@google.com</owner>
+  <owner>alimariam@google.com</owner>
   <summary>
     Tracks actions with the &quot;All Sites&quot; page in website settings
     starting in M82. No data available for M94, was temporarily expired. Values
     7 and 8 were added with M96.
-  </summary>
-</histogram>
-
-<histogram name="WebsiteSettings.Discoverability.Action"
-    enum="WebsiteSettingsDiscoverabilityAction" expires_after="2023-06-18">
-  <owner>eokoyomon@chromium.org</owner>
-  <owner>dullweber@chromium.org</owner>
-  <summary>
-    Tracks actions related to page info when discoverability has been activated.
-  </summary>
-</histogram>
-
-<histogram name="WebsiteSettings.Discoverability.TimeToClickHighlight"
-    units="ms" expires_after="M98">
-  <owner>eokoyomon@chromium.org</owner>
-  <owner>dullweber@chromium.org</owner>
-  <summary>
-    Records the amount of time between when the page info is opened and the
-    highlighted permissions section is clicked.
-  </summary>
-</histogram>
-
-<histogram name="WebsiteSettings.Discoverability.TimeToClickHighlightStoreInfo"
-    units="ms" expires_after="2022-12-01">
-  <owner>zhiyuancai@chromium.org</owner>
-  <owner>chrome-shopping@google.com</owner>
-  <summary>
-    Records the amount of time between when the page info is opened and the
-    highlighted store info section is clicked.
-  </summary>
-</histogram>
-
-<histogram name="WebsiteSettings.Discoverability.TimeToOpen" units="ms"
-    expires_after="2023-02-19">
-  <owner>eokoyomon@chromium.org</owner>
-  <owner>dullweber@chromium.org</owner>
-  <summary>
-    Records the amount of time the discoverability icon is shown in the omnibox
-    before the user clicks into page info.
-  </summary>
-</histogram>
-
-<histogram name="WebsiteSettings.Discoverability.TimeToOpenFromStoreIcon"
-    units="ms" expires_after="2022-12-01">
-  <owner>zhiyuancai@chromium.org</owner>
-  <owner>chrome-shopping@google.com</owner>
-  <summary>
-    Records the amount of time the store icon is shown in the omnibox before the
-    user clicks into page info.
   </summary>
 </histogram>
 
@@ -1639,7 +1598,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebsiteSettings.OriginInfo.PermissionChanged"
-    enum="ContentType" expires_after="2023-10-01">
+    enum="ContentType" expires_after="2023-12-04">
   <owner>andypaicu@chromium.org</owner>
   <owner>engedy@chromium.org</owner>
   <owner>hkamila@chromium.org</owner>
@@ -1654,7 +1613,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebsiteSettings.OriginInfo.PermissionChanged.Allowed"
-    enum="ContentType" expires_after="2023-10-01">
+    enum="ContentType" expires_after="2023-12-04">
   <owner>andypaicu@chromium.org</owner>
   <owner>engedy@chromium.org</owner>
   <owner>hkamila@chromium.org</owner>
@@ -1669,7 +1628,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="WebsiteSettings.OriginInfo.PermissionChanged.Blocked"
-    enum="ContentType" expires_after="2023-10-01">
+    enum="ContentType" expires_after="2023-12-04">
   <owner>andypaicu@chromium.org</owner>
   <owner>engedy@chromium.org</owner>
   <owner>hkamila@chromium.org</owner>

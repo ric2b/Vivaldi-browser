@@ -8,8 +8,8 @@
 
 #include "base/android/jni_string.h"
 #include "base/feature_list.h"
+#include "content/public/browser/network_service_util.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/network_service_util.h"
 
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
@@ -23,8 +23,7 @@ bool IsJavaDrivenFeatureEnabled(const base::Feature& feature) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_feature_name(
       ConvertUTF8ToJavaString(env, feature.name));
-  return Java_CachedFeatureFlags_isEnabled(env, j_feature_name,
-                                           feature.default_state);
+  return Java_CachedFeatureFlags_isEnabled(env, j_feature_name);
 }
 
 std::string GetReachedCodeProfilerTrialGroup() {

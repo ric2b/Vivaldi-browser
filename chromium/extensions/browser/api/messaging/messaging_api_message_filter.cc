@@ -109,12 +109,57 @@ bool IsValidMessagingSource(RenderProcessHost& process,
       return true;
     }
 
+    case MessagingEndpoint::Type::kUserScript: {
+      if (!source_endpoint.extension_id) {
+        bad_message::ReceivedBadMessage(
+            &process, bad_message::EMF_INVALID_EXTENSION_ID_FOR_USER_SCRIPT);
+        return false;
+      }
+      bool is_user_script_expected =
+          ContentScriptTracker::DidProcessRunUserScriptFromExtension(
+              process, *source_endpoint.extension_id);
+      if (!is_user_script_expected) {
+        bad_message::ReceivedBadMessage(
+            &process, bad_message::EMF_INVALID_EXTENSION_ID_FOR_USER_SCRIPT);
+        return false;
+      }
+
+      return true;
+    }
+
     case MessagingEndpoint::Type::kWebPage:
       // NOTE: We classify hosted apps as kWebPage, but we don't include
       // the extension ID in the source for those messages.
       if (source_endpoint.extension_id) {
         bad_message::ReceivedBadMessage(
             &process, bad_message::EMF_INVALID_EXTENSION_ID_FOR_WEB_PAGE);
+        return false;
+      }
+      return true;
+  }
+}
+
+bool IsValidMessagingTarget(RenderProcessHost& process,
+                            const MessagingEndpoint& source_endpoint,
+                            const ExtensionId& target_id) {
+  switch (source_endpoint.type) {
+    case MessagingEndpoint::Type::kNativeApp:
+    case MessagingEndpoint::Type::kExtension:
+    case MessagingEndpoint::Type::kWebPage:
+    case MessagingEndpoint::Type::kContentScript:
+      // The API allows these to target any source. The connection may be
+      // refused (e.g. if the target extension isn't installed or doesn't accept
+      // a connection from the source), but it isn't a sign of a bad IPC.
+      return true;
+    case MessagingEndpoint::Type::kUserScript:
+      // User scripts can only target their own corresponding extension.
+      // `source_endpoint.extension_id` should have been validated above in
+      // `IsValidMessagingSource()`.
+      CHECK(source_endpoint.extension_id);
+      if (source_endpoint.extension_id != target_id) {
+        bad_message::ReceivedBadMessage(
+            &process,
+            bad_message::EMF_INVALID_EXTERNAL_EXTENSION_ID_FOR_USER_SCRIPT);
         return false;
       }
       return true;
@@ -178,11 +223,6 @@ bool IsValidSourceUrl(content::RenderProcessHost& process,
 
   // Extract the `base_origin`.
   //
-  // We don't just use (or compare against) the trustworthy
-  // `render_frame_host->GetLastCommittedURL()` because the renderer-side and
-  // browser-side URLs may differ in some scenarios (e.g. see
-  // https://crbug.com/1197308 or `document.write`).
-  //
   // We don't use `ChildProcessSecurityPolicy::CanCommitURL` because: 1) it
   // doesn't cover service workers (e.g. see https://crbug.com/1038996#c35), 2)
   // it has bugs (e.g. https://crbug.com/1380576), and 3) we *can* extract the
@@ -202,6 +242,20 @@ bool IsValidSourceUrl(content::RenderProcessHost& process,
       // deletion of the frame.
       return false;
     }
+
+    if (frame->GetLastCommittedURL() == source_url) {
+      // If the trustworthy, browser-side URL matches `source_url` from the IPC
+      // payload, then report that the IPC is valid.  If the URLs don't match
+      // then we can't assume that the IPC is malformed and `return false`,
+      // because the renderer-side and browser-side URLs may differ in some
+      // scenarios (e.g. see https://crbug.com/1197308 or `document.write`).  In
+      // such scenarios we want to fall back to `base_origin`-based /
+      // `source_url_origin``-based checks, but these checks are not 100%
+      // correct (see https://crbug.com/1449796), so `GetLastCommittedURL` is
+      // consulted first.
+      return true;
+    }
+
     base_origin = frame->GetLastCommittedOrigin();
   } else if (source_context.is_for_service_worker()) {
     // Validate `source_context` before using it to validate `source_url`.
@@ -225,6 +279,12 @@ bool IsValidSourceUrl(content::RenderProcessHost& process,
   }
 
   // Verify `source_url` via CanAccessDataForOrigin.
+  //
+  // TODO(https://crbug.com/1449796): Stop partially/not-100%-correctly
+  // replicating checks from `RenderFrameHostImpl::CanCommitOriginAndUrl`.
+  // The code below correctly handles URLs like `about:blank`, but may diverge
+  // from //content checks in some cases (e.g. WebUI checks are not replicated
+  // here;  MHTML divergence is avoided via GetLastCommittedURL() check above).
   url::Origin source_url_origin = url::Origin::Resolve(source_url, base_origin);
   auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
   if (!policy->CanAccessDataForOrigin(process.GetID(), source_url_origin)) {
@@ -436,6 +496,7 @@ void MessagingAPIMessageFilter::OnOpenChannelToExtension(
   }
 
   if (!IsValidMessagingSource(*process, info.source_endpoint) ||
+      !IsValidMessagingTarget(*process, info.source_endpoint, info.target_id) ||
       !IsValidSourceUrl(*process, info.source_url, source_context) ||
       !IsValidSourceContext(*process, source_context)) {
     // No need to call ReceivedBadMessage here, because it will be called (when

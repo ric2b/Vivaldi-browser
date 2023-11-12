@@ -114,7 +114,7 @@ bool IsTabMuted(const WebContents* web_contents) {
       base::JSONReader::Read(viv_extdata, options);
   absl::optional<bool> mute = absl::nullopt;
   if (json && json->is_dict()) {
-    mute = json->FindBoolKey(kVivaldiTabMuted);
+    mute = json->GetDict().FindBool(kVivaldiTabMuted);
   }
   return mute ? *mute : false;
 }
@@ -541,7 +541,7 @@ void VivaldiPrivateTabObserver::SaveZoomLevelToExtData(double zoom_level) {
   std::string viv_ext_data = web_contents()->GetVivExtData();
   absl::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
   if (json) {
-    json->SetDoubleKey(kVivaldiTabZoom, zoom_level);
+    json->GetDict().Set(kVivaldiTabZoom, zoom_level);
     std::string json_string;
     if (ValueToJSONString(*json, json_string)) {
       web_contents()->SetVivExtData(json_string);
@@ -609,9 +609,9 @@ void VivaldiPrivateTabObserver::SetMuted(bool mute) {
   std::string viv_ext_data = web_contents()->GetVivExtData();
   absl::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
   if (json) {
-    absl::optional<bool> existing = json->FindBoolKey(kVivaldiTabMuted);
+    absl::optional<bool> existing = json->GetDict().FindBool(kVivaldiTabMuted);
     if ((existing && *existing != mute) || (!existing && mute)) {
-      json->SetBoolKey(kVivaldiTabMuted, mute);
+      json->GetDict().Set(kVivaldiTabMuted, mute);
       std::string json_string;
       if (ValueToJSONString(*json, json_string)) {
         web_contents()->SetVivExtData(json_string);
@@ -715,18 +715,6 @@ void VivaldiPrivateTabObserver::AccessKeyAction(std::string access_key) {
   auto* rfh = static_cast<content::RenderFrameHostImpl*>(
       web_contents()->GetPrimaryMainFrame());
   rfh->GetVivaldiFrameService()->AccessKeyAction(access_key);
-}
-
-void VivaldiPrivateTabObserver::GetCurrentSpatnavRect(
-    JSSpatnavRectCallback callback) {
-  auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
-      web_contents()->GetPrimaryMainFrame());
-
-  rfhi->GetVivaldiFrameService()->GetCurrentSpatnavRect(
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(&VivaldiPrivateTabObserver::SpatnavRectReceived,
-                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
-          ::vivaldi::mojom::SpatnavRect::New()));
 }
 
 void VivaldiPrivateTabObserver::MoveSpatnavRect(
@@ -1205,39 +1193,6 @@ ExtensionFunction::ResponseAction TabsPrivateScrollPageFunction::Run() {
   int scroll_amount = (params->scroll_amount) ? *(params->scroll_amount) : 0;
   frame_service->ScrollPage(*scroll_type, scroll_amount);
   return RespondNow(ArgumentList(Results::Create()));
-}
-
-void TabsPrivateGetCurrentSpatnavRectFunction::SpatnavRectReceived(
-    ::vivaldi::mojom::SpatnavRectPtr rect) {
-  namespace Results = tabs_private::GetCurrentSpatnavRect::Results;
-  tabs_private::NavigationRect results;
-
-  results.left = rect->x;
-  results.right = rect->x + rect->width;
-  results.top = rect->y;
-  results.bottom = rect->y + rect->height;
-  results.width = rect->width;
-  results.height = rect->height;
-  results.href = rect->href;
-
-  Respond(ArgumentList(Results::Create(results)));
-}
-
-ExtensionFunction::ResponseAction
-TabsPrivateGetCurrentSpatnavRectFunction::Run() {
-  using tabs_private::GetCurrentSpatnavRect::Params;
-
-  absl::optional<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  std::string error;
-  VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
-      browser_context(), params->tab_id, &error);
-  if (!tab_api)
-    return RespondNow(Error(error));
-  tab_api->GetCurrentSpatnavRect(base::BindOnce(
-      &TabsPrivateGetCurrentSpatnavRectFunction::SpatnavRectReceived, this));
-  return RespondLater();
 }
 
 void TabsPrivateMoveSpatnavRectFunction::SpatnavRectReceived(

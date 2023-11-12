@@ -94,8 +94,6 @@ views::MenuItemView* NotesSubMenuObserverHelperViews::AddMenuItem(
           model, model_index, parent, menu_index, command_id);
 
   if (menu_item) {
-    // Flush all buttons to the right side of the menu for the new menu type.
-    menu_item->set_use_right_margin(false);
     // If we want to load images / icons, this is the place. See
     // vivaldi_menubar.cc for how.
   }

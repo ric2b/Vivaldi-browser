@@ -247,6 +247,7 @@ void DeleteShortcuts(std::vector<base::FilePath> all_shortcuts,
   for (const auto& shortcut : all_shortcuts) {
     if (!base::DeleteFile(shortcut))
       result = false;
+    SHChangeNotify(SHCNE_DELETE, SHCNF_PATH, shortcut.value().c_str(), nullptr);
   }
   std::move(result_callback).Run(result);
 }
@@ -627,9 +628,11 @@ bool CreatePlatformShortcuts(const base::FilePath& web_app_path,
   return true;
 }
 
-Result UpdatePlatformShortcuts(const base::FilePath& web_app_path,
-                               const std::u16string& old_app_title,
-                               const ShortcutInfo& shortcut_info) {
+Result UpdatePlatformShortcuts(
+    const base::FilePath& web_app_path,
+    const std::u16string& old_app_title,
+    absl::optional<ShortcutLocations> user_specified_locations,
+    const ShortcutInfo& shortcut_info) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
   // If this is set, then keeping this as a local variable ensures it is not
@@ -642,6 +645,23 @@ Result UpdatePlatformShortcuts(const base::FilePath& web_app_path,
       GetIconFilePath(web_app_path, shortcut_info.title);
   bool success_updating_icon =
       CheckAndSaveIcon(icon_file, shortcut_info.favicon, true);
+
+  ShortcutLocations existing_locations =
+      GetAppExistingShortCutLocationImpl(shortcut_info);
+
+  bool require_creation_in_different_places =
+      user_specified_locations.has_value() &&
+      (user_specified_locations.value() != existing_locations);
+
+  // If an update is triggered due to stacked installation calls, then ensure
+  // that new shortcuts are created in user specified locations before
+  // triggering a name update.
+  if (require_creation_in_different_places) {
+    ShortcutLocations creation_locations =
+        MergeLocations(user_specified_locations.value(), existing_locations);
+    CreatePlatformShortcuts(web_app_path, creation_locations,
+                            SHORTCUT_CREATION_BY_USER, shortcut_info);
+  }
 
   if (old_app_title != shortcut_info.title) {
     // The app's title has changed. Rename existing shortcuts.
@@ -805,17 +825,15 @@ std::vector<base::FilePath> GetShortcutPaths(
        testing_shortcuts ? testing_shortcuts->startup() : base::FilePath()}};
 
   // Populate shortcut_paths.
+  base::FilePath path;
   for (auto location : locations) {
     if (location.use_this_location) {
-      base::FilePath path;
       if (!location.test_path.empty()) {
-        path = location.test_path;
-      } else if (!ShellUtil::GetShortcutPath(location.location_id,
-                                             ShellUtil::CURRENT_USER, &path)) {
-        NOTREACHED();
-        continue;
+        shortcut_paths.push_back(location.test_path);
+      } else if (ShellUtil::GetShortcutPath(location.location_id,
+                                            ShellUtil::CURRENT_USER, &path)) {
+        shortcut_paths.push_back(path);
       }
-      shortcut_paths.push_back(path);
     }
   }
   return shortcut_paths;

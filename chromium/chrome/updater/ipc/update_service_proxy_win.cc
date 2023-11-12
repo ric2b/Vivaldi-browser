@@ -27,6 +27,7 @@
 #include "base/time/time.h"
 #include "base/version.h"
 #include "base/win/scoped_bstr.h"
+#include "base/win/scoped_safearray.h"
 #include "chrome/updater/app/server/win/updater_idl.h"
 #include "chrome/updater/ipc/proxy_impl_base_win.h"
 #include "chrome/updater/registration_data.h"
@@ -43,10 +44,7 @@ using ICompleteStatusPtr = ::Microsoft::WRL::ComPtr<ICompleteStatus>;
 
 // This class implements the IUpdaterObserver interface and exposes it as a COM
 // object. The class has thread-affinity for the STA thread.
-class UpdaterObserver
-    : public DynamicIIDsImpl<IUpdaterObserver,
-                             __uuidof(IUpdaterObserverUser),
-                             __uuidof(IUpdaterObserverSystem)> {
+class UpdaterObserver : public DYNAMICIIDSIMPL(IUpdaterObserver) {
  public:
   UpdaterObserver(UpdateService::StateChangeCallback state_update_callback,
                   UpdateService::Callback callback)
@@ -212,10 +210,7 @@ class UpdaterObserver
 
 // This class implements the IUpdaterCallback interface and exposes it as a COM
 // object. The class has thread-affinity for the STA thread.
-class UpdaterCallback
-    : public DynamicIIDsImpl<IUpdaterCallback,
-                             __uuidof(IUpdaterCallbackUser),
-                             __uuidof(IUpdaterCallbackSystem)> {
+class UpdaterCallback : public DYNAMICIIDSIMPL(IUpdaterCallback) {
  public:
   explicit UpdaterCallback(base::OnceCallback<void(LONG)> callback)
       : callback_(std::move(callback)) {}
@@ -254,6 +249,137 @@ class UpdaterCallback
   base::OnceCallback<void(LONG)> callback_;
 
   LONG status_code_ = 0;
+};
+
+// This class implements the IUpdaterAppStatesCallback interface and exposes it
+// as a COM object. The class has thread-affinity for the STA thread.
+class UpdaterAppStatesCallback
+    : public DYNAMICIIDSIMPL(IUpdaterAppStatesCallback) {
+ public:
+  explicit UpdaterAppStatesCallback(
+      base::OnceCallback<void(const std::vector<UpdateService::AppState>&)>
+          callback)
+      : callback_(std::move(callback)) {}
+  UpdaterAppStatesCallback(const UpdaterAppStatesCallback&) = delete;
+  UpdaterAppStatesCallback& operator=(const UpdaterAppStatesCallback&) = delete;
+
+  // Overrides for IUpdaterAppStatesCallback. This function is called on the STA
+  // thread directly by the COM RPC runtime, and must be sequenced through
+  // the task runner.
+  IFACEMETHODIMP Run(VARIANT updater_app_states) override {
+    CHECK_EQ(base::PlatformThreadRef(), com_thread_ref_);
+    VLOG(2) << __func__;
+
+    if (V_VT(&updater_app_states) != (VT_ARRAY | VT_DISPATCH)) {
+      return E_INVALIDARG;
+    }
+
+    // The safearray is owned by the caller of `Run`, so ownership is released
+    // here after acquiring the `LockScope`.
+    base::win::ScopedSafearray safearray(V_ARRAY(&updater_app_states));
+    absl::optional<base::win::ScopedSafearray::LockScope<VT_DISPATCH>>
+        lock_scope = safearray.CreateLockScope<VT_DISPATCH>();
+    safearray.Release();
+
+    if (!lock_scope.has_value() || !lock_scope->size()) {
+      return E_INVALIDARG;
+    }
+
+    for (size_t i = 0; i < lock_scope->size(); ++i) {
+      Microsoft::WRL::ComPtr<IDispatch> dispatch(lock_scope->at(i));
+      if (!dispatch) {
+        return E_INVALIDARG;
+      }
+      Microsoft::WRL::ComPtr<IUpdaterAppState> app_state;
+      const HRESULT hr =
+          dispatch.CopyTo(IsSystemInstall() ? __uuidof(IUpdaterAppStateSystem)
+                                            : __uuidof(IUpdaterAppStateUser),
+                          IID_PPV_ARGS_Helper(&app_state));
+      if (FAILED(hr)) {
+        return hr;
+      }
+      app_states_.push_back(IUpdaterAppStateToAppState(app_state));
+    }
+
+    return S_OK;
+  }
+
+  // Disconnects this observer from its subject and ensures the callbacks are
+  // not posted after this function is called. Returns the completion callback
+  // so that the owner of this object can take back the callback ownership.
+  base::OnceCallback<void(const std::vector<UpdateService::AppState>&)>
+  Disconnect() {
+    CHECK_EQ(base::PlatformThreadRef(), com_thread_ref_);
+    VLOG(2) << __func__;
+    return std::move(callback_);
+  }
+
+ private:
+  ~UpdaterAppStatesCallback() override {
+    CHECK_EQ(base::PlatformThreadRef(), com_thread_ref_);
+    if (callback_) {
+      std::move(callback_).Run(app_states_);
+    }
+  }
+
+  UpdateService::AppState IUpdaterAppStateToAppState(
+      Microsoft::WRL::ComPtr<IUpdaterAppState> updater_app_state) {
+    DCHECK(updater_app_state);
+
+    UpdateService::AppState app_state;
+    {
+      base::win::ScopedBstr app_id;
+      HRESULT hr = updater_app_state->get_appId(app_id.Receive());
+      if (SUCCEEDED(hr)) {
+        app_state.app_id = base::WideToUTF8(app_id.Get());
+      }
+    }
+    {
+      base::win::ScopedBstr version;
+      HRESULT hr = updater_app_state->get_version(version.Receive());
+      if (SUCCEEDED(hr)) {
+        app_state.version = base::Version(base::WideToUTF8(version.Get()));
+      }
+    }
+    {
+      base::win::ScopedBstr ap;
+      HRESULT hr = updater_app_state->get_ap(ap.Receive());
+      if (SUCCEEDED(hr)) {
+        app_state.ap = base::WideToUTF8(ap.Get());
+      }
+    }
+    {
+      base::win::ScopedBstr brand_code;
+      HRESULT hr = updater_app_state->get_brandCode(brand_code.Receive());
+      if (SUCCEEDED(hr)) {
+        app_state.brand_code = base::WideToUTF8(brand_code.Get());
+      }
+    }
+    {
+      base::win::ScopedBstr brand_path;
+      HRESULT hr = updater_app_state->get_brandPath(brand_path.Receive());
+      if (SUCCEEDED(hr)) {
+        app_state.brand_path = base::FilePath(brand_path.Get());
+      }
+    }
+    {
+      base::win::ScopedBstr ecp;
+      HRESULT hr = updater_app_state->get_ecp(ecp.Receive());
+      if (SUCCEEDED(hr)) {
+        app_state.ecp = base::FilePath(ecp.Get());
+      }
+    }
+
+    return app_state;
+  }
+
+  // The reference of the thread this object is bound to.
+  base::PlatformThreadRef com_thread_ref_;
+
+  base::OnceCallback<void(const std::vector<UpdateService::AppState>&)>
+      callback_;
+
+  std::vector<UpdateService::AppState> app_states_;
 };
 
 }  // namespace
@@ -387,7 +513,7 @@ class UpdateServiceProxyImpl
       return;
     }
     auto callback_wrapper =
-        Microsoft::WRL::Make<UpdaterCallback>(base::BindOnce(
+        MakeComObjectOrCrash<UpdaterCallback>(base::BindOnce(
             [](base::OnceCallback<void(int)> callback, LONG status_code) {
               std::move(callback).Run(status_code);
             },
@@ -439,7 +565,7 @@ class UpdateServiceProxyImpl
     }
 
     auto callback_wrapper =
-        Microsoft::WRL::Make<UpdaterCallback>(base::BindOnce(
+        MakeComObjectOrCrash<UpdaterCallback>(base::BindOnce(
             [](base::OnceCallback<void(int)> callback, LONG status_code) {
               std::move(callback).Run(status_code);
             },
@@ -459,10 +585,18 @@ class UpdateServiceProxyImpl
       base::OnceCallback<void(const std::vector<UpdateService::AppState>&)>
           callback) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-    // TODO(crbug.com/1094024): implement this feature in the COM server and
-    // then replace this stub code with the actual call.
-    std::move(callback).Run(std::vector<UpdateService::AppState>());
+    if (!ConnectToServer()) {
+      std::move(callback).Run({});
+      return;
+    }
+    auto callback_wrapper =
+        MakeComObjectOrCrash<UpdaterAppStatesCallback>(std::move(callback));
+    if (HRESULT hr = get_interface()->GetAppStates(callback_wrapper.Get());
+        FAILED(hr)) {
+      VLOG(2) << "Failed to call IUpdater::GetAppStates, " << std::hex << hr;
+      callback_wrapper->Disconnect().Run({});
+      return;
+    }
   }
 
   void RunPeriodicTasksOnSTA(base::OnceClosure callback) {
@@ -471,7 +605,7 @@ class UpdateServiceProxyImpl
       std::move(callback).Run();
       return;
     }
-    auto callback_wrapper = Microsoft::WRL::Make<UpdaterCallback>(
+    auto callback_wrapper = MakeComObjectOrCrash<UpdaterCallback>(
         base::BindOnce([](base::OnceClosure callback,
                           LONG /*status_code*/) { std::move(callback).Run(); },
                        std::move(callback)));
@@ -500,7 +634,7 @@ class UpdateServiceProxyImpl
       return;
     }
 
-    auto observer = Microsoft::WRL::Make<UpdaterObserver>(state_update,
+    auto observer = MakeComObjectOrCrash<UpdaterObserver>(state_update,
                                                           std::move(callback));
     HRESULT hr = get_interface()->CheckForUpdate(
         app_id_w.c_str(), static_cast<int>(priority),
@@ -543,7 +677,7 @@ class UpdateServiceProxyImpl
       return;
     }
 
-    auto observer = Microsoft::WRL::Make<UpdaterObserver>(state_update,
+    auto observer = MakeComObjectOrCrash<UpdaterObserver>(state_update,
                                                           std::move(callback));
     HRESULT hr = get_interface()->Update(
         app_id_w.c_str(), install_data_index_w.c_str(),
@@ -565,7 +699,7 @@ class UpdateServiceProxyImpl
       std::move(callback).Run(UpdateService::Result::kServiceFailed);
       return;
     }
-    auto observer = Microsoft::WRL::Make<UpdaterObserver>(state_update,
+    auto observer = MakeComObjectOrCrash<UpdaterObserver>(state_update,
                                                           std::move(callback));
     if (HRESULT hr = get_interface()->UpdateAll(observer.Get()); FAILED(hr)) {
       VLOG(2) << "Failed to call IUpdater::UpdateAll" << std::hex << hr;
@@ -627,7 +761,7 @@ class UpdateServiceProxyImpl
       std::move(callback).Run(UpdateService::Result::kServiceFailed);
       return;
     }
-    auto observer = Microsoft::WRL::Make<UpdaterObserver>(state_update,
+    auto observer = MakeComObjectOrCrash<UpdaterObserver>(state_update,
                                                           std::move(callback));
     HRESULT hr = get_interface()->Install(
         app_id_w.c_str(), brand_code_w.c_str(), brand_path_w.c_str(),
@@ -692,7 +826,7 @@ class UpdateServiceProxyImpl
       return;
     }
 
-    auto observer = Microsoft::WRL::Make<UpdaterObserver>(state_update,
+    auto observer = MakeComObjectOrCrash<UpdaterObserver>(state_update,
                                                           std::move(callback));
     HRESULT hr = get_interface()->RunInstaller(
         app_id_w.c_str(), installer_path.value().c_str(),

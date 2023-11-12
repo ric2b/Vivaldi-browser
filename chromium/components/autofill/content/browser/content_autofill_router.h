@@ -10,6 +10,7 @@
 
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
+#include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/form_forest.h"
 #include "components/autofill/core/browser/autofill_driver.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -22,8 +23,6 @@
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace autofill {
-
-class ContentAutofillDriver;
 
 // ContentAutofillRouter routes events between ContentAutofillDriver objects in
 // order to handle frame-transcending forms.
@@ -144,9 +143,14 @@ class ContentAutofillRouter {
 
   // Deletes all forms and fields related to |driver| (and this driver only).
   // Must be called whenever |driver| is destroyed.
-  // As a simple performance optimization, if |driver| is a main frame, the
-  // whole router is reset to the initial state.
-  void UnregisterDriver(ContentAutofillDriver* driver);
+  //
+  // |driver_is_dying| indicates if the |driver| is being destructed or about to
+  // be destructed. Typically, the driver dies on cross-origin navigations but
+  // survives same-origin navigations (but more precisely this depends on the
+  // lifecycle of the content::RenderFrameHost). If the driver survives, the
+  // router may keep the meta data is collected about the frame (in particular,
+  // the parent frame).
+  void UnregisterDriver(ContentAutofillDriver* driver, bool driver_is_dying);
 
   // Returns the ContentAutofillDriver* for which AskForValuesToFill() was
   // called last.
@@ -228,14 +232,12 @@ class ContentAutofillRouter {
       FormData form,
       const FormFieldData& field,
       const gfx::RectF& bounding_box,
-      AutoselectFirstSuggestion autoselect_first_suggestion,
-      FormElementWasClicked form_element_was_clicked,
+      AutofillSuggestionTriggerSource trigger_source,
       void (*callback)(ContentAutofillDriver* target,
                        const FormData& form,
                        const FormFieldData& field,
                        const gfx::RectF& bounding_box,
-                       AutoselectFirstSuggestion autoselect_first_suggestion,
-                       FormElementWasClicked form_element_was_clicked));
+                       AutofillSuggestionTriggerSource trigger_source));
   void HidePopup(ContentAutofillDriver* source,
                  void (*callback)(ContentAutofillDriver* target));
   void FocusNoLongerOnForm(ContentAutofillDriver* source,
@@ -317,6 +319,13 @@ class ContentAutofillRouter {
   void RendererShouldClearPreviewedForm(
       ContentAutofillDriver* source,
       void (*callback)(ContentAutofillDriver* target));
+  void RendererShouldTriggerSuggestions(
+      ContentAutofillDriver* source,
+      const FieldGlobalId& field,
+      AutofillSuggestionTriggerSource trigger_source,
+      void (*callback)(ContentAutofillDriver* target,
+                       const FieldRendererId& field,
+                       AutofillSuggestionTriggerSource trigger_source));
   void RendererShouldFillFieldWithValue(
       ContentAutofillDriver* source,
       const FieldGlobalId& field,
@@ -345,9 +354,9 @@ class ContentAutofillRouter {
   // Returns the driver of |frame| stored in |form_forest_|.
   ContentAutofillDriver* DriverOfFrame(LocalFrameToken frame);
 
-  // Calls ContentAutofillDriver::TriggerReparse() for all drivers in
+  // Calls ContentAutofillDriver::TriggerFormExtraction() for all drivers in
   // |form_forest_| except for |exception|.
-  void TriggerReparseExcept(ContentAutofillDriver* exception);
+  void TriggerFormExtractionExcept(ContentAutofillDriver* exception);
 
   // Update the last queried and source and do cleanup work.
   void SetLastQueriedSource(ContentAutofillDriver* source);
@@ -367,7 +376,8 @@ class ContentAutofillRouter {
 
   // The driver that triggered the last AskForValuesToFill() call.
   // Update with SetLastQueriedSource().
-  raw_ptr<ContentAutofillDriver> last_queried_source_ = nullptr;
+  raw_ptr<ContentAutofillDriver, DanglingUntriaged> last_queried_source_ =
+      nullptr;
   // The driver to which the last AskForValuesToFill() call was routed.
   // Update with SetLastQueriedTarget().
   raw_ptr<ContentAutofillDriver> last_queried_target_ = nullptr;

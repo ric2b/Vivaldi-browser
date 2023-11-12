@@ -282,9 +282,6 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
 
   form_data->SetIdentifier(GenerateFormDataIdentifier());
   form_data->SetContainsPasswordData(dom_form_data->ContainsPasswordData());
-  AtomicString target_or_base_target = copied_attributes.Target().empty()
-                                           ? document.BaseTarget()
-                                           : copied_attributes.Target();
 
   if (copied_attributes.Method() != FormSubmission::kPostMethod &&
       !action_url.ProtocolIsJavaScript()) {
@@ -329,6 +326,9 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
   frame_request.SetClientRedirectReason(reason);
   frame_request.SetForm(form);
   frame_request.SetTriggeringEventInfo(triggering_event_info);
+  AtomicString target_or_base_target = frame_request.CleanNavigationTarget(
+      copied_attributes.Target().empty() ? document.BaseTarget()
+                                         : copied_attributes.Target());
 
   if (RuntimeEnabledFeatures::FormRelAttributeEnabled() &&
       form->HasRel(HTMLFormElement::kNoReferrer)) {
@@ -354,12 +354,14 @@ FormSubmission* FormSubmission::Create(HTMLFormElement* form,
           .FindOrCreateFrameForNavigation(frame_request, target_or_base_target)
           .frame;
 
+  // Apply replacement now, before any async steps, as the result may change.
   WebFrameLoadType load_type = WebFrameLoadType::kStandard;
   LocalFrame* target_local_frame = DynamicTo<LocalFrame>(target_frame);
   if (target_local_frame &&
-      !target_local_frame->GetDocument()->LoadEventFinished() &&
-      !LocalFrame::HasTransientUserActivation(target_local_frame))
+      target_local_frame->NavigationShouldReplaceCurrentHistoryEntry(
+          frame_request, load_type)) {
     load_type = WebFrameLoadType::kReplaceCurrentItem;
+  }
 
   return MakeGarbageCollected<FormSubmission>(
       copied_attributes.Method(), action_url, target_or_base_target,

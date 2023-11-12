@@ -76,6 +76,32 @@ class TaskLists {
   std::vector<std::unique_ptr<TaskList>> items_;
 };
 
+// https://developers.google.com/tasks/reference/rest/v1/tasks (see "links[]*").
+class TaskLink {
+ public:
+  // Type of the link.
+  enum class Type {
+    kEmail,  // is the only supported right now.
+    kUnknown,
+  };
+
+  TaskLink() = default;
+  TaskLink(const TaskLink&) = delete;
+  TaskLink& operator=(const TaskLink&) = delete;
+  ~TaskLink() = default;
+
+  // Registers the mapping between JSON field names and the members in this
+  // class.
+  static void RegisterJSONConverter(
+      base::JSONValueConverter<TaskLink>* converter);
+
+  Type type() const { return type_; }
+
+ private:
+  // Type of the link.
+  Type type_ = Type::kUnknown;
+};
+
 // https://developers.google.com/tasks/reference/rest/v1/tasks
 class Task {
  public:
@@ -102,7 +128,9 @@ class Task {
   const std::string& title() const { return title_; }
   Status status() const { return status_; }
   const std::string& parent_id() const { return parent_id_; }
-  absl::optional<base::Time> due() { return due_; }
+  const std::string& position() const { return position_; }
+  const absl::optional<base::Time>& due() const { return due_; }
+  const std::vector<std::unique_ptr<TaskLink>>& links() const { return links_; }
 
  private:
   // Task identifier.
@@ -117,10 +145,16 @@ class Task {
   // Parent task identifier.
   std::string parent_id_;
 
+  // Position of the task among its sibling tasks.
+  std::string position_;
+
   // Due date of the task (comes as a RFC 3339 timestamp and converted to
   // `base::Time`). The due date only records date information. Not all tasks
   // have a due date.
   absl::optional<base::Time> due_ = absl::nullopt;
+
+  // Collection of links related to this task.
+  std::vector<std::unique_ptr<TaskLink>> links_;
 };
 
 // Container for multiple `Task`s.

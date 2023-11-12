@@ -28,6 +28,7 @@
 #include "chrome/common/extensions/api/passwords_private.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/common/switches.h"
@@ -40,7 +41,12 @@ namespace {
 
 class PasswordsPrivateApiTest : public ExtensionApiTest {
  public:
-  PasswordsPrivateApiTest() = default;
+  PasswordsPrivateApiTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {password_manager::features::kPasswordManagerRedesign,
+         password_manager::features::kPasswordsGrouping},
+        {});
+  }
 
   PasswordsPrivateApiTest(const PasswordsPrivateApiTest&) = delete;
   PasswordsPrivateApiTest& operator=(const PasswordsPrivateApiTest&) = delete;
@@ -142,6 +148,7 @@ class PasswordsPrivateApiTest : public ExtensionApiTest {
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
   scoped_refptr<TestPasswordsPrivateDelegate> test_delegate_;
 };
 
@@ -203,6 +210,20 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
+                       ChangeCredentialChangePassword) {
+  EXPECT_TRUE(RunPasswordsSubtest("changeCredentialChangePassword"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, ChangeCredentialChangePasskey) {
+  EXPECT_TRUE(RunPasswordsSubtest("changeCredentialChangePasskey")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, ChangeCredentialNotFound) {
+  EXPECT_TRUE(RunPasswordsSubtest("changeCredentialNotFound")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
                        RemoveAndUndoRemoveSavedPassword) {
   EXPECT_TRUE(RunPasswordsSubtest("removeAndUndoRemoveSavedPassword"))
       << message_;
@@ -212,6 +233,10 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
                        RemoveAndUndoRemovePasswordException) {
   EXPECT_TRUE(RunPasswordsSubtest("removeAndUndoRemovePasswordException"))
       << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, RemovePasskey) {
+  EXPECT_TRUE(RunPasswordsSubtest("removePasskey")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, RequestPlaintextPassword) {

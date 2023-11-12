@@ -109,11 +109,12 @@ void LaunchWebApp(const std::string& package_name,
   }
   const auto gurl = GURL(url);
 
-  return LaunchBubble(gurl, icon, visible_name, phone_name,
-                      apps_launch_info_provider->GetConnectionStatusForUi(),
-                      apps_launch_info_provider->entry_point(),
-                      base::BindOnce(&EnsureStreamClose, profile),
-                      base::BindRepeating(&StreamGoBack, profile));
+  return LaunchBubble(
+      gurl, icon, visible_name, phone_name,
+      apps_launch_info_provider->GetConnectionStatusFromLastAttempt(),
+      apps_launch_info_provider->entry_point(),
+      base::BindOnce(&EnsureStreamClose, profile),
+      base::BindRepeating(&StreamGoBack, profile));
 }
 
 void RelaunchLast(Profile* profile) {
@@ -156,7 +157,8 @@ EcheAppManager* EcheAppManagerFactory::GetForProfile(Profile* profile) {
 
 // static
 EcheAppManagerFactory* EcheAppManagerFactory::GetInstance() {
-  return base::Singleton<EcheAppManagerFactory>::get();
+  static base::NoDestructor<EcheAppManagerFactory> instance;
+  return instance.get();
 }
 
 // static

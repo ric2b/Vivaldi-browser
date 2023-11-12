@@ -16,7 +16,6 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/ash/login/saml/password_sync_token_checkers_collection.h"
 #include "chrome/browser/ash/login/signin/token_handle_util.h"
-#include "chrome/browser/ash/login/ui/login_display.h"
 #include "chrome/browser/ash/login/user_online_signin_notifier.h"
 #include "chrome/browser/ash/system/system_clock.h"
 #include "chromeos/ash/components/dbus/cryptohome/rpc.pb.h"
@@ -101,9 +100,6 @@ class UserSelectionScreen
 
   // UserOnlineSigninNotifier::Observer
   void OnOnlineSigninEnforced(const AccountId& account_id) override;
-
-  // Determines if user auth status requires online sign in.
-  static bool ShouldForceOnlineSignIn(const user_manager::User* user);
 
   // Builds a `UserAvatar` instance which contains the current image for `user`.
   static UserAvatar BuildAshUserAvatarForUser(const user_manager::User& user);

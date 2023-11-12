@@ -70,15 +70,18 @@ class UnifiedSystemTrayTest
         switches::kCameraEffectsSupportedByHardware);
 
     std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
     if (IsQsRevampEnabled()) {
       enabled_features.push_back(features::kQsRevamp);
+    } else {
+      disabled_features.push_back(features::kQsRevamp);
     }
     if (IsVcControlsUiEnabled()) {
       fake_video_conference_tray_controller_ =
           std::make_unique<FakeVideoConferenceTrayController>();
       enabled_features.push_back(features::kVideoConference);
     }
-    feature_list_.InitWithFeatures(enabled_features, {});
+    feature_list_.InitWithFeatures(enabled_features, disabled_features);
     AshTestBase::SetUp();
   }
 
@@ -231,9 +234,12 @@ TEST_P(UnifiedSystemTrayTest, GetAccessibleNameForQuickSettingsBubble) {
   auto* tray = GetPrimaryUnifiedSystemTray();
   tray->ShowBubble();
 
-  EXPECT_EQ(tray->GetAccessibleNameForQuickSettingsBubble(),
-            l10n_util::GetStringUTF16(
-                IDS_ASH_QUICK_SETTINGS_BUBBLE_ACCESSIBLE_DESCRIPTION));
+  EXPECT_EQ(
+      tray->GetAccessibleNameForQuickSettingsBubble(),
+      l10n_util::GetStringUTF16(
+          IsQsRevampEnabled()
+              ? IDS_ASH_REVAMPED_QUICK_SETTINGS_BUBBLE_ACCESSIBLE_DESCRIPTION
+              : IDS_ASH_QUICK_SETTINGS_BUBBLE_ACCESSIBLE_DESCRIPTION));
 }
 
 TEST_P(UnifiedSystemTrayTest, ShowVolumeSliderBubble) {
@@ -783,7 +789,9 @@ TEST_P(UnifiedSystemTrayTest, InputMuteStateToggledButNoMicrophoneAvailable) {
   EXPECT_FALSE(IsMicrophoneMuteToastShown());
 }
 
-// Tests that the bubble is closed after entering or exiting tablet mode.
+// Tests that the bubble is closed after entering or exiting tablet mode. This
+// is required because the `FeatureTile`'s must be recreated to switch between
+// primary and compact.
 TEST_P(UnifiedSystemTrayTest, BubbleClosedAfterTabletModeChange) {
   auto* tray = GetPrimaryUnifiedSystemTray();
   TabletModeController* tablet_mode_controller =
@@ -958,15 +966,10 @@ class UnifiedSystemTrayPrivacyIndicatorsTest
   ~UnifiedSystemTrayPrivacyIndicatorsTest() override = default;
 
   void SetUp() override {
-    std::vector<base::test::FeatureRef> enabled_features = {
-        features::kPrivacyIndicators};
-    if (IsQsRevampEnabled()) {
-      enabled_features.push_back(features::kQsRevamp);
-    }
-
-    scoped_feature_list_.InitWithFeatures(
-        enabled_features,
-        /*disabled_features=*/{features::kVideoConference});
+    scoped_feature_list_.InitWithFeatureStates(
+        {{features::kPrivacyIndicators, true},
+         {features::kVideoConference, false},
+         {features::kQsRevamp, IsQsRevampEnabled()}});
 
     AshTestBase::SetUp();
   }

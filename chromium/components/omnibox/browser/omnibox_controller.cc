@@ -16,22 +16,36 @@
 #include "components/omnibox/browser/omnibox_popup_view.h"
 #include "ui/gfx/geometry/rect.h"
 
-OmniboxController::OmniboxController(OmniboxEditModel* omnibox_edit_model,
-                                     OmniboxClient* client)
-    : omnibox_edit_model_(omnibox_edit_model),
-      client_(client),
-      autocomplete_controller_(new AutocompleteController(
+OmniboxController::OmniboxController(OmniboxView* view,
+                                     std::unique_ptr<OmniboxClient> client)
+    : client_(std::move(client)),
+      edit_model_(std::make_unique<OmniboxEditModel>(
+          /*omnibox_controller=*/this,
+          view)),
+      autocomplete_controller_(std::make_unique<AutocompleteController>(
           client_->CreateAutocompleteProviderClient(),
           AutocompleteClassifier::DefaultOmniboxProviders())) {
-  autocomplete_controller_->AddObserver(this);
+  // Directly observe omnibox's `AutocompleteController` instance - i.e., when
+  // `view` is provided in the constructor. In the case of realbox - i.e., when
+  // `view` is not provided in the constructor - `RealboxHandler` directly
+  // observes the `AutocompleteController` instance itself.
+  if (view) {
+    autocomplete_controller_->AddObserver(this);
+  }
 
-  AutocompleteControllerEmitter* emitter =
-      client_->GetAutocompleteControllerEmitter();
-  if (emitter)
+  // Register the `AutocompleteController` with `AutocompleteControllerEmitter`.
+  if (auto* emitter = client_->GetAutocompleteControllerEmitter()) {
     autocomplete_controller_->AddObserver(emitter);
+  }
 }
 
 OmniboxController::~OmniboxController() = default;
+
+void OmniboxController::set_edit_model(
+    std::unique_ptr<OmniboxEditModel> edit_model) {
+  CHECK_EQ(this, edit_model->omnibox_controller());
+  edit_model_ = std::move(edit_model);
+}
 
 void OmniboxController::StartAutocomplete(
     const AutocompleteInput& input) const {
@@ -48,36 +62,36 @@ void OmniboxController::OnResultChanged(AutocompleteController* controller,
   TRACE_EVENT0("omnibox", "OmniboxController::OnResultChanged");
   DCHECK(controller == autocomplete_controller_.get());
 
-  const bool was_open = omnibox_edit_model_->PopupIsOpen();
+  const bool was_open = edit_model_->PopupIsOpen();
   if (default_match_changed) {
     // The default match has changed, we need to let the OmniboxEditModel know
     // about new inline autocomplete text (blue highlight).
     if (auto* match = result().default_match()) {
       current_match_ = *match;
-      omnibox_edit_model_->OnCurrentMatchChanged();
+      edit_model_->OnCurrentMatchChanged();
     } else {
       InvalidateCurrentMatch();
-      omnibox_edit_model_->OnPopupResultChanged();
-      omnibox_edit_model_->OnPopupDataChanged(
+      edit_model_->OnPopupResultChanged();
+      edit_model_->OnPopupDataChanged(
           std::u16string(),
           /*is_temporary_text=*/false, std::u16string(), std::u16string(),
           std::u16string(), false, std::u16string(), AutocompleteMatch());
     }
   } else {
-    omnibox_edit_model_->OnPopupResultChanged();
+    edit_model_->OnPopupResultChanged();
   }
 
-  if (was_open && !omnibox_edit_model_->PopupIsOpen()) {
+  if (was_open && !edit_model_->PopupIsOpen()) {
     // Accept the temporary text as the user text, because it makes little sense
     // to have temporary text when the popup is closed.
-    omnibox_edit_model_->AcceptTemporaryTextAsUserText();
+    edit_model_->AcceptTemporaryTextAsUserText();
     // Closing the popup can change the default suggestion. This usually occurs
     // when it's unclear whether the input represents a search or URL; e.g.,
     // 'a.com/b c' or when title autocompleting. Clear the additional text to
     // avoid suggesting the omnibox contains a URL suggestion when that may no
     // longer be the case; i.e. when the default suggestion changed from a URL
     // to a search suggestion upon closing the popup.
-    omnibox_edit_model_->ClearAdditionalText();
+    edit_model_->ClearAdditionalText();
   }
 
   // Note: The client outlives |this|, so bind a weak pointer to the callback
@@ -96,16 +110,16 @@ void OmniboxController::InvalidateCurrentMatch() {
 
 void OmniboxController::ClearPopupKeywordMode() const {
   TRACE_EVENT0("omnibox", "OmniboxController::ClearPopupKeywordMode");
-  if (omnibox_edit_model_->PopupIsOpen()) {
-    OmniboxPopupSelection selection = omnibox_edit_model_->GetPopupSelection();
+  if (edit_model_->PopupIsOpen()) {
+    OmniboxPopupSelection selection = edit_model_->GetPopupSelection();
     if (selection.state == OmniboxPopupSelection::KEYWORD_MODE) {
       selection.state = OmniboxPopupSelection::NORMAL;
-      omnibox_edit_model_->SetPopupSelection(selection);
+      edit_model_->SetPopupSelection(selection);
     }
   }
 }
 
 void OmniboxController::SetRichSuggestionBitmap(int result_index,
                                                 const SkBitmap& bitmap) {
-  omnibox_edit_model_->SetPopupRichSuggestionBitmap(result_index, bitmap);
+  edit_model_->SetPopupRichSuggestionBitmap(result_index, bitmap);
 }

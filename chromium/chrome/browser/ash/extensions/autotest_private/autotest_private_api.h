@@ -16,6 +16,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/ash/bruschetta/bruschetta_installer.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/printing/cups_printers_manager.h"
 #include "chrome/browser/platform_util.h"
@@ -1545,6 +1546,20 @@ class AutotestPrivateWaitForAmbientPhotoAnimationFunction
   void Timeout();
 };
 
+class AutotestPrivateWaitForAmbientVideoFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateWaitForAmbientVideoFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.waitForAmbientVideo",
+                             AUTOTESTPRIVATE_WAITFORAMBIENTVIDEO)
+
+ private:
+  ~AutotestPrivateWaitForAmbientVideoFunction() override;
+  ResponseAction Run() override;
+
+  void RespondWithSuccess();
+  void RespondWithError(std::string error_message);
+};
+
 class AutotestPrivateDisableSwitchAccessDialogFunction
     : public ExtensionFunction {
  public:
@@ -1764,6 +1779,44 @@ class AutotestPrivateStopFrameCountingFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   void OnDataReceived(viz::mojom::FrameCountingDataPtr data_ptr);
+};
+
+class AutotestPrivateInstallBruschettaFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateInstallBruschettaFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.installBruschetta",
+                             AUTOTESTPRIVATE_INSTALLBRUSCHETTA)
+
+ private:
+  ~AutotestPrivateInstallBruschettaFunction() override;
+  ResponseAction Run() override;
+
+  void ClickAccept();
+  void OnInstallerFinish(bruschetta::BruschettaInstallResult result);
+};
+
+class AutotestPrivateRemoveBruschettaFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateRemoveBruschettaFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.removeBruschetta",
+                             AUTOTESTPRIVATE_REMOVEBRUSCHETTA)
+
+ private:
+  ~AutotestPrivateRemoveBruschettaFunction() override;
+  ResponseAction Run() override;
+
+  void OnRemoveVm(bool success);
+};
+
+class AutotestPrivateIsFeatureEnabledFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateIsFeatureEnabledFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.isFeatureEnabled",
+                             AUTOTESTPRIVATE_ISFEATUREENABLED)
+
+ private:
+  ~AutotestPrivateIsFeatureEnabledFunction() override;
+  ResponseAction Run() override;
 };
 
 template <>

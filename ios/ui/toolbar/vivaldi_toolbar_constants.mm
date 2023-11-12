@@ -8,8 +8,23 @@
 
 #pragma mark - SIZE AND PADDINGS
 
-const CGFloat vivaldiToolbarHeightFullscreen = 0;
-const CGFloat vivaldiNonDynamicToolbarHeightFullscreen = 0;
+const CGFloat vPrimaryToolbarHorizontalPadding = 4;
+const CGFloat vPrimaryToolbarTextFieldLeadingOffsetNoImage = 0;
+const CGFloat vPrimaryToolbarTextFieldLeadingOffsetImage = 2;
+const CGFloat vStickyToolbarViewHeight = 20.0;
+
+#pragma mark - ANIMATIONS
+const CGFloat vPrimaryToolbarAnimationDuration = 0.5;
+const CGFloat vPrimaryToolbarAnimationDamping = 0.9;
+const CGFloat vPrimaryToolbarAnimationSpringVelocity = 2.0;
+
+const CGFloat vStickyToolbarAnimationDuration = 0.3;
+const CGFloat vStickyToolbarAnimationDamping = 0.8;
+const CGFloat vStickyToolbarAnimationSpringVelocity = 15.0;
+const CGFloat vStickyToolbarExpandedScale = 1.0;
+const CGFloat vStickyToolbarExpandedAlpha = 1.0;
+const CGFloat vStickyToolbarCollapsedScale = 0.3;
+const CGFloat vStickyToolbarCollapsedAlpha = 0.0;
 
 #pragma mark - ICONS
 

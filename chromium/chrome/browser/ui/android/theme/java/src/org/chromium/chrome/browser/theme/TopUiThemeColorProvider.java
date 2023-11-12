@@ -28,8 +28,6 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
  * <p>The theme color is only updated when the supplied tab is non-null.
  */
 public class TopUiThemeColorProvider extends ThemeColorProvider {
-    private static final float LOCATION_BAR_TRANSPARENT_BACKGROUND_ALPHA = 0.2f;
-
     private final CurrentTabObserver mTabObserver;
 
     private final Supplier<Integer> mActivityThemeColorSupplier;
@@ -183,19 +181,6 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
         int defaultColor = calculateColor(tab, tab.getThemeColor());
         return nativePage != null ? nativePage.getToolbarSceneLayerBackground(defaultColor)
                                   : defaultColor;
-    }
-
-    /**
-     * @param tab The {@link Tab} on which the top toolbar is drawn.
-     * @return Background alpha for the textbox given a Tab.
-     */
-    public float getTextBoxBackgroundAlpha(Tab tab) {
-        float alpha = ColorUtils.shouldUseOpaqueTextboxBackground(
-                              calculateColor(tab, tab.getThemeColor()))
-                ? 1.f
-                : LOCATION_BAR_TRANSPARENT_BACKGROUND_ALPHA;
-        NativePage nativePage = tab.getNativePage();
-        return nativePage != null ? nativePage.getToolbarTextBoxAlpha(alpha) : alpha;
     }
 
     @Override

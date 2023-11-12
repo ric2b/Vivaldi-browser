@@ -285,6 +285,7 @@ constexpr char kWebAppTabHistogramName[] = "WebAppTab";
 constexpr char kWebAppWindowHistogramName[] = "WebAppWindow";
 
 constexpr char kUsageTimeAppIdKey[] = "app_id";
+constexpr char kUsageTimeAppPublisherIdKey[] = "app_publisher_id";
 constexpr char kUsageTimeAppTypeKey[] = "app_type";
 constexpr char kUsageTimeDurationKey[] = "time";
 constexpr char kReportingUsageTimeDurationKey[] = "reporting_usage_time";
@@ -378,6 +379,10 @@ void RecordAppLaunchMetrics(Profile* profile,
   }
 }
 
+AppPlatformMetrics::UsageTime::UsageTime() = default;
+
+AppPlatformMetrics::UsageTime::~UsageTime() = default;
+
 AppPlatformMetrics::UsageTime::UsageTime(const base::Value& value) {
   const base::Value::Dict* data_dict = value.GetIfDict();
   if (!data_dict) {
@@ -388,6 +393,12 @@ AppPlatformMetrics::UsageTime::UsageTime(const base::Value& value) {
       data_dict->FindString(kUsageTimeAppIdKey);
   if (!app_id_value) {
     return;
+  }
+
+  const std::string* const app_publisher_id_value =
+      data_dict->FindString(kUsageTimeAppPublisherIdKey);
+  if (app_publisher_id_value) {
+    app_publisher_id = *app_publisher_id_value;
   }
 
   const std::string* const app_type_value =
@@ -424,6 +435,7 @@ AppPlatformMetrics::UsageTime::UsageTime(const base::Value& value) {
 base::Value::Dict AppPlatformMetrics::UsageTime::ConvertToDict() const {
   base::Value::Dict usage_time_dict;
   usage_time_dict.Set(kUsageTimeAppIdKey, app_id);
+  usage_time_dict.Set(kUsageTimeAppPublisherIdKey, app_publisher_id);
   usage_time_dict.Set(kUsageTimeAppTypeKey,
                       GetAppTypeHistogramName(app_type_name));
   usage_time_dict.Set(kUsageTimeDurationKey,
@@ -439,7 +451,7 @@ AppPlatformMetrics::AppPlatformMetrics(
     InstanceRegistry& instance_registry)
     : profile_(profile), app_registry_cache_(app_registry_cache) {
   apps::AppRegistryCache::Observer::Observe(&app_registry_cache);
-  apps::InstanceRegistry::Observer::Observe(&instance_registry);
+  instance_registry_observation_.Observe(&instance_registry);
   user_type_by_device_type_ = GetUserTypeByDeviceTypeMetrics();
   InitRunningDuration();
   LoadAppsUsageTimeUkmFromPref();
@@ -468,7 +480,6 @@ ukm::SourceId AppPlatformMetrics::GetSourceId(Profile* profile,
     return ukm::kInvalidSourceId;
   }
 
-  ukm::SourceId source_id = ukm::kInvalidSourceId;
   AppType app_type = GetAppType(profile, app_id);
   if (!ShouldRecordUkmForAppTypeName(app_type)) {
     return ukm::kInvalidSourceId;
@@ -479,13 +490,11 @@ ukm::SourceId AppPlatformMetrics::GetSourceId(Profile* profile,
     case AppType::kChromeApp:
     case AppType::kExtension:
     case AppType::kStandaloneBrowser:
-      source_id = ukm::AppSourceUrlRecorder::GetSourceIdForChromeApp(app_id);
-      break;
+      return ukm::AppSourceUrlRecorder::GetSourceIdForChromeApp(app_id);
     case AppType::kStandaloneBrowserChromeApp:
     case AppType::kStandaloneBrowserExtension:
-      source_id = ukm::AppSourceUrlRecorder::GetSourceIdForChromeApp(
+      return ukm::AppSourceUrlRecorder::GetSourceIdForChromeApp(
           GetStandaloneBrowserExtensionAppId(app_id));
-      break;
     case AppType::kArc:
     case AppType::kWeb:
     case AppType::kSystemWeb: {
@@ -502,27 +511,21 @@ ukm::SourceId AppPlatformMetrics::GetSourceId(Profile* profile,
         return ukm::kInvalidSourceId;
       }
       if (app_type == AppType::kArc) {
-        source_id = ukm::AppSourceUrlRecorder::GetSourceIdForArcPackageName(
+        return ukm::AppSourceUrlRecorder::GetSourceIdForArcPackageName(
             publisher_id);
-        break;
       }
       if (app_type == AppType::kSystemWeb ||
           install_reason == apps::InstallReason::kSystem) {
         // For system web apps, call GetSourceIdForChromeApp to record the app
         // id because the url could be filtered by the server side.
-        source_id = ukm::AppSourceUrlRecorder::GetSourceIdForChromeApp(app_id);
-        break;
+        return ukm::AppSourceUrlRecorder::GetSourceIdForChromeApp(app_id);
       }
-      source_id =
-          ukm::AppSourceUrlRecorder::GetSourceIdForPWA(GURL(publisher_id));
-      break;
+      return ukm::AppSourceUrlRecorder::GetSourceIdForPWA(GURL(publisher_id));
     }
     case AppType::kCrostini:
-      source_id = GetSourceIdForCrostini(profile, app_id);
-      break;
+      return GetSourceIdForCrostini(profile, app_id);
     case AppType::kBorealis:
-      source_id = GetSourceIdForBorealis(profile, app_id);
-      break;
+      return GetSourceIdForBorealis(profile, app_id);
     case AppType::kBruschetta:
     case AppType::kUnknown:
     case AppType::kMacOs:
@@ -530,7 +533,6 @@ ukm::SourceId AppPlatformMetrics::GetSourceId(Profile* profile,
     case AppType::kRemote:
       return ukm::kInvalidSourceId;
   }
-  return source_id;
 }
 
 // static
@@ -871,7 +873,7 @@ void AppPlatformMetrics::OnInstanceUpdate(const apps::InstanceUpdate& update) {
 
 void AppPlatformMetrics::OnInstanceRegistryWillBeDestroyed(
     apps::InstanceRegistry* cache) {
-  apps::InstanceRegistry::Observer::Observe(nullptr);
+  instance_registry_observation_.Reset();
 }
 
 void AppPlatformMetrics::GetBrowserInstanceInfo(
@@ -1253,7 +1255,7 @@ void AppPlatformMetrics::SaveUsageTime() {
   }
 
   ScopedDictPrefUpdate usage_dict_pref(profile_->GetPrefs(), kAppUsageTime);
-  for (auto it : usage_time_per_two_hours_) {
+  for (const auto& it : usage_time_per_two_hours_) {
     const std::string& instance_id = it.first.ToString();
     auto* const usage_info = usage_dict_pref->FindDictByDottedPath(instance_id);
     if (!usage_info) {

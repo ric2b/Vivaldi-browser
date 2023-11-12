@@ -13,7 +13,7 @@
 #include "ash/public/cpp/kiosk_app_menu.h"
 #include "ash/public/cpp/login_accelerators.h"
 #include "ash/public/cpp/login_screen.h"
-#include "ash/public/cpp/system_tray_observer.h"
+#include "ash/system/tray/system_tray_observer.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -79,11 +79,7 @@ class ASH_EXPORT LoginScreenController : public LoginScreen,
       const std::string& code);
   bool GetSecurityTokenPinRequestCanceled() const;
   void OnFocusPod(const AccountId& account_id);
-  void OnNoPodFocused();
-  void LoadWallpaper(const AccountId& account_id);
-  void SignOutUser();
   void CancelAddUser();
-  void LoginAsGuest();
   void ShowGuestTosScreen();
   void OnMaxIncorrectPasswordAttempted(const AccountId& account_id);
   void FocusLockScreenApps(bool reverse);

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ash/constants/ash_features.h"
+#include "ash/webui/common/trusted_types_util.h"
 #include "ash/webui/grit/ash_shortcut_customization_app_resources.h"
 #include "ash/webui/grit/ash_shortcut_customization_app_resources_map.h"
 #include "ash/webui/shortcut_customization_ui/backend/accelerator_configuration_provider.h"
@@ -108,6 +109,7 @@ void AddLocalizedStrings(content::WebUIDataSource* source) {
        IDS_SHORTCUT_CUSTOMIZATION_SUBCATEGORY_VISIBILITY},
       {"subcategoryAccessibilityNavigation",
        IDS_SHORTCUT_CUSTOMIZATION_SUBCATEGORY_ACCESSIBILITY_NAVIGATION},
+      {"noShortcutAssigned", IDS_SHORTCUT_CUSTOMIZATION_NO_SHORTCUT_ASSIGNED},
       {"iconLabelArrowDown", IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_ARROW_DOWN},
       {"iconLabelArrowLeft", IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_ARROW_LEFT},
       {"iconLabelArrowRight",
@@ -164,12 +166,16 @@ void AddLocalizedStrings(content::WebUIDataSource* source) {
        IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_MODE_CHANGE},
       {"iconLabelOpenLauncher",
        IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_OPEN_LAUNCHER},
+      {"iconLabelOpenSearch",
+       IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_OPEN_SEARCH},
       {"iconLabelPower", IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_POWER},
       {"iconLabelPrintScreen",
        IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_PRINT_SCREEN},
       {"iconLabelPrivacyScreenToggle",
        IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_PRIVACY_SCREEN_TOGGLE},
       {"iconLabelSettings", IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_SETTINGS},
+      {"iconLabelViewAllApps",
+       IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_VIEW_ALL_APPS},
       {"iconLabelZoomToggle",
        IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_ZOOM_TOGGLE},
   };
@@ -186,6 +192,8 @@ void AddFeatureFlags(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "isJellyEnabledForShortcutCustomization",
       ash::features::IsJellyEnabledForShortcutCustomization());
+  html_source->AddBoolean("isInputDeviceSettingsSplitEnabled",
+                          features::IsInputDeviceSettingsSplitEnabled());
 }
 
 }  // namespace
@@ -200,7 +208,7 @@ ShortcutCustomizationAppUI::ShortcutCustomizationAppUI(content::WebUI* web_ui)
       "script-src chrome://resources chrome://test chrome://webui-test "
       "'self';");
 
-  source->DisableTrustedTypesCSP();
+  ash::EnableTrustedTypesCSP(source);
 
   const auto resources =
       base::make_span(kAshShortcutCustomizationAppResources,

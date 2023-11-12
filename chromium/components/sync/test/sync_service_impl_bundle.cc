@@ -40,11 +40,9 @@ std::unique_ptr<SyncClientMock> SyncServiceImplBundle::CreateSyncClientMock() {
 }
 
 SyncServiceImpl::InitParams SyncServiceImplBundle::CreateBasicInitParams(
-    SyncServiceImpl::StartBehavior start_behavior,
     std::unique_ptr<SyncClient> sync_client) {
   SyncServiceImpl::InitParams init_params;
 
-  init_params.start_behavior = start_behavior;
   init_params.sync_client = std::move(sync_client);
   init_params.identity_manager = identity_manager();
   init_params.url_loader_factory =
@@ -53,6 +51,7 @@ SyncServiceImpl::InitParams SyncServiceImplBundle::CreateBasicInitParams(
   init_params.network_connection_tracker =
       network::TestNetworkConnectionTracker::GetInstance();
   init_params.debug_identifier = "dummyDebugName";
+  init_params.is_regular_profile_for_uma = true;
 
   return init_params;
 }

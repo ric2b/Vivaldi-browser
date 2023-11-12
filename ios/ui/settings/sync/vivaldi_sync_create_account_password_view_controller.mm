@@ -301,6 +301,13 @@ BOOL subscribeToNewsletter;
       [editCell.identifyingIconButton addTarget:self
                                   action:@selector(toggleConfirmPasswordMasking)
                         forControlEvents:UIControlEventTouchUpInside];
+      editCell.textField.delegate = self;
+      break;
+    }
+    case ItemTypeDeviceName: {
+      VivaldiTableViewTextEditCell* editCell =
+          base::mac::ObjCCast<VivaldiTableViewTextEditCell>(cell);
+      editCell.textField.delegate = self;
       break;
     }
     case ItemTypeTOSSwitch: {
@@ -332,6 +339,13 @@ BOOL subscribeToNewsletter;
   }
 
   return cell;
+}
+
+#pragma mark - UITextFieldDelegate
+
+- (BOOL)textFieldShouldReturn:(UITextField*)textField {
+  [self createButtonPressed:nil];
+  return NO;
 }
 
 #pragma mark - UITextViewDelegate

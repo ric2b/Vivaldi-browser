@@ -218,8 +218,7 @@ public class BookmarkAddEditFolderActivity
         } else if (item == mSaveButton) {
             assert mIsAddMode;
 
-            if (mFolderTitle.isEmpty()) {
-                mFolderTitle.validate();
+            if (!mFolderTitle.validate()) {
                 mFolderTitle.requestFocus();
                 return true;
             }

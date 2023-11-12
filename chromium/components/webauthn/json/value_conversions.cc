@@ -5,11 +5,14 @@
 #include "components/webauthn/json/value_conversions.h"
 
 #include "base/base64url.h"
+#include "base/feature_list.h"
+#include "base/ranges/ranges.h"
 #include "base/strings/string_piece.h"
 #include "base/values.h"
 #include "device/fido/attestation_object.h"
 #include "device/fido/authenticator_selection_criteria.h"
 #include "device/fido/cable/cable_discovery_data.h"
+#include "device/fido/features.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_transport_protocol.h"
 #include "device/fido/fido_types.h"
@@ -57,26 +60,32 @@ absl::optional<std::string> Base64UrlDecodeStringKey(
 }
 
 // Like `Base64UrlDecodeStringKey()` attempts to find and base64-decode the
-// value of `key` in `dict`. However, the value may also be of
-// `base::Value::Type::NONE`. Returns true on success and the decoded result if
-// the value was a string. Returns `{false, absl::nullopt}` if the key wasn't
-// found or if decoding the string failed.
+// value of `key` in `dict`. However, the value is optional and so may be
+// `base::Value::Type::NONE` or may be omitted. The style of omitted values
+// is changing: initially they were expressed as `null` values in JSON objects,
+// but as of https://github.com/w3c/webauthn/pull/1878 they'll be omitted
+// instead. This code is in a transitional state where either form is accepted.
 //
-// This is useful for extracting attributes that are defined as nullable
-// ArrayBuffers in the WebIDL since the JS `null` value maps to
-// `base::Value::Type::NONE`.
-std::tuple<bool, absl::optional<std::string>> Base64UrlDecodeNullableStringKey(
+// Returns true on success and the decoded result if the value was a string.
+// Returns `{false, absl::nullopt}` if the key wasn't found or if decoding the
+// string failed.
+std::tuple<bool, absl::optional<std::string>> Base64UrlDecodeOptionalStringKey(
     const base::Value::Dict& dict,
-    const std::string& key) {
+    const std::string& key,
+    const JSONUser user) {
   const base::Value* value = dict.Find(key);
-  if (!value || (!value->is_string() && !value->is_none())) {
-    return {false, absl::nullopt};
-  }
-  if (value->is_none()) {
+  if (!value) {
     return {true, absl::nullopt};
   }
+  if (value->is_none()) {
+    return {!(base::FeatureList::IsEnabled(device::kWebAuthnNoNullInJSON) &&
+              (base::FeatureList::IsEnabled(
+                   device::kWebAuthnRequireUpToDateJSONForRemoteDesktop) ||
+               user != JSONUser::kRemoteDesktop)),
+            absl::nullopt};
+  }
   std::string decoded;
-  if (!Base64UrlDecode(value->GetString(), &decoded)) {
+  if (!value->is_string() || !Base64UrlDecode(value->GetString(), &decoded)) {
     return {false, absl::nullopt};
   }
   return {true, decoded};
@@ -102,9 +111,9 @@ base::Value ToValue(const device::PublicKeyCredentialUserEntity& user) {
   // `PublicKeyCredentialEntity.name` is required in the IDL but optional on the
   // mojo struct.
   value.Set("name", user.name.value_or(""));
-  if (user.display_name) {
-    value.Set("displayName", *user.display_name);
-  }
+  // `PublicKeyCredentialUserEntity.displayName` is required in the IDL but
+  // optional on the mojo struct.
+  value.Set("displayName", user.display_name.value_or(""));
   return base::Value(std::move(value));
 }
 
@@ -276,16 +285,26 @@ absl::optional<device::FidoTransportProtocol> FidoTransportProtocolFromValue(
 }
 
 absl::optional<device::AuthenticatorAttachment>
-NullableAuthenticatorAttachmentFromValue(const base::Value& value) {
-  if (!value.is_none() && !value.is_string()) {
-    return absl::nullopt;
-  }
-  if (value.is_none()) {
-    // PublicKeyCredential.authenticatorAttachment can be `null`, which is
-    // equivalent to `AuthenticatorAttachment::kAny`.
+OptionalAuthenticatorAttachmentFromValue(const base::Value* value,
+                                         const JSONUser user) {
+  if (!value) {
+    // PublicKeyCredential.authenticatorAttachment can be omitted,
+    // which is equivalent to `AuthenticatorAttachment::kAny`.
     return device::AuthenticatorAttachment::kAny;
   }
-  const std::string& attachment_name = value.GetString();
+  if (value->is_none()) {
+    if (base::FeatureList::IsEnabled(device::kWebAuthnNoNullInJSON) &&
+        (base::FeatureList::IsEnabled(
+             device::kWebAuthnRequireUpToDateJSONForRemoteDesktop) ||
+         user != JSONUser::kRemoteDesktop)) {
+      return absl::nullopt;
+    }
+    return device::AuthenticatorAttachment::kAny;
+  }
+  if (!value->is_string()) {
+    return absl::nullopt;
+  }
+  const std::string& attachment_name = value->GetString();
   if (attachment_name == "platform") {
     return device::AuthenticatorAttachment::kPlatform;
   } else if (attachment_name == "cross-platform") {
@@ -330,8 +349,7 @@ base::Value ToValue(
   }
   value.Set("attestation", ToValue(options->attestation));
 
-  base::Value::Dict& extensions =
-      value.Set("extensions", base::Value::Dict())->GetDict();
+  base::Value::Dict extensions;
 
   if (options->hmac_create_secret) {
     extensions.Set("hmacCreateSecret", true);
@@ -376,11 +394,16 @@ base::Value ToValue(
 
   DCHECK(!options->prf_enable);
 
+  if (!extensions.empty()) {
+    value.Set("extensions", std::move(extensions));
+  }
+
   return base::Value(std::move(value));
 }
 
 base::Value ToValue(
     const blink::mojom::PublicKeyCredentialRequestOptionsPtr& options) {
+  CHECK(!options->extensions.is_null());
   base::Value::Dict value;
   value.Set("challenge", Base64UrlEncode(options->challenge));
   value.Set("rpId", options->relying_party_id);
@@ -394,50 +417,55 @@ base::Value ToValue(
 
   value.Set("userVerification", ToValue(options->user_verification));
 
-  base::Value::Dict& extensions =
-      value.Set("extensions", base::Value::Dict())->GetDict();
+  base::Value::Dict extensions;
 
-  if (options->appid) {
-    extensions.Set("appid", *options->appid);
+  if (options->extensions->appid) {
+    extensions.Set("appid", *options->extensions->appid);
   }
 
   base::Value::List cable_authentication_data;
   for (const device::CableDiscoveryData& cable :
-       options->cable_authentication_data) {
+       options->extensions->cable_authentication_data) {
     cable_authentication_data.Append(ToValue(cable));
   }
   if (!cable_authentication_data.empty()) {
     extensions.Set("cableAuthentication", std::move(cable_authentication_data));
   }
 
-  if (options->get_cred_blob) {
+  if (options->extensions->get_cred_blob) {
     extensions.Set("getCredBlob", true);
   }
 
-  if (options->large_blob_read || options->large_blob_write) {
+  if (options->extensions->large_blob_read ||
+      options->extensions->large_blob_write) {
     base::Value::Dict large_blob_value;
-    if (options->large_blob_read) {
+    if (options->extensions->large_blob_read) {
       large_blob_value.Set("read", true);
     }
-    if (options->large_blob_write) {
-      large_blob_value.Set("write",
-                           Base64UrlEncode(*options->large_blob_write));
+    if (options->extensions->large_blob_write) {
+      large_blob_value.Set(
+          "write", Base64UrlEncode(*options->extensions->large_blob_write));
     }
     extensions.Set("largeBlob", std::move(large_blob_value));
   }
 
-  if (options->remote_desktop_client_override) {
-    extensions.Set("remoteDesktopClientOverride",
-                   ToValue(*options->remote_desktop_client_override));
+  if (options->extensions->remote_desktop_client_override) {
+    extensions.Set(
+        "remoteDesktopClientOverride",
+        ToValue(*options->extensions->remote_desktop_client_override));
   }
 
-  DCHECK(!options->prf);
+  DCHECK(!options->extensions->prf);
+
+  if (!extensions.empty()) {
+    value.Set("extensions", std::move(extensions));
+  }
 
   return base::Value(std::move(value));
 }
 
 std::pair<blink::mojom::MakeCredentialAuthenticatorResponsePtr, std::string>
-MakeCredentialResponseFromValue(const base::Value& value) {
+MakeCredentialResponseFromValue(const base::Value& value, JSONUser user) {
   if (!value.is_dict()) {
     return {nullptr, "value is not a dict"};
   }
@@ -462,13 +490,9 @@ MakeCredentialResponseFromValue(const base::Value& value) {
   }
   response->info->raw_id = ToByteVector(*raw_id);
 
-  const base::Value* authenticator_attachment_value =
-      dict.Find("authenticatorAttachment");
-  if (!authenticator_attachment_value) {
-    return InvalidMakeCredentialField("authenticatorAttachment");
-  }
   absl::optional<device::AuthenticatorAttachment> authenticator_attachment =
-      NullableAuthenticatorAttachmentFromValue(*authenticator_attachment_value);
+      OptionalAuthenticatorAttachmentFromValue(
+          dict.Find("authenticatorAttachment"), user);
   if (!authenticator_attachment) {
     return InvalidMakeCredentialField("authenticatorAttachment");
   }
@@ -489,16 +513,98 @@ MakeCredentialResponseFromValue(const base::Value& value) {
 
   absl::optional<device::AttestationObject::ResponseFields> fields =
       device::AttestationObject::ParseForResponseFields(
-          std::move(attestation_object_bytes), /*attestation_acceptable=*/true);
+          std::move(attestation_object_bytes),
+          /*attestation_acceptable=*/true);
   if (!fields) {
     return InvalidMakeCredentialField("attestationObject");
   }
-
   response->attestation_object = std::move(fields->attestation_object_bytes);
-  response->info->authenticator_data = std::move(fields->authenticator_data);
-  response->public_key_algo = fields->public_key_algo;
-  if (fields->public_key_der) {
-    response->public_key_der = std::move(*fields->public_key_der);
+
+  if (base::FeatureList::IsEnabled(
+          device::kWebAuthnRequireEasyAccessorFieldsInJSON) &&
+      (base::FeatureList::IsEnabled(
+           device::kWebAuthnRequireUpToDateJSONForRemoteDesktop) ||
+       user != JSONUser::kRemoteDesktop)) {
+    // These fields are checked against the calculated values to ensure that
+    // bugs in providers don't sneak in.
+
+    absl::optional<int> opt_public_key_algo =
+        attestation_response->FindInt("publicKeyAlgorithm");
+    if (!opt_public_key_algo ||
+        *opt_public_key_algo != fields->public_key_algo) {
+      return InvalidMakeCredentialField("publicKeyAlgorithm");
+    }
+    response->public_key_algo = *opt_public_key_algo;
+
+    absl::optional<std::string> opt_authenticator_data =
+        Base64UrlDecodeStringKey(*attestation_response, "authenticatorData");
+    if (!opt_authenticator_data) {
+      return InvalidMakeCredentialField("authenticatorData");
+    }
+    response->info->authenticator_data = ToByteVector(*opt_authenticator_data);
+    if (!base::ranges::equal(response->info->authenticator_data,
+                             fields->authenticator_data)) {
+      return InvalidMakeCredentialField("authenticatorData");
+    }
+
+    auto [ok, opt_public_key] = Base64UrlDecodeOptionalStringKey(
+        *attestation_response, "publicKey", user);
+    if (!ok) {
+      return InvalidMakeCredentialField("publicKey");
+    }
+    if (opt_public_key) {
+      response->public_key_der = ToByteVector(*opt_public_key);
+    }
+    // For P-256 and Ed25519 keys, providers must be able to provide the
+    // publicKey.
+    if ((response->public_key_algo ==
+             static_cast<int>(device::CoseAlgorithmIdentifier::kEs256) ||
+         response->public_key_algo ==
+             static_cast<int>(device::CoseAlgorithmIdentifier::kEdDSA)) &&
+        !opt_public_key) {
+      return InvalidMakeCredentialField("publicKey");
+    }
+    // For any key, providers must calculate the same key as us.
+    if (fields->public_key_der && opt_public_key &&
+        !base::ranges::equal(*response->public_key_der,
+                             *fields->public_key_der)) {
+      return InvalidMakeCredentialField("publicKey");
+    }
+  } else {
+    response->info->authenticator_data = std::move(fields->authenticator_data);
+    response->public_key_algo = fields->public_key_algo;
+    if (fields->public_key_der) {
+      response->public_key_der = std::move(*fields->public_key_der);
+    }
+
+    // These three values are things that we have already calculated with
+    // `ParseForResponseFields`, above. We will transition to requiring them
+    // from providers on Android but, for now, just check that they have the
+    // correct value if provided.
+
+    absl::optional<int> opt_public_key_algo =
+        attestation_response->FindInt("publicKeyAlgorithm");
+    if (opt_public_key_algo &&
+        response->public_key_algo != *opt_public_key_algo) {
+      return InvalidMakeCredentialField("publicKeyAlgorithm");
+    }
+
+    auto [ok, opt_authenticator_data] = Base64UrlDecodeOptionalStringKey(
+        *attestation_response, "authenticatorData", user);
+    if (!ok || (opt_authenticator_data &&
+                !base::ranges::equal(response->info->authenticator_data,
+                                     ToByteVector(*opt_authenticator_data)))) {
+      return InvalidMakeCredentialField("authenticatorData");
+    }
+
+    absl::optional<std::string> opt_public_key_der;
+    std::tie(ok, opt_public_key_der) = Base64UrlDecodeOptionalStringKey(
+        *attestation_response, "publicKey", user);
+    if (!ok || (response->public_key_der && opt_public_key_der &&
+                !base::ranges::equal(*response->public_key_der,
+                                     ToByteVector(*opt_public_key_der)))) {
+      return InvalidMakeCredentialField("publicKey");
+    }
   }
 
   absl::optional<std::string> client_data_json =
@@ -517,10 +623,12 @@ MakeCredentialResponseFromValue(const base::Value& value) {
   for (const base::Value& transport_name : *transports) {
     absl::optional<device::FidoTransportProtocol> transport =
         FidoTransportProtocolFromValue(transport_name);
-    if (!transport) {
-      return InvalidMakeCredentialField("transports");
+    // Unknown transports are ignored because new transport values might be
+    // introduced in the future. Plausibly we should pass them as opaque
+    // strings, but our Mojo interface isn't shaped like that.
+    if (transport) {
+      response->transports.push_back(*transport);
     }
-    response->transports.push_back(*transport);
   }
 
   const base::Value::Dict* client_extension_results =
@@ -565,7 +673,7 @@ MakeCredentialResponseFromValue(const base::Value& value) {
 }
 
 std::pair<blink::mojom::GetAssertionAuthenticatorResponsePtr, std::string>
-GetAssertionResponseFromValue(const base::Value& value) {
+GetAssertionResponseFromValue(const base::Value& value, const JSONUser user) {
   if (!value.is_dict()) {
     return {nullptr, "value is not a dict"};
   }
@@ -590,13 +698,9 @@ GetAssertionResponseFromValue(const base::Value& value) {
   }
   response->info->raw_id = ToByteVector(*raw_id);
 
-  const base::Value* authenticator_attachment_value =
-      dict.Find("authenticatorAttachment");
-  if (!authenticator_attachment_value) {
-    return InvalidGetAssertionField("authenticatorAttachment");
-  }
   absl::optional<device::AuthenticatorAttachment> authenticator_attachment =
-      NullableAuthenticatorAttachmentFromValue(*authenticator_attachment_value);
+      OptionalAuthenticatorAttachmentFromValue(
+          dict.Find("authenticatorAttachment"), user);
   if (!authenticator_attachment) {
     return InvalidGetAssertionField("authenticatorAttachment");
   }
@@ -629,9 +733,8 @@ GetAssertionResponseFromValue(const base::Value& value) {
   }
   response->signature = ToByteVector(*signature);
 
-  // userHandle is non-optional but nullable.
   auto [ok, opt_user_handle] =
-      Base64UrlDecodeNullableStringKey(*assertion_response, "userHandle");
+      Base64UrlDecodeOptionalStringKey(*assertion_response, "userHandle", user);
   if (!ok) {
     return InvalidGetAssertionField("userHandle");
   }

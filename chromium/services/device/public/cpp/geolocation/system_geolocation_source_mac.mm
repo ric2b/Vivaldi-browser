@@ -2,14 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "services/device/public/cpp/geolocation/system_geolocation_source_mac.h"
+
 #import <CoreLocation/CoreLocation.h>
 
 #include <memory>
 
 #include "base/functional/callback_helpers.h"
-#include "base/mac/scoped_nsobject.h"
 #include "base/sequence_checker.h"
-#include "services/device/public/cpp/geolocation/system_geolocation_source_mac.h"
+#include "build/build_config.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 @interface GeolocationManagerDelegate : NSObject <CLLocationManagerDelegate> {
   BOOL _permissionInitialized;
@@ -105,6 +110,15 @@ LocationSystemPermissionStatus SystemGeolocationSourceMac::GetSystemPermission()
   return LocationSystemPermissionStatus::kDenied;
 }
 
+void SystemGeolocationSourceMac::TrackGeolocationAttempted(
+    const std::string& app_name) {
+#if BUILDFLAG(IS_IOS)
+  if (@available(ios 8.0, macOS 10.15, *)) {
+    [location_manager_ requestWhenInUseAuthorization];
+  }
+#endif
+}
+
 }  // namespace device
 
 @implementation GeolocationManagerDelegate
@@ -121,12 +135,25 @@ LocationSystemPermissionStatus SystemGeolocationSourceMac::GetSystemPermission()
 
 - (void)locationManager:(CLLocationManager*)manager
     didChangeAuthorizationStatus:(CLAuthorizationStatus)status {
+  if (status == kCLAuthorizationStatusNotDetermined) {
+    _permissionInitialized = NO;
+    return;
+  }
   _permissionInitialized = YES;
   if (status == kCLAuthorizationStatusAuthorizedAlways) {
     _hasPermission = YES;
   } else {
     _hasPermission = NO;
   }
+
+#if BUILDFLAG(IS_IOS)
+  if (@available(iOS 8.0, *)) {
+    if (status == kCLAuthorizationStatusAuthorizedWhenInUse) {
+      _hasPermission = YES;
+    }
+  }
+#endif
+
   _manager->PermissionUpdated();
 }
 

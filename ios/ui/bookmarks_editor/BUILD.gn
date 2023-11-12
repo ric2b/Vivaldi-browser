@@ -1,0 +1,35 @@
+# Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+source_set("vivaldi_bookmarks_editor") {
+  sources = [
+    "vivaldi_bookmarks_constants.h",
+    "vivaldi_bookmarks_constants.mm",
+    "vivaldi_bookmark_add_edit_folder_view_controller.h",
+    "vivaldi_bookmark_add_edit_folder_view_controller.mm",
+    "vivaldi_bookmark_add_edit_url_view_controller.h",
+    "vivaldi_bookmark_add_edit_url_view_controller.mm",
+    "vivaldi_bookmark_parent_folder_view.h",
+    "vivaldi_bookmark_parent_folder_view.mm",
+    "vivaldi_bookmark_folder_selection_header_view.h",
+    "vivaldi_bookmark_folder_selection_header_view.mm",
+    "vivaldi_bookmark_add_edit_controller_delegate.h",
+    "vivaldi_bookmark_prefs.h",
+    "vivaldi_bookmark_prefs.mm",
+  ]
+
+  deps = [
+    "//ui/base",
+    "//base",
+    "//base:i18n",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/common/ui/util",
+    "resources",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}

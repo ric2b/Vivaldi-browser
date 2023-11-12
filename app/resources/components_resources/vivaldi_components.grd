@@ -7,7 +7,7 @@
                flattenhtml="true" type="BINDATA" compress="gzip"/>
       <include name="IDR_VERSION_UI_CSS" file="version_ui/about_version.css"
                type="BINDATA" compress="gzip" />
-      <include name="IDR_VERSION_UI_HTML" file="version_ui/about_version.html"
+      <include name="IDR_VERSION_UI_ABOUT_VERSION_HTML" file="version_ui/about_version.html"
                preprocess="true" type="BINDATA" />
       <include name="IDR_DOCUMENT_BLOCKED_INTERSTITIAL_HTML" file="../../../components/request_filter/adblock_filter/interstitial/document_blocked_interstitial.html"
                compress="gzip" flattenhtml="true" type="BINDATA"/>

@@ -94,6 +94,7 @@ template("ios_binary_bundle") {
   }
 
   bundle_data(_plist_bundle) {
+    product_type = invoker.product_type
     public_deps = [ ":$_plist_target" ]
     sources = [ "$target_out_dir/$_plist_target/Info.plist" ]
     outputs = [ "{{bundle_contents_dir}}/Info.plist" ]

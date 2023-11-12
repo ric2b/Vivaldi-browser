@@ -2,17 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {CupsPrintersBrowserProxyImpl, PrinterType} from 'chrome://os-settings/chromeos/lazy_load.js';
-import {Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
-import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
+import {CupsPrintersBrowserProxyImpl, PRINTER_STATUS_QUERY_SHORT_DELAY_RANGE_MS, PrinterSettingsUserAction, PrinterStatusReason, PrinterStatusSeverity, PrinterType} from 'chrome://os-settings/lazy_load.js';
+import {Router, routes} from 'chrome://os-settings/os_settings.js';
 import {webUIListenerCallback} from 'chrome://resources/ash/common/cr.m.js';
+import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
 import {getDeepActiveElement} from 'chrome://resources/ash/common/util.js';
 import {NetworkStateProperties} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {ConnectionStateType, NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {assertEquals, assertFalse, assertGE, assertNotReached, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {MockTimer} from 'chrome://webui-test/mock_timer.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {createCupsPrinterInfo, createPrinterListEntry, getPrinterEntries} from './cups_printer_test_utils.js';
+import {FakeMetricsPrivate} from './fake_metrics_private.js';
 import {TestCupsPrintersBrowserProxy} from './test_cups_printers_browser_proxy.js';
 
 const arrowUpEvent = new KeyboardEvent(
@@ -654,6 +657,94 @@ suite('CupsSavedPrintersTests', function() {
         'First saved printer menu button should be focused for settingId=1401.');
   });
 
+  test('SavedPrintersStatusUpdates', async () => {
+    createCupsPrinterPage([
+      createCupsPrinterInfo('test1', '1', 'id1'),
+      createCupsPrinterInfo('test2', '2', 'id2'),
+      createCupsPrinterInfo('test3', '3', 'id3'),
+    ]);
+
+    cupsPrintersBrowserProxy.addPrinterStatus(
+        'id1', PrinterStatusReason.NO_ERROR, PrinterStatusSeverity.ERROR);
+    cupsPrintersBrowserProxy.addPrinterStatus(
+        'id2', PrinterStatusReason.PRINTER_UNREACHABLE,
+        PrinterStatusSeverity.ERROR);
+
+    await cupsPrintersBrowserProxy.whenCalled('getCupsSavedPrintersList');
+    await flushTasks();
+
+    savedPrintersElement =
+        page.shadowRoot.querySelector('settings-cups-saved-printers');
+    assertTrue(!!savedPrintersElement);
+
+    // The printer statuses should be added to the cache once fetched.
+    const printerStatusReasonCache =
+        savedPrintersElement.getPrinterStatusReasonCacheForTesting();
+    assertTrue(printerStatusReasonCache.has('id1'));
+    assertTrue(printerStatusReasonCache.has('id2'));
+    assertFalse(printerStatusReasonCache.has('id3'));
+
+    // For each of the 3 saved printers verify it gets the correct printer
+    // icon based on the printer status previously set.
+    const printerListEntries = getPrinterEntries(savedPrintersElement);
+    assertEquals(3, printerListEntries.length);
+    for (const entry of printerListEntries) {
+      let expectedPrinterIcon;
+      switch (entry.printerEntry.printerInfo.printerId) {
+        case 'id1':
+          expectedPrinterIcon = 'os-settings:printer-status-green';
+          break;
+        case 'id2':
+          expectedPrinterIcon = 'os-settings:printer-status-red';
+          break;
+        case 'id3':
+          expectedPrinterIcon = 'os-settings:printer-status-grey';
+          break;
+        default:
+          assertNotReached();
+      }
+      assertEquals(
+          expectedPrinterIcon,
+          entry.shadowRoot.querySelector('#printerStatusIcon').icon);
+    }
+
+    // Removing the printers should also remove their cache entry.
+    await removeAllPrinters(cupsPrintersBrowserProxy, savedPrintersElement);
+    assertFalse(printerStatusReasonCache.has('id1'));
+    assertFalse(printerStatusReasonCache.has('id2'));
+  });
+
+  test('SavedPrintersStatusPolling', async () => {
+    createCupsPrinterPage([
+      createCupsPrinterInfo('test1', '1', 'id1'),
+    ]);
+    await flushTasks();
+    assertEquals(
+        1, cupsPrintersBrowserProxy.getCallCount('requestPrinterStatusUpdate'));
+
+    // Set up the timer to control the delay timers.
+    const mockTimer = new MockTimer();
+    mockTimer.install();
+
+    // Kick start the printer status query polling and track the number of times
+    // the printer status query is triggered.
+    page.shadowRoot.querySelector('settings-cups-saved-printers')
+        .startPrinterStatusQueryTimerForTesting();
+
+    // Advance the timer only half of the min delay and verify no query is made.
+    mockTimer.tick(PRINTER_STATUS_QUERY_SHORT_DELAY_RANGE_MS[0] / 2);
+    assertEquals(
+        1, cupsPrintersBrowserProxy.getCallCount('requestPrinterStatusUpdate'));
+
+    // Now advance the timer by double the max delay and verify at least one
+    // more query request is made.
+    mockTimer.tick(PRINTER_STATUS_QUERY_SHORT_DELAY_RANGE_MS[1] * 2);
+    assertGE(
+        cupsPrintersBrowserProxy.getCallCount('requestPrinterStatusUpdate'), 2);
+
+    mockTimer.uninstall();
+  });
+
   test('ShowMoreButtonIsInitiallyHiddenAndANewPrinterIsAdded', function() {
     createCupsPrinterPage([
       createCupsPrinterInfo('google', '4', 'id4'),
@@ -1020,6 +1111,49 @@ suite('CupsSavedPrintersTests', function() {
           // Printer list length is <= 3, Show more button should be hidden.
           assertFalse(!!savedPrintersElement.shadowRoot.querySelector(
               '#show-more-container'));
+        });
+  });
+
+  test('RecordUserActionMetric', function() {
+    const fakeMetricsPrivate = new FakeMetricsPrivate();
+    chrome.metricsPrivate = fakeMetricsPrivate;
+
+    createCupsPrinterPage([
+      createCupsPrinterInfo('test1', '1', 'id1'),
+      createCupsPrinterInfo('test2', '2', 'id2'),
+    ]);
+    return cupsPrintersBrowserProxy.whenCalled('getCupsSavedPrintersList')
+        .then(() => {
+          // Wait for saved printers to populate.
+          flush();
+
+          savedPrintersElement =
+              page.shadowRoot.querySelector('settings-cups-saved-printers');
+          assertTrue(!!savedPrintersElement);
+
+          // Remove the first saved printer then verify the action is recorded.
+          return removePrinter(
+              cupsPrintersBrowserProxy, savedPrintersElement, /*index=*/ 0);
+        })
+        .then(() => {
+          assertEquals(
+              1,
+              fakeMetricsPrivate.countMetricValue(
+                  'Printing.CUPS.SettingsUserAction',
+                  PrinterSettingsUserAction.REMOVE_PRINTER));
+
+          // Click the next printer's Edit button then verify the action is
+          // recorded.
+          const savedPrinterEntries = getPrinterEntries(savedPrintersElement);
+          clickButton(savedPrinterEntries[0].shadowRoot.querySelector(
+              '.icon-more-vert'));
+          clickButton(
+              savedPrintersElement.shadowRoot.querySelector('#editButton'));
+          assertEquals(
+              1,
+              fakeMetricsPrivate.countMetricValue(
+                  'Printing.CUPS.SettingsUserAction',
+                  PrinterSettingsUserAction.EDIT_PRINTER));
         });
   });
 });

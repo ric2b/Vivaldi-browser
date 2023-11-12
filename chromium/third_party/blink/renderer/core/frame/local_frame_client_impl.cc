@@ -766,6 +766,11 @@ void LocalFrameClientImpl::DidObserveLoadingBehavior(
     web_frame_->Client()->DidObserveLoadingBehavior(behavior);
 }
 
+void LocalFrameClientImpl::DidObserveJavaScriptFrameworks(
+    const JavaScriptFrameworkDetectionResult& result) {
+  web_frame_->Client()->DidObserveJavaScriptFrameworks(result);
+}
+
 void LocalFrameClientImpl::DidObserveSubresourceLoad(
     const SubresourceLoadMetrics& subresource_load_metrics) {
   if (web_frame_->Client()) {
@@ -780,9 +785,10 @@ void LocalFrameClientImpl::DidObserveNewFeatureUsage(
 }
 
 // A new soft navigation was observed.
-void LocalFrameClientImpl::DidObserveSoftNavigation(uint32_t count) {
+void LocalFrameClientImpl::DidObserveSoftNavigation(
+    SoftNavigationMetrics metrics) {
   if (WebLocalFrameClient* client = web_frame_->Client()) {
-    client->DidObserveSoftNavigation(count);
+    client->DidObserveSoftNavigation(metrics);
   }
 }
 
@@ -870,28 +876,6 @@ String LocalFrameClientImpl::UserAgent() {
   } while (false);
 
   return user_agent_;
-}
-
-String LocalFrameClientImpl::ReducedUserAgent() {
-  String override = UserAgentOverride();
-  if (!override.empty()) {
-    return override;
-  }
-
-  if (reduced_user_agent_.empty())
-    reduced_user_agent_ = Platform::Current()->ReducedUserAgent();
-  return reduced_user_agent_;
-}
-
-String LocalFrameClientImpl::FullUserAgent() {
-  String override = UserAgentOverride();
-  if (!override.empty()) {
-    return override;
-  }
-
-  if (full_user_agent_.empty())
-    full_user_agent_ = Platform::Current()->FullUserAgent();
-  return full_user_agent_;
 }
 
 absl::optional<UserAgentMetadata> LocalFrameClientImpl::UserAgentMetadata() {

@@ -17,8 +17,9 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/action.h"
 #include "chrome/browser/ash/arc/input_overlay/touch_injector.h"
-#include "chrome/browser/ash/arc/input_overlay/ui/action_edit_menu.h"
+#include "chrome/browser/ash/arc/input_overlay/ui/button_options_menu.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/edit_finish_view.h"
+#include "chrome/browser/ash/arc/input_overlay/ui/editing_list.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/educational_view.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/input_mapping_view.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/input_menu_view.h"
@@ -50,12 +51,8 @@ namespace arc::input_overlay {
 
 namespace {
 // UI specs.
-constexpr int kMenuEntrySize = 48;
-// Menu entry size for alpha.
-constexpr int kMenuEntrySizeAlpha = 56;
 constexpr int kMenuEntrySideMargin = 24;
 constexpr int kNudgeVerticalAlign = 8;
-constexpr int kNudgeHeight = 40;
 
 }  // namespace
 
@@ -143,49 +140,18 @@ void DisplayOverlayController::AddNudgeView(views::Widget* overlay_widget) {
   DCHECK(overlay_widget);
   auto* parent = overlay_widget->GetContentsView();
   DCHECK(parent);
-  if (AllowReposition()) {
-    if (nudge_view_) {
-      return;
-    }
+  if (!nudge_view_) {
     nudge_view_ = NudgeView::Show(parent, menu_entry_);
-    return;
   }
-
-  if (nudge_view_alpha_) {
-    return;
-  }
-  auto nudge_view = std::make_unique<ash::PillButton>(
-      base::BindRepeating(&DisplayOverlayController::OnNudgeDismissed,
-                          base::Unretained(this)),
-      l10n_util::GetStringUTF16(AllowReposition()
-                                    ? IDS_INPUT_OVERLAY_SETTINGS_NUDGE_ALPHAV2
-                                    : IDS_INPUT_OVERLAY_SETTINGS_NUDGE_ALPHA),
-      ash::PillButton::Type::kDefaultWithIconLeading, &kTipIcon);
-  nudge_view->SetSize(
-      gfx::Size(nudge_view->GetPreferredSize().width(), kNudgeHeight));
-  nudge_view->SetButtonTextColor(cros_styles::ResolveColor(
-      cros_styles::ColorName::kNudgeLabelColor, IsDarkModeEnabled()));
-  nudge_view->SetBackgroundColor(cros_styles::ResolveColor(
-      cros_styles::ColorName::kNudgeBackgroundColor, IsDarkModeEnabled()));
-  nudge_view->SetIconColor(cros_styles::ResolveColor(
-      cros_styles::ColorName::kNudgeIconColor, IsDarkModeEnabled()));
-  nudge_view->SetPosition(CalculateNudgePosition(nudge_view->width()));
-
-  nudge_view_alpha_ = parent->AddChildView(std::move(nudge_view));
 }
 
 void DisplayOverlayController::RemoveNudgeView() {
-  if (!ShowingNudge()) {
+  if (!nudge_view_) {
     return;
   }
 
-  if (nudge_view_alpha_) {
-    nudge_view_alpha_->parent()->RemoveChildViewT(nudge_view_alpha_);
-    nudge_view_alpha_ = nullptr;
-  } else {
-    nudge_view_->parent()->RemoveChildViewT(nudge_view_);
-    nudge_view_ = nullptr;
-  }
+  nudge_view_->parent()->RemoveChildViewT(nudge_view_);
+  nudge_view_ = nullptr;
 }
 
 void DisplayOverlayController::OnNudgeDismissed() {
@@ -194,8 +160,40 @@ void DisplayOverlayController::OnNudgeDismissed() {
   touch_injector_->set_show_nudge(false);
 }
 
+void DisplayOverlayController::AddButtonOptionsMenu(Action* action) {
+  if (!IsBeta() ||
+      (button_options_menu_ && button_options_menu_->action() == action)) {
+    return;
+  }
+  RemoveButtonOptionsMenu();
+  button_options_menu_ = ButtonOptionsMenu::Show(this, action);
+}
+
+void DisplayOverlayController::RemoveButtonOptionsMenu() {
+  if (!IsBeta() || !button_options_menu_) {
+    return;
+  }
+  button_options_menu_->parent()->RemoveChildViewT(button_options_menu_);
+  button_options_menu_ = nullptr;
+}
+
+void DisplayOverlayController::AddEditingList() {
+  if (!IsBeta() || editing_list_) {
+    return;
+  }
+  editing_list_ = EditingList::Show(this);
+}
+
+void DisplayOverlayController::RemoveEditingList() {
+  if (!IsBeta() || !editing_list_) {
+    return;
+  }
+  GetOverlayWidgetContentsView()->RemoveChildViewT(editing_list_);
+  editing_list_ = nullptr;
+}
+
 gfx::Point DisplayOverlayController::CalculateNudgePosition(int nudge_width) {
-  gfx::Point nudge_position = CalculateMenuEntryPosition();
+  gfx::Point nudge_position = menu_entry_->origin();
   int x = nudge_position.x() - nudge_width - kMenuEntrySideMargin;
   int y = nudge_position.y() + kNudgeVerticalAlign;
   // If the nudge view shows at the outside of the window, move the nudge view
@@ -216,19 +214,12 @@ void DisplayOverlayController::AddMenuEntryView(views::Widget* overlay_widget) {
   }
   DCHECK(overlay_widget);
   // Create and position entry point for |InputMenuView|.
-  auto menu_entry = std::make_unique<MenuEntryView>(
+  menu_entry_ = MenuEntryView::Show(
       base::BindRepeating(&DisplayOverlayController::OnMenuEntryPressed,
                           base::Unretained(this)),
       base::BindRepeating(&DisplayOverlayController::OnMenuEntryPositionChanged,
                           base::Unretained(this)),
       this);
-  menu_entry->SetPosition(CalculateMenuEntryPosition());
-  menu_entry->SetAccessibleName(
-      l10n_util::GetStringUTF16(IDS_INPUT_OVERLAY_GAME_CONTROLS_ALPHA));
-
-  auto* parent_view = overlay_widget->GetContentsView();
-  DCHECK(parent_view);
-  menu_entry_ = parent_view->AddChildView(std::move(menu_entry));
 }
 
 void DisplayOverlayController::RemoveMenuEntryView() {
@@ -343,7 +334,8 @@ void DisplayOverlayController::AddEducationalView() {
     return;
   }
 
-  educational_view_ = EducationalView::Show(this, GetParentView());
+  educational_view_ =
+      EducationalView::Show(this, GetOverlayWidgetContentsView());
 }
 
 void DisplayOverlayController::RemoveEducationalView() {
@@ -373,37 +365,9 @@ views::Widget* DisplayOverlayController::GetOverlayWidget() {
                             : nullptr;
 }
 
-gfx::Point DisplayOverlayController::CalculateMenuEntryPosition() {
-  if (touch_injector_->allow_reposition() &&
-      touch_injector_->menu_entry_location()) {
-    auto normalized_location = touch_injector_->menu_entry_location();
-    auto content_bounds = touch_injector_->content_bounds();
-
-    return gfx::Point(static_cast<int>(std::round(normalized_location->x() *
-                                                  content_bounds.width())),
-                      static_cast<int>(std::round(normalized_location->y() *
-                                                  content_bounds.height())));
-  } else {
-    auto* overlay_widget = GetOverlayWidget();
-    if (!overlay_widget) {
-      return gfx::Point();
-    }
-    auto* view = overlay_widget->GetContentsView();
-    if (!view || view->bounds().IsEmpty()) {
-      return gfx::Point();
-    }
-
-    auto size = AllowReposition() ? kMenuEntrySize : kMenuEntrySizeAlpha;
-    return gfx::Point(std::max(0, view->width() - size - kMenuEntrySideMargin),
-                      std::max(0, view->height() / 2 - size / 2));
-  }
-}
-
-views::View* DisplayOverlayController::GetParentView() {
+views::View* DisplayOverlayController::GetOverlayWidgetContentsView() {
   auto* overlay_widget = GetOverlayWidget();
-  if (!overlay_widget) {
-    return nullptr;
-  }
+  DCHECK(overlay_widget);
   return overlay_widget->GetContentsView();
 }
 
@@ -425,6 +389,7 @@ void DisplayOverlayController::SetDisplayMode(DisplayMode mode) {
       RemoveInputMappingView();
       RemoveEducationalView();
       RemoveEditFinishView();
+      RemoveButtonOptionsMenu();
       RemoveNudgeView();
       break;
     case DisplayMode::kEducation:
@@ -437,9 +402,11 @@ void DisplayOverlayController::SetDisplayMode(DisplayMode mode) {
       ClearFocus();
       RemoveEditMessage();
       RemoveInputMenuView();
+      RemoveEditingList();
       RemoveEditFinishView();
       RemoveEducationalView();
       RemoveNudgeView();
+      RemoveButtonOptionsMenu();
       AddInputMappingView(overlay_widget);
       AddMenuEntryView(overlay_widget);
       if (touch_injector_->show_nudge()) {
@@ -456,6 +423,7 @@ void DisplayOverlayController::SetDisplayMode(DisplayMode mode) {
       RemoveEducationalView();
       RemoveNudgeView();
       AddEditFinishView(overlay_widget);
+      AddEditingList();
       SetEventTarget(overlay_widget, /*on_overlay=*/true);
       break;
     case DisplayMode::kPreMenu:
@@ -490,33 +458,6 @@ DisplayOverlayController::GetOverlayMenuEntryBounds() {
   }
 
   return absl::optional<gfx::Rect>(menu_entry_->GetBoundsInScreen());
-}
-
-void DisplayOverlayController::AddActionEditMenu(ActionView* anchor,
-                                                 ActionType action_type) {
-  auto* overlay_widget = GetOverlayWidget();
-  DCHECK(overlay_widget);
-  if (!overlay_widget) {
-    return;
-  }
-  auto* parent_view = overlay_widget->GetContentsView();
-  DCHECK(parent_view);
-  if (!parent_view) {
-    return;
-  }
-  auto action_edit_menu =
-      ActionEditMenu::BuildActionEditMenu(this, anchor, action_type);
-  if (action_edit_menu) {
-    action_edit_menu_ = parent_view->AddChildView(std::move(action_edit_menu));
-  }
-}
-
-void DisplayOverlayController::RemoveActionEditMenu() {
-  if (!action_edit_menu_) {
-    return;
-  }
-  action_edit_menu_->parent()->RemoveChildViewT(action_edit_menu_);
-  action_edit_menu_ = nullptr;
 }
 
 void DisplayOverlayController::AddEditMessage(const base::StringPiece& message,
@@ -600,16 +541,31 @@ InputOverlayWindowStateType DisplayOverlayController::GetWindowStateType()
   return type;
 }
 
-void DisplayOverlayController::OnActionAdded(Action* action) {
-  input_mapping_view_->OnActionAdded(action);
+void DisplayOverlayController::AddNewAction(ActionType action_type) {
+  touch_injector_->AddNewAction(action_type);
 }
 
-void DisplayOverlayController::OnActionRemoved(Action* action) {
-  input_mapping_view_->OnActionRemoved(action);
+void DisplayOverlayController::RemoveAction(Action* action) {
+  // TODO(b/270973654): Show delete confirmation dialog here.
+  touch_injector_->RemoveAction(action);
+}
+
+int DisplayOverlayController::GetTouchInjectorActionsSize() {
+  return touch_injector_->actions().size();
+}
+
+void DisplayOverlayController::AddTouchInjectorObserver(
+    TouchInjectorObserver* observer) {
+  touch_injector_->AddObserver(observer);
+}
+
+void DisplayOverlayController::RemoveTouchInjectorObserver(
+    TouchInjectorObserver* observer) {
+  touch_injector_->RemoveObserver(observer);
 }
 
 void DisplayOverlayController::OnMouseEvent(ui::MouseEvent* event) {
-  if ((display_mode_ == DisplayMode::kView && !ShowingNudge()) ||
+  if ((display_mode_ == DisplayMode::kView && !nudge_view_) ||
       event->type() != ui::ET_MOUSE_PRESSED) {
     return;
   }
@@ -618,7 +574,7 @@ void DisplayOverlayController::OnMouseEvent(ui::MouseEvent* event) {
 }
 
 void DisplayOverlayController::OnTouchEvent(ui::TouchEvent* event) {
-  if ((display_mode_ == DisplayMode::kView && !ShowingNudge()) ||
+  if ((display_mode_ == DisplayMode::kView && !nudge_view_) ||
       event->type() != ui::ET_TOUCH_PRESSED) {
     return;
   }
@@ -703,7 +659,7 @@ bool DisplayOverlayController::GetTouchInjectorEnable() {
 
 void DisplayOverlayController::ProcessPressedEvent(
     const ui::LocatedEvent& event) {
-  if (!action_edit_menu_ && !message_ && !input_menu_view_ && !ShowingNudge()) {
+  if (!message_ && !input_menu_view_ && !nudge_view_) {
     return;
   }
 
@@ -712,13 +668,6 @@ void DisplayOverlayController::ProcessPressedEvent(
   auto origin =
       touch_injector_->window()->GetRootWindow()->GetBoundsInScreen().origin();
   root_location.Offset(origin.x(), origin.y());
-
-  if (action_edit_menu_) {
-    auto bounds = action_edit_menu_->GetBoundsInScreen();
-    if (!bounds.Contains(root_location)) {
-      RemoveActionEditMenu();
-    }
-  }
 
   if (message_) {
     auto bounds = message_->GetBoundsInScreen();
@@ -735,7 +684,7 @@ void DisplayOverlayController::ProcessPressedEvent(
   }
 
   // Dismiss the nudge, regardless where the click was.
-  if (ShowingNudge()) {
+  if (nudge_view_) {
     OnNudgeDismissed();
   }
 }
@@ -768,10 +717,6 @@ void DisplayOverlayController::EnsureTaskWindowToFrontForViewMode(
   } else {
     host_window->Focus();
   }
-}
-
-bool DisplayOverlayController::ShowingNudge() {
-  return nudge_view_ || nudge_view_alpha_;
 }
 
 void DisplayOverlayController::UpdateForBoundsChanged() {

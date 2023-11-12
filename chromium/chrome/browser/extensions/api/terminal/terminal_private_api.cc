@@ -344,6 +344,14 @@ TerminalPrivateOpenTerminalProcessFunction::OpenProcess(
     if (!container_features.empty())
       cmdline.AppendSwitchASCII(kSwitchContainerFeatures, container_features);
 
+    // Append trailing passthrough args if any.  E.g. `-- vim file.txt`
+    auto passthrough_args = params_args.GetArgs();
+    if (!passthrough_args.empty()) {
+      cmdline.AppendArg("--");
+      for (const auto& arg : passthrough_args) {
+        cmdline.AppendArg(arg);
+      }
+    }
     VLOG(1) << "Starting " << *guest_id_
             << ", cmdline=" << cmdline.GetCommandLineString();
 
@@ -702,7 +710,7 @@ ExtensionFunction::ResponseAction TerminalPrivateOpenWindowFunction::Run() {
   } else {
     guest_os::LaunchTerminalWithUrl(
         Profile::FromBrowserContext(browser_context()),
-        display::kInvalidDisplayId, GURL(*url));
+        display::kInvalidDisplayId, /*restore_id=*/0, GURL(*url));
   }
 
   return RespondNow(NoArguments());
@@ -737,14 +745,9 @@ ExtensionFunction::ResponseAction TerminalPrivateGetOSInfoFunction::Run() {
   info.Set("alternative_emulator",
            base::FeatureList::IsEnabled(
                ash::features::kTerminalAlternativeEmulator));
-  info.Set("multi_profile",
-           base::FeatureList::IsEnabled(ash::features::kTerminalMultiProfile));
-  info.Set("sftp", base::FeatureList::IsEnabled(ash::features::kTerminalSftp));
   info.Set("tast", extensions::ExtensionRegistry::Get(browser_context())
                        ->enabled_extensions()
                        .Contains(extension_misc::kGuestModeTestExtensionId));
-  info.Set("tmux_integration", base::FeatureList::IsEnabled(
-                                   ash::features::kTerminalTmuxIntegration));
   return RespondNow(WithArguments(std::move(info)));
 }
 

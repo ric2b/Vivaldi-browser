@@ -33,7 +33,7 @@ class PostProcessor {
   std::vector<std::string> GetClassifierResults(
       const proto::PredictionResult& prediction_result);
 
-  // Calls GetClassifieResults toget post processed result from model execution
+  // Calls GetClassifieResults to get post processed result from model execution
   // and wrap them as ClassificationResult.
   ClassificationResult GetPostProcessedClassificationResult(
       const proto::PredictionResult& prediction_result,
@@ -50,6 +50,11 @@ class PostProcessor {
   // winning label, otherwise the index of the label in the labels list.
   // Returns -2 for all kinds of invalid cases.
   int GetIndexOfTopLabel(const proto::PredictionResult& prediction_result);
+
+  // Converts the prediction result into RawResult usable by
+  // clients.
+  RawResult GetRawResult(const proto::PredictionResult& prediction_result,
+                         PredictionStatus status);
 
  private:
   std::vector<std::string> GetBinaryClassifierResults(

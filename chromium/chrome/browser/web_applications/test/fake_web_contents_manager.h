@@ -13,6 +13,7 @@
 #include "chrome/browser/web_applications/web_contents/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/web_contents/web_app_icon_downloader.h"
 #include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
+#include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
 #include "components/webapps/browser/installable/installable_logging.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
@@ -32,7 +33,7 @@ namespace web_app {
 // reflect a fake network state. This class can be re-used when creating a
 // general dependency wrapper for the web contents system, see
 // http://b/262606416.
-class FakeWebContentsManager {
+class FakeWebContentsManager : public WebContentsManager {
  public:
   // State used to represent a page at a url, which is retrieved through
   // `LoadUrl`, `GetWebAppInstallInfo`, and
@@ -41,6 +42,10 @@ class FakeWebContentsManager {
     FakePageState();
     ~FakePageState();
     FakePageState(FakePageState&&);
+
+    AppId PopulateWithBasicManifest(GURL install_url,
+                                    GURL manifest_url,
+                                    GURL start_url);
 
     // `WebAppUrlLoader::LoadUrl`:
     // If this is populated, then a redirection is always assumed. If the
@@ -63,6 +68,8 @@ class FakeWebContentsManager {
     webapps::InstallableStatusCode error_code;
     GURL favicon_url;
     std::vector<SkBitmap> favicon;
+
+    base::OnceClosure on_manifest_fetch;
   };
 
   // State used to represent an icon at a url, which is retrieved through
@@ -79,20 +86,28 @@ class FakeWebContentsManager {
   };
 
   FakeWebContentsManager();
-  ~FakeWebContentsManager();
+  ~FakeWebContentsManager() override;
 
-  std::unique_ptr<WebAppUrlLoader> CreateUrlLoader();
-  std::unique_ptr<WebAppDataRetriever> CreateDataRetriever();
+  void SetUrlLoaded(content::WebContents* web_contents, const GURL& url);
+
+  std::unique_ptr<WebAppUrlLoader> CreateUrlLoader() override;
+  std::unique_ptr<WebAppDataRetriever> CreateDataRetriever() override;
+  std::unique_ptr<WebAppIconDownloader> CreateIconDownloader() override;
 
   // Set the behavior for calls to `GetIcons` from wrappers returned by this
   // fake class.
-  void SetIconState(const GURL& gurl, const FakeIconState& icon_state);
-  FakeIconState& GetOrCreateIconState(const GURL& gurl);
-  void DeleteIconState(const GURL& gurl);
+  void SetIconState(const GURL& icon_url, const FakeIconState& icon_state);
+  FakeIconState& GetOrCreateIconState(const GURL& icon_url);
+  void DeleteIconState(const GURL& icon_url);
 
   // Set the behavior for calls to `LoadUrl`, `GetWebAppInstallInfo`, and
-  // `CheckInstallabilityAndRetrieveManifest`  from wrappers returned by this
+  // `CheckInstallabilityAndRetrieveManifest` from wrappers returned by this
   // fake class.
+  AppId CreateBasicInstallPageState(
+      const GURL& install_url,
+      const GURL& manifest_url,
+      const GURL& start_url,
+      base::StringPiece16 name = u"Basic app name");
   void SetPageState(const GURL& gurl, FakePageState page_state);
   FakePageState& GetOrCreatePageState(const GURL& gurl);
   void DeletePageState(const GURL& gurl);
@@ -101,6 +116,7 @@ class FakeWebContentsManager {
 
  private:
   class FakeUrlLoader;
+  class FakeWebAppIconDownloader;
   class FakeWebAppDataRetriever;
 
   std::map<GURL, FakeIconState> icon_state_;

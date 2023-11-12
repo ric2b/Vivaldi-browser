@@ -8,6 +8,7 @@
 
 #import <memory>
 
+#import "base/apple/bundle_locations.h"
 #import "base/command_line.h"
 #import "base/ios/ios_util.h"
 #import "base/strings/sys_string_conversions.h"
@@ -157,6 +158,11 @@ void ResetAuthentication() {
 @end
 
 @implementation ChromeTestCase
+
++ (void)load {
+  base::apple::SetOverrideFrameworkBundle(
+      [NSBundle bundleForClass:[ChromeTestCase class]]);
+}
 
 // Overrides testInvocations so the set of tests run can be modified, as
 // necessary.
@@ -310,7 +316,8 @@ void ResetAuthentication() {
 }
 
 - (BOOL)isRunningTest:(SEL)selector {
-  return [[self currentTestMethodName] isEqual:NSStringFromSelector(selector)];
+  return [[self currentTestMethodName]
+      isEqualToString:NSStringFromSelector(selector)];
 }
 
 + (void)testForStartup {

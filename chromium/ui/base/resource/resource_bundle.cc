@@ -13,7 +13,6 @@
 
 #include "base/big_endian.h"
 #include "base/command_line.h"
-#include "base/containers/contains.h"
 #include "base/debug/alias.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
@@ -32,14 +31,15 @@
 #include "build/build_config.h"
 #include "net/filter/gzip_header.h"
 #include "skia/ext/image_operations.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/brotli/include/brotli/decode.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/zlib/google/compression_utils.h"
 #include "ui/base/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/layout.h"
 #include "ui/base/resource/data_pack.h"
+#include "ui/base/resource/resource_scale_factor.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display.h"
@@ -86,10 +86,6 @@ const char kPakFileExtension[] = ".pak";
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-// The prefix that GRIT prepends to Lottie assets, after compression if any.
-// See: tools/grit/grit/node/structure.py
-constexpr char kLottiePrefix[6] = {'L', 'O', 'T', 'T', 'I', 'E'};
-
 // Pointers to the functions |lottie::ParseLottieAsStillImage| and
 // |lottie::ParseLottieAsThemedStillImage|, so that dependencies used by those
 // functions do not need to be included directly in ui/base.
@@ -165,35 +161,52 @@ size_t GetBrotliDecompressSize(base::StringPiece input) {
   return static_cast<size_t>(uncompress_size);
 }
 
+using OutputBufferType = absl::variant<std::string*, std::vector<uint8_t>*>;
+
+// Returns a span of the given length that writes into `out_buf`.
+base::span<uint8_t> GetBufferForWriting(OutputBufferType out_buf, size_t len) {
+  if (absl::holds_alternative<std::string*>(out_buf)) {
+    std::string* str = absl::get<std::string*>(out_buf);
+    str->resize(len);
+    return base::span<uint8_t>(reinterpret_cast<uint8_t*>(str->data()), len);
+  }
+
+  std::vector<uint8_t>* vec = absl::get<std::vector<uint8_t>*>(out_buf);
+  vec->resize(len);
+  return base::span<uint8_t>(vec->data(), len);
+}
+
 // Decompresses data in |input| using brotli, storing
 // the result in |output|, which is resized as necessary. Returns true for
 // success. To be used for grit compressed resources only.
-bool BrotliDecompress(base::StringPiece input, std::string* output) {
+bool BrotliDecompress(base::StringPiece input, OutputBufferType output) {
   size_t decompress_size = GetBrotliDecompressSize(input);
   const uint8_t* raw_input = reinterpret_cast<const uint8_t*>(input.data());
   raw_input = raw_input + ResourceBundle::kBrotliHeaderSize;
 
-  output->resize(decompress_size);
-  uint8_t* output_bytes =
-      reinterpret_cast<uint8_t*>(const_cast<char*>(output->data()));
   return BrotliDecoderDecompress(
              input.size() - ResourceBundle::kBrotliHeaderSize, raw_input,
-             &decompress_size, output_bytes) == BROTLI_DECODER_RESULT_SUCCESS;
+             &decompress_size,
+             GetBufferForWriting(output, decompress_size).data()) ==
+         BROTLI_DECODER_RESULT_SUCCESS;
 }
 
 // Helper function for decompressing resource.
-void DecompressIfNeeded(base::StringPiece data, std::string* output) {
+void DecompressIfNeeded(base::StringPiece data, OutputBufferType output) {
   if (!data.empty() && HasGzipHeader(data)) {
     TRACE_EVENT0("ui", "DecompressIfNeeded::GzipUncompress");
-    bool success = compression::GzipUncompress(data, output);
+    const uint32_t uncompressed_size = compression::GetUncompressedSize(data);
+    bool success = compression::GzipUncompress(
+        base::as_bytes(base::make_span(data)),
+        GetBufferForWriting(output, uncompressed_size));
     DCHECK(success);
   } else if (!data.empty() && HasBrotliHeader(data)) {
     TRACE_EVENT0("ui", "DecompressIfNeeded::BrotliDecompress");
     bool success = BrotliDecompress(data, output);
     DCHECK(success);
   } else {
-    // Assume the raw data is not compressed.
-    output->assign(data.data(), data.size());
+    base::span<uint8_t> dest = GetBufferForWriting(output, data.size());
+    memcpy(dest.data(), data.data(), dest.size());
   }
 }
 
@@ -253,7 +266,7 @@ class ResourceBundle::BitmapImageSource : public gfx::ImageSkiaSource {
   }
 
  private:
-  raw_ptr<ResourceBundle> rb_;
+  raw_ptr<ResourceBundle, DanglingUntriaged> rb_;
 
   const int resource_id_;
 };
@@ -640,6 +653,24 @@ gfx::Image& ResourceBundle::GetImageNamed(int resource_id) {
   return inserted.first->second;
 }
 
+absl::optional<ResourceBundle::LottieData> ResourceBundle::GetLottieData(
+    int resource_id) const {
+  // The prefix that GRIT prepends to Lottie assets, after compression if any.
+  // See: tools/grit/grit/node/structure.py
+  constexpr char kLottiePrefix[6] = {'L', 'O', 'T', 'T', 'I', 'E'};
+
+  const base::StringPiece potential_lottie = GetRawDataResource(resource_id);
+  if (potential_lottie.substr(0u, std::size(kLottiePrefix)) !=
+      base::StringPiece(kLottiePrefix, std::size(kLottiePrefix))) {
+    return absl::nullopt;
+  }
+
+  LottieData result;
+  DecompressIfNeeded(potential_lottie.substr(std::size(kLottiePrefix)),
+                     &result);
+  return result;
+}
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 const ui::ImageModel& ResourceBundle::GetThemedLottieImageNamed(
     int resource_id) {
@@ -650,8 +681,8 @@ const ui::ImageModel& ResourceBundle::GetThemedLottieImageNamed(
   if (found != image_models_.end())
     return found->second;
 
-  std::string bytes_string;
-  if (!LoadLottieBytesString(resource_id, &bytes_string)) {
+  absl::optional<LottieData> data = GetLottieData(resource_id);
+  if (!data) {
     LOG(WARNING) << "Unable to load themed Lottie image with id "
                  << resource_id;
     NOTREACHED();  // Want to assert in debug mode.
@@ -663,7 +694,7 @@ const ui::ImageModel& ResourceBundle::GetThemedLottieImageNamed(
   // The bytes string was successfully loaded, so parse it and cache the
   // resulting image.
   auto inserted = image_models_.emplace(
-      resource_id, (*g_parse_lottie_as_themed_still_image_)(bytes_string));
+      resource_id, (*g_parse_lottie_as_themed_still_image_)(std::move(*data)));
   DCHECK(inserted.second);
   return inserted.first->second;
 }
@@ -938,12 +969,6 @@ ResourceScaleFactor ResourceBundle::GetMaxResourceScaleFactor() const {
 #endif
 }
 
-bool ResourceBundle::IsScaleFactorSupported(ResourceScaleFactor scale_factor) {
-  const std::vector<ResourceScaleFactor>& supported_scale_factors =
-      ui::GetSupportedResourceScaleFactors();
-  return base::Contains(supported_scale_factors, scale_factor);
-}
-
 void ResourceBundle::CheckCanOverrideStringResources() {
 #if DCHECK_IS_ON()
   base::AutoLock lock_scope(*locale_resources_data_lock_);
@@ -972,10 +997,8 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
 #if BUILDFLAG(IS_IOS)
   display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
   if (display.device_scale_factor() > 2.0) {
-    DCHECK_EQ(3.0, display.device_scale_factor());
     supported_scale_factors.push_back(k300Percent);
   } else if (display.device_scale_factor() > 1.0) {
-    DCHECK_EQ(2.0, display.device_scale_factor());
     supported_scale_factors.push_back(k200Percent);
   } else {
     supported_scale_factors.push_back(k100Percent);
@@ -1077,9 +1100,10 @@ void ResourceBundle::InitDefaultFontList() {
 gfx::ImageSkia ResourceBundle::CreateImageSkia(int resource_id) {
   DCHECK(!resource_handles_.empty()) << "Missing call to SetResourcesDataDLL?";
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  std::string lottie_bytes_string;
-  if (LoadLottieBytesString(resource_id, &lottie_bytes_string))
-    return (*g_parse_lottie_as_still_image_)(lottie_bytes_string);
+  absl::optional<LottieData> data = GetLottieData(resource_id);
+  if (data) {
+    return (*g_parse_lottie_as_still_image_)(std::move(*data));
+  }
   const ResourceScaleFactor scale_factor_to_load = GetMaxResourceScaleFactor();
 #elif BUILDFLAG(IS_WIN)
   const ResourceScaleFactor scale_factor_to_load =
@@ -1283,18 +1307,5 @@ bool ResourceBundle::DecodePNG(const unsigned char* buf,
   *fell_back_to_1x = PNGContainsFallbackMarker(buf, size);
   return gfx::PNGCodec::Decode(buf, size, bitmap);
 }
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-bool ResourceBundle::LoadLottieBytesString(int resource_id,
-                                           std::string* bytes_string) const {
-  const base::StringPiece potential_lottie = GetRawDataResource(resource_id);
-  if (potential_lottie.substr(0u, std::size(kLottiePrefix)) !=
-      base::StringPiece(kLottiePrefix, std::size(kLottiePrefix)))
-    return false;
-  DecompressIfNeeded(potential_lottie.substr(std::size(kLottiePrefix)),
-                     bytes_string);
-  return true;
-}
-#endif
 
 }  // namespace ui

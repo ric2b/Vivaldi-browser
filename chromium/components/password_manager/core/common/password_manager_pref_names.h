@@ -7,8 +7,7 @@
 
 #include "build/build_config.h"
 
-namespace password_manager {
-namespace prefs {
+namespace password_manager::prefs {
 
 // Alphabetical list of preference names specific to the PasswordManager
 // component.
@@ -114,11 +113,19 @@ extern const char kTimesReenrolledToGoogleMobileServices[];
 // after a successful reenrollment.
 extern const char kTimesAttemptedToReenrollToGoogleMobileServices[];
 
-// Integer value indicating the number of consecutive times the password manager
-// auth error UI was displayed to the user. Reset once the error is resolved
-// (detected by a successful backend request) or when the user is unenrolled
-// from UPM.
-extern const char kTimesUPMAuthErrorShown[];
+// Boolean value meant to record in the prefs if the user clicked "Got it" in
+// the UPM local passwords migration warning. When set to true, the warning
+// should not be displayed again.
+extern const char kUserAcknowledgedLocalPasswordsMigrationWarning[];
+
+// The timestamp at which the last UPM local passwords migration warning was
+// shown to the user in microseconds since Windows epoch. This is needed to
+// ensure that the UI is prompted only once per given time interval (currently
+// one month).
+extern const char kLocalPasswordsMigrationWarningShownTimestamp[];
+
+// Whether the local password migration warning was already shown at startup.
+extern const char kLocalPasswordMigrationWarningShownAtStartup[];
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -247,7 +254,6 @@ extern const char kAccountStorageNewFeatureIconImpressions[];
 extern const char kPasswordManagerPromoCardsList[];
 #endif
 
-}  // namespace prefs
-}  // namespace password_manager
+}  // namespace password_manager::prefs
 
 #endif  // COMPONENTS_PASSWORD_MANAGER_CORE_COMMON_PASSWORD_MANAGER_PREF_NAMES_H_

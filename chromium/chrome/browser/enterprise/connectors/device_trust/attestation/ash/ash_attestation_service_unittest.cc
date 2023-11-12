@@ -122,6 +122,7 @@ class AshAttestationServiceTest : public testing::Test {
   TestingProfile test_profile_;
   raw_ptr<ash::attestation::MockTpmChallengeKey, ExperimentalAsh>
       mock_challenge_key_;
+  std::set<enterprise_connectors::DTCPolicyLevel> levels_;
 };
 
 TEST_F(AshAttestationServiceTest, BuildChallengeResponse_Success) {
@@ -140,7 +141,7 @@ TEST_F(AshAttestationServiceTest, BuildChallengeResponse_Success) {
 
   auto protoChallenge = GetSerializedSignedChallenge();
   EXPECT_CALL(*mock_challenge_key_,
-              BuildResponse(ash::attestation::AttestationKeyType::KEY_DEVICE,
+              BuildResponse(::attestation::ENTERPRISE_MACHINE,
                             /*profile=*/&test_profile_, /*callback=*/_,
                             /*challenge=*/protoChallenge,
                             /*register_key=*/false,
@@ -152,7 +153,7 @@ TEST_F(AshAttestationServiceTest, BuildChallengeResponse_Success) {
               kFakeResponse)));
 
   attestation_service_->BuildChallengeResponseForVAChallenge(
-      protoChallenge, CreateSignals(), std::move(callback));
+      protoChallenge, CreateSignals(), levels_, std::move(callback));
   run_loop.Run();
 }
 

@@ -34,6 +34,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 };
 
 @interface VivaldiSyncLoginViewController () <
+    UITextFieldDelegate,
     UITextViewDelegate>
 
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* usernameItem;
@@ -184,6 +185,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [editCell.identifyingIconButton addTarget:self
                                          action:@selector(togglePasswordMasking)
                                forControlEvents:UIControlEventTouchUpInside];
+      editCell.textField.delegate = self;
       break;
     }
     case ItemTypeTitle: {
@@ -197,6 +199,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
   }
 
   return cell;
+}
+
+#pragma mark - UITextFieldDelegate
+
+- (BOOL)textFieldShouldReturn:(UITextField*)textField {
+  [self logInButtonPressed:nil];
+  return NO;
 }
 
 #pragma mark - UITextViewDelegate

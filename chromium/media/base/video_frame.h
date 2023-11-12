@@ -548,11 +548,8 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   const gfx::Size& natural_size() const { return natural_size_; }
 
   int stride(size_t plane) const {
-    if (UNLIKELY(!IsValidPlane(format(), plane) ||
-                 plane >= layout_.num_planes())) {
-      NOTREACHED();
-      return 0;
-    }
+    CHECK(IsValidPlane(format(), plane));
+    CHECK_LT(plane, layout_.num_planes());
     return layout_.planes()[plane].stride;
   }
 
@@ -829,6 +826,13 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // the same DMABUF memory by testing for
   // (&vf1->DmabufFds() == &vf2->DmabufFds()).
   scoped_refptr<DmabufHolder> dmabuf_fds_;
+
+  friend scoped_refptr<VideoFrame>
+  WrapChromeOSCompressedGpuMemoryBufferAsVideoFrame(
+      const gfx::Rect& visible_rect,
+      const gfx::Size& natural_size,
+      std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer,
+      base::TimeDelta timestamp);
 #endif
 
 #if BUILDFLAG(IS_APPLE)

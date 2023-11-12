@@ -22,6 +22,7 @@ component("network") {
     "//chromeos/ash/components/network/metrics",
     "//chromeos/ash/components/network/onc",
     "//chromeos/ash/components/network/proxy",
+    "//chromeos/ash/services/cellular_setup/public/mojom",
     "//chromeos/ash/services/hotspot_config/public/cpp",
     "//chromeos/ash/services/hotspot_config/public/mojom",
     "//chromeos/components/onc",
@@ -39,6 +40,8 @@ component("network") {
     "//dbus",
     "//net",
     "//services/preferences/public/cpp",
+    "//third_party/abseil-cpp:absl",
+    "//third_party/re2",
     "//url",
   ]
 
@@ -269,6 +272,7 @@ source_set("unit_tests") {
     "//chromeos/ash/components/network/metrics:unit_tests",
     "//chromeos/ash/components/network/onc:unit_tests",
     "//chromeos/ash/components/network/proxy:unit_tests",
+    "//chromeos/ash/services/cellular_setup/public/mojom",
     "//chromeos/ash/services/hotspot_config/public/cpp",
     "//chromeos/ash/services/hotspot_config/public/cpp:test_support",
     "//chromeos/ash/services/hotspot_config/public/mojom",
@@ -290,6 +294,7 @@ source_set("unit_tests") {
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/abseil-cpp:absl",
   ]
   sources = [
     "auto_connect_handler_unittest.cc",
@@ -331,6 +336,7 @@ source_set("unit_tests") {
     "network_type_pattern_unittest.cc",
     "network_ui_data_unittest.cc",
     "network_util_unittest.cc",
+    "policy_util_unittest.cc",
     "profile_policies_unittest.cc",
     "prohibited_technologies_handler_unittest.cc",
     "shill_property_handler_unittest.cc",

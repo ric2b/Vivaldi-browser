@@ -228,7 +228,7 @@ class HistoryBackendTestBase : public testing::Test {
  public:
   typedef std::vector<std::pair<URLRow, VisitRow>> URLVisitedList;
   typedef std::vector<URLRows> URLsModifiedList;
-  typedef std::vector<std::pair<bool, bool>> URLsDeletedList;
+  typedef std::vector<DeletionInfo> URLsDeletedList;
 
   HistoryBackendTestBase() = default;
   HistoryBackendTestBase(const HistoryBackendTestBase&) = delete;
@@ -297,8 +297,7 @@ class HistoryBackendTestBase : public testing::Test {
 
   void NotifyURLsDeleted(DeletionInfo deletion_info) {
     mem_backend_->OnURLsDeleted(nullptr, deletion_info);
-    urls_deleted_notifications_.push_back(std::make_pair(
-        deletion_info.IsAllHistory(), deletion_info.is_from_expiration()));
+    urls_deleted_notifications_.push_back(std::move(deletion_info));
   }
 
   void NotifyKeywordSearchTermUpdated(const URLRow& row,
@@ -863,8 +862,8 @@ TEST_F(HistoryBackendTest, DeleteAll) {
 
   // Check that we fire the notification about all history having been deleted.
   ASSERT_EQ(1u, urls_deleted_notifications().size());
-  EXPECT_TRUE(urls_deleted_notifications()[0].first);
-  EXPECT_FALSE(urls_deleted_notifications()[0].second);
+  EXPECT_TRUE(urls_deleted_notifications()[0].IsAllHistory());
+  EXPECT_FALSE(urls_deleted_notifications()[0].is_from_expiration());
 }
 
 // Test that clearing all history does not delete bookmark favicons in the
@@ -909,6 +908,12 @@ TEST_F(HistoryBackendTest, DeleteAllURLPreviouslyDeleted) {
   backend_->DeleteURL(kPageURL);
   backend_->DeleteAllHistory();
 
+  // Ensure delete notifications were propagated with the correct reason.
+  EXPECT_EQ(2u, urls_deleted_notifications().size());
+  for (const DeletionInfo& info : urls_deleted_notifications()) {
+    EXPECT_EQ(DeletionInfo::Reason::kOther, info.deletion_reason());
+  }
+
   // Test that the entry in the url table for the bookmark is gone but that the
   // favicon data for the bookmark is still there.
   ASSERT_EQ(0, backend_->db_->GetRowForURL(kPageURL, nullptr));
@@ -944,6 +949,11 @@ TEST_F(HistoryBackendTest, DeleteAllThenAddData) {
 
   // Clear all history.
   backend_->DeleteAllHistory();
+
+  // Ensure delete notifications were propagated with the correct reason.
+  ASSERT_EQ(1u, urls_deleted_notifications().size());
+  EXPECT_EQ(DeletionInfo::Reason::kOther,
+            urls_deleted_notifications()[0].deletion_reason());
 
   // The row should be deleted.
   EXPECT_FALSE(backend_->db_->GetRowForURL(url, &outrow));
@@ -2390,7 +2400,8 @@ TEST_F(HistoryBackendTest, RemoveVisitsTransitions) {
   ASSERT_EQ(2, row.visit_count());
 
   // Now, delete the typed visit and verify that typed_count is updated.
-  ASSERT_TRUE(backend_->RemoveVisits(VisitVector(1, visits[0])));
+  ASSERT_TRUE(backend_->RemoveVisits(VisitVector(1, visits[0]),
+                                     DeletionInfo::Reason::kOther));
   id = backend_->db()->GetRowForURL(url1, &row);
   ASSERT_TRUE(backend_->db()->GetVisitsForURL(id, &visits));
   ASSERT_EQ(2U, visits.size());
@@ -2399,7 +2410,8 @@ TEST_F(HistoryBackendTest, RemoveVisitsTransitions) {
 
   // Delete the reload visit now and verify that none of the counts have
   // changed.
-  ASSERT_TRUE(backend_->RemoveVisits(VisitVector(1, visits[0])));
+  ASSERT_TRUE(backend_->RemoveVisits(VisitVector(1, visits[0]),
+                                     DeletionInfo::Reason::kOther));
   id = backend_->db()->GetRowForURL(url1, &row);
   ASSERT_TRUE(backend_->db()->GetVisitsForURL(id, &visits));
   ASSERT_EQ(1U, visits.size());
@@ -2407,8 +2419,15 @@ TEST_F(HistoryBackendTest, RemoveVisitsTransitions) {
   ASSERT_EQ(1, row.visit_count());
 
   // Delete the last visit and verify that we delete the URL.
-  ASSERT_TRUE(backend_->RemoveVisits(VisitVector(1, visits[0])));
+  ASSERT_TRUE(backend_->RemoveVisits(VisitVector(1, visits[0]),
+                                     DeletionInfo::Reason::kOther));
   ASSERT_EQ(0, backend_->db()->GetRowForURL(url1, &row));
+
+  // Ensure delete notifications were propagated with the correct reason.
+  EXPECT_EQ(2u, urls_deleted_notifications().size());
+  for (const DeletionInfo& info : urls_deleted_notifications()) {
+    EXPECT_EQ(DeletionInfo::Reason::kOther, info.deletion_reason());
+  }
 }
 
 TEST_F(HistoryBackendTest, RemoveVisitsSource) {
@@ -2439,7 +2458,13 @@ TEST_F(HistoryBackendTest, RemoveVisitsSource) {
   ASSERT_TRUE(backend_->db()->GetVisitsForURL(id, &visits));
   ASSERT_EQ(2U, visits.size());
   // Remove these visits.
-  ASSERT_TRUE(backend_->RemoveVisits(visits));
+  ASSERT_TRUE(backend_->RemoveVisits(visits, DeletionInfo::Reason::kOther));
+
+  // Ensure delete notifications were propagated with the correct reason.
+  EXPECT_EQ(2u, urls_deleted_notifications().size());
+  for (const DeletionInfo& info : urls_deleted_notifications()) {
+    EXPECT_EQ(DeletionInfo::Reason::kOther, info.deletion_reason());
+  }
 
   // Now check only url2's source in visit_source table.
   VisitSourceMap visit_sources;
@@ -2992,7 +3017,7 @@ TEST_F(HistoryBackendTest, UpdateVisitDuration) {
             visits1[0].visit_duration.ToInternalValue());
 
   // Remove the visit to cnn.com.
-  ASSERT_TRUE(backend_->RemoveVisits(visits1));
+  ASSERT_TRUE(backend_->RemoveVisits(visits1, DeletionInfo::Reason::kOther));
 }
 
 TEST_F(HistoryBackendTest, MarkVisitAsKnownToSync) {
@@ -3560,6 +3585,11 @@ TEST_F(InMemoryHistoryBackendTest, OnURLsDeletedPiecewise) {
   // URL has been deleted.
   SimulateNotificationURLsDeleted(&row2, &row3);
 
+  // Ensure delete notifications were propagated with the correct reason.
+  ASSERT_EQ(1u, urls_deleted_notifications().size());
+  EXPECT_EQ(DeletionInfo::Reason::kOther,
+            urls_deleted_notifications()[0].deletion_reason());
+
   // Expect that the first typed URL remains intact, the second typed URL is
   // correctly removed, and the non-typed URL does not magically appear.
   URLRow cached_row1;
@@ -3688,6 +3718,11 @@ TEST_F(InMemoryHistoryBackendTest, OnURLsDeletedWithSearchTerms) {
 
   // Notify the in-memory database that the second typed URL has been deleted.
   SimulateNotificationURLsDeleted(&row2);
+
+  // Ensure delete notifications were propagated with the correct reason.
+  ASSERT_EQ(1u, urls_deleted_notifications().size());
+  EXPECT_EQ(DeletionInfo::Reason::kOther,
+            urls_deleted_notifications()[0].deletion_reason());
 
   // Verify that the second term is no longer returned as result, and also check
   // at the low level that it is gone for good. The term corresponding to the
@@ -3869,9 +3904,14 @@ TEST_F(HistoryBackendTest, ExpireVisitDeletes) {
   EXPECT_EQ(visit_id, backend_->visit_tracker().GetLastVisit(
                           context_id, navigation_entry_id, url));
 
-  backend_->RemoveVisits(visits);
+  backend_->RemoveVisits(visits, DeletionInfo::Reason::kOther);
   EXPECT_EQ(0, backend_->visit_tracker().GetLastVisit(
                    context_id, navigation_entry_id, url));
+
+  // Ensure delete notifications were propagated with the correct reason.
+  ASSERT_EQ(1u, urls_deleted_notifications().size());
+  EXPECT_EQ(DeletionInfo::Reason::kOther,
+            urls_deleted_notifications()[0].deletion_reason());
 }
 
 TEST_F(HistoryBackendTest, AddPageWithContextAnnotations) {
@@ -3899,8 +3939,8 @@ TEST_F(HistoryBackendTest, AddPageWithContextAnnotations) {
   // Read the visit back from the DB and make sure the annotations are there.
   history::QueryOptions query_options;
   query_options.duplicate_policy = QueryOptions::KEEP_ALL_DUPLICATES;
-  std::vector<AnnotatedVisit> annotated_visits =
-      backend_->GetAnnotatedVisits(query_options);
+  std::vector<AnnotatedVisit> annotated_visits = backend_->GetAnnotatedVisits(
+      query_options, /*compute_redirect_chain_start_properties=*/false);
   ASSERT_EQ(annotated_visits.size(), 1u);
 
   EXPECT_EQ(context_annotations,
@@ -3945,29 +3985,50 @@ TEST_F(HistoryBackendTest, AnnotatedVisits) {
   backend_->AddContextAnnotationsForVisit(1, MakeContextAnnotations(true));
   backend_->AddContextAnnotationsForVisit(3, MakeContextAnnotations(false));
   backend_->AddContextAnnotationsForVisit(2, MakeContextAnnotations(true));
-  EXPECT_EQ(backend_->GetAnnotatedVisits(query_options).size(), 3u);
+  EXPECT_EQ(
+      backend_
+          ->GetAnnotatedVisits(query_options,
+                               /*compute_redirect_chain_start_properties=*/true)
+          .size(),
+      3u);
 
   // Annotated visits should have a visit IDs.
   EXPECT_DCHECK_DEATH(
       backend_->AddContextAnnotationsForVisit(0, MakeContextAnnotations(true)));
-  EXPECT_EQ(backend_->GetAnnotatedVisits(query_options).size(), 3u);
+  EXPECT_EQ(
+      backend_
+          ->GetAnnotatedVisits(query_options,
+                               /*compute_redirect_chain_start_properties=*/true)
+          .size(),
+      3u);
 
   // `GetAnnotatedVisits()` should still succeed to fetch visits that lack
   // annotations. They just won't have annotations attached.
   EXPECT_EQ(add_url_and_visit("http://3.com/"),
             (std::pair<URLID, VisitID>{3, 4}));
-  EXPECT_EQ(backend_->GetAnnotatedVisits(query_options).size(), 4u);
+  EXPECT_EQ(
+      backend_
+          ->GetAnnotatedVisits(query_options,
+                               /*compute_redirect_chain_start_properties=*/true)
+          .size(),
+      4u);
 
   // Annotations associated with a removed visit should not be added.
   EXPECT_EQ(add_url_and_visit("http://4.com/"),
             (std::pair<URLID, VisitID>{4, 5}));
   delete_visit(5);
   backend_->AddContextAnnotationsForVisit(5, MakeContextAnnotations(true));
-  EXPECT_EQ(backend_->GetAnnotatedVisits(query_options).size(), 4u);
+  EXPECT_EQ(
+      backend_
+          ->GetAnnotatedVisits(query_options,
+                               /*compute_redirect_chain_start_properties=*/true)
+          .size(),
+      4u);
 
   // Verify only the correct annotated visits are retrieved ordered recent
   // visits first.
-  auto annotated_visits = backend_->GetAnnotatedVisits(query_options);
+  auto annotated_visits = backend_->GetAnnotatedVisits(
+      query_options, /*compute_redirect_chain_start_properties=*/true);
   ASSERT_EQ(annotated_visits.size(), 4u);
   EXPECT_EQ(annotated_visits[0].url_row.id(), 3);
   EXPECT_EQ(annotated_visits[0].url_row.url(), "http://3.com/");
@@ -3999,7 +4060,8 @@ TEST_F(HistoryBackendTest, AnnotatedVisits) {
   delete_visit(3);
   // Annotated visits should be unfetchable if their associated URL or visit is
   // removed.
-  annotated_visits = backend_->GetAnnotatedVisits(query_options);
+  annotated_visits = backend_->GetAnnotatedVisits(
+      query_options, /*compute_redirect_chain_start_properties=*/true);
   ASSERT_EQ(annotated_visits.size(), 1u);
   EXPECT_EQ(annotated_visits[0].url_row.id(), 1);
   EXPECT_EQ(annotated_visits[0].url_row.url(), "http://1.com/");
@@ -4042,8 +4104,8 @@ TEST_F(HistoryBackendTest, PreservesAllContextAnnotationsFields) {
   // Verify that we can read all the fields back from the DB.
   history::QueryOptions query_options;
   query_options.duplicate_policy = QueryOptions::KEEP_ALL_DUPLICATES;
-  std::vector<AnnotatedVisit> annotated_visits =
-      backend_->GetAnnotatedVisits(query_options);
+  std::vector<AnnotatedVisit> annotated_visits = backend_->GetAnnotatedVisits(
+      query_options, /*compute_redirect_chain_start_properties=*/false);
   ASSERT_EQ(annotated_visits.size(), 1u);
 
   VisitContextAnnotations annotations_out =
@@ -4068,7 +4130,8 @@ TEST_F(HistoryBackendTest, PreservesAllContextAnnotationsFields) {
   VisitContextAnnotations annotations_expected = annotations_update;
   annotations_expected.on_visit = annotations_in.on_visit;
 
-  annotated_visits = backend_->GetAnnotatedVisits(query_options);
+  annotated_visits = backend_->GetAnnotatedVisits(
+      query_options, /*compute_redirect_chain_start_properties=*/false);
   ASSERT_EQ(annotated_visits.size(), 1u);
 
   annotations_out = annotated_visits[0].context_annotations;
@@ -4514,7 +4577,8 @@ TEST_F(HistoryBackendTest, GetRedirectChainStart) {
   QueryOptions queryOptions;
   queryOptions.duplicate_policy = QueryOptions::KEEP_ALL_DUPLICATES;
   queryOptions.visit_order = QueryOptions::OLDEST_FIRST;
-  auto annotated_visits = backend_->GetAnnotatedVisits(queryOptions);
+  auto annotated_visits = backend_->GetAnnotatedVisits(
+      queryOptions, /*compute_redirect_chain_start_properties=*/true);
   ASSERT_EQ(annotated_visits.size(), expectations.size());
   for (size_t i = 0; i < expectations.size(); ++i) {
     VisitID visit_id = i + 1;
@@ -4540,6 +4604,36 @@ TEST_F(HistoryBackendTest, GetRedirectChainStart) {
         << "visit id: " << visit_id;
     EXPECT_EQ(annotated_visit.opener_visit_of_redirect_chain_start,
               expectation.opener_visit_of_redirect_chain_start)
+        << "visit id: " << visit_id;
+  }
+
+  // Now, explicitly do not set the redirect chain start.
+  auto annotated_visits_no_redirect = backend_->GetAnnotatedVisits(
+      queryOptions, /*compute_redirect_chain_start_properties=*/false);
+  ASSERT_EQ(annotated_visits_no_redirect.size(), expectations.size());
+  for (size_t i = 0; i < expectations.size(); ++i) {
+    VisitID visit_id = i + 1;
+    const auto& expectation = expectations[i];
+    VisitRow visit;
+    backend_->db_->GetRowForVisit(visit_id, &visit);
+    EXPECT_EQ(visit.referring_visit, expectation.referring_visit)
+        << "visit id: " << visit_id;
+    EXPECT_EQ(visit.opener_visit, expectation.opener_visit)
+        << "visit id: " << visit_id;
+
+    // Verify `GetRedirectChainStart()`.
+    auto first_redirect = backend_->GetRedirectChainStart(visit);
+    EXPECT_EQ(first_redirect.visit_id, expectation.first_redirect)
+        << "visit id: " << visit_id;
+
+    // Verify `GetAnnotatedVisits()`. Redirect chain start visits should not be
+    // set.
+    const auto& annotated_visit = annotated_visits_no_redirect[i];
+    EXPECT_EQ(annotated_visit.visit_row.visit_id, visit_id)
+        << "visit id: " << visit_id;
+    EXPECT_EQ(annotated_visit.referring_visit_of_redirect_chain_start, 0)
+        << "visit id: " << visit_id;
+    EXPECT_EQ(annotated_visit.opener_visit_of_redirect_chain_start, 0)
         << "visit id: " << visit_id;
   }
 }
@@ -5055,6 +5149,11 @@ TEST_F(HistoryBackendTest, DeleteAllForeignVisitsDoesNotDeleteLocalVisits) {
   // The deletions happens asynchronously, so wait for it to complete.
   task_environment_.RunUntilIdle();
 
+  // Ensure delete notifications were propagated with the correct reason.
+  ASSERT_EQ(1u, urls_deleted_notifications().size());
+  EXPECT_EQ(DeletionInfo::Reason::kDeleteAllForeignVisits,
+            urls_deleted_notifications()[0].deletion_reason());
+
   // Make sure the foreign visits (and only those) got deleted.
   {
     VisitVector visits;
@@ -5105,6 +5204,11 @@ TEST_F(HistoryBackendTest, DeleteAllForeignVisitsWorksInBatches) {
 
   // Wait for the deletions to happen.
   task_environment_.RunUntilIdle();
+
+  // Ensure delete notifications were propagated with the correct reason.
+  ASSERT_EQ(1u, urls_deleted_notifications().size());
+  EXPECT_EQ(DeletionInfo::Reason::kDeleteAllForeignVisits,
+            urls_deleted_notifications()[0].deletion_reason());
 
   // Make sure that all the foreign visits got deleted.
   {

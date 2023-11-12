@@ -369,19 +369,19 @@ class FileSystemAccessManagerImplTest : public testing::Test {
               blink::mojom::FileSystemAccessStatus::kOk);
   }
 
-  storage::BucketLocator CreateBucketForTesting() {
+  storage::QuotaErrorOr<storage::BucketLocator> CreateBucketForTesting() {
     base::test::TestFuture<storage::QuotaErrorOr<storage::BucketInfo>>
         bucket_future;
     quota_manager_proxy_->CreateBucketForTesting(
         kTestStorageKey, "custom_bucket", blink::mojom::StorageType::kTemporary,
         base::SequencedTaskRunner::GetCurrentDefault(),
         bucket_future.GetCallback());
-    auto bucket = bucket_future.Take();
-    EXPECT_TRUE(bucket.has_value());
-    return bucket->ToBucketLocator();
+    return bucket_future.Take().transform(
+        &storage::BucketInfo::ToBucketLocator);
   }
 
-  storage::BucketLocator CreateSandboxFileSystemAndGetDefaultBucket() {
+  storage::QuotaErrorOr<storage::BucketLocator>
+  CreateSandboxFileSystemAndGetDefaultBucket() {
     base::test::TestFuture<
         blink::mojom::FileSystemAccessErrorPtr,
         mojo::PendingRemote<blink::mojom::FileSystemAccessDirectoryHandle>>
@@ -400,15 +400,15 @@ class FileSystemAccessManagerImplTest : public testing::Test {
         quota_manager_proxy_.get());
 
     // Check default bucket exists.
-    storage::QuotaErrorOr<storage::BucketInfo> result =
-        quota_manager_proxy_sync.GetBucket(
-            kTestStorageKey, storage::kDefaultBucketName,
-            blink::mojom::StorageType::kTemporary);
-    EXPECT_TRUE(result.has_value());
-    EXPECT_EQ(result->name, storage::kDefaultBucketName);
-    EXPECT_EQ(result->storage_key, kTestStorageKey);
-    EXPECT_GT(result->id.value(), 0);
-    return result->ToBucketLocator();
+    return quota_manager_proxy_sync
+        .GetBucket(kTestStorageKey, storage::kDefaultBucketName,
+                   blink::mojom::StorageType::kTemporary)
+        .transform([&](storage::BucketInfo result) {
+          EXPECT_EQ(result.name, storage::kDefaultBucketName);
+          EXPECT_EQ(result.storage_key, kTestStorageKey);
+          EXPECT_GT(result.id.value(), 0);
+          return result.ToBucketLocator();
+        });
   }
 
  protected:
@@ -457,7 +457,9 @@ class FileSystemAccessManagerImplTest : public testing::Test {
 
 TEST_F(FileSystemAccessManagerImplTest, GetSandboxedFileSystem_CreateBucket) {
   // Check default bucket exists.
-  ASSERT_TRUE(CreateSandboxFileSystemAndGetDefaultBucket().is_default);
+  const auto bucket = CreateSandboxFileSystemAndGetDefaultBucket();
+  ASSERT_TRUE(bucket.has_value());
+  ASSERT_TRUE(bucket->is_default);
 }
 
 TEST_F(FileSystemAccessManagerImplTest, GetSandboxedFileSystem_CustomBucket) {
@@ -473,7 +475,7 @@ TEST_F(FileSystemAccessManagerImplTest, GetSandboxedFileSystem_CustomBucket) {
       base::SequencedTaskRunner::GetCurrentDefault(),
       bucket_future.GetCallback());
   auto bucket = bucket_future.Take();
-  EXPECT_TRUE(bucket.has_value());
+  ASSERT_TRUE(bucket.has_value());
 
   base::test::TestFuture<
       blink::mojom::FileSystemAccessErrorPtr,
@@ -639,10 +641,14 @@ TEST_F(FileSystemAccessManagerImplTest,
   auto lock = manager_->TakeWriteLock(
       test_file_url, FileSystemAccessWriteLockManager::WriteLockType::kShared);
   ASSERT_TRUE(lock);
+  auto swap_lock = manager_->TakeWriteLock(
+      test_swap_url,
+      FileSystemAccessWriteLockManager::WriteLockType::kExclusive);
+  ASSERT_TRUE(swap_lock);
 
   mojo::Remote<blink::mojom::FileSystemAccessFileWriter> writer_remote(
       manager_->CreateFileWriter(kBindingContext, test_file_url, test_swap_url,
-                                 std::move(lock),
+                                 std::move(lock), std::move(swap_lock),
                                  FileSystemAccessManagerImpl::SharedHandleState(
                                      allow_grant_, allow_grant_),
                                  /*auto_close=*/false));
@@ -677,10 +683,14 @@ TEST_F(FileSystemAccessManagerImplTest, FileWriterCloseDoesNotAbortOnDestruct) {
   auto lock = manager_->TakeWriteLock(
       test_file_url, FileSystemAccessWriteLockManager::WriteLockType::kShared);
   ASSERT_TRUE(lock);
+  auto swap_lock = manager_->TakeWriteLock(
+      test_swap_url,
+      FileSystemAccessWriteLockManager::WriteLockType::kExclusive);
+  ASSERT_TRUE(swap_lock);
 
   mojo::Remote<blink::mojom::FileSystemAccessFileWriter> writer_remote(
       manager_->CreateFileWriter(kBindingContext, test_file_url, test_swap_url,
-                                 std::move(lock),
+                                 std::move(lock), std::move(swap_lock),
                                  FileSystemAccessManagerImpl::SharedHandleState(
                                      allow_grant_, allow_grant_),
                                  /*auto_close=*/false));
@@ -726,10 +736,14 @@ TEST_F(FileSystemAccessManagerImplTest,
   auto lock = manager_->TakeWriteLock(
       test_file_url, FileSystemAccessWriteLockManager::WriteLockType::kShared);
   ASSERT_TRUE(lock);
+  auto swap_lock = manager_->TakeWriteLock(
+      test_swap_url,
+      FileSystemAccessWriteLockManager::WriteLockType::kExclusive);
+  ASSERT_TRUE(swap_lock);
 
   mojo::Remote<blink::mojom::FileSystemAccessFileWriter> writer_remote(
       manager_->CreateFileWriter(kBindingContext, test_file_url, test_swap_url,
-                                 std::move(lock),
+                                 std::move(lock), std::move(swap_lock),
                                  FileSystemAccessManagerImpl::SharedHandleState(
                                      allow_grant_, allow_grant_),
                                  /*auto_close=*/false));
@@ -764,10 +778,14 @@ TEST_F(FileSystemAccessManagerImplTest,
   auto lock = manager_->TakeWriteLock(
       test_file_url, FileSystemAccessWriteLockManager::WriteLockType::kShared);
   ASSERT_TRUE(lock);
+  auto swap_lock = manager_->TakeWriteLock(
+      test_swap_url,
+      FileSystemAccessWriteLockManager::WriteLockType::kExclusive);
+  ASSERT_TRUE(swap_lock);
 
   mojo::Remote<blink::mojom::FileSystemAccessFileWriter> writer_remote(
       manager_->CreateFileWriter(kBindingContext, test_file_url, test_swap_url,
-                                 std::move(lock),
+                                 std::move(lock), std::move(swap_lock),
                                  FileSystemAccessManagerImpl::SharedHandleState(
                                      allow_grant_, allow_grant_),
                                  /*auto_close=*/true));
@@ -799,10 +817,11 @@ TEST_F(FileSystemAccessManagerImplTest,
 TEST_F(FileSystemAccessManagerImplTest,
        SerializeHandle_SandboxedFile_DefaultBucket) {
   auto default_bucket = CreateSandboxFileSystemAndGetDefaultBucket();
+  ASSERT_TRUE(default_bucket.has_value());
   auto test_file_url = file_system_context_->CreateCrackedFileSystemURL(
       kTestStorageKey, storage::kFileSystemTypeTemporary,
       base::FilePath::FromUTF8Unsafe("test/foo/bar"));
-  test_file_url.SetBucket(default_bucket);
+  test_file_url.SetBucket(*default_bucket);
   FileSystemAccessFileHandleImpl file(manager_.get(), kBindingContext,
                                       test_file_url, {ask_grant_, ask_grant_});
   mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token_remote;
@@ -829,7 +848,9 @@ TEST_F(FileSystemAccessManagerImplTest,
   auto test_file_url = file_system_context_->CreateCrackedFileSystemURL(
       kTestStorageKey, storage::kFileSystemTypeTemporary,
       base::FilePath::FromUTF8Unsafe("test/foo/bar"));
-  test_file_url.SetBucket(CreateBucketForTesting());
+  auto bucket = CreateBucketForTesting();
+  ASSERT_TRUE(bucket.has_value());
+  test_file_url.SetBucket(*std::move(bucket));
   FileSystemAccessFileHandleImpl file(manager_.get(), kBindingContext,
                                       test_file_url, {ask_grant_, ask_grant_});
   mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token_remote;
@@ -854,10 +875,11 @@ TEST_F(FileSystemAccessManagerImplTest,
 TEST_F(FileSystemAccessManagerImplTest,
        SerializeHandle_SandboxedDirectory_DefaultBucket) {
   auto default_bucket = CreateSandboxFileSystemAndGetDefaultBucket();
+  ASSERT_TRUE(default_bucket.has_value());
   auto test_file_url = file_system_context_->CreateCrackedFileSystemURL(
       kTestStorageKey, storage::kFileSystemTypeTemporary,
       base::FilePath::FromUTF8Unsafe("hello/world/"));
-  test_file_url.SetBucket(default_bucket);
+  test_file_url.SetBucket(*default_bucket);
   FileSystemAccessDirectoryHandleImpl directory(
       manager_.get(), kBindingContext, test_file_url, {ask_grant_, ask_grant_});
   mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token_remote;
@@ -884,7 +906,9 @@ TEST_F(FileSystemAccessManagerImplTest,
   auto test_file_url = file_system_context_->CreateCrackedFileSystemURL(
       kTestStorageKey, storage::kFileSystemTypeTemporary,
       base::FilePath::FromUTF8Unsafe("hello/world/"));
-  test_file_url.SetBucket(CreateBucketForTesting());
+  auto bucket = CreateBucketForTesting();
+  ASSERT_TRUE(bucket.has_value());
+  test_file_url.SetBucket(*std::move(bucket));
   FileSystemAccessDirectoryHandleImpl directory(
       manager_.get(), kBindingContext, test_file_url, {ask_grant_, ask_grant_});
   mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token_remote;
@@ -1686,6 +1710,7 @@ TEST_F(FileSystemAccessManagerImplTest, ChooseEntries_InvalidStartInID) {
 TEST_F(FileSystemAccessManagerImplTest, GetUniqueId) {
   const base::FilePath kTestPath(dir_.GetPath().AppendASCII("foo"));
   auto default_bucket = CreateSandboxFileSystemAndGetDefaultBucket();
+  ASSERT_TRUE(default_bucket.has_value());
 
   auto grant = base::MakeRefCounted<FixedFileSystemAccessPermissionGrant>(
       FixedFileSystemAccessPermissionGrant::PermissionStatus::GRANTED,
@@ -1693,7 +1718,7 @@ TEST_F(FileSystemAccessManagerImplTest, GetUniqueId) {
 
   auto test_url = file_system_context_->CreateCrackedFileSystemURL(
       kTestStorageKey, storage::kFileSystemTypeTemporary, kTestPath);
-  test_url.SetBucket(default_bucket);
+  test_url.SetBucket(*default_bucket);
 
   FileSystemAccessFileHandleImpl file(manager_.get(), kBindingContext, test_url,
                                       {ask_grant_, ask_grant_});
@@ -1714,7 +1739,7 @@ TEST_F(FileSystemAccessManagerImplTest, GetUniqueId) {
   auto other_url = file_system_context_->CreateCrackedFileSystemURL(
       kTestStorageKey, storage::kFileSystemTypeTemporary,
       kTestPath.AppendASCII("bar"));
-  other_url.SetBucket(default_bucket);
+  other_url.SetBucket(*default_bucket);
   FileSystemAccessFileHandleImpl other_file(
       manager_.get(), kBindingContext, other_url, {ask_grant_, ask_grant_});
   auto other_id = manager_->GetUniqueId(other_file);

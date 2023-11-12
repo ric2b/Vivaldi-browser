@@ -166,17 +166,22 @@ export class XfSelect extends XfBase {
   private renderDropdown_() {
     const alignment = this.menuAlignment || 'center';
     return html`<cr-action-menu>
-        ${this.options.map((option, index) => html`
-          <cr-button
-              class="dropdown-item dropdown-item-${alignment}"
-              role="menuitem"
-              @click=${() => this.onOptionSelected_(index)}
-              ?selected=${this.selectedOption_!.value === option.value}>
-            ${option.text}
-            <div class='dropdown-filler'></div>
-            <div slot='suffix-icon' class='selected-icon'></div>
-          </cr-button>`)}
-      </cr-action-menu>`;
+        ${this.options.map((option, index) => {
+      const checked = this.selectedOption_!.value === option.value;
+      return html`
+              <cr-button
+                  class="dropdown-item dropdown-item-${alignment}"
+                  role="menuitemcheckbox"
+                  aria-label="${option.text}"
+                  aria-checked="${checked}"
+                  @click=${() => this.onOptionSelected_(index)}
+                  ?selected=${checked}>
+                ${option.text}
+                <div class='dropdown-filler'></div>
+                <div slot='suffix-icon' class='selected-icon'></div>
+              </cr-button>`;
+    })}
+        </cr-action-menu>`;
   }
 
   override updated(changedProperties: Map<string, any>) {
@@ -393,6 +398,7 @@ function getCSS(): CSSResultGroup {
       --ripple-opacity: 100%;
       --text-color: var(--cros-sys-on_surface);
       box-shadow: none;
+      font: var(--cros-button-1-font);
     }
     #dropdown-toggle {
       --border-color: var(--cros-sys-separator);
@@ -402,6 +408,9 @@ function getCSS(): CSSResultGroup {
       min-width: auto;
       padding-inline: 12px;
       white-space: nowrap;
+    }
+    :host(:first-of-type) #dropdown-toggle {
+      margin-inline-start: 0;
     }
     :host-context(.focus-outline-visible) #dropdown-toggle:focus {
       outline: 2px solid var(--cros-sys-focus_ring);
@@ -439,6 +448,8 @@ function getCSS(): CSSResultGroup {
     }
     cr-button.dropdown-item {
       --focus-shadow-color: none;
+      font: var(--cros-button-2-font);
+      height: 36px;
       padding: 0 16px;
     }
     cr-button.dropdown-item:hover {
@@ -468,9 +479,16 @@ function getCSS(): CSSResultGroup {
     cr-button[selected] div.selected-icon {
       visibility: visible;
     }
-    :host-context(.focus-outline-visible) cr-action-menu cr-button:focus {
-      outline: 2px solid var(--cros-sys-focus_ring);
-      outline-offset: -2px;
+    :host-context(.focus-outline-visible)
+        cr-action-menu cr-button:focus::after {
+      border: 2px solid var(--cros-sys-focus_ring);
+      border-radius: 8px;
+      content: '';
+      height: 32px; /* option height - 2 x border width */
+      left: 0;
+      position: absolute;
+      top: 0;
+      width: calc(100% - 4px); /* 2 x border width */
     }
     /** Reset the hover color when using keyboard to navigate the menu items. */
     :host-context(.focus-outline-visible) cr-action-menu cr-button:hover {

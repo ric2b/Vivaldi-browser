@@ -15,8 +15,8 @@
 #include "base/memory/raw_ptr.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
@@ -44,6 +44,8 @@
 #include "chrome/browser/task_manager/task_manager_browsertest_util.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/login/login_handler.h"
+#include "chrome/browser/ui/login/login_handler_test_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -133,6 +135,11 @@
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/gfx/geometry/point.h"
 #include "url/url_constants.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
+#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"  // nogncheck
+#endif
 
 #if defined(USE_AURA)
 #include "ui/aura/env.h"
@@ -276,7 +283,7 @@ void ExecuteScriptWaitForTitle(content::WebContents* web_contents,
 
   content::TitleWatcher title_watcher(web_contents, expected_title);
   title_watcher.AlsoWaitForTitle(error_title);
-  EXPECT_TRUE(content::ExecuteScript(web_contents, script));
+  EXPECT_TRUE(content::ExecJs(web_contents, script));
   EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
 }
 
@@ -708,17 +715,15 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
     ExtensionTestMessageListener done_listener("TEST_PASSED");
     done_listener.set_failure_message("TEST_FAILED");
     // Note that domAutomationController may not exist for some tests so we
-    // must use the async version of ExecuteScript.
+    // must use the ExecuteScriptAsync.
     content::ExecuteScriptAsync(
         embedder_web_contents,
-        base::StringPrintf("try { "
-                           "  runTest('%s'); "
-                           "} catch (e) { "
-                           "  console.log('UNABLE TO START TEST.'); "
-                           "  console.log(e); "
-                           "  chrome.test.sendMessage('TEST_FAILED'); "
-                           "}",
-                           test_name.c_str()));
+        base::StrCat({"try { runTest('", test_name,
+                      "'); } catch (e) { "
+                      "  console.log('UNABLE TO START TEST.'); "
+                      "  console.log(e); "
+                      "  chrome.test.sendMessage('TEST_FAILED'); "
+                      "}"}));
     ASSERT_TRUE(done_listener.WaitUntilSatisfied());
   }
 
@@ -738,9 +743,8 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
     ExtensionTestMessageListener test_run_listener("PASSED");
     test_run_listener.set_failure_message("FAILED");
     EXPECT_TRUE(
-        content::ExecuteScript(
-            embedder_web_contents,
-            base::StringPrintf("startDenyTest('%s')", test_name.c_str())));
+        content::ExecJs(embedder_web_contents,
+                        base::StrCat({"startDenyTest('", test_name, "')"})));
     ASSERT_TRUE(test_run_listener.WaitUntilSatisfied());
   }
 
@@ -755,9 +759,8 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
 
   void SendMessageToEmbedder(const std::string& message) {
     EXPECT_TRUE(
-        content::ExecuteScript(
-            GetEmbedderWebContents(),
-            base::StringPrintf("onAppCommand('%s');", message.c_str())));
+        content::ExecJs(GetEmbedderWebContents(),
+                        base::StrCat({"onAppCommand('", message, "');"})));
   }
 
   void SendMessageToGuestAndWait(const std::string& message,
@@ -767,9 +770,9 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
       listener = std::make_unique<ExtensionTestMessageListener>(wait_message);
     }
 
-    EXPECT_TRUE(content::ExecuteScript(
+    EXPECT_TRUE(content::ExecJs(
         GetGuestViewManager()->WaitForSingleGuestRenderFrameHostCreated(),
-        base::StringPrintf("onAppCommand('%s');", message.c_str())));
+        base::StrCat({"onAppCommand('", message, "');"})));
 
     if (listener) {
       ASSERT_TRUE(listener->WaitUntilSatisfied());
@@ -912,8 +915,7 @@ class WebViewNewWindowTest : public WebViewTest,
 
   static std::string DescribeParams(
       const testing::TestParamInfo<ParamType>& info) {
-    return base::StringPrintf("NewWindow%s",
-                              info.param ? "Restricted" : "Legacy");
+    return info.param ? "NewWindowRestricted" : "NewWindowLegacy";
   }
 
   bool IsNewWindowRestricted() { return GetParam(); }
@@ -932,7 +934,7 @@ class WebViewDPITest : public WebViewTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     WebViewTest::SetUpCommandLine(command_line);
     command_line->AppendSwitchASCII(switches::kForceDeviceScaleFactor,
-                                    base::StringPrintf("%f", scale()));
+                                    base::NumberToString(scale()));
   }
 
   static float scale() { return 2.0f; }
@@ -1004,23 +1006,21 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, AudibilityStatePropagates) {
 
   // Just in case we get console error messages from the guest, we should
   // surface them in the test output.
-  EXPECT_TRUE(content::ExecuteScript(
-      embedder,
-      "wv = document.getElementsByTagName('webview')[0];"
-      "wv.addEventListener('consolemessage', function (e) {"
-      "  console.log('WebViewTest Guest: ' + e.message);"
-      "});"));
+  EXPECT_TRUE(
+      content::ExecJs(embedder,
+                      "wv = document.getElementsByTagName('webview')[0];"
+                      "wv.addEventListener('consolemessage', function (e) {"
+                      "  console.log('WebViewTest Guest: ' + e.message);"
+                      "});"));
 
   // Inject JS to start audio.
   GURL audio_url = embedded_test_server()->GetURL(
       "/extensions/platform_apps/web_view/simple/ping.mp3");
-  std::string setup_audio_script = base::StringPrintf(
-      "ae = document.createElement('audio');"
-      "ae.src='%s';"
-      "document.body.appendChild(ae);"
-      "ae.play();",
-      audio_url.spec().c_str());
-  EXPECT_TRUE(content::ExecuteScript(guest, setup_audio_script));
+  std::string setup_audio_script = base::StrCat(
+      {"ae = document.createElement('audio'); ae.src='", audio_url.spec(),
+       "'; document.body.appendChild(ae); ae.play();"});
+  EXPECT_TRUE(content::ExecJs(guest, setup_audio_script,
+                              content::EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
 
   // Wait for audio to start.
   embedder_obs.WaitForCurrentlyAudible(true);
@@ -1689,8 +1689,9 @@ IN_PROC_BROWSER_TEST_P(WebViewNewWindowTest,
   EXPECT_EQ(true,
             content::EvalJs(new_window_guest_frame, "!!window.newWindow"));
   if (IsNewWindowRestricted()) {
-    EXPECT_EQ(false, content::EvalJs(new_window_guest_frame,
-                                     "!!window.newWindow.location.href"));
+    EXPECT_EQ(url::kAboutBlankURL,
+              content::EvalJs(new_window_guest_frame,
+                              "window.newWindow.location.href"));
   } else {
     EXPECT_EQ(empty_guest_frame->GetLastCommittedURL(),
               content::EvalJs(new_window_guest_frame,
@@ -1844,12 +1845,12 @@ IN_PROC_BROWSER_TEST_P(WebViewNewWindowTest, NewWindow_UpdateOpener) {
   // Create a subframe in the second guest.  This is needed because the crash
   // in crbug.com/1013553 only happened when trying to incorrectly create
   // proxies for a subframe.
-  EXPECT_TRUE(content::ExecuteScript(
+  EXPECT_TRUE(content::ExecJs(
       guest2, "document.body.appendChild(document.createElement('iframe'));"));
 
   // Update the opener of |guest1| to point to |guest2|.  This triggers
   // creation of proxies on the new opener chain, which should not crash.
-  EXPECT_TRUE(content::ExecuteScript(guest2, "window.open('', 'foo');"));
+  EXPECT_TRUE(content::ExecJs(guest2, "window.open('', 'foo');"));
 
   // Ensure both guests have the proper opener relationship set up.  Namely,
   // each guest's opener should point to the other guest, creating a cycle.
@@ -2061,9 +2062,8 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestRemoveWebviewOnExit) {
   // Run the test and wait until the guest WebContents is available and has
   // finished loading.
   ExtensionTestMessageListener guest_loaded_listener("guest-loaded");
-  EXPECT_TRUE(content::ExecuteScript(
-                  embedder_web_contents,
-                  "runTest('testRemoveWebviewOnExit')"));
+  EXPECT_TRUE(content::ExecJs(embedder_web_contents,
+                              "runTest('testRemoveWebviewOnExit')"));
   guest_observer.Wait();
 
   content::Source<content::NavigationController> source =
@@ -2079,9 +2079,8 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestRemoveWebviewOnExit) {
       source->DeprecatedGetWebContents());
 
   // Tell the embedder to kill the guest.
-  EXPECT_TRUE(content::ExecuteScript(
-                  embedder_web_contents,
-                  "removeWebviewOnExitDoCrash();"));
+  EXPECT_TRUE(
+      content::ExecJs(embedder_web_contents, "removeWebviewOnExitDoCrash();"));
 
   // Wait until the guest WebContents is destroyed.
   destroyed_watcher.Wait();
@@ -2114,29 +2113,14 @@ IN_PROC_BROWSER_TEST_F(WebViewSizeTest, Shim_TestResizeWebviewResizesContent) {
              NO_TEST_SERVER);
 }
 
-class WebViewSSLErrorTest : public WebViewTest,
-                            public testing::WithParamInterface<bool> {
+class WebViewSSLErrorTest : public WebViewTest {
  public:
-  WebViewSSLErrorTest() {
-    bool use_interstitials = GetParam();
-    scoped_feature_list_.InitWithFeatureState(
-        extensions_features::kWebviewTagMPArchBehavior,
-        /*enabled=*/!use_interstitials);
-  }
+  WebViewSSLErrorTest() = default;
   ~WebViewSSLErrorTest() override = default;
 
-  static std::string DescribeParams(
-      const testing::TestParamInfo<ParamType>& info) {
-    bool use_interstitials = info.param;
-    return base::StringPrintf("Use%s",
-                              use_interstitials ? "Interstitial" : "ErrorPage");
-  }
-
-  bool UseInterstitials() { return GetParam(); }
-
   // Loads the guest at "web_view/ssl/https_page.html" with an SSL error, and
-  // asserts the security interstitial is not displayed for guest through the
-  // embedder's WebContents.
+  // asserts the security interstitial is displayed within the guest instead of
+  // through the embedder's WebContents.
   void SSLTestHelper() {
     // Starts a HTTPS server so we can load a page with a SSL error inside
     // guest.
@@ -2160,9 +2144,7 @@ class WebViewSSLErrorTest : public WebViewTest,
 
     auto* guest = GetGuestViewManager()->GetLastGuestViewCreated();
     ASSERT_TRUE(guest->GetGuestMainFrame()->IsErrorDocument());
-    // TODO(1338009): We intend to limit SSL errors to a plain error page
-    // instead of an interstitial.
-    ASSERT_EQ(UseInterstitials(), IsShowingInterstitial(guest->web_contents()));
+    ASSERT_TRUE(IsShowingInterstitial(guest->web_contents()));
   }
 
   void LoadEmptyGuest() {
@@ -2170,8 +2152,7 @@ class WebViewSSLErrorTest : public WebViewTest,
     content::WebContents* embedder_web_contents =
         GetFirstAppWindowWebContents();
     ExtensionTestMessageListener guest_added("GuestAddedToDom");
-    EXPECT_TRUE(
-        content::ExecuteScript(embedder_web_contents, "createGuest();"));
+    EXPECT_TRUE(content::ExecJs(embedder_web_contents, "createGuest();"));
     ASSERT_TRUE(guest_added.WaitUntilSatisfied());
     auto* guest_main_frame =
         GetGuestViewManager()->WaitForSingleGuestRenderFrameHostCreated();
@@ -2188,9 +2169,9 @@ class WebViewSSLErrorTest : public WebViewTest,
     ASSERT_TRUE(guest_main_frame);
 
     content::TestFrameNavigationObserver guest_navi_obs(guest_main_frame);
-    ASSERT_TRUE(content::ExecuteScript(
-        embedder_web_contents,
-        content::JsReplace("loadGuestUrl($1);", guest_url)));
+    ASSERT_TRUE(
+        content::ExecJs(embedder_web_contents,
+                        content::JsReplace("loadGuestUrl($1);", guest_url)));
     guest_navi_obs.Wait();
 
     // Do not dereference `guest_main_frame` beyond here as it can be destroyed
@@ -2211,37 +2192,78 @@ class WebViewSSLErrorTest : public WebViewTest,
       ASSERT_EQ(guest_navi_obs.last_committed_url(), GURL());
     }
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-INSTANTIATE_TEST_SUITE_P(WebViewSSLErrorTests,
-                         WebViewSSLErrorTest,
-                         testing::Bool(),
-                         WebViewSSLErrorTest::DescribeParams);
-
-// Test makes sure that an error document is shown in `<webview>` with an SSL
+// Test makes sure that an interstitial is shown in `<webview>` with an SSL
 // error.
 // Flaky on Win dbg: crbug.com/779973
 #if BUILDFLAG(IS_WIN) && !defined(NDEBUG)
-#define MAYBE_ShowErrorDocForSSLError DISABLED_ShowErrorDocForSSLError
+#define MAYBE_ShowInterstitialForSSLError DISABLED_ShowInterstitialForSSLError
 #else
-#define MAYBE_ShowErrorDocForSSLError ShowErrorDocForSSLError
+#define MAYBE_ShowInterstitialForSSLError ShowInterstitialForSSLError
 #endif
-IN_PROC_BROWSER_TEST_P(WebViewSSLErrorTest, MAYBE_ShowErrorDocForSSLError) {
+IN_PROC_BROWSER_TEST_F(WebViewSSLErrorTest, MAYBE_ShowInterstitialForSSLError) {
   SSLTestHelper();
 }
 
-// Test makes sure that the error document is registered in the
+// Ensure that when a guest is created and navigated to a URL that triggers an
+// SSL interstitial, and then the "Back to safety" button is activated on the
+// interstitial, the guest doesn't crash trying to load the NTP (the usual
+// known-safe page used to navigate back from such interstitials when there's
+// no other page in history to go to).  See https://crbug.com/1444221.
+IN_PROC_BROWSER_TEST_F(WebViewSSLErrorTest, NavigateBackFromSSLError) {
+  // Starts a HTTPS server so we can load a page with a SSL error inside a
+  // guest.
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
+  https_server.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
+  ASSERT_TRUE(https_server.Start());
+
+  LoadAndLaunchPlatformApp("web_view/ssl", "EmbedderLoaded");
+
+  const auto failure_url = https_server.GetURL(
+      "/extensions/platform_apps/web_view/ssl/https_page.html");
+  EXPECT_TRUE(content::ExecJs(
+      GetFirstAppWindowWebContents(),
+      content::JsReplace("var w = document.createElement('webview');"
+                         "w.src = $1;"
+                         "document.body.appendChild(w);",
+                         failure_url)));
+  GetGuestViewManager()->WaitForSingleGuestRenderFrameHostCreated();
+
+  // The navigation should fail and show an interstitial in the guest.
+  auto* guest = GetGuestViewManager()->GetLastGuestViewCreated();
+  EXPECT_FALSE(WaitForLoadStop(guest->web_contents()));
+  ASSERT_TRUE(guest->GetGuestMainFrame()->IsErrorDocument());
+  ASSERT_TRUE(IsShowingInterstitial(guest->web_contents()));
+
+  // Simulate invoking the "Back to safety" button.  This should dismiss the
+  // interstitial and navigate the guest to a known safe URL that can always
+  // load in a guest (in this case, about:blank).
+  security_interstitials::SecurityInterstitialTabHelper* helper =
+      security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
+          guest->web_contents());
+  ASSERT_TRUE(helper);
+  auto* interstitial =
+      helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting();
+  ASSERT_TRUE(interstitial);
+  interstitial->CommandReceived(base::NumberToString(
+      security_interstitials::SecurityInterstitialCommand::CMD_DONT_PROCEED));
+
+  EXPECT_TRUE(WaitForLoadStop(guest->web_contents()));
+  ASSERT_FALSE(guest->GetGuestMainFrame()->IsErrorDocument());
+  ASSERT_FALSE(IsShowingInterstitial(guest->web_contents()));
+}
+
+// Test makes sure that the interstitial is registered in the
 // `RenderWidgetHostInputEventRouter` when inside a `<webview>`.
 // Flaky on Win dbg: crbug.com/779973
 #if BUILDFLAG(IS_WIN) && !defined(NDEBUG)
-#define MAYBE_ErrorPageRouteEvents DISABLED_ErrorPageRouteEvents
+#define MAYBE_InterstitialPageRouteEvents DISABLED_InterstitialPageRouteEvents
 #else
-#define MAYBE_ErrorPageRouteEvents ErrorPageRouteEvents
+#define MAYBE_InterstitialPageRouteEvents InterstitialPageRouteEvents
 #endif
-IN_PROC_BROWSER_TEST_P(WebViewSSLErrorTest, MAYBE_ErrorPageRouteEvents) {
+IN_PROC_BROWSER_TEST_F(WebViewSSLErrorTest, MAYBE_InterstitialPageRouteEvents) {
   SSLTestHelper();
 
   std::vector<content::RenderWidgetHostView*> hosts =
@@ -2258,14 +2280,14 @@ IN_PROC_BROWSER_TEST_P(WebViewSSLErrorTest, MAYBE_ErrorPageRouteEvents) {
 }
 
 // Test makes sure that the browser does not crash when a `<webview>` navigates
-// out of an error page caused by a SSL error.
+// out of an interstitial caused by a SSL error.
 // Flaky on Win dbg: crbug.com/779973
 #if BUILDFLAG(IS_WIN) && !defined(NDEBUG)
-#define MAYBE_ErrorPageDetach DISABLED_ErrorPageDetach
+#define MAYBE_InterstitialPageDetach DISABLED_InterstitialPageDetach
 #else
-#define MAYBE_ErrorPageDetach ErrorPageDetach
+#define MAYBE_InterstitialPageDetach InterstitialPageDetach
 #endif
-IN_PROC_BROWSER_TEST_P(WebViewSSLErrorTest, MAYBE_ErrorPageDetach) {
+IN_PROC_BROWSER_TEST_F(WebViewSSLErrorTest, MAYBE_InterstitialPageDetach) {
   SSLTestHelper();
 
   // Navigate to about:blank
@@ -2274,28 +2296,28 @@ IN_PROC_BROWSER_TEST_P(WebViewSSLErrorTest, MAYBE_ErrorPageDetach) {
 }
 
 // This test makes sure the browser process does not crash if app is closed
-// while an error page is being shown in guest.
+// while an interstitial is being shown in guest.
 // Flaky on Win dbg: crbug.com/779973
 #if BUILDFLAG(IS_WIN) && !defined(NDEBUG)
-#define MAYBE_ErrorPageTearDown DISABLED_ErrorPageTearDown
+#define MAYBE_InterstitialTearDown DISABLED_InterstitialTearDown
 #else
-#define MAYBE_ErrorPageTearDown ErrorPageTearDown
+#define MAYBE_InterstitialTearDown InterstitialTearDown
 #endif
-IN_PROC_BROWSER_TEST_P(WebViewSSLErrorTest, MAYBE_ErrorPageTearDown) {
+IN_PROC_BROWSER_TEST_F(WebViewSSLErrorTest, MAYBE_InterstitialTearDown) {
   SSLTestHelper();
 
-  // Now close the app while error page being shown in guest.
+  // Now close the app while the interstitial is being shown in the guest.
   extensions::AppWindow* window = GetFirstAppWindow();
   window->GetBaseWindow()->Close();
 }
 
 // This test makes sure the browser process does not crash if browser is shut
-// down while an error page is being shown in guest.
-IN_PROC_BROWSER_TEST_P(WebViewSSLErrorTest,
-                       ErrorPageTearDownOnBrowserShutdown) {
+// down while an interstitial is being shown in guest.
+IN_PROC_BROWSER_TEST_F(WebViewSSLErrorTest,
+                       InterstitialTearDownOnBrowserShutdown) {
   SSLTestHelper();
 
-  // Now close the app while error page being shown in guest.
+  // Now close the app while the interstitial is being shown in the guest.
   extensions::AppWindow* window = GetFirstAppWindow();
   window->GetBaseWindow()->Close();
 
@@ -2370,15 +2392,10 @@ class WebViewHttpsFirstModeTest : public WebViewSSLErrorTest {
   base::test::ScopedFeatureList feature_list_;
 };
 
-INSTANTIATE_TEST_SUITE_P(WebViewHttpsFirstModeTests,
-                         WebViewHttpsFirstModeTest,
-                         testing::Bool(),
-                         WebViewHttpsFirstModeTest::DescribeParams);
-
 // Tests that loading an HTTPS page in a guest <webview> with HTTPS-First Mode
 // enabled doesn't crash nor shows error page.
 // Regression test for crbug.com/1233889
-IN_PROC_BROWSER_TEST_P(WebViewHttpsFirstModeTest, GuestLoadsHttpsWithoutError) {
+IN_PROC_BROWSER_TEST_F(WebViewHttpsFirstModeTest, GuestLoadsHttpsWithoutError) {
   browser()->profile()->GetPrefs()->SetBoolean(prefs::kHttpsOnlyModeEnabled,
                                                true);
 
@@ -2403,7 +2420,7 @@ IN_PROC_BROWSER_TEST_P(WebViewHttpsFirstModeTest, GuestLoadsHttpsWithoutError) {
 
 // Tests that loading an HTTP page in a guest <webview> with HTTPS-First Mode
 // enabled doesn't crash and doesn't trigger the error page.
-IN_PROC_BROWSER_TEST_P(WebViewHttpsFirstModeTest, GuestLoadsHttpWithoutError) {
+IN_PROC_BROWSER_TEST_F(WebViewHttpsFirstModeTest, GuestLoadsHttpWithoutError) {
   browser()->profile()->GetPrefs()->SetBoolean(prefs::kHttpsOnlyModeEnabled,
                                                true);
 
@@ -2422,6 +2439,37 @@ IN_PROC_BROWSER_TEST_P(WebViewHttpsFirstModeTest, GuestLoadsHttpWithoutError) {
   ASSERT_FALSE(guest_main_frame->IsErrorDocument());
   ASSERT_FALSE(embedder_main_frame->IsErrorDocument());
   ASSERT_FALSE(IsShowingInterstitial(GetFirstAppWindowWebContents()));
+}
+
+// Verify that guests cannot be navigated to disallowed URLs, such as
+// chrome:// URLs, directly via the content/public API.  The enforcement for
+// this typically happens in the embedder layer, catching cases where the
+// embedder navigates a guest, but Chrome features could bypass that
+// enforcement by directly navigating guests.  This test verifies that if that
+// were to happen, //content would still gracefully disallow attempts to load
+// disallowed URLs in guests without crashing.
+IN_PROC_BROWSER_TEST_F(WebViewTest, CannotNavigateGuestToChromeURL) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+
+  // Load an app with a <webview> guest that starts at a data: URL.
+  LoadAppWithGuest("web_view/simple");
+
+  auto* guest = GetGuestViewManager()->GetLastGuestViewCreated();
+  auto* guest_main_frame = guest->GetGuestMainFrame();
+  GURL original_url = guest_main_frame->GetLastCommittedURL();
+
+  // Try to navigate <webview> to a chrome: URL directly.
+  GURL chrome_url(chrome::kChromeUINewTabURL);
+  content::TestFrameNavigationObserver observer(guest_main_frame);
+  guest->GetController().LoadURL(chrome_url, content::Referrer(),
+                                 ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
+                                 std::string());
+
+  // The navigation should be aborted, and the last committed URL should
+  // remain unchanged.
+  EXPECT_FALSE(observer.navigation_started());
+  EXPECT_EQ(original_url, guest_main_frame->GetLastCommittedURL());
+  EXPECT_NE(chrome_url, guest_main_frame->GetLastCommittedURL());
 }
 
 IN_PROC_BROWSER_TEST_F(WebViewTest, ShimSrcAttribute) {
@@ -2659,10 +2707,8 @@ void WebViewTest::MediaAccessAPIAllowTestHelper(const std::string& test_name) {
   ExtensionTestMessageListener done_listener("TEST_PASSED");
   done_listener.set_failure_message("TEST_FAILED");
   EXPECT_TRUE(
-      content::ExecuteScript(
-          embedder_web_contents,
-          base::StringPrintf("startAllowTest('%s')",
-                             test_name.c_str())));
+      content::ExecJs(embedder_web_contents,
+                      base::StrCat({"startAllowTest('", test_name, "')"})));
   ASSERT_TRUE(done_listener.WaitUntilSatisfied());
 
   mock->WaitForRequestMediaPermission();
@@ -2773,6 +2819,22 @@ IN_PROC_BROWSER_TEST_P(WebViewNewWindowTest,
   EXPECT_TRUE(content::NavigateToURLFromRenderer(guest2, coop_url));
 }
 
+// This test creates a situation where we have two unattached webviews which
+// have an opener relationship, and ensures that we can shutdown safely. See
+// https://crbug.com/1450397.
+IN_PROC_BROWSER_TEST_P(WebViewNewWindowTest, DestroyOpenerBeforeAttachment) {
+  TestHelper("testDestroyOpenerBeforeAttachment", "web_view/newwindow",
+             NEEDS_TEST_SERVER);
+  GetGuestViewManager()->WaitForNumGuestsCreated(2);
+
+  content::RenderProcessHost* embedder_rph =
+      GetEmbedderWebContents()->GetPrimaryMainFrame()->GetProcess();
+  content::RenderProcessHostWatcher kill_observer(
+      embedder_rph, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  EXPECT_TRUE(embedder_rph->Shutdown(content::RESULT_CODE_KILLED));
+  kill_observer.Wait();
+}
+
 IN_PROC_BROWSER_TEST_F(WebViewTest, ContextMenuInspectElement) {
   LoadAppWithGuest("web_view/context_menus/basic");
   content::RenderFrameHost* guest_rfh = GetGuestRenderFrameHost();
@@ -2786,17 +2848,21 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, ContextMenuInspectElement) {
   EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_INSPECTELEMENT));
 }
 
-// This test executes the context menu command 'LanguageSettings' which will
-// load chrome://settings/languages in a browser window. This is a browser-
-// initiated operation and so we expect this to succeed if the embedder is
-// allowed to perform the operation.
+// This test executes the context menu command 'LanguageSettings'.
+// On Ash, this will open the language settings in the OS Settings app.
+// Elsewhere, it will load chrome://settings/languages in a browser window.
+// In either case, this is a browser-initiated operation and so we expect it
+// to succeed if the embedder is allowed to perform the operation.
 IN_PROC_BROWSER_TEST_F(WebViewTest, ContextMenuLanguageSettings) {
   LoadAppWithGuest("web_view/context_menus/basic");
-
   content::WebContents* embedder = GetEmbedderWebContents();
   ASSERT_TRUE(embedder);
 
-  // Create and build our test context menu.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  ash::SystemWebAppManager::Get(browser()->profile())
+      ->InstallSystemAppsForTesting();
+#endif
+
   content::WebContentsAddedObserver web_contents_added_observer;
 
   GURL page_url("http://www.google.com");
@@ -2805,14 +2871,20 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, ContextMenuLanguageSettings) {
                                         GURL(), GURL()));
   menu->ExecuteCommand(IDC_CONTENT_CONTEXT_LANGUAGE_SETTINGS, 0);
 
+  // Verify that a new WebContents has been created that is at the appropriate
+  // Language Settings page.
   content::WebContents* new_contents =
       web_contents_added_observer.GetWebContents();
-
-  // Verify that a new WebContents has been created that is at the Language
-  // Settings page.
-  EXPECT_EQ(GURL(std::string(chrome::kChromeUISettingsURL) +
-                 chrome::kLanguageOptionsSubPage),
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  EXPECT_EQ(
+      GURL(chrome::kChromeUIOSSettingsURL)
+          .Resolve(chromeos::settings::mojom::kLanguagesAndInputSectionPath),
+      new_contents->GetVisibleURL());
+#else
+  EXPECT_EQ(GURL(chrome::kChromeUISettingsURL)
+                .Resolve(chrome::kLanguageOptionsSubPage),
             new_contents->GetVisibleURL());
+#endif
 }
 
 IN_PROC_BROWSER_TEST_F(WebViewTest, ContextMenusAPI_Basic) {
@@ -2878,7 +2950,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, ContextMenusAPI_PreventDefault) {
   // does not show up.
   ExtensionTestMessageListener prevent_default_listener(
       "WebViewTest.CONTEXT_MENU_DEFAULT_PREVENTED");
-  EXPECT_TRUE(content::ExecuteScript(embedder, "registerPreventDefault()"));
+  EXPECT_TRUE(content::ExecJs(embedder, "registerPreventDefault()"));
   ContextMenuShownObserver context_menu_shown_observer;
 
   OpenContextMenu(guest_main_frame);
@@ -2951,10 +3023,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, MediaAccessAPIAllow_TestCheck) {
 
   ExtensionTestMessageListener done_listener("TEST_PASSED");
   done_listener.set_failure_message("TEST_FAILED");
-  EXPECT_TRUE(
-      content::ExecuteScript(
-          embedder_web_contents,
-          base::StringPrintf("startCheckTest('')")));
+  EXPECT_TRUE(content::ExecJs(embedder_web_contents, "startCheckTest('')"));
   ASSERT_TRUE(done_listener.WaitUntilSatisfied());
 
   mock->WaitForCheckMediaPermission();
@@ -3340,20 +3409,20 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, DownloadPermission) {
 
   // Start test.
   // 1. Guest requests a download that its embedder denies.
-  EXPECT_TRUE(content::ExecuteScript(guest_render_frame_host,
-                                     "startDownload('download-link-1')"));
+  EXPECT_TRUE(content::ExecJs(guest_render_frame_host,
+                              "startDownload('download-link-1')"));
   mock_delegate->WaitForCanDownload(false);  // Expect to not allow.
   mock_delegate->Reset();
 
   // 2. Guest requests a download that its embedder allows.
-  EXPECT_TRUE(content::ExecuteScript(guest_render_frame_host,
-                                     "startDownload('download-link-2')"));
+  EXPECT_TRUE(content::ExecJs(guest_render_frame_host,
+                              "startDownload('download-link-2')"));
   mock_delegate->WaitForCanDownload(true);  // Expect to allow.
   mock_delegate->Reset();
 
   // 3. Guest requests a download that its embedder ignores, this implies deny.
-  EXPECT_TRUE(content::ExecuteScript(guest_render_frame_host,
-                                     "startDownload('download-link-3')"));
+  EXPECT_TRUE(content::ExecJs(guest_render_frame_host,
+                              "startDownload('download-link-3')"));
   mock_delegate->WaitForCanDownload(false);  // Expect to not allow.
   completion_observer->WaitForFinished();
 }
@@ -3459,12 +3528,12 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, DownloadCookieIsolation) {
     content::DownloadTestObserverInterrupted interrupted_observer(
         download_manager, 1,
         content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
-    EXPECT_TRUE(content::ExecuteScript(
+    EXPECT_TRUE(content::ExecJs(
         web_contents,
-        base::StringPrintf(
-            "startDownload('%s', '%s?cookie=%s')", cookie.c_str(),
-            embedded_test_server()->GetURL(kDownloadPathPrefix).spec().c_str(),
-            cookie.c_str())));
+        base::StrCat(
+            {"startDownload('", cookie, "', '",
+             embedded_test_server()->GetURL(kDownloadPathPrefix).spec(),
+             "?cookie=", cookie, "')"})));
 
     // This maps to DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED.
     interrupted_observer.WaitForFinished();
@@ -3549,12 +3618,12 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, PRE_DownloadCookieIsolation_CrossSession) {
         download_manager, 1,
         content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
 
-    EXPECT_TRUE(content::ExecuteScript(
+    EXPECT_TRUE(content::ExecJs(
         web_contents,
-        base::StringPrintf(
-            "startDownload('%s', '%s?cookie=%s')", cookie.c_str(),
-            embedded_test_server()->GetURL(kDownloadPathPrefix).spec().c_str(),
-            cookie.c_str())));
+        base::StrCat(
+            {"startDownload('", cookie, "', '",
+             embedded_test_server()->GetURL(kDownloadPathPrefix).spec(),
+             "?cookie=", cookie, "')"})));
 
     // This maps to DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED.
     interrupted_observer.WaitForFinished();
@@ -3713,14 +3782,13 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, SendMessageToComponentExtensionFromGuest) {
   // Retrive the guestProcessId and guestRenderFrameRoutingId from the
   // extension.
   int guest_process_id =
-      content::ExecuteScriptAndGetValue(
-          embedder_web_contents->GetPrimaryMainFrame(), "window.guestProcessId")
-          .GetInt();
+      content::EvalJs(embedder_web_contents->GetPrimaryMainFrame(),
+                      "window.guestProcessId")
+          .ExtractInt();
   int guest_render_frame_routing_id =
-      content::ExecuteScriptAndGetValue(
-          embedder_web_contents->GetPrimaryMainFrame(),
-          "window.guestRenderFrameRoutingId")
-          .GetInt();
+      content::EvalJs(embedder_web_contents->GetPrimaryMainFrame(),
+                      "window.guestRenderFrameRoutingId")
+          .ExtractInt();
 
   auto* guest_rfh = content::RenderFrameHost::FromID(
       guest_process_id, guest_render_frame_routing_id);
@@ -3918,7 +3986,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, LoadDataAPINotRelativeToAnotherExtension) {
   content::RenderFrameHost* guest = GetGuestView()->GetGuestMainFrame();
 
   content::TestFrameNavigationObserver fail_if_webview_navigates(guest);
-  ASSERT_TRUE(content::ExecuteScript(
+  ASSERT_TRUE(content::ExecJs(
       embedder, content::JsReplace(
                     "var webview = document.querySelector('webview'); "
                     "webview.loadDataWithBaseUrl('data:text/html,hello', $1);",
@@ -3955,6 +4023,91 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestDisabledZoomMode) {
 
 IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestZoomBeforeNavigation) {
   TestHelper("testZoomBeforeNavigation", "web_view/shim", NO_TEST_SERVER);
+}
+
+IN_PROC_BROWSER_TEST_F(WebViewTest, HttpAuth) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  LoadAppWithGuest("web_view/simple");
+
+  const GURL auth_url = embedded_test_server()->GetURL("/auth-basic");
+  content::NavigationController* guest_controller =
+      &GetGuestView()->GetController();
+  LoginPromptBrowserTestObserver login_observer;
+  login_observer.Register(
+      content::Source<content::NavigationController>(guest_controller));
+  WindowedAuthNeededObserver auth_needed(guest_controller);
+  WindowedAuthSuppliedObserver auth_supplied(guest_controller);
+  // There are two navigations occurring here. The first fails due to the need
+  // for auth. After it's supplied, a second navigation will succeed.
+  content::TestNavigationObserver nav_observer(GetGuestWebContents(), 2);
+  nav_observer.set_wait_event(
+      content::TestNavigationObserver::WaitEvent::kNavigationFinished);
+
+  EXPECT_TRUE(
+      content::ExecJs(GetGuestRenderFrameHost(),
+                      content::JsReplace("location.href = $1;", auth_url)));
+  auth_needed.Wait();
+
+  LoginHandler* login_handler = login_observer.handlers().front();
+  login_handler->SetAuth(u"basicuser", u"secret");
+  auth_supplied.Wait();
+  nav_observer.WaitForNavigationFinished();
+}
+
+IN_PROC_BROWSER_TEST_F(WebViewTest, HttpAuthIdentical) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  LoadAppWithGuest("web_view/simple");
+
+  const GURL auth_url = embedded_test_server()->GetURL("/auth-basic");
+  content::NavigationController* guest_controller =
+      &GetGuestView()->GetController();
+  content::NavigationController* tab_controller =
+      &browser()->tab_strip_model()->GetActiveWebContents()->GetController();
+  LoginPromptBrowserTestObserver login_observer;
+  login_observer.Register(
+      content::Source<content::NavigationController>(guest_controller));
+  login_observer.Register(
+      content::Source<content::NavigationController>(tab_controller));
+  WindowedAuthNeededObserver guest_auth_needed(guest_controller);
+  WindowedAuthNeededObserver tab_auth_needed(tab_controller);
+  WindowedAuthSuppliedObserver guest_auth_supplied(guest_controller);
+  // There are two navigations occurring here. The first fails due to the need
+  // for auth. After it's supplied, a second navigation will succeed.
+  content::TestNavigationObserver guest_nav_observer(GetGuestWebContents(), 2);
+  guest_nav_observer.set_wait_event(
+      content::TestNavigationObserver::WaitEvent::kNavigationFinished);
+
+  EXPECT_TRUE(
+      content::ExecJs(GetGuestRenderFrameHost(),
+                      content::JsReplace("location.href = $1;", auth_url)));
+  guest_auth_needed.Wait();
+
+  // While the login UI is showing for the app, navigate a tab to the same URL
+  // requiring auth.
+  tab_controller->LoadURL(auth_url, content::Referrer(),
+                          ui::PAGE_TRANSITION_TYPED, std::string());
+  tab_auth_needed.Wait();
+
+  // Both the guest and the tab should be prompting for credentials and the auth
+  // challenge should be the same. Normally, the login code de-duplicates
+  // identical challenges if multiple prompts are shown for them. However,
+  // credentials can't be shared across StoragePartitions. So providing
+  // credentials within the guest should not affect the tab.
+  ASSERT_EQ(2u, login_observer.handlers().size());
+  LoginHandler* guest_login_handler = login_observer.handlers().front();
+  LoginHandler* tab_login_handler = login_observer.handlers().back();
+  EXPECT_EQ(tab_controller,
+            &tab_login_handler->web_contents()->GetController());
+  EXPECT_TRUE(guest_login_handler->auth_info().MatchesExceptPath(
+      tab_login_handler->auth_info()));
+
+  guest_login_handler->SetAuth(u"basicuser", u"secret");
+  guest_auth_supplied.Wait();
+  guest_nav_observer.WaitForNavigationFinished();
+
+  // The tab should still be prompting for credentials.
+  ASSERT_EQ(1u, login_observer.handlers().size());
+  EXPECT_EQ(tab_login_handler, login_observer.handlers().front());
 }
 
 namespace {
@@ -4141,9 +4294,8 @@ IN_PROC_BROWSER_TEST_P(
     WebViewChannelTest,
     MAYBE_Shim_TestRulesRegistryIDAreRemovedAfterWebViewIsGone) {
   ASSERT_EQ(extensions::GetCurrentChannel(), GetChannelParam());
-  SCOPED_TRACE(base::StringPrintf(
-      "Testing Channel %s",
-      version_info::GetChannelString(GetChannelParam()).c_str()));
+  SCOPED_TRACE(base::StrCat(
+      {"Testing Channel ", version_info::GetChannelString(GetChannelParam())}));
 
   LoadAppWithGuest("web_view/rules_registry");
 
@@ -4190,9 +4342,8 @@ IN_PROC_BROWSER_TEST_P(
 IN_PROC_BROWSER_TEST_P(WebViewChannelTest,
                        Shim_WebViewWebRequestRegistryHasNoPersistentCache) {
   ASSERT_EQ(extensions::GetCurrentChannel(), GetChannelParam());
-  SCOPED_TRACE(base::StringPrintf(
-      "Testing Channel %s",
-      version_info::GetChannelString(GetChannelParam()).c_str()));
+  SCOPED_TRACE(base::StrCat(
+      {"Testing Channel ", version_info::GetChannelString(GetChannelParam())}));
 
   LoadAppWithGuest("web_view/rules_registry");
 
@@ -4512,7 +4663,6 @@ IN_PROC_BROWSER_TEST_F(WebViewTest,
 
   // Finally, try accessing a privileged API, which shouldn't be available to
   // the embedded resource.
-  std::string app_window_result;
   static constexpr char kCallAppWindowCreate[] =
       R"(var message;
          if (chrome.app && chrome.app.window) {
@@ -4520,10 +4670,8 @@ IN_PROC_BROWSER_TEST_F(WebViewTest,
          } else {
            message = 'success';
          }
-         domAutomationController.send(message);)";
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_view_frame, kCallAppWindowCreate, &app_window_result));
-  EXPECT_EQ("success", app_window_result);
+         message;)";
+  EXPECT_EQ("success", content::EvalJs(web_view_frame, kCallAppWindowCreate));
 }
 
 // Tests that a WebView can navigate an iframe to a blob URL that it creates
@@ -4607,8 +4755,8 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, ReloadAfterCrash) {
   // Reload guest and make sure it appears.
   content::TestFrameNavigationObserver load_observer(
       GetGuestView()->GetGuestMainFrame());
-  EXPECT_TRUE(ExecuteScript(GetEmbedderWebContents(),
-                            "document.querySelector('webview').reload()"));
+  EXPECT_TRUE(ExecJs(GetEmbedderWebContents(),
+                     "document.querySelector('webview').reload()"));
   load_observer.Wait();
   EXPECT_TRUE(GetGuestView()->GetGuestMainFrame()->GetView());
   // Ensure that the guest produces a new frame.
@@ -4822,9 +4970,7 @@ class WebViewGuestScrollTest : public WebViewTest,
 
   static std::string DescribeParams(
       const testing::TestParamInfo<ParamType>& info) {
-    bool is_scroll_disabled = info.param;
-    return base::StringPrintf("Scroll%s",
-                              is_scroll_disabled ? "Disabled" : "Enabled");
+    return info.param ? "ScrollDisabled" : "ScrollEnabled";
   }
 };
 
@@ -5235,9 +5381,8 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginWebViewTest, IsolatedOriginInWebview) {
   {
     content::TestFrameNavigationObserver load_observer(
         guest->GetGuestMainFrame());
-    EXPECT_TRUE(
-        ExecuteScript(guest->GetGuestMainFrame(),
-                      "location.href = '" + isolated_url.spec() + "';"));
+    EXPECT_TRUE(ExecJs(guest->GetGuestMainFrame(),
+                       "location.href = '" + isolated_url.spec() + "';"));
     load_observer.Wait();
   }
 
@@ -5248,8 +5393,8 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginWebViewTest, IsolatedOriginInWebview) {
   {
     content::TestFrameNavigationObserver load_observer(
         guest->GetGuestMainFrame());
-    EXPECT_TRUE(ExecuteScript(guest->GetGuestMainFrame(),
-                              "location.href = '" + foo_url.spec() + "';"));
+    EXPECT_TRUE(ExecJs(guest->GetGuestMainFrame(),
+                       "location.href = '" + foo_url.spec() + "';"));
     load_observer.Wait();
   }
 
@@ -5285,13 +5430,9 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginWebViewTest, IsolatedOriginInWebview) {
   // Check that accessing a foo.com cookie from the WebView doesn't result in a
   // renderer kill. This might happen if we erroneously applied an isolated.com
   // origin lock to the WebView process when committing isolated.com.
-  bool cookie_is_correct = false;
-  EXPECT_TRUE(ExecuteScriptAndExtractBool(
-      guest->GetGuestMainFrame(),
-      "document.cookie = 'foo=bar';\n"
-      "window.domAutomationController.send(document.cookie == 'foo=bar');\n",
-      &cookie_is_correct));
-  EXPECT_TRUE(cookie_is_correct);
+  EXPECT_EQ(true, EvalJs(guest->GetGuestMainFrame(),
+                         "document.cookie = 'foo=bar';\n"
+                         "document.cookie == 'foo=bar';\n"));
 }
 
 // This test is similar to IsolatedOriginInWebview above, but loads an isolated
@@ -5322,8 +5463,8 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginWebViewTest,
   {
     content::TestFrameNavigationObserver load_observer(
         guest->GetGuestMainFrame());
-    EXPECT_TRUE(ExecuteScript(guest->GetGuestMainFrame(),
-                              "location.href = '" + foo_url.spec() + "';"));
+    EXPECT_TRUE(ExecJs(guest->GetGuestMainFrame(),
+                       "location.href = '" + foo_url.spec() + "';"));
     load_observer.Wait();
   }
   EXPECT_TRUE(NavigateToURLFromRenderer(
@@ -5350,13 +5491,9 @@ IN_PROC_BROWSER_TEST_F(IsolatedOriginWebViewTest,
   // Check that accessing a foo.com cookie from the WebView doesn't result in a
   // renderer kill. This might happen if we erroneously applied an isolated.com
   // origin lock to the WebView process when committing isolated.com.
-  bool cookie_is_correct = false;
-  EXPECT_TRUE(ExecuteScriptAndExtractBool(
-      guest->GetGuestMainFrame(),
-      "document.cookie = 'foo=bar';\n"
-      "window.domAutomationController.send(document.cookie == 'foo=bar');\n",
-      &cookie_is_correct));
-  EXPECT_TRUE(cookie_is_correct);
+  EXPECT_EQ(true, EvalJs(guest->GetGuestMainFrame(),
+                         "document.cookie = 'foo=bar';\n"
+                         "document.cookie == 'foo=bar';\n"));
 }
 
 // Sends an auto-resize message to the RenderWidgetHost and ensures that the
@@ -5524,7 +5661,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, LoadDisallowedExtensionURLInSubframe) {
           document.body.appendChild(iframe);
       )";
 
-  EXPECT_TRUE(content::ExecuteScript(guest, setup_iframe_script));
+  EXPECT_TRUE(content::ExecJs(guest, setup_iframe_script));
   content::RenderFrameHost* webview_subframe = ChildFrameAt(guest, 0);
   EXPECT_TRUE(content::NavigateToURLFromRenderer(webview_subframe, iframe_url));
 
@@ -5622,6 +5759,50 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, InsertIntoDetachedIframe) {
              NEEDS_TEST_SERVER);
   // Round-trip to ensure the embedder did not crash.
   EXPECT_EQ(true, content::EvalJs(GetFirstAppWindowWebContents(), "true"));
+}
+
+// Ensure that if a <webview>'s name is set, the guest preserves the
+// corresponding window.name across navigations and after a crash and reload.
+IN_PROC_BROWSER_TEST_F(WebViewTest, PreserveNameAcrossNavigationsAndCrashes) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+
+  LoadAppWithGuest("web_view/simple");
+  GetGuestViewManager()->WaitForSingleGuestRenderFrameHostCreated();
+
+  content::WebContents* embedder = GetEmbedderWebContents();
+  EXPECT_TRUE(
+      ExecJs(embedder, "document.querySelector('webview').name = 'foo';"));
+  extensions::WebViewGuest* guest =
+      extensions::WebViewGuest::FromGuestViewBase(GetGuestView());
+  EXPECT_EQ("foo", guest->name());
+
+  // Changing the <webview> attribute also changes the current guest
+  // document's window.name (see webViewInternal.setName).
+  EXPECT_EQ("foo", content::EvalJs(GetGuestRenderFrameHost(), "window.name"));
+
+  // Ensure that the guest's new window.name is preserved across navigations.
+  const GURL url_1 = embedded_test_server()->GetURL("a.test", "/title1.html");
+  EXPECT_TRUE(
+      content::NavigateToURLFromRenderer(GetGuestRenderFrameHost(), url_1));
+  EXPECT_EQ("foo", content::EvalJs(GetGuestRenderFrameHost(), "window.name"));
+
+  const GURL url_2 = embedded_test_server()->GetURL("b.test", "/title1.html");
+  EXPECT_TRUE(
+      content::NavigateToURLFromRenderer(GetGuestRenderFrameHost(), url_2));
+  EXPECT_EQ("foo", content::EvalJs(GetGuestRenderFrameHost(), "window.name"));
+
+  // Crash the guest.
+  auto* rph = GetGuestRenderFrameHost()->GetProcess();
+  content::RenderProcessHostWatcher crash_observer(
+      rph, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  EXPECT_TRUE(rph->Shutdown(content::RESULT_CODE_KILLED));
+  crash_observer.Wait();
+
+  // Reload guest and make sure its window.name is preserved.
+  content::TestFrameNavigationObserver load_observer(GetGuestRenderFrameHost());
+  EXPECT_TRUE(ExecJs(embedder, "document.querySelector('webview').reload()"));
+  load_observer.Wait();
+  EXPECT_EQ("foo", content::EvalJs(GetGuestRenderFrameHost(), "window.name"));
 }
 
 #if BUILDFLAG(ENABLE_PPAPI)
@@ -5741,7 +5922,7 @@ IN_PROC_BROWSER_TEST_P(WebstoreWebViewTest, NoRendererKillWithChromeWebStore) {
       url, content::MessageLoopRunner::QuitMode::IMMEDIATE,
       /*ignore_uncommitted_navigations=*/false);
   error_observer.WatchExistingWebContents();
-  EXPECT_TRUE(ExecuteScript(guest, "location.href = '" + url.spec() + "';"));
+  EXPECT_TRUE(ExecJs(guest, "location.href = '" + url.spec() + "';"));
   error_observer.Wait();
   EXPECT_FALSE(error_observer.last_navigation_succeeded());
   EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, error_observer.last_net_error_code());
@@ -5788,8 +5969,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, SimpleNavigations) {
       embedded_test_server()->GetURL("a.test", "/iframe.html");
   {
     content::TestNavigationObserver load_observer(guest);
-    EXPECT_TRUE(
-        ExecuteScript(guest, "location.href = '" + start_url.spec() + "';"));
+    EXPECT_TRUE(ExecJs(guest, "location.href = '" + start_url.spec() + "';"));
     load_observer.Wait();
   }
 
@@ -5861,8 +6041,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, ErrorPageIsolation) {
   {
     content::TestFrameNavigationObserver load_observer(
         GetGuestRenderFrameHost());
-    EXPECT_TRUE(ExecuteScript(GetGuestRenderFrameHost(),
-                              "location.href = '" + error_url.spec() + "';"));
+    EXPECT_TRUE(ExecJs(GetGuestRenderFrameHost(),
+                       "location.href = '" + error_url.spec() + "';"));
     load_observer.Wait();
     EXPECT_FALSE(load_observer.last_navigation_succeeded());
     EXPECT_TRUE(GetGuestRenderFrameHost()->IsErrorDocument());
@@ -5891,9 +6071,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, ErrorPageIsolation) {
   {
     content::TestFrameNavigationObserver load_observer(
         GetGuestRenderFrameHost());
-    EXPECT_TRUE(ExecuteScript(
-        embedder,
-        "document.querySelector('webview').src = '" + error_url.spec() + "';"));
+    EXPECT_TRUE(ExecJs(embedder, "document.querySelector('webview').src = '" +
+                                     error_url.spec() + "';"));
     load_observer.Wait();
     EXPECT_FALSE(load_observer.last_navigation_succeeded());
     EXPECT_TRUE(GetGuestRenderFrameHost()->IsErrorDocument());
@@ -5935,8 +6114,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, ErrorPageInSubframe) {
   {
     content::TestFrameNavigationObserver load_observer(
         GetGuestRenderFrameHost());
-    EXPECT_TRUE(ExecuteScript(GetGuestRenderFrameHost(),
-                              "location.href = '" + first_url.spec() + "';"));
+    EXPECT_TRUE(ExecJs(GetGuestRenderFrameHost(),
+                       "location.href = '" + first_url.spec() + "';"));
     load_observer.Wait();
     EXPECT_TRUE(load_observer.last_navigation_succeeded());
   }
@@ -5949,8 +6128,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, ErrorPageInSubframe) {
   const GURL error_url = GURL("unknownscheme:foo");
   {
     content::TestFrameNavigationObserver load_observer(guest_subframe);
-    EXPECT_TRUE(ExecuteScript(guest_subframe,
-                              "location.href = '" + error_url.spec() + "';"));
+    EXPECT_TRUE(
+        ExecJs(guest_subframe, "location.href = '" + error_url.spec() + "';"));
     load_observer.Wait();
     EXPECT_FALSE(load_observer.last_navigation_succeeded());
     auto* error_rfh = ChildFrameAt(GetGuestRenderFrameHost(), 0);
@@ -5979,8 +6158,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, BrowsingInstanceSwap) {
   {
     content::TestFrameNavigationObserver load_observer(
         GetGuestRenderFrameHost());
-    EXPECT_TRUE(ExecuteScript(GetGuestRenderFrameHost(),
-                              "location.href = '" + first_url.spec() + "';"));
+    EXPECT_TRUE(ExecJs(GetGuestRenderFrameHost(),
+                       "location.href = '" + first_url.spec() + "';"));
     load_observer.Wait();
   }
 
@@ -6103,9 +6282,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, NavigateToAboutBlank) {
   {
     content::TestFrameNavigationObserver load_observer(
         GetGuestRenderFrameHost());
-    EXPECT_TRUE(ExecuteScript(
-        embedder,
-        "document.querySelector('webview').src = '" + blank_url.spec() + "';"));
+    EXPECT_TRUE(ExecJs(embedder, "document.querySelector('webview').src = '" +
+                                     blank_url.spec() + "';"));
     load_observer.Wait();
   }
   scoped_refptr<content::SiteInstance> fourth_instance =
@@ -6180,7 +6358,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, ContentScript) {
         chrome.test.sendMessage("Hello from content script!");
     )";
 
-    EXPECT_TRUE(content::ExecuteScript(
+    EXPECT_TRUE(content::ExecJs(
         embedder, content::JsReplace(kContentScriptTemplate, kContentScript)));
 
     // Ensure the new content script is now tracked for the <webview> in the
@@ -6221,8 +6399,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, ContentScript) {
   // Remove the <webview> and ensure no guests remain in WebViewRendererState.
   {
     content::RenderFrameDeletedObserver deleted_observer(main_frame);
-    EXPECT_TRUE(content::ExecuteScript(
-        embedder, "document.querySelector('webview').remove()"));
+    EXPECT_TRUE(content::ExecJs(embedder,
+                                "document.querySelector('webview').remove()"));
     deleted_observer.WaitUntilDeleted();
     ASSERT_EQ(0u, web_view_renderer_state->guest_count_for_testing());
   }
@@ -6266,7 +6444,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, MAYBE_ContentScriptInOOPIF) {
         chrome.test.sendMessage("Hello from content script!");
     )";
 
-    EXPECT_TRUE(content::ExecuteScript(
+    EXPECT_TRUE(content::ExecJs(
         embedder, content::JsReplace(kContentScriptTemplate, kContentScript)));
   }
 
@@ -6325,12 +6503,10 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessWebViewTest, SubframeProcessReuse) {
       content::ChildFrameAt(guest->GetGuestMainFrame(), 0);
   EXPECT_TRUE(NavigateToURLFromRenderer(subframe, frame_url));
   // Attach a second <webview>.
-  ASSERT_TRUE(content::ExecuteScript(
+  ASSERT_TRUE(content::ExecJs(
       GetEmbedderWebContents(),
-      base::StringPrintf("const w = document.createElement('webview');"
-                         "w.src = '%s';"
-                         "document.body.appendChild(w);",
-                         start_url.spec().c_str())));
+      base::StrCat({"const w = document.createElement('webview'); w.src = '",
+                    start_url.spec(), "'; document.body.appendChild(w);"})));
   GetGuestViewManager()->WaitForNumGuestsCreated(2u);
   auto* guest2 = GetGuestViewManager()->GetLastGuestViewCreated();
   ASSERT_NE(guest, guest2);
@@ -6427,8 +6603,8 @@ IN_PROC_BROWSER_TEST_F(WebViewWithDefaultSiteInstanceTest, SimpleNavigations) {
       embedded_test_server()->GetURL("a.test", "/iframe.html");
   {
     content::TestFrameNavigationObserver load_observer(main_frame);
-    EXPECT_TRUE(ExecuteScript(main_frame,
-                              "location.href = '" + start_url.spec() + "';"));
+    EXPECT_TRUE(
+        ExecJs(main_frame, "location.href = '" + start_url.spec() + "';"));
     load_observer.Wait();
   }
 
@@ -6492,8 +6668,8 @@ IN_PROC_BROWSER_TEST_F(WebViewWithDefaultSiteInstanceTest, IsolatedOrigin) {
       embedded_test_server()->GetURL("isolated.com", "/iframe.html");
   {
     content::TestFrameNavigationObserver load_observer(main_frame);
-    EXPECT_TRUE(ExecuteScript(main_frame,
-                              "location.href = '" + start_url.spec() + "';"));
+    EXPECT_TRUE(
+        ExecJs(main_frame, "location.href = '" + start_url.spec() + "';"));
     load_observer.Wait();
   }
 
@@ -6513,7 +6689,7 @@ IN_PROC_BROWSER_TEST_F(WebViewWithDefaultSiteInstanceTest, IsolatedOrigin) {
   {
     content::TestFrameNavigationObserver subframe_load_observer(subframe);
     EXPECT_TRUE(
-        ExecuteScript(subframe, "location.href = '" + frame_url.spec() + "';"));
+        ExecJs(subframe, "location.href = '" + frame_url.spec() + "';"));
     subframe_load_observer.Wait();
   }
   subframe = content::ChildFrameAt(main_frame, 0);

@@ -26,6 +26,9 @@ struct StartupTab {
   GURL url;
 
   Type type;
+
+
+  bool vivaldi_commandline_tab = false;
 };
 
 using StartupTabs = std::vector<StartupTab>;

@@ -50,10 +50,10 @@
 #include "content/test/content_browser_test_utils_internal.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/iaccessible2/ia2_api_all.h"
 #include "third_party/isimpledom/ISimpleDOMNode.h"
 #include "ui/accessibility/accessibility_features.h"
-#include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/ax_event_generator.h"
 #include "ui/accessibility/platform/ax_fragment_root_win.h"
 #include "ui/accessibility/platform/inspect/ax_inspect_utils_win.h"
@@ -80,6 +80,12 @@ class AccessibilityWinBrowserTest : public AccessibilityBrowserTest {
       delete;
 
   ~AccessibilityWinBrowserTest() override;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    AccessibilityBrowserTest::SetUpCommandLine(command_line);
+    // Some of these tests assume a device scale factor of 1.0.
+    command_line->AppendSwitchASCII(switches::kForceDeviceScaleFactor, "1");
+  }
 
  protected:
   class AccessibleChecker;
@@ -4704,14 +4710,26 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestScrollTo) {
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
                        TestPageIsAccessibleAfterCancellingReload) {
-  LoadInitialAccessibilityTreeFromHtml(
-      "data:text/html,"
-      "<script>"
-      "window.onbeforeunload = function () {"
-      "  return '';"
-      "};"
-      "</script>"
-      "<input value='Test'>");
+  if (base::FeatureList::IsEnabled(
+          blink::features::kBeforeunloadEventCancelByPreventDefault)) {
+    LoadInitialAccessibilityTreeFromHtml(
+        "data:text/html,"
+        "<script>"
+        "window.onbeforeunload = function (e) {"
+        "  e.preventDefault()"
+        "};"
+        "</script>"
+        "<input value='Test'>");
+  } else {
+    LoadInitialAccessibilityTreeFromHtml(
+        "data:text/html,"
+        "<script>"
+        "window.onbeforeunload = function () {"
+        "  return 'Not empty string';"
+        "};"
+        "</script>"
+        "<input value='Test'>");
+  }
 
   // When the before unload dialog shows, simulate the user clicking
   // cancel on that dialog.
@@ -4779,13 +4797,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
 }
 
 class AccessibilityWinUIABrowserTest : public AccessibilityWinBrowserTest {
- protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    AccessibilityWinBrowserTest::SetUpCommandLine(command_line);
-
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        ::switches::kEnableExperimentalUIAutomation);
-  }
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_{::features::kUiaProvider};
 };
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinUIABrowserTest, TestIScrollProvider) {
@@ -4973,7 +4986,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinUIABrowserTest,
   EXPECT_NE(nullptr, accessibility_com_win);
 
   base::win::ScopedVariant result;
-  
+
   accessibility_com_win->GetPropertyValue(UIA_IsOffscreenPropertyId,
                                           result.Receive());
 

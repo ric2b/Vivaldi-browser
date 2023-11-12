@@ -78,7 +78,8 @@ class PageInfoDelegate {
 
   virtual std::unique_ptr<content_settings::CookieControlsController>
   CreateCookieControlsController() = 0;
-  virtual std::u16string GetWebAppShortName() = 0;
+
+  virtual bool IsIsolatedWebApp() = 0;
   virtual void ShowSiteSettings(const GURL& site_url) = 0;
   virtual void ShowCookiesSettings() = 0;
   virtual void ShowAllSitesSettingsFilteredByFpsOwner(
@@ -92,6 +93,9 @@ class PageInfoDelegate {
   virtual void OnPageInfoActionOccurred(PageInfo::PageInfoAction action) = 0;
   virtual void OnUIClosing() = 0;
 #endif
+
+  virtual std::u16string GetSubjectName(const GURL& url) = 0;
+
   virtual permissions::PermissionDecisionAutoBlocker*
   GetPermissionDecisionAutoblocker() = 0;
 
@@ -113,10 +117,12 @@ class PageInfoDelegate {
   virtual bool IsContentDisplayedInVrHeadset() = 0;
   virtual security_state::SecurityLevel GetSecurityLevel() = 0;
   virtual security_state::VisibleSecurityState GetVisibleSecurityState() = 0;
+  virtual void OnCookiesPageOpened() = 0;
 #if BUILDFLAG(IS_ANDROID)
   // Gets the name of the embedder.
   virtual const std::u16string GetClientApplicationName() = 0;
 #endif
+  virtual bool IsHttpsFirstModeEnabled() = 0;
 };
 
 #endif  // COMPONENTS_PAGE_INFO_PAGE_INFO_DELEGATE_H_

@@ -5,6 +5,8 @@
 #include "components/segmentation_platform/internal/data_collection/training_data_collector_impl.h"
 #include <cstdint>
 
+#include "base/containers/contains.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/user_metrics.h"
@@ -15,6 +17,8 @@
 #include "components/segmentation_platform/internal/config_parser.h"
 #include "components/segmentation_platform/internal/constants.h"
 #include "components/segmentation_platform/internal/data_collection/training_data_cache.h"
+#include "components/segmentation_platform/internal/database/cached_result_provider.h"
+#include "components/segmentation_platform/internal/database/config_holder.h"
 #include "components/segmentation_platform/internal/database/signal_storage_config.h"
 #include "components/segmentation_platform/internal/execution/processing/feature_list_query_processor.h"
 #include "components/segmentation_platform/internal/metadata/metadata_utils.h"
@@ -24,6 +28,7 @@
 #include "components/segmentation_platform/public/config.h"
 #include "components/segmentation_platform/public/local_state_helper.h"
 #include "components/segmentation_platform/public/proto/model_metadata.pb.h"
+#include "components/segmentation_platform/public/trigger.h"
 
 namespace segmentation_platform {
 namespace {
@@ -59,20 +64,6 @@ std::map<uint64_t, int> ParseUmaOutputs(
   return hash_index_map;
 }
 
-// Find the segmentation key from the configs that contains the segment ID.
-std::string GetSegmentationKey(std::vector<std::unique_ptr<Config>>* configs,
-                               SegmentId segment_id) {
-  if (!configs)
-    return std::string();
-
-  for (const auto& config : *configs) {
-    auto it = config->segments.find(segment_id);
-    if (it != config->segments.end())
-      return config->segmentation_key;
-  }
-  return std::string();
-}
-
 // Returns a list of preferred segment info for each segment ID in the list.
 std::map<SegmentId, proto::SegmentInfo> GetPreferredSegmentInfo(
     DefaultModelManager::SegmentInfoList&& segment_list) {
@@ -102,17 +93,18 @@ TrainingDataCollectorImpl::TrainingDataCollectorImpl(
     HistogramSignalHandler* histogram_signal_handler,
     UserActionSignalHandler* user_action_signal_handler,
     StorageService* storage_service,
-    std::vector<std::unique_ptr<Config>>* configs,
     PrefService* profile_prefs,
-    base::Clock* clock)
+    base::Clock* clock,
+    CachedResultProvider* cached_result_provider)
     : segment_info_database_(storage_service->segment_info_database()),
       feature_list_query_processor_(processor),
       histogram_signal_handler_(histogram_signal_handler),
       user_action_signal_handler_(user_action_signal_handler),
       signal_storage_config_(storage_service->signal_storage_config()),
-      configs_(configs),
+      config_holder_(storage_service->config_holder()),
       clock_(clock),
       result_prefs_(std::make_unique<SegmentationResultPrefs>(profile_prefs)),
+      cached_result_provider_(cached_result_provider),
       training_cache_(std::make_unique<TrainingDataCache>(
           storage_service->segment_info_database())),
       default_model_manager_(storage_service->default_model_manager()) {}
@@ -127,8 +119,7 @@ void TrainingDataCollectorImpl::OnModelMetadataUpdated() {
 }
 
 void TrainingDataCollectorImpl::OnServiceInitialized() {
-  base::flat_set<SegmentId> segment_ids =
-      GetAllSegmentIdsFromConfigs(*configs_);
+  base::flat_set<SegmentId> segment_ids = config_holder_->all_segment_ids();
   if (segment_ids.empty()) {
     return;
   }
@@ -197,9 +188,10 @@ void TrainingDataCollectorImpl::OnGetSegmentsInfoList(
         const auto& training_data = segment_info.training_data(i);
         if (current_time > training_data.observation_trigger_timestamp()) {
           // Observation is reached for the current training data.
-          OnObservationTrigger(absl::nullopt,
-                               (TrainingRequestId)training_data.request_id(),
-                               segment_info);
+          OnObservationTrigger(
+              absl::nullopt,
+              TrainingRequestId::FromUnsafeValue(training_data.request_id()),
+              segment_info, base::DoNothing());
         }
       }
     }
@@ -217,8 +209,12 @@ void TrainingDataCollectorImpl::OnGetSegmentsInfoList(
               segment.first);
         } else if (feature.type() == proto::SignalType::HISTOGRAM_VALUE ||
                    feature.type() == proto::SignalType::HISTOGRAM_ENUM) {
+          std::vector<int> enum_ids;
+          for (int j = 0; j < feature.enum_ids_size(); j++) {
+            enum_ids.emplace_back(feature.enum_ids(j));
+          }
           immediate_trigger_histograms_[feature.name_hash()].emplace(
-              segment.first);
+              std::make_pair(segment.first, enum_ids));
         }
       }
     }
@@ -238,15 +234,24 @@ void TrainingDataCollectorImpl::OnHistogramSignalUpdated(
   auto it = immediate_trigger_histograms_.find(hash);
   if (it != immediate_trigger_histograms_.end()) {
     auto segments = it->second;
-    auto param = absl::make_optional<ImmediaCollectionParam>();
+    auto param = absl::make_optional<ImmediateCollectionParam>();
     param->output_metric_hash = hash;
     param->output_value = static_cast<float>(sample);
     for (auto segment : segments) {
-      segment_info_database_->GetSegmentInfo(
-          segment,
-          base::BindOnce(
-              &TrainingDataCollectorImpl::OnUmaUpdatedReportForSegmentInfo,
-              weak_ptr_factory_.GetWeakPtr(), param));
+      auto segment_id = segment.first;
+      auto accepted_enum_ids = segment.second;
+
+      // Process both enum histograms with their corresponding accepted enum ids
+      // and value histograms with no enum ids.
+      if (accepted_enum_ids.empty() ||
+          base::Contains(accepted_enum_ids, sample)) {
+        // TODO (ritikagup@) : Add handling for default models, if required.
+        segment_info_database_->GetSegmentInfo(
+            segment_id, proto::ModelSource::SERVER_MODEL_SOURCE,
+            base::BindOnce(
+                &TrainingDataCollectorImpl::OnUmaUpdatedReportForSegmentInfo,
+                weak_ptr_factory_.GetWeakPtr(), param));
+      }
     }
   }
 }
@@ -260,8 +265,9 @@ void TrainingDataCollectorImpl::OnUserAction(const std::string& user_action,
   if (it != immediate_trigger_user_actions_.end()) {
     auto segments = it->second;
     for (auto segment : segments) {
+      // TODO (ritikagup@) : Add handling for default models, if required.
       segment_info_database_->GetSegmentInfo(
-          segment,
+          segment, ModelSource::SERVER_MODEL_SOURCE,
           base::BindOnce(
               &TrainingDataCollectorImpl::OnUmaUpdatedReportForSegmentInfo,
               weak_ptr_factory_.GetWeakPtr(), absl::nullopt));
@@ -270,7 +276,7 @@ void TrainingDataCollectorImpl::OnUserAction(const std::string& user_action,
 }
 
 void TrainingDataCollectorImpl::OnUmaUpdatedReportForSegmentInfo(
-    const absl::optional<ImmediaCollectionParam>& param,
+    const absl::optional<ImmediateCollectionParam>& param,
     absl::optional<proto::SegmentInfo> segment) {
   if (segment.has_value()) {
     absl::optional<TrainingRequestId> request_id =
@@ -279,7 +285,8 @@ void TrainingDataCollectorImpl::OnUmaUpdatedReportForSegmentInfo(
       RecordTrainingDataCollectionEvent(
           segment.value().segment_id(),
           stats::TrainingDataCollectionEvent::kHistogramTriggerHit);
-      OnObservationTrigger(param, request_id.value(), segment.value());
+      OnObservationTrigger(param, request_id.value(), segment.value(),
+                           base::DoNothing());
     }
   }
 }
@@ -345,7 +352,7 @@ bool TrainingDataCollectorImpl::CanReportTrainingData(
 }
 
 void TrainingDataCollectorImpl::OnGetTrainingTensors(
-    const absl::optional<ImmediaCollectionParam>& param,
+    const absl::optional<ImmediateCollectionParam>& param,
     const proto::SegmentInfo& segment_info,
     bool has_error,
     const ModelProvider::Request& input_tensors,
@@ -360,8 +367,9 @@ void TrainingDataCollectorImpl::OnGetTrainingTensors(
   // TODO(qinmin): update SegmentationUkmHelper::RecordTrainingData()
   // and ukm file for description of the prediction result as it is
   // the segment selection result, rather than model result.
-  std::string segmentation_key =
-      GetSegmentationKey(configs_, segment_info.segment_id());
+  const Config* config =
+      config_holder_->GetConfigForSegmentId(segment_info.segment_id());
+  std::string segmentation_key = config ? config->segmentation_key : "";
 
   std::vector<int> output_indexes;
   auto output_values = output_tensors;
@@ -377,10 +385,26 @@ void TrainingDataCollectorImpl::OnGetTrainingTensors(
     output_values.emplace_back(param->output_value);
   }
 
+  // Cached results are stored in two formats depending on whether the model is
+  // using the legacy output config or the new multi-output model config.
+  // |prediction_results| represents the new format which may contains multiple
+  // outputs as floats.
+  absl::optional<proto::PredictionResult> prediction_result;
+  // |selected_segment| represents the legacy format which contains a single
+  // segment ID.
+  absl::optional<SelectedSegment> selected_segment;
+
+  if (metadata_utils::ConfigUsesLegacyOutput(config)) {
+    selected_segment =
+        result_prefs_->ReadSegmentationResultFromPref(segmentation_key);
+  } else {
+    prediction_result =
+        cached_result_provider_->GetPredictionResultForClient(segmentation_key);
+  }
+
   auto ukm_source_id = SegmentationUkmHelper::GetInstance()->RecordTrainingData(
       segment_info.segment_id(), segment_info.model_version(), input_tensors,
-      output_values, output_indexes, segment_info.prediction_result(),
-      result_prefs_->ReadSegmentationResultFromPref(segmentation_key));
+      output_values, output_indexes, prediction_result, selected_segment);
   if (ukm_source_id == ukm::kInvalidSourceId) {
     VLOG(1) << "Failed to collect training data for segment:"
             << segment_info.segment_id();
@@ -416,12 +440,36 @@ void TrainingDataCollectorImpl::ReportCollectedContinuousTrainingData() {
   }
 }
 
-void TrainingDataCollectorImpl::OnDecisionTime(
+void TrainingDataCollectorImpl::CollectTrainingData(
+    SegmentId segment_id,
+    TrainingRequestId request_id,
+    const TrainingLabels& param,
+    SuccessCallback callback) {
+  // TODO (ritikagup@) : Add handling for default models, if required.
+  auto segment_info = segment_info_database_->GetCachedSegmentInfo(
+      segment_id, proto::ModelSource::SERVER_MODEL_SOURCE);
+  if (!segment_info) {
+    return;
+  }
+  absl::optional<TrainingDataCollector::ImmediateCollectionParam>
+      immediate_param;
+  if (param.output_metric) {
+    immediate_param = TrainingDataCollector::ImmediateCollectionParam();
+    immediate_param->output_metric_hash =
+        base::HashMetricName(param.output_metric.value().first);
+    immediate_param->output_value =
+        static_cast<float>(param.output_metric.value().second);
+  }
+  OnObservationTrigger(immediate_param, request_id, segment_info.value(),
+                       std::move(callback));
+}
+
+TrainingRequestId TrainingDataCollectorImpl::OnDecisionTime(
     proto::SegmentId id,
     scoped_refptr<InputContext> input_context,
     DecisionType type) {
   if (all_segments_for_training_.count(id) == 0) {
-    return;
+    return TrainingRequestId();
   }
 
   const TrainingRequestId request_id = training_cache_->GenerateNextId();
@@ -431,6 +479,8 @@ void TrainingDataCollectorImpl::OnDecisionTime(
       base::BindOnce(&TrainingDataCollectorImpl::OnGetSegmentInfoAtDecisionTime,
                      weak_ptr_factory_.GetWeakPtr(), id, request_id, type,
                      input_context));
+
+  return request_id;
 }
 
 void TrainingDataCollectorImpl::OnGetSegmentInfoAtDecisionTime(
@@ -537,7 +587,7 @@ void TrainingDataCollectorImpl::OnGetTrainingTensorsAtDecisionTime(
         FROM_HERE,
         base::BindOnce(&TrainingDataCollectorImpl::OnObservationTrigger,
                        weak_ptr_factory_.GetWeakPtr(), absl::nullopt,
-                       request_id, segment_info),
+                       request_id, segment_info, base::DoNothing()),
         *training_request.observation_delayed_task);
   } else {
     RecordTrainingDataCollectionEvent(
@@ -547,9 +597,14 @@ void TrainingDataCollectorImpl::OnGetTrainingTensorsAtDecisionTime(
 }
 
 void TrainingDataCollectorImpl::OnObservationTrigger(
-    const absl::optional<ImmediaCollectionParam>& param,
+    const absl::optional<ImmediateCollectionParam>& param,
     TrainingRequestId request_id,
-    const proto::SegmentInfo& segment_info) {
+    const proto::SegmentInfo& segment_info,
+    SuccessCallback callback) {
+  if (request_id.is_null()) {
+    return;
+  }
+
   RecordTrainingDataCollectionEvent(
       segment_info.segment_id(),
       stats::TrainingDataCollectionEvent::kObservationTimeReached);
@@ -565,17 +620,20 @@ void TrainingDataCollectorImpl::OnObservationTrigger(
   training_cache_->GetInputsAndDelete(
       segment_info.segment_id(), request_id,
       base::BindOnce(&TrainingDataCollectorImpl::OnGetStoredTrainingData,
-                     weak_ptr_factory_.GetWeakPtr(), param, segment_info));
+                     weak_ptr_factory_.GetWeakPtr(), param, segment_info,
+                     std::move(callback)));
 }
 
 void TrainingDataCollectorImpl::OnGetStoredTrainingData(
-    const absl::optional<ImmediaCollectionParam>& param,
+    const absl::optional<ImmediateCollectionParam>& param,
     const proto::SegmentInfo& segment_info,
+    SuccessCallback callback,
     absl::optional<proto::TrainingData> input) {
   if (!input.has_value()) {
     RecordTrainingDataCollectionEvent(
         segment_info.segment_id(),
         stats::TrainingDataCollectionEvent::kTrainingDataMissing);
+    std::move(callback).Run(/*success*/ false);
     return;
   }
 
@@ -596,10 +654,12 @@ void TrainingDataCollectorImpl::OnGetStoredTrainingData(
           weak_ptr_factory_.GetWeakPtr(), param, segment_info,
           ModelProvider::Response(input.value().inputs().begin(),
                                   input.value().inputs().end())));
+
+  std::move(callback).Run(/*success*/ true);
 }
 
 void TrainingDataCollectorImpl::OnGetOutputsOnObservationTrigger(
-    const absl::optional<ImmediaCollectionParam>& param,
+    const absl::optional<ImmediateCollectionParam>& param,
     const proto::SegmentInfo& segment_info,
     const ModelProvider::Request& cached_input_tensors,
     bool has_error,

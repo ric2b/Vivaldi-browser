@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "Ic1c818f59254be09682ebc54f078d6ee7c6b2d74",
+  "upstream_commit_id": "I5e83c5e4357557fb56b1c968c3ef7e69aea5b2ca",
 }
 
 hooks = [
@@ -71,6 +71,13 @@ hooks = [
     'pattern': '.',
     'action': [
       'python3', "-u", 'scripts/load_net_build_support.py',
+      '--linux', Var("checkout_linux_str"),
+      '--win', Var("checkout_win_str"),
+      '--mac', Var("checkout_mac_str"),
+      '--android', Var("checkout_android_str"),
+      '--x64', Var("checkout_x64_str"),
+      '--arm', Var("checkout_arm_str"),
+      '--arm64', Var("checkout_arm64_str"),
     ],
   },
   {

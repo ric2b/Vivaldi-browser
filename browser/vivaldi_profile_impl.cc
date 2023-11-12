@@ -146,24 +146,26 @@ void PerformUpdates(Profile* profile) {
 }
 
 void VivaldiInitProfile(Profile* profile) {
-  adblock_filter::RuleServiceFactory::GetForBrowserContext(profile);
-  content_injection::ServiceFactory::GetForBrowserContext(profile);
-  page_actions::ServiceFactory::GetForBrowserContext(profile);
+  // Note that this is called for !vivaldi::IsVivaldiRunning() as well. So keep.
+  if (vivaldi::IsVivaldiRunning()) {
+    adblock_filter::RuleServiceFactory::GetForBrowserContext(profile);
+    content_injection::ServiceFactory::GetForBrowserContext(profile);
+    page_actions::ServiceFactory::GetForBrowserContext(profile);
 
-  RequestFilterManagerFactory::GetForBrowserContext(profile)->AddFilter(
-      std::make_unique<PingBlockerFilter>());
+    RequestFilterManagerFactory::GetForBrowserContext(profile)->AddFilter(
+        std::make_unique<PingBlockerFilter>());
 
-  vivaldi::NotesModel* notes_model =
-      vivaldi::NotesModelFactory::GetForBrowserContext(profile);
-  notes_model->AddObserver(new vivaldi::NotesModelLoadedObserver(profile));
-
+    vivaldi::NotesModel* notes_model =
+        vivaldi::NotesModelFactory::GetForBrowserContext(profile);
+    notes_model->AddObserver(new vivaldi::NotesModelLoadedObserver(profile));
+  }
   PerformUpdates(profile);
 
   if (vivaldi::IsVivaldiRunning()) {
     bookmarks::BookmarkModel* bookmarks_model =
         BookmarkModelFactory::GetForBrowserContext(profile);
     if (bookmarks_model)
-      vivaldi_partners::RemovedPartnersTracker::Create(profile->GetPrefs(),
+      vivaldi_partners::RemovedPartnersTracker::Create(profile,
                                                        bookmarks_model);
 
     // Manages its own lifetime.
@@ -175,21 +177,22 @@ void VivaldiInitProfile(Profile* profile) {
 #if !BUILDFLAG(IS_ANDROID)
   PrefService* pref_service = profile->GetPrefs();
 
-  menus::Menu_Model* menu_model =
-      menus::MainMenuServiceFactory::GetForBrowserContext(profile);
-  menu_model->AddObserver(new menus::MenuModelLoadedObserver());
-  // The context menu model content is loaded on demand so no observer here.
-  menus::ContextMenuServiceFactory::GetForBrowserContext(profile);
-  // Index is loaded on demand.
-  sessions::IndexServiceFactory::GetForBrowserContext(profile);
+  if (vivaldi::IsVivaldiRunning()) {
+    menus::Menu_Model* menu_model =
+        menus::MainMenuServiceFactory::GetForBrowserContext(profile);
+    menu_model->AddObserver(new menus::MenuModelLoadedObserver());
+    // The context menu model content is loaded on demand so no observer here.
+    menus::ContextMenuServiceFactory::GetForBrowserContext(profile);
+    // Index is loaded on demand.
+    sessions::IndexServiceFactory::GetForBrowserContext(profile);
 
-  extensions::VivaldiUtilitiesAPI* utility_api =
-      extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
-        ->Get(profile);
-  if (utility_api) {
-    utility_api->PostProfileSetup();
+    extensions::VivaldiUtilitiesAPI* utility_api =
+        extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
+          ->Get(profile);
+    if (utility_api) {
+      utility_api->PostProfileSetup();
+    }
   }
-
   if (!vivaldi::IsVivaldiRunning())
     return;
 

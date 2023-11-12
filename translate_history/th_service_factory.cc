@@ -16,7 +16,7 @@ namespace translate_history {
 
 TH_ServiceFactory::TH_ServiceFactory()
     : BrowserContextKeyedServiceFactory(
-          "ContextMenuService",
+          "TH_Service",
           BrowserContextDependencyManager::GetInstance()) {}
 
 TH_ServiceFactory::~TH_ServiceFactory() {}

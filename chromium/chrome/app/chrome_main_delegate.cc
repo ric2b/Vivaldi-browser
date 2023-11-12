@@ -30,6 +30,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequence_manager/sequence_manager_impl.h"
+#include "base/task/sequence_manager/thread_controller.h"
 #include "base/task/sequence_manager/thread_controller_power_monitor.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/hang_watcher.h"
@@ -120,6 +121,7 @@
 #include "base/message_loop/message_pump_default.h"
 #include "base/message_loop/message_pump_kqueue.h"
 #include "base/message_loop/message_pump_mac.h"
+#include "base/synchronization/condition_variable.h"
 #include "chrome/app/chrome_main_mac.h"
 #include "chrome/browser/chrome_browser_application_mac.h"
 #include "chrome/browser/headless/headless_mode_util.h"
@@ -155,10 +157,9 @@
 #include "chrome/browser/ash/boot_times_recorder.h"
 #include "chrome/browser/ash/dbus/ash_dbus_helper.h"
 #include "chrome/browser/ash/startup_settings_cache.h"
-#include "chromeos/ash/components/memory/kstaled.h"
 #include "chromeos/ash/components/memory/memory.h"
+#include "chromeos/ash/components/memory/mglru.h"
 #include "chromeos/ash/components/memory/swap_configuration.h"
-#include "chromeos/hugepage_text/hugepage_text.h"
 #include "ui/lottie/resource.h"  // nogncheck
 #endif
 
@@ -216,6 +217,7 @@
 #endif  // BUILDFLAG(ENABLE_PROCESS_SINGLETON)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "base/scoped_add_feature_flags.h"
 #include "chrome/common/chrome_paths_lacros.h"
 #include "chromeos/crosapi/cpp/crosapi_constants.h"  // nogncheck
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"    // nogncheck
@@ -229,6 +231,7 @@
 #include "content/public/browser/zygote_host/zygote_host_linux.h"
 #include "media/base/media_switches.h"
 #include "ui/base/resource/data_pack_with_resource_sharing_lacros.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/switches.h"
 #endif
 
@@ -404,18 +407,19 @@ bool HandleVersionSwitches(const base::CommandLine& command_line) {
 #if defined(VIVALDI_BUILD)
     printf("%s\n", vivaldi::GetVivaldiVersionString().c_str());
 #else
-    printf("%s\n", version_info::GetVersionNumber().c_str());
+    printf("%s\n", version_info::GetVersionNumber().data());
 #endif
     return true;
   }
 #endif
 
   if (command_line.HasSwitch(switches::kVersion)) {
-    printf("%s %s %s\n", version_info::GetProductName().c_str(),
+    printf("%s %s %s\n", version_info::GetProductName().data(),
 #if defined(VIVALDI_BUILD)
            vivaldi::GetVivaldiVersionString().c_str(),
 #else
-           version_info::GetVersionNumber().c_str(),
+    printf("%s %s %s\n", version_info::GetProductName().data(),
+           version_info::GetVersionNumber().data(),
 #endif
            chrome::GetChannelName(chrome::WithExtendedStable(true)).c_str());
     return true;
@@ -804,6 +808,13 @@ absl::optional<int> ChromeMainDelegate::PostEarlyInitialization(
   // Redirect logs from system directory to cryptohome.
   if (chromeos::IsLaunchedWithPostLoginParams())
     RedirectLacrosLogging();
+
+  // Must be added before feature list is created otherwise the added flag won't
+  // be picked up.
+  if (chromeos::BrowserParamsProxy::Get()->IsVariableRefreshRateEnabled()) {
+    base::ScopedAddFeatureFlags(base::CommandLine::ForCurrentProcess())
+        .EnableIfNotSet(features::kEnableVariableRefreshRate);
+  }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   // The DBus initialization above is needed for FeatureList creation here;
@@ -956,7 +967,7 @@ void ChromeMainDelegate::CommonEarlyInitialization() {
   if (is_browser_process) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     ash::ConfigureSwap(arc::IsArcAvailable());
-    ash::InitializeKstaled();
+    ash::InitializeMGLRU();
 #endif
   }
 
@@ -984,12 +995,14 @@ void ChromeMainDelegate::CommonEarlyInitialization() {
 
   base::InitializeCpuReductionExperiment();
   base::sequence_manager::internal::SequenceManagerImpl::InitializeFeatures();
+  base::sequence_manager::internal::ThreadController::InitializeFeatures();
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
   base::MessagePumpLibevent::InitializeFeatures();
 #elif BUILDFLAG(IS_MAC)
   base::PlatformThread::InitFeaturesPostFieldTrial();
   base::MessagePumpCFRunLoopBase::InitializeFeatures();
   base::MessagePumpKqueue::InitializeFeatures();
+  base::ConditionVariable::InitializeFeatures();
 #endif
 }
 
@@ -1673,10 +1686,6 @@ void ChromeMainDelegate::ProcessExiting(const std::string& process_type) {
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 void ChromeMainDelegate::ZygoteStarting(
     std::vector<std::unique_ptr<content::ZygoteForkDelegate>>* delegates) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::InitHugepagesAndMlockSelf();
-#endif
-
 #if BUILDFLAG(ENABLE_NACL)
   nacl::AddNaClZygoteForkDelegates(delegates);
 #endif

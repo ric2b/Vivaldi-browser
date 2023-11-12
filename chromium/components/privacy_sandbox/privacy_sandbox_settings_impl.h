@@ -12,6 +12,7 @@
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class HostContentSettingsMap;
 class PrefService;
@@ -60,6 +61,10 @@ class PrivacySandboxSettingsImpl : public PrivacySandboxSettings {
       const url::Origin& top_frame_origin) const override;
   bool IsFledgeAllowed(const url::Origin& top_frame_origin,
                        const url::Origin& auction_party) const override;
+  bool IsEventReportingDestinationAttested(
+      const url::Origin& destination_origin,
+      privacy_sandbox::PrivacySandboxAttestationsGatedAPI invoking_api)
+      const override;
   bool IsSharedStorageAllowed(
       const url::Origin& top_frame_origin,
       const url::Origin& accessing_origin) const override;
@@ -74,6 +79,7 @@ class PrivacySandboxSettingsImpl : public PrivacySandboxSettings {
   void SetTopicsBlockedForTesting() override;
   void SetPrivacySandboxEnabled(bool enabled) override;
   bool IsPrivacySandboxRestricted() const override;
+  bool IsPrivacySandboxCurrentlyUnrestricted() const override;
   bool IsSubjectToM1NoticeRestricted() const override;
   bool IsRestrictedNoticeEnabled() const override;
   void OnCookiesCleared() override;
@@ -82,7 +88,9 @@ class PrivacySandboxSettingsImpl : public PrivacySandboxSettings {
   void SetDelegateForTesting(std::unique_ptr<Delegate> delegate) override;
 
  private:
-  friend class PrivacySandboxSettingsM1Test;
+  friend class PrivacySandboxSettingsTest;
+  friend class PrivacySandboxAttestations;
+  friend class PrivacySandboxAttestationsTestBase;
   // Called when the First-Party Sets enabled preference is changed.
   void OnFirstPartySetsEnabledPrefChanged();
 
@@ -106,10 +114,14 @@ class PrivacySandboxSettingsImpl : public PrivacySandboxSettings {
     kApisDisabled = 3,
     kSiteDataAccessBlocked = 4,
     kMismatchedConsent = 5,
-    kMaxValue = kMismatchedConsent,
+    kAttestationFailed = 6,
+    kAttestationsNotLoaded = 7,
+    kMaxValue = kAttestationsNotLoaded,
   };
 
   static bool IsAllowed(Status status);
+
+  static void JoinHistogram(const char* name, Status status);
 
   // Get the Topics that are disabled by Finch.
   const std::vector<browsing_topics::Topic>& GetFinchDisabledTopics();
@@ -122,7 +134,8 @@ class PrivacySandboxSettingsImpl : public PrivacySandboxSettings {
   // Whether the privacy sandbox APIs can be allowed given the current
   // environment. For example, the privacy sandbox is always disabled in
   // Incognito and for restricted accounts.
-  Status GetPrivacySandboxAllowedStatus() const;
+  Status GetPrivacySandboxAllowedStatus(
+      bool should_ignore_restriction = false) const;
 
   // Whether the privacy sandbox associated with  the |pref_name| is enabled.
   // For individual sites, check as well with GetSiteAccessAllowedStatus.

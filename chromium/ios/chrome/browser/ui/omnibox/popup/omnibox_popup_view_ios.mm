@@ -18,13 +18,16 @@
 #import "components/omnibox/browser/omnibox_edit_model.h"
 #import "components/omnibox/browser/omnibox_popup_selection.h"
 #import "components/open_from_clipboard/clipboard_recent_content.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/default_browser/utils.h"
-#import "ios/chrome/browser/flags/system_flags.h"
+#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/ntp/metrics/home_metrics.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_mediator.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_view_suggestions_delegate.h"
+#import "ios/chrome/browser/ui/omnibox/web_location_bar.h"
 #import "ios/chrome/grit/ios_theme_resources.h"
 #import "ios/web/public/thread/web_thread.h"
 #import "net/url_request/url_request_context_getter.h"
@@ -37,8 +40,11 @@ using base::UserMetricsAction;
 
 OmniboxPopupViewIOS::OmniboxPopupViewIOS(
     OmniboxEditModel* edit_model,
+    WebLocationBar* location_bar,
     OmniboxPopupViewSuggestionsDelegate* delegate)
-    : edit_model_(edit_model), delegate_(delegate) {
+    : edit_model_(edit_model),
+      location_bar_(location_bar),
+      delegate_(delegate) {
   DCHECK(delegate);
   DCHECK(edit_model);
   edit_model->set_popup_view(this);
@@ -56,6 +62,11 @@ void OmniboxPopupViewIOS::UpdatePopupAppearance() {
 
 bool OmniboxPopupViewIOS::IsOpen() const {
   return [mediator_ hasResults];
+}
+
+std::u16string OmniboxPopupViewIOS::GetAccessibleButtonTextForResult(
+    size_t line) {
+  return u"";
 }
 
 OmniboxEditModel* OmniboxPopupViewIOS::model() const {
@@ -88,6 +99,12 @@ void OmniboxPopupViewIOS::OnMatchSelected(
     size_t row,
     WindowOpenDisposition disposition) {
   base::RecordAction(UserMetricsAction("MobileOmniboxUse"));
+  NewTabPageTabHelper* NTPTabHelper =
+      NewTabPageTabHelper::FromWebState(location_bar_->GetWebState());
+  if (NTPTabHelper->IsActive()) {
+    RecordHomeAction(IOSHomeActionType::kOmnibox,
+                     NTPTabHelper->ShouldShowStartSurface());
+  }
 
   // OpenMatch() may close the popup, which will clear the result set and, by
   // extension, `match` and its contents.  So copy the relevant match out to

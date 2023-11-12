@@ -27,27 +27,19 @@ void HistoryBackend::DropHistoryTables() {
   db_->DropHistoryTables();
 }
 
-QueryResults HistoryBackend::QueryHistoryWStatement(
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+DetailedHistory::DetailedHistoryList
+HistoryBackend::QueryDetailedHistoryWStatement(
     const char* sql_query,
     const std::string& search_string,
     int max_hits) {
-  QueryResults query_results;
+  DetailedHistory::DetailedHistoryList query_results;
   if (db_) {
-    URLRows text_matches;
-    db_->GetMatchesWStatement(sql_query, search_string, max_hits,
-                              &text_matches);
-
-    std::vector<URLResult> matching_results;
-    // todo: Check if this can be further optimized.
-    for (size_t i = 0; i < text_matches.size(); i++) {
-      const URLRow& text_match = text_matches[i];
-      // Get all visits for given URL match.
-      URLResult url_result(text_match);
-      matching_results.push_back(std::move(url_result));
-    }
-    query_results.SetURLResults(std::move(matching_results));
+    db_->GetDetailedMatchesWStatement(
+      sql_query, search_string, max_hits, &query_results);
   }
   return query_results;
 }
+#endif
 
 }  // namespace history

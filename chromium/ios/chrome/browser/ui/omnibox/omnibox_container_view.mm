@@ -20,6 +20,13 @@
 #import "ui/gfx/color_palette.h"
 #import "ui/gfx/image/image.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -78,9 +85,15 @@ const CGFloat kTextFieldClearButtonTrailingOffset = 4;
     }
     [self addSubview:_textField];
 
+    if (IsVivaldiRunning()) {
+      _leadingTextfieldConstraint = [_textField.leadingAnchor
+          constraintEqualToAnchor:self.leadingAnchor
+                         constant:vPrimaryToolbarTextFieldLeadingOffsetNoImage];
+    } else {
     _leadingTextfieldConstraint = [_textField.leadingAnchor
         constraintEqualToAnchor:self.leadingAnchor
                        constant:kTextFieldLeadingOffsetNoImage];
+    } // End Vivaldi
 
     [NSLayoutConstraint activateConstraints:@[
       [_textField.trailingAnchor
@@ -152,6 +165,13 @@ const CGFloat kTextFieldClearButtonTrailingOffset = 4;
       [self.leadingImageView.trailingAnchor
           constraintEqualToAnchor:self.textField.leadingAnchor
                          constant:-kTextFieldLeadingOffsetImage];
+
+  if (IsVivaldiRunning()) {
+    leadingImageViewToTextField =
+      [self.leadingImageView.trailingAnchor
+          constraintEqualToAnchor:self.textField.leadingAnchor
+                         constant:-vPrimaryToolbarTextFieldLeadingOffsetImage];
+  } // End Vivaldi
 
   [NSLayoutConstraint activateConstraints:@[
     [_leadingImageView.centerYAnchor

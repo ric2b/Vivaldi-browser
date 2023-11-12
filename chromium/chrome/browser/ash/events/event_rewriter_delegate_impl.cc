@@ -9,6 +9,8 @@
 #include "ash/public/cpp/input_device_settings_controller.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/mojom/input_device_settings.mojom.h"
+#include "base/containers/fixed_flat_map.h"
+#include "base/notreached.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/notifications/deprecation_notification_controller.h"
 #include "chrome/browser/extensions/extension_commands_global_registry.h"
@@ -19,6 +21,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/events/ash/mojom/modifier_key.mojom-shared.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/message_center/message_center.h"
 
 namespace ash {
@@ -91,7 +94,7 @@ EventRewriterDelegateImpl::GetKeyboardRemappedModifierValue(
   const mojom::KeyboardSettings* settings =
       input_device_settings_controller_->GetKeyboardSettings(device_id);
   if (!settings) {
-    return modifier_key;
+    return absl::nullopt;
   }
 
   auto iter = settings->modifier_remappings.find(modifier_key);
@@ -170,6 +173,88 @@ void EventRewriterDelegateImpl::SuppressMetaTopRowKeyComboRewrites(
   suppress_meta_top_row_key_rewrites_ = should_suppress;
 }
 
+void EventRewriterDelegateImpl::RecordEventRemappedToRightClick(
+    bool alt_based_right_click) {
+  PrefService* const pref_service = GetPrefService();
+  if (!pref_service) {
+    return;
+  }
+  const auto* pref_name = alt_based_right_click
+                              ? prefs::kAltEventRemappedToRightClick
+                              : prefs::kSearchEventRemappedToRightClick;
+  int count = pref_service->GetInteger(pref_name);
+  pref_service->SetInteger(pref_name, ++count);
+}
+
+void EventRewriterDelegateImpl::RecordSixPackEventRewrite(
+    ui::KeyboardCode key_code,
+    bool alt_based) {
+  PrefService* const pref_service = GetPrefService();
+  if (!pref_service) {
+    return;
+  }
+  // A map between "six pack" keys to prefs which track how often a user uses
+  // either the alt or search based shortcut variant to emit a "six pack" event.
+  // The "Insert" key is omitted since the (Search+Shift+Backspace) rewrite is
+  // the only way to emit an "Insert" key event.
+  static constexpr auto kSixPackKeyToPrefMap =
+      base::MakeFixedFlatMap<ui::KeyboardCode, const char*>({
+          {ui::KeyboardCode::VKEY_DELETE,
+           prefs::kKeyEventRemappedToSixPackDelete},
+          {ui::KeyboardCode::VKEY_HOME, prefs::kKeyEventRemappedToSixPackHome},
+          {ui::KeyboardCode::VKEY_PRIOR,
+           prefs::kKeyEventRemappedToSixPackPageDown},
+          {ui::KeyboardCode::VKEY_END, prefs::kKeyEventRemappedToSixPackEnd},
+          {ui::KeyboardCode::VKEY_NEXT,
+           prefs::kKeyEventRemappedToSixPackPageUp},
+      });
+  auto* it = kSixPackKeyToPrefMap.find(key_code);
+  CHECK(it != kSixPackKeyToPrefMap.end());
+  int count = pref_service->GetInteger(it->second);
+  // `alt_based` tells us whether this "six pack" event was produced by an
+  // Alt or Search/Launcher based keyboard shortcut. Update our pref to track
+  // which method the user uses more frequently.
+  count += alt_based ? 1 : -1;
+  pref_service->SetInteger(it->second, count);
+}
+
+absl::optional<ui::mojom::SimulateRightClickModifier>
+EventRewriterDelegateImpl::GetRemapRightClickModifier(int device_id) {
+  const mojom::TouchpadSettings* settings =
+      input_device_settings_controller_->GetTouchpadSettings(device_id);
+  if (!settings) {
+    return absl::nullopt;
+  }
+  return settings->simulate_right_click;
+}
+
+absl::optional<ui::mojom::SixPackShortcutModifier>
+EventRewriterDelegateImpl::GetShortcutModifierForSixPackKey(
+    int device_id,
+    ui::KeyboardCode key_code) {
+  const mojom::KeyboardSettings* settings =
+      input_device_settings_controller_->GetKeyboardSettings(device_id);
+  if (!settings) {
+    return absl::nullopt;
+  }
+  switch (key_code) {
+    case ui::KeyboardCode::VKEY_DELETE:
+      return settings->six_pack_key_remappings->del;
+    case ui::KeyboardCode::VKEY_HOME:
+      return settings->six_pack_key_remappings->home;
+    case ui::KeyboardCode::VKEY_PRIOR:
+      return settings->six_pack_key_remappings->page_up;
+    case ui::KeyboardCode::VKEY_END:
+      return settings->six_pack_key_remappings->end;
+    case ui::KeyboardCode::VKEY_NEXT:
+      return settings->six_pack_key_remappings->page_down;
+    case ui::KeyboardCode::VKEY_INSERT:
+      return settings->six_pack_key_remappings->insert;
+    default:
+      NOTREACHED_NORETURN();
+  }
+}
+
 bool EventRewriterDelegateImpl::NotifyDeprecatedRightClickRewrite() {
   return deprecation_controller_->NotifyDeprecatedRightClickRewrite();
 }
@@ -179,7 +264,7 @@ bool EventRewriterDelegateImpl::NotifyDeprecatedSixPackKeyRewrite(
   return deprecation_controller_->NotifyDeprecatedSixPackKeyRewrite(key_code);
 }
 
-const PrefService* EventRewriterDelegateImpl::GetPrefService() const {
+PrefService* EventRewriterDelegateImpl::GetPrefService() const {
   if (pref_service_for_testing_)
     return pref_service_for_testing_;
   Profile* profile = ProfileManager::GetActiveUserProfile();

@@ -20,7 +20,17 @@ BASE_FEATURE(kDumpOnAudioServiceHang,
 // for audio output streams.
 BASE_FEATURE(kUseAAudioDriver,
              "UseAAudioDriver",
+#if defined(OEM_MERCEDES_BUILD)
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#else
              base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
+
+// Enables loading and using AAudio instead of OpenSLES on compatible devices,
+// for audio input streams.
+BASE_FEATURE(kUseAAudioInput,
+             "UseAAudioInput",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_WIN)

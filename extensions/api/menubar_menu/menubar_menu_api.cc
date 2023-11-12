@@ -275,9 +275,11 @@ std::string MenubarMenuShowFunction::PopulateModel(
     bool dark_text_color,
     const std::vector<Element>& list,
     ui::SimpleMenuModel* menu_model) {
+  bool prev_is_bookmarks = false;
   namespace menubar_menu = extensions::vivaldi::menubar_menu;
   for (const Element& child : list) {
     if (child.item) {
+      prev_is_bookmarks = false;
       const Item& item = *child.item;
       int id = item.id + IDC_VIV_MENU_FIRST + 1;
       const std::u16string label = base::UTF8ToUTF16(item.name);
@@ -354,17 +356,15 @@ std::string MenubarMenuShowFunction::PopulateModel(
         }
       }
     } else if (child.separator) {
-      if (bookmark_menu_id_ == menu_id) {
-        // We do not populate the bookmark menu container here so the menu model
-        // does not know about it. Adding a separator under the bookmarks may
-        // then fail in some case (double sepatators and a separator at the
-        // start of the menu) so we let the bookmark code add one.
-        if (static_cast<unsigned int>(menu_model->GetItemCount()) ==
-            bookmark_menu_container_->siblings[0].menu_index) {
-          bookmark_menu_container_->siblings[0].tweak_separator = true;
-        } else {
-          menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
-        }
+      // All container types except bookmarks are expanded in JS. For bookmarks
+      // expansion happens in C++ code just before a menu is shown. This causes
+      // a problem for separators since the menu model prevents adding multiple
+      // separators after another which we may do since the container content
+      // is expanded later. We let the container expansion code add a separator
+      // if needed (Note: we reset this tweak at the end of this function if
+      // the bookmark container turns out to be the last element in the menu).
+      if (prev_is_bookmarks) {
+        bookmark_menu_container_->siblings[0].tweak_separator = true;
       } else {
         menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
       }
@@ -374,6 +374,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
         if (bookmark_menu_container_) {
           return "Only one bookmark container supported";
         }
+        prev_is_bookmarks = true;
         bookmark_menu_id_ = menu_id;
         bookmark_menu_container_.reset(
             new ::vivaldi::BookmarkMenuContainer(this));
@@ -451,7 +452,12 @@ std::string MenubarMenuShowFunction::PopulateModel(
       return "Unknown menu element";
     }
   }
-  SanitizeModel(menu_model);
+  if (prev_is_bookmarks) {
+    bookmark_menu_container_->siblings[0].tweak_separator = false;
+  } else {
+    SanitizeModel(menu_model);
+  }
+
   return "";
 }
 

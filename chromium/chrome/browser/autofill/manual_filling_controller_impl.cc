@@ -104,6 +104,8 @@ bool IsRelevantActionForVisibility(AccessoryAction action) {
     // These cases are sufficient as a reason for showing the fallback sheet.
     case AccessoryAction::USE_OTHER_PASSWORD:
     case AccessoryAction::GENERATE_PASSWORD_MANUAL:
+    case AccessoryAction::CREDMAN_CONDITIONAL_UI_REENTRY:
+    case AccessoryAction::CROSS_DEVICE_PASSKEY:
       return true;
 
     case AccessoryAction::COUNT:
@@ -177,10 +179,11 @@ void ManualFillingControllerImpl::CreateForWebContentsForTesting(
   FromWebContents(web_contents)->Initialize();
 }
 
-void ManualFillingControllerImpl::OnAutomaticGenerationStatusChanged(
-    bool available) {
+void ManualFillingControllerImpl::OnAccessoryActionAvailabilityChanged(
+    ShouldShowAction shouldShowAction,
+    autofill::AccessoryAction action) {
   DCHECK(view_);
-  view_->OnAutomaticGenerationStatusChanged(available);
+  view_->OnAccessoryActionAvailabilityChanged(shouldShowAction, action);
 }
 
 void ManualFillingControllerImpl::RefreshSuggestions(
@@ -393,6 +396,7 @@ bool ManualFillingControllerImpl::ShouldShowAccessory() const {
     // If there are suggestions, show on usual form fields.
     case FocusedFieldType::kFillablePasswordField:
     case FocusedFieldType::kFillableUsernameField:
+    case FocusedFieldType::kFillableWebauthnTaggedField:
     case FocusedFieldType::kFillableNonSearchField:
       return !available_sources_.empty();
 
@@ -425,8 +429,11 @@ void ManualFillingControllerImpl::UpdateVisibility() {
       }
       if (source == FillingSource::AUTOFILL)
         continue;  // Autofill suggestions have no sheet.
-      absl::optional<AccessorySheetData> sheet =
-          GetControllerForFillingSource(source)->GetSheetData();
+      AccessoryController* controller = GetControllerForFillingSource(source);
+      if (!controller) {
+        continue;  // Most-likely, the controller was cleaned up already.
+      }
+      absl::optional<AccessorySheetData> sheet = controller->GetSheetData();
       if (sheet.has_value())
         view_->OnItemsAvailable(std::move(sheet.value()));
     }
@@ -495,6 +502,8 @@ AccessoryController* ManualFillingControllerImpl::GetControllerForAction(
     case AccessoryAction::USE_OTHER_PASSWORD:
     case AccessoryAction::GENERATE_PASSWORD_AUTOMATIC:
     case AccessoryAction::TOGGLE_SAVE_PASSWORDS:
+    case AccessoryAction::CREDMAN_CONDITIONAL_UI_REENTRY:
+    case AccessoryAction::CROSS_DEVICE_PASSKEY:
       return pwd_controller_.get();
     case AccessoryAction::MANAGE_ADDRESSES:
       return address_controller_.get();

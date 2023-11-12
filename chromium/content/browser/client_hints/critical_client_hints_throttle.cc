@@ -129,8 +129,7 @@ void CriticalClientHintsThrottle::MaybeRestartWithHints(
   blink::EnabledClientHints hints;
   for (const WebClientHintsType hint :
        response_head.parsed_headers->accept_ch.value())
-    hints.SetIsEnabled(response_url_, /*third_party_url=*/absl::nullopt,
-                       response_head.headers.get(), hint, true);
+    hints.SetIsEnabled(hint, true);
 
   std::vector<WebClientHintsType> critical_hints;
   for (const WebClientHintsType hint :
@@ -177,6 +176,7 @@ void CriticalClientHintsThrottle::MaybeRestartWithHints(
   for (auto modified_header : modified_headers.GetHeaderVector()) {
     if (!initial_request_headers_.HasHeader(modified_header.key)) {
       LogCriticalCHStatus(CriticalCHRestart::kNavigationRestarted);
+      delegate_->DidRestartForCriticalClientHint();
       delegate_->RestartWithURLResetAndFlags(/*additional_load_flags=*/0);
       return;
     }

@@ -25,7 +25,10 @@ class TraceItem {
     TRACE_FILE_LOAD,
     TRACE_FILE_PARSE,
     TRACE_FILE_EXECUTE,
+    TRACE_FILE_EXECUTE_TEMPLATE,
     TRACE_FILE_WRITE,
+    TRACE_FILE_WRITE_GENERATED,
+    TRACE_FILE_WRITE_NINJA,
     TRACE_IMPORT_LOAD,
     TRACE_IMPORT_BLOCK,
     TRACE_SCRIPT_EXECUTE,
@@ -33,6 +36,7 @@ class TraceItem {
     TRACE_ON_RESOLVED,
     TRACE_CHECK_HEADER,   // One file.
     TRACE_CHECK_HEADERS,  // All files.
+    TRACE_WALK_METADATA,
   };
 
   TraceItem(Type type, const std::string& name, std::thread::id thread_id);

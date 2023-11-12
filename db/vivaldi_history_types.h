@@ -61,6 +61,41 @@ class Visit {
   ui::PageTransition transition;
   int visit_count;
 };
+
+class DetailedHistory {
+  public:
+   DetailedHistory();
+   DetailedHistory(const DetailedHistory& other);
+   ~DetailedHistory();
+
+   typedef std::vector<DetailedHistory> DetailedHistoryList;
+
+  // The unique identifier for the item.
+  std::string id;
+
+  // The URL navigated to by a user.
+  GURL url;
+
+  // The title of the page when it was last loaded.
+  std::string title;
+
+  // When this page was last loaded, represented in milliseconds since the epoch.
+  base::Time last_visit_time;
+
+  // The number of times the user has navigated to this page.
+  int visit_count;
+
+  // The number of times the user has navigated to this page by typing in the
+  // address.
+  int typed_count;
+
+  // States if the URL is bookmarked.
+  bool is_bookmarked;
+
+  // The transition type for this visit from its referrer.
+  ui::PageTransition transition_type;
+
+};
 }  //  namespace history
 
 #endif  // DB_VIVALDI_HISTORY_TYPES_H_

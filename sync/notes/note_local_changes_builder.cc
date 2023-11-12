@@ -62,7 +62,7 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
            data->client_tag_hash ==
                syncer::ClientTagHash::FromUnhashed(
                    syncer::BOOKMARKS,
-                   entity->note_node()->guid().AsLowercaseString()));
+                   entity->note_node()->uuid().AsLowercaseString()));
 
     if (!metadata.is_deleted()) {
       const vivaldi::NoteNode* node = entity->note_node();
@@ -73,7 +73,7 @@ syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
       // verify the type, so we temporarily produce tags using the BOOKMARKS
       // type. Change this to NOTES in a few version. 07-2021
       DCHECK_EQ(syncer::ClientTagHash::FromUnhashed(
-                    syncer::BOOKMARKS, node->guid().AsLowercaseString()),
+                    syncer::BOOKMARKS, node->uuid().AsLowercaseString()),
                 syncer::ClientTagHash::FromHashed(metadata.client_tag_hash()));
 
       const vivaldi::NoteNode* parent = node->parent();

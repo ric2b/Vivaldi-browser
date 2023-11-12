@@ -27,7 +27,6 @@ import static org.chromium.chrome.browser.customtabs.CustomTabsConnection.ON_ACT
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Process;
 
 import androidx.browser.customtabs.CustomTabsCallback;
 import androidx.browser.customtabs.CustomTabsSessionToken;
@@ -85,7 +84,6 @@ public class CustomTabsConnectionUnitTest {
             new ArrayList<String>(List.of(ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS,
                     ChromeFeatureList.CCT_BRAND_TRANSPARENCY));
     private CustomTabsConnection mConnection;
-    private int mUid = Process.myUid();
 
     @Implements(UmaSessionStats.class)
     public static class ShadowUmaSessionStats {
@@ -304,22 +302,6 @@ public class CustomTabsConnectionUnitTest {
         assertTrue(mConnection.isEngagementSignalsApiAvailable(mSession, Bundle.EMPTY));
         when(mPrivacyPreferencesManager.isUsageAndCrashReportingPermitted()).thenReturn(false);
         assertFalse(mConnection.isEngagementSignalsApiAvailable(mSession, Bundle.EMPTY));
-    }
-
-    @Test
-    public void getGreatestScrollPercentage() {
-        initSession();
-        when(mPrivacyPreferencesManager.isUsageAndCrashReportingPermitted()).thenReturn(true);
-        mConnection.setGreatestScrollPercentageSupplier(mSession, () -> 75);
-        assertEquals(75, mConnection.getGreatestScrollPercentage(mSession, Bundle.EMPTY));
-    }
-
-    @Test(expected = UnsupportedOperationException.class)
-    public void getGreatestScrollPercentage_ThrowsIfNotPermitted() {
-        initSession();
-        when(mPrivacyPreferencesManager.isUsageAndCrashReportingPermitted()).thenReturn(false);
-        mConnection.setGreatestScrollPercentageSupplier(mSession, () -> 75);
-        mConnection.getGreatestScrollPercentage(mSession, Bundle.EMPTY);
     }
 
     @Test

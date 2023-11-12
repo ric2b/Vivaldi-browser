@@ -5,7 +5,9 @@
 package org.chromium.chrome.browser.privacy_guide;
 
 import static androidx.test.espresso.Espresso.onView;
+import static androidx.test.espresso.Espresso.pressBack;
 import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.intent.Intents.intended;
 import static androidx.test.espresso.intent.Intents.intending;
@@ -51,12 +53,13 @@ import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.privacy.settings.PrivacySettings;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingBridge;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingState;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridge;
-import org.chromium.chrome.browser.sync.SyncService;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
@@ -89,8 +92,12 @@ public class PrivacyGuideFragmentTest {
     public ChromeBrowserTestRule mChromeBrowserTestRule = new ChromeBrowserTestRule();
 
     @Rule
-    public SettingsActivityTestRule<PrivacyGuideFragment> mSettingsActivityTestRule =
+    public SettingsActivityTestRule<PrivacyGuideFragment> mPrivacyGuideTestRule =
             new SettingsActivityTestRule<>(PrivacyGuideFragment.class);
+
+    @Rule
+    public SettingsActivityTestRule<PrivacySettings> mPrivacySettingsTestRule =
+            new SettingsActivityTestRule<>(PrivacySettings.class);
 
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
@@ -116,7 +123,13 @@ public class PrivacyGuideFragmentTest {
     }
 
     private void launchPrivacyGuide() {
-        mSettingsActivityTestRule.startSettingsActivity();
+        mPrivacyGuideTestRule.startSettingsActivity();
+        onViewWaiting(withText(R.string.privacy_guide_fragment_title));
+    }
+
+    private void launchPrivacySettingsAndOpenPrivacyGuide() {
+        mPrivacySettingsTestRule.startSettingsActivity();
+        onViewWaiting(withText(R.string.privacy_guide_pref_summary)).perform(click());
         onViewWaiting(withText(R.string.privacy_guide_fragment_title));
     }
 
@@ -195,7 +208,8 @@ public class PrivacyGuideFragmentTest {
             selectedTypes.remove(UserSelectableType.HISTORY);
         }
 
-        runOnUiThreadBlocking(() -> SyncService.get().setSelectedTypes(false, selectedTypes));
+        runOnUiThreadBlocking(
+                () -> SyncServiceFactory.get().setSelectedTypes(false, selectedTypes));
     }
 
     private void setSafeBrowsingState(@SafeBrowsingState int safeBrowsingState) {
@@ -240,15 +254,13 @@ public class PrivacyGuideFragmentTest {
     }
 
     private View getRootView() {
-        return mSettingsActivityTestRule.getActivity()
-                .findViewById(android.R.id.content)
-                .getRootView();
+        return mPrivacyGuideTestRule.getActivity().findViewById(android.R.id.content).getRootView();
     }
 
     private void clickOnArrowNextToRadioButtonWithText(int textId) {
         onView(allOf(withId(R.id.expand_arrow),
                        withParent(hasSibling(withChild(withText(textId))))))
-                .perform(click());
+                .perform(scrollTo(), click());
     }
 
     @Test
@@ -329,9 +341,10 @@ public class PrivacyGuideFragmentTest {
     @Feature({"PrivacyGuide"})
     public void testForwardNavigation() {
         launchPrivacyGuide();
+        testButtons(false, false, false);
 
         navigateFromWelcomeToMSBBCard();
-        testButtons(true, false, false);
+        testButtons(true, true, false);
 
         navigateFromMSBBToHistorySyncCard();
         testButtons(true, true, false);
@@ -341,6 +354,33 @@ public class PrivacyGuideFragmentTest {
 
         navigateFromSBToCookiesCard();
         testButtons(false, true, true);
+
+        navigateFromCookiesToCompletionCard();
+        testButtons(false, false, false);
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"PrivacyGuide"})
+    @Features.EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE_POST_MVP)
+    public void testBackButtonNavigation() {
+        launchPrivacyGuide();
+        goToCompletionCard();
+
+        pressBack();
+        onViewWaiting(withText(R.string.privacy_guide_cookies_intro));
+
+        pressBack();
+        onViewWaiting(withText(R.string.privacy_guide_safe_browsing_intro));
+
+        pressBack();
+        onViewWaiting(withText(R.string.privacy_guide_history_sync_toggle));
+
+        pressBack();
+        onViewWaiting(withText(R.string.url_keyed_anonymized_data_title));
+
+        pressBack();
+        onViewWaiting(withText(R.string.privacy_guide_fragment_title));
     }
 
     @Test
@@ -409,7 +449,7 @@ public class PrivacyGuideFragmentTest {
         launchPrivacyGuide();
         goToCompletionCard();
 
-        onViewWaiting(withId(R.id.ps_button)).perform(click());
+        onViewWaiting(withId(R.id.ps_button)).perform(scrollTo(), click());
         onViewWaiting(withText(R.string.privacy_sandbox_trials_title))
                 .check(matches(isDisplayed()));
     }
@@ -423,7 +463,7 @@ public class PrivacyGuideFragmentTest {
         launchPrivacyGuide();
         goToCompletionCard();
 
-        onViewWaiting(withId(R.id.ps_button)).perform(click());
+        onViewWaiting(withId(R.id.ps_button)).perform(scrollTo(), click());
         onViewWaiting(withText(R.string.ad_privacy_page_title)).check(matches(isDisplayed()));
     }
 
@@ -434,7 +474,7 @@ public class PrivacyGuideFragmentTest {
         launchPrivacyGuide();
         goToCompletionCard();
 
-        onViewWaiting(withId(R.id.ps_button)).perform(click());
+        onViewWaiting(withId(R.id.ps_button)).perform(scrollTo(), click());
         assertTrue(mActionTester.getActions().contains("Settings.PrivacyGuide.CompletionPSClick"));
     }
 
@@ -448,7 +488,7 @@ public class PrivacyGuideFragmentTest {
         var histogram = HistogramWatcher.newSingleRecordWatcher(
                 ENTRY_EXIT_HISTOGRAM, PrivacyGuideInteractions.PRIVACY_SANDBOX_COMPLETION_LINK);
 
-        onViewWaiting(withId(R.id.ps_button)).perform(click());
+        onViewWaiting(withId(R.id.ps_button)).perform(scrollTo(), click());
 
         histogram.assertExpected();
     }
@@ -461,7 +501,7 @@ public class PrivacyGuideFragmentTest {
         goToCompletionCard();
 
         executeWhileCapturingIntents(() -> {
-            onViewWaiting(withId(R.id.waa_button)).perform(click());
+            onViewWaiting(withId(R.id.waa_button)).perform(scrollTo(), click());
             intended(IntentMatchers.hasData(
                     UrlConstants.GOOGLE_ACCOUNT_ACTIVITY_CONTROLS_FROM_PG_URL));
         });
@@ -474,7 +514,8 @@ public class PrivacyGuideFragmentTest {
         launchPrivacyGuide();
         goToCompletionCard();
 
-        executeWhileCapturingIntents(() -> onViewWaiting(withId(R.id.waa_button)).perform(click()));
+        executeWhileCapturingIntents(
+                () -> onViewWaiting(withId(R.id.waa_button)).perform(scrollTo(), click()));
 
         assertTrue(
                 mActionTester.getActions().contains("Settings.PrivacyGuide.CompletionSWAAClick"));
@@ -490,7 +531,8 @@ public class PrivacyGuideFragmentTest {
         var histogram = HistogramWatcher.newSingleRecordWatcher(
                 ENTRY_EXIT_HISTOGRAM, PrivacyGuideInteractions.SWAA_COMPLETION_LINK);
 
-        executeWhileCapturingIntents(() -> onViewWaiting(withId(R.id.waa_button)).perform(click()));
+        executeWhileCapturingIntents(
+                () -> onViewWaiting(withId(R.id.waa_button)).perform(scrollTo(), click()));
 
         histogram.assertExpected();
     }
@@ -591,14 +633,32 @@ public class PrivacyGuideFragmentTest {
     @Feature({"PrivacyGuide"})
     public void testMSBBCard_nextButtonInitialMSBBStateIsSet() {
         launchPrivacyGuide();
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
                 mPrivacyGuideMetricsDelegateMock);
         navigateFromWelcomeToMSBBCard();
 
         verify(mPrivacyGuideMetricsDelegateMock)
                 .setInitialStateForCard(PrivacyGuideFragment.FragmentType.MSBB);
 
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"PrivacyGuide"})
+    public void testMSBBCard_nextButtonAfterActivityRecreation() {
+        setMSBBState(false);
+        launchPrivacyGuide();
+        navigateFromWelcomeToMSBBCard();
+
+        var histogram = HistogramWatcher.newSingleRecordWatcher(
+                SETTINGS_STATES_HISTOGRAM, PrivacyGuideSettingsStates.MSBB_OFF_TO_ON);
+
+        onView(withId(R.id.msbb_switch)).perform(click());
+        mPrivacyGuideTestRule.recreateActivity();
+        navigateFromMSBBToHistorySyncCard();
+
+        histogram.assertExpected();
     }
 
     @Test
@@ -606,7 +666,7 @@ public class PrivacyGuideFragmentTest {
     @Feature({"PrivacyGuide"})
     public void testMSBBCard_backButtonInitialMSBBStateIsSet() {
         launchPrivacyGuide();
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
                 mPrivacyGuideMetricsDelegateMock);
 
         goToHistorySyncCard();
@@ -615,7 +675,7 @@ public class PrivacyGuideFragmentTest {
         verify(mPrivacyGuideMetricsDelegateMock, times(2))
                 .setInitialStateForCard(PrivacyGuideFragment.FragmentType.MSBB);
 
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
     }
 
     @Test
@@ -714,16 +774,34 @@ public class PrivacyGuideFragmentTest {
     @Test
     @LargeTest
     @Feature({"PrivacyGuide"})
+    public void testHistorySyncCard_nextButtonAfterActivityRecreation() {
+        setHistorySyncState(false);
+        launchPrivacyGuide();
+        goToHistorySyncCard();
+
+        var histogram = HistogramWatcher.newSingleRecordWatcher(
+                SETTINGS_STATES_HISTOGRAM, PrivacyGuideSettingsStates.HISTORY_SYNC_OFF_TO_ON);
+
+        onView(withId(R.id.history_sync_switch)).perform(click());
+        mPrivacyGuideTestRule.recreateActivity();
+        navigateFromHistorySyncToSBCard();
+
+        histogram.assertExpected();
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"PrivacyGuide"})
     public void testHistorySyncCard_nextButtonInitialSyncStateIsSet() {
         launchPrivacyGuide();
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
                 mPrivacyGuideMetricsDelegateMock);
         goToHistorySyncCard();
 
         verify(mPrivacyGuideMetricsDelegateMock)
                 .setInitialStateForCard(PrivacyGuideFragment.FragmentType.HISTORY_SYNC);
 
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
     }
 
     @Test
@@ -731,7 +809,7 @@ public class PrivacyGuideFragmentTest {
     @Feature({"PrivacyGuide"})
     public void testHistorySyncCard_backButtonInitialSyncStateIsSet() {
         launchPrivacyGuide();
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
                 mPrivacyGuideMetricsDelegateMock);
 
         goToSafeBrowsingCard();
@@ -740,7 +818,7 @@ public class PrivacyGuideFragmentTest {
         verify(mPrivacyGuideMetricsDelegateMock, times(2))
                 .setInitialStateForCard(PrivacyGuideFragment.FragmentType.HISTORY_SYNC);
 
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
     }
 
     @Test
@@ -829,7 +907,25 @@ public class PrivacyGuideFragmentTest {
         var histogram = HistogramWatcher.newSingleRecordWatcher(SETTINGS_STATES_HISTOGRAM,
                 PrivacyGuideSettingsStates.SAFE_BROWSING_ENHANCED_TO_STANDARD);
 
-        onView(withId(R.id.standard_option)).perform(click());
+        onView(withId(R.id.standard_option)).perform(scrollTo(), click());
+        navigateFromSBToCookiesCard();
+
+        histogram.assertExpected();
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"PrivacyGuide"})
+    public void testSafeBrowsingCard_nextButtonAfterActivityRecreation() {
+        setSafeBrowsingState(SafeBrowsingState.STANDARD_PROTECTION);
+        launchPrivacyGuide();
+        goToSafeBrowsingCard();
+
+        var histogram = HistogramWatcher.newSingleRecordWatcher(SETTINGS_STATES_HISTOGRAM,
+                PrivacyGuideSettingsStates.SAFE_BROWSING_STANDARD_TO_ENHANCED);
+
+        onView(withId(R.id.enhanced_option)).perform(click());
+        mPrivacyGuideTestRule.recreateActivity();
         navigateFromSBToCookiesCard();
 
         histogram.assertExpected();
@@ -840,14 +936,14 @@ public class PrivacyGuideFragmentTest {
     @Feature({"PrivacyGuide"})
     public void testSafeBrowsingCard_nextButtonInitialSafeBrowsingStateIsSet() {
         launchPrivacyGuide();
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
                 mPrivacyGuideMetricsDelegateMock);
         goToSafeBrowsingCard();
 
         verify(mPrivacyGuideMetricsDelegateMock)
                 .setInitialStateForCard(PrivacyGuideFragment.FragmentType.SAFE_BROWSING);
 
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
     }
 
     @Test
@@ -855,7 +951,7 @@ public class PrivacyGuideFragmentTest {
     @Feature({"PrivacyGuide"})
     public void testSafeBrowsingCard_backButtonInitialSafeBrowsingStateIsSet() {
         launchPrivacyGuide();
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
                 mPrivacyGuideMetricsDelegateMock);
 
         goToCookiesCard();
@@ -864,7 +960,39 @@ public class PrivacyGuideFragmentTest {
         verify(mPrivacyGuideMetricsDelegateMock, times(2))
                 .setInitialStateForCard(PrivacyGuideFragment.FragmentType.SAFE_BROWSING);
 
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"PrivacyGuide"})
+    @Features.EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE_POST_MVP)
+    public void testSafeBrowsingCard_enhancedBottomSheetBackButtonBehaviour() {
+        launchPrivacyGuide();
+        goToSafeBrowsingCard();
+
+        clickOnArrowNextToRadioButtonWithText(R.string.privacy_guide_safe_browsing_enhanced_title);
+        onViewWaiting(withId(R.id.sb_enhanced_sheet)).check(matches(isDisplayed()));
+
+        pressBack();
+        onViewWaiting(withText(R.string.privacy_guide_safe_browsing_enhanced_title))
+                .check(matches(isDisplayed()));
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"PrivacyGuide"})
+    @Features.EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE_POST_MVP)
+    public void testSafeBrowsingCard_standardBottomSheetBackButtonBehaviour() {
+        launchPrivacyGuide();
+        goToSafeBrowsingCard();
+
+        clickOnArrowNextToRadioButtonWithText(R.string.privacy_guide_safe_browsing_standard_title);
+        onViewWaiting(withId(R.id.sb_standard_sheet)).check(matches(isDisplayed()));
+
+        pressBack();
+        onViewWaiting(withText(R.string.privacy_guide_safe_browsing_standard_title))
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -919,7 +1047,7 @@ public class PrivacyGuideFragmentTest {
         var histogram = HistogramWatcher.newSingleRecordWatcher(
                 SETTINGS_STATES_HISTOGRAM, PrivacyGuideSettingsStates.BLOCK3P_INCOGNITO_TO3P);
 
-        onView(withId(R.id.block_third_party)).perform(click());
+        onView(withId(R.id.block_third_party)).perform(scrollTo(), click());
         navigateFromCookiesToCompletionCard();
 
         histogram.assertExpected();
@@ -961,16 +1089,34 @@ public class PrivacyGuideFragmentTest {
     @Test
     @LargeTest
     @Feature({"PrivacyGuide"})
+    public void testCookiesCard_nextButtonAfterActivityRecreation() {
+        setCookieControlsMode(CookieControlsMode.INCOGNITO_ONLY);
+        launchPrivacyGuide();
+        goToCookiesCard();
+
+        var histogram = HistogramWatcher.newSingleRecordWatcher(
+                SETTINGS_STATES_HISTOGRAM, PrivacyGuideSettingsStates.BLOCK3P_INCOGNITO_TO3P);
+
+        onView(withId(R.id.block_third_party)).perform(scrollTo(), click());
+        mPrivacyGuideTestRule.recreateActivity();
+        navigateFromCookiesToCompletionCard();
+
+        histogram.assertExpected();
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"PrivacyGuide"})
     public void testCookiesCard_nextButtonInitialCookiesStateIsSet() {
         launchPrivacyGuide();
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(
                 mPrivacyGuideMetricsDelegateMock);
         goToCookiesCard();
 
         verify(mPrivacyGuideMetricsDelegateMock)
                 .setInitialStateForCard(PrivacyGuideFragment.FragmentType.COOKIES);
 
-        mSettingsActivityTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
+        mPrivacyGuideTestRule.getFragment().setPrivacyGuideMetricsDelegateForTesting(null);
     }
 
     @Test
@@ -1015,5 +1161,93 @@ public class PrivacyGuideFragmentTest {
         // Verify that the user action is emitted when the back button is clicked on the Cookies
         // card
         assertTrue(mActionTester.getActions().contains("Settings.PrivacyGuide.BackClickCookies"));
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"PrivacyGuide"})
+    public void testBottomSheetControllerOnRecreate() {
+        launchPrivacyGuide();
+        goToSafeBrowsingCard();
+        mPrivacyGuideTestRule.recreateActivity();
+        clickOnArrowNextToRadioButtonWithText(R.string.privacy_guide_safe_browsing_enhanced_title);
+        onViewWaiting(withId(R.id.sb_enhanced_sheet)).check(matches(isDisplayed()));
+    }
+
+    @Test
+    @LargeTest
+    @Features.EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
+    @Features.DisableFeatures(ChromeFeatureList.PRIVACY_GUIDE_POST_MVP)
+    public void testExitOnBackInWelcomeCard() {
+        launchPrivacySettingsAndOpenPrivacyGuide();
+
+        // Exit the guide when pressing back.
+        pressBack();
+        onView(withText(R.string.privacy_guide_pref_summary)).check(matches(isDisplayed()));
+    }
+
+    @Test
+    @LargeTest
+    @Features.EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
+    @Features.DisableFeatures(ChromeFeatureList.PRIVACY_GUIDE_POST_MVP)
+    public void testExitOnBackInMSBBCard() {
+        launchPrivacySettingsAndOpenPrivacyGuide();
+        navigateFromWelcomeToMSBBCard();
+
+        // Exit the guide when pressing back.
+        pressBack();
+        onView(withText(R.string.privacy_guide_pref_summary)).check(matches(isDisplayed()));
+    }
+
+    @Test
+    @LargeTest
+    @Features.EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
+    @Features.DisableFeatures(ChromeFeatureList.PRIVACY_GUIDE_POST_MVP)
+    public void testExitOnBackInHistorySyncCard() {
+        launchPrivacySettingsAndOpenPrivacyGuide();
+        goToHistorySyncCard();
+
+        // Exit the guide when pressing back.
+        pressBack();
+        onView(withText(R.string.privacy_guide_pref_summary)).check(matches(isDisplayed()));
+    }
+
+    @Test
+    @LargeTest
+    @Features.EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
+    @Features.DisableFeatures(ChromeFeatureList.PRIVACY_GUIDE_POST_MVP)
+    public void testExitOnBackInSBCard() {
+        launchPrivacySettingsAndOpenPrivacyGuide();
+        goToSafeBrowsingCard();
+
+        // Exit the guide when pressing back.
+        pressBack();
+        onView(withText(R.string.privacy_guide_pref_summary)).check(matches(isDisplayed()));
+    }
+
+    @Test
+    @LargeTest
+    @Features.EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
+    @Features.DisableFeatures(ChromeFeatureList.PRIVACY_GUIDE_POST_MVP)
+    public void testExitOnBackInCookiesCard() {
+        launchPrivacySettingsAndOpenPrivacyGuide();
+        goToCookiesCard();
+
+        // Exit the guide when pressing back.
+        pressBack();
+        onView(withText(R.string.privacy_guide_pref_summary)).check(matches(isDisplayed()));
+    }
+
+    @Test
+    @LargeTest
+    @Features.EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
+    @Features.DisableFeatures(ChromeFeatureList.PRIVACY_GUIDE_POST_MVP)
+    public void testExitOnBackInCompletionCard() {
+        launchPrivacySettingsAndOpenPrivacyGuide();
+        goToCompletionCard();
+
+        // Exit the guide when pressing back.
+        pressBack();
+        onView(withText(R.string.privacy_guide_pref_summary)).check(matches(isDisplayed()));
     }
 }

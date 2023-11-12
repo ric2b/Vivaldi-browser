@@ -37,6 +37,9 @@ std::string GetCardIssuerIdSuffix(const std::string& card_issuer_id) {
     if (card_issuer_id == kChaseCardIssuerId) {
       return kChase;
     }
+    if (card_issuer_id == kDiscoverCardIssuerId) {
+      return kDiscover;
+    }
     if (card_issuer_id == kMarqetaCardIssuerId) {
       return kMarqeta;
     }
@@ -57,11 +60,8 @@ std::string GetCardIssuerIdSuffix(const std::string& card_issuer_id) {
 // image.
 bool HasRichCardArtImageFromMetadata(const CreditCard& card) {
   return card.card_art_url().is_valid() &&
-         card.card_art_url().spec() !=
-             (base::FeatureList::IsEnabled(
-                  features::kAutofillEnableNewCardArtAndNetworkImages)
-                  ? kCapitalOneLargeCardArtUrl
-                  : kCapitalOneCardArtUrl);
+         card.card_art_url().spec() != kCapitalOneLargeCardArtUrl &&
+         card.card_art_url().spec() != kCapitalOneCardArtUrl;
 }
 
 }  // namespace
@@ -143,6 +143,30 @@ void LogCardWithMetadataFormEventMetric(
                                         ".SelectedWithMetadataOnce",
                                     has_metadata);
         }
+        break;
+      case CardMetadataLoggingEvent::kFilled:
+        base::UmaHistogramBoolean("Autofill.CreditCard." +
+                                      GetCardIssuerIdSuffix(issuer) +
+                                      ".FilledWithMetadata",
+                                  has_metadata);
+        if (!has_been_logged.value()) {
+          base::UmaHistogramBoolean("Autofill.CreditCard." +
+                                        GetCardIssuerIdSuffix(issuer) +
+                                        ".FilledWithMetadataOnce",
+                                    has_metadata);
+        }
+        break;
+      case CardMetadataLoggingEvent::kWillSubmit:
+        base::UmaHistogramBoolean("Autofill.CreditCard." +
+                                      GetCardIssuerIdSuffix(issuer) +
+                                      ".WillSubmitWithMetadataOnce",
+                                  has_metadata);
+        break;
+      case CardMetadataLoggingEvent::kSubmitted:
+        base::UmaHistogramBoolean("Autofill.CreditCard." +
+                                      GetCardIssuerIdSuffix(issuer) +
+                                      ".SubmittedWithMetadataOnce",
+                                  has_metadata);
         break;
     }
   }

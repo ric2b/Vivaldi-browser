@@ -98,6 +98,11 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(kSelectiveUIAEnablement);
 // the accessibility system.
 AX_BASE_EXPORT bool IsSelectiveUIAEnablementEnabled();
 
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kUiaProvider);
+
+// Returns true if the browser's UIA provider should be used when requested by
+// an a11y client.
+AX_BASE_EXPORT bool IsUiaProviderEnabled();
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -202,12 +207,12 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAblateSendPendingAccessibilityEvents);
 AX_BASE_EXPORT bool IsAblateSendPendingAccessibilityEventsEnabled();
 
 #if BUILDFLAG(IS_ANDROID)
-// Enable AXModes based on running services. If disabled, then AXModes
+// Enable filtered AXModes based on running services. If disabled, then AXModes
 // will not be available to be set.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityAXModes);
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityPerformanceFiltering);
 
-// Returns true if AXMode is enabled.
-AX_BASE_EXPORT bool IsAccessibilityAXModesEnabled();
+// Returns true if AXMode filtering for performance is enabled.
+AX_BASE_EXPORT bool IsAccessibilityPerformanceFilteringEnabled();
 
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -223,10 +228,6 @@ AX_BASE_EXPORT BASE_DECLARE_FEATURE(kReadAnythingWithScreen2x);
 // Returns true if read anything is enabled with screen2x integration, which
 // distills web pages using an ML model.
 AX_BASE_EXPORT bool IsReadAnythingWithScreen2xEnabled();
-
-// Returns true if Screen AI Service is needed as either
-// ScreenAIVisualAnnotations or ReadAnythingWithScreen2x are enabled.
-AX_BASE_EXPORT bool IsScreenAIServiceNeeded();
 
 // If enabled, ScreenAI library writes some debug data in /tmp.
 AX_BASE_EXPORT bool IsScreenAIDebugModeEnabled();

@@ -18,6 +18,11 @@
     position: relative;
   }
 
+  :host-context([chrome-refresh-2023]) #customColor {
+    background: var(
+        --color-side-panel-customize-chrome-custom-option-background);
+  }
+
   /* colorPicker is placed on top of the theme icon to work around
      https://crbug.com/1162053. */
   #colorPicker {
@@ -46,12 +51,18 @@
     width: 20px;
   }
 
+  :host-context([chrome-refresh-2023]) #colorPickerIcon {
+    background-color: var(
+        --color-side-panel-customize-chrome-custom-option-foreground);
+  }
+
   managed-dialog {
     --cr-dialog-width: min(calc(100% - 32px), 512px);
   }
 
   :host-context([chrome-refresh-2023]) customize-chrome-color {
-    background-color: lightgrey;
+    background-color: var(
+        --color-side-panel-customize-chrome-color-picker-option-background);
     border-radius: 12px;
   }
 </style>
@@ -62,6 +73,7 @@
     <customize-chrome-color
         id="defaultColor"
         background-color="[[defaultColor_.background]]"
+        base-color="[[defaultColor_.base]]"
         foreground-color="[[defaultColor_.foreground]]"
         background-color-hidden="[[themeHasBackgroundImage_(theme_)]]"
         title="$i18n{defaultColorName}"
@@ -93,6 +105,7 @@
     <customize-chrome-color
         class="chrome-color"
         background-color="[[item.background]]"
+        base-color="[[item.base]]"
         foreground-color="[[item.foreground]]"
         background-color-hidden="[[themeHasBackgroundImage_(theme_)]]"
         title="[[item.name]]"

@@ -544,7 +544,7 @@ suite('PasswordsSection', function() {
     firstNode.$.moreActionsButton.click();
     passwordsSection.$.passwordsListHandler.$.menuRemovePassword.click();
 
-    const {id} = await passwordManager.whenCalled('removeSavedPassword');
+    const {id} = await passwordManager.whenCalled('removeCredential');
     // Verify that the expected value was passed to the proxy.
     assertEquals(firstPassword.id, id);
     assertEquals(
@@ -1105,15 +1105,6 @@ suite('PasswordsSection', function() {
   });
 
   if (!(isChromeOS || isLacros)) {
-    // Test verifies that the overflow menu does not offer an option to move a
-    // password to the account.
-    test('noMoveToAccountOption', async function() {
-      const passwordsSection =
-          await createPasswordsSection(elementFactory, passwordManager, [], []);
-      assertTrue(passwordsSection.$.passwordsListHandler.$
-                     .menuMovePasswordToAccount.hidden);
-    });
-
     // Tests that the opt-in/opt-out buttons appear for signed-in (non-sync)
     // users and that the text content changes accordingly.
     test(
@@ -1305,7 +1296,7 @@ suite('PasswordsSection', function() {
           removeDialog.$.removeFromDeviceCheckbox.checked);
       removeDialog.$.removeButton.click();
       const {id, fromStores} =
-          await passwordManager.whenCalled('removeSavedPassword');
+          await passwordManager.whenCalled('removeCredential');
       assertEquals(password.id, id);
       assertEquals('DEVICE_AND_ACCOUNT', fromStores);
     });
@@ -1344,7 +1335,7 @@ suite('PasswordsSection', function() {
           removeDialog.$.removeFromDeviceCheckbox.checked);
       removeDialog.$.removeButton.click();
       const {id, fromStores} =
-          await passwordManager.whenCalled('removeSavedPassword');
+          await passwordManager.whenCalled('removeCredential');
       assertEquals(onAccountAndDevice.id, id);
       assertEquals(chrome.passwordsPrivate.PasswordStoreSet.DEVICE, fromStores);
     });

@@ -132,7 +132,7 @@ bool EnsureFileIsGeneratedByDependency(const Target* target,
         return true;  // Found a path.
     }
     if (target->output_type() == Target::CREATE_BUNDLE) {
-      for (auto* dep : target->bundle_data().bundle_deps()) {
+      for (const auto* dep : target->bundle_data().bundle_deps()) {
         if (EnsureFileIsGeneratedByDependency(dep, file, false,
                                               consider_object_files,
                                               check_data_deps, seen_targets))
@@ -483,29 +483,7 @@ bool Target::OnResolved(Err* err) {
                              dep.ptr->public_configs().end());
   }
 
-  // Copy our own libs and lib_dirs to the final set. This will be from our
-  // target and all of our configs. We do this specially since these must be
-  // inherited through the dependency tree (other flags don't work this way).
-  //
-  // This needs to happen after we pull dependent target configs for the
-  // public config's libs to be included here. And it needs to happen
-  // before pulling the dependent target libs so the libs are in the correct
-  // order (local ones first, then the dependency's).
-  for (ConfigValuesIterator iter(this); !iter.done(); iter.Next()) {
-    const ConfigValues& cur = iter.cur();
-    all_lib_dirs_.Append(cur.lib_dirs().begin(), cur.lib_dirs().end());
-    all_libs_.Append(cur.libs().begin(), cur.libs().end());
-
-    all_framework_dirs_.Append(cur.framework_dirs().begin(),
-                               cur.framework_dirs().end());
-    all_frameworks_.Append(cur.frameworks().begin(), cur.frameworks().end());
-    all_weak_frameworks_.Append(cur.weak_frameworks().begin(),
-                                cur.weak_frameworks().end());
-  }
-
   PullRecursiveBundleData();
-  PullDependentTargetLibs();
-  PullRecursiveHardDeps();
   if (!ResolvePrecompiledHeaders(err))
     return false;
 
@@ -759,169 +737,28 @@ void Target::PullDependentTargetConfigs() {
   }
 }
 
-void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
-  // Direct dependent libraries.
-  if (dep->output_type() == STATIC_LIBRARY ||
-      dep->output_type() == SHARED_LIBRARY ||
-      dep->output_type() == RUST_LIBRARY ||
-      dep->output_type() == SOURCE_SET ||
-      (dep->output_type() == CREATE_BUNDLE &&
-       dep->bundle_data().is_framework())) {
-    inherited_libraries_.Append(dep, is_public);
-  }
-
-  // Collect Rust libraries that are accessible from the current target, or
-  // transitively part of the current target.
-  if (dep->output_type() == STATIC_LIBRARY ||
-      dep->output_type() == SHARED_LIBRARY ||
-      dep->output_type() == SOURCE_SET || dep->output_type() == RUST_LIBRARY ||
-      dep->output_type() == GROUP) {
-    // Here we have: `this` --[depends-on]--> `dep`
-    //
-    // The `this` target has direct access to `dep` since its a direct
-    // dependency, regardless of the edge being a public_dep or not, so we pass
-    // true for public-ness. Whereas, anything depending on `this` can only gain
-    // direct access to `dep` if the edge between `this` and `dep` is public, so
-    // we pass `is_public`.
-    //
-    // TODO(danakj): We should only need to track Rust rlibs or dylibs here, as
-    // it's used for passing to rustc with --extern. We currently track
-    // everything then drop non-Rust libs in ninja_rust_binary_target_writer.cc.
-    rust_transitive_inherited_libs_.Append(dep, true);
-    rust_transitive_inheritable_libs_.Append(dep, is_public);
-
-    rust_transitive_inherited_libs_.AppendInherited(
-        dep->rust_transitive_inheritable_libs(), true);
-    rust_transitive_inheritable_libs_.AppendInherited(
-        dep->rust_transitive_inheritable_libs(), is_public);
-  } else if (dep->output_type() == RUST_PROC_MACRO) {
-    // Proc-macros are inherited as a transitive dependency, but the things they
-    // depend on can't be used elsewhere, as the proc macro is not linked into
-    // the target (as it's only used during compilation).
-    rust_transitive_inherited_libs_.Append(dep, true);
-    rust_transitive_inheritable_libs_.Append(dep, is_public);
-  }
-
-  if (dep->output_type() == SHARED_LIBRARY) {
-    // Shared library dependendencies are inherited across public shared
-    // library boundaries.
-    //
-    // In this case:
-    //   EXE -> INTERMEDIATE_SHLIB --[public]--> FINAL_SHLIB
-    // The EXE will also link to to FINAL_SHLIB. The public dependency means
-    // that the EXE can use the headers in FINAL_SHLIB so the FINAL_SHLIB
-    // will need to appear on EXE's link line.
-    //
-    // However, if the dependency is private:
-    //   EXE -> INTERMEDIATE_SHLIB --[private]--> FINAL_SHLIB
-    // the dependency will not be propagated because INTERMEDIATE_SHLIB is
-    // not granting permission to call functions from FINAL_SHLIB. If EXE
-    // wants to use functions (and link to) FINAL_SHLIB, it will need to do
-    // so explicitly.
-    //
-    // Static libraries and source sets aren't inherited across shared
-    // library boundaries because they will be linked into the shared
-    // library. Rust dylib deps are handled above and transitive deps are
-    // resolved by the compiler.
-    inherited_libraries_.AppendPublicSharedLibraries(dep->inherited_libraries(),
-                                                     is_public);
-  } else {
-    InheritedLibraries transitive;
-
-    if (!dep->IsFinal()) {
-      // The current target isn't linked, so propagate linked deps and
-      // libraries up the dependency tree.
-      for (const auto& [inherited, inherited_is_public] :
-           dep->inherited_libraries().GetOrderedAndPublicFlag()) {
-        transitive.Append(inherited, is_public && inherited_is_public);
-      }
-    } else if (dep->complete_static_lib()) {
-      // Inherit only final targets through _complete_ static libraries.
-      //
-      // Inherited final libraries aren't linked into complete static libraries.
-      // They are forwarded here so that targets that depend on complete
-      // static libraries can link them in. Conversely, since complete static
-      // libraries link in non-final targets they shouldn't be inherited.
-      for (const auto& [inherited, inherited_is_public] :
-           dep->inherited_libraries().GetOrderedAndPublicFlag()) {
-        if (inherited->IsFinal()) {
-          transitive.Append(inherited, is_public && inherited_is_public);
-        }
-      }
-    }
-
-    for (const auto& [target, pub] : transitive.GetOrderedAndPublicFlag()) {
-      // Proc macros are not linked into targets that depend on them, so do not
-      // get inherited; they are consumed by the Rust compiler and only need to
-      // be specified in --extern.
-      if (target->output_type() != RUST_PROC_MACRO) {
-        inherited_libraries_.Append(target, pub);
-      }
-    }
-  }
-
-  // Library settings are always inherited across static library boundaries.
-  if (!dep->IsFinal() || dep->output_type() == STATIC_LIBRARY) {
-    all_lib_dirs_.Append(dep->all_lib_dirs());
-    all_libs_.Append(dep->all_libs());
-
-    all_framework_dirs_.Append(dep->all_framework_dirs());
-    all_frameworks_.Append(dep->all_frameworks());
-    all_weak_frameworks_.Append(dep->all_weak_frameworks());
-  }
-}
-
-void Target::PullDependentTargetLibs() {
-  for (const auto& dep : public_deps_)
-    PullDependentTargetLibsFrom(dep.ptr, true);
-  for (const auto& dep : private_deps_)
-    PullDependentTargetLibsFrom(dep.ptr, false);
-}
-
-void Target::PullRecursiveHardDeps() {
-  for (const auto& pair : GetDeps(DEPS_LINKED)) {
-    // Direct hard dependencies.
-    if (hard_dep() || pair.ptr->hard_dep()) {
-      recursive_hard_deps_.insert(pair.ptr);
-      continue;
-    }
-
-    // If |pair.ptr| is binary target and |pair.ptr| has no public header,
-    // |this| target does not need to have |pair.ptr|'s hard_deps as its
-    // hard_deps to start compiles earlier. Unless the target compiles a
-    // Swift module (since they also generate a header that can be used
-    // by the current target).
-    if (pair.ptr->IsBinary() && !pair.ptr->all_headers_public() &&
-        pair.ptr->public_headers().empty() &&
-        !pair.ptr->builds_swift_module()) {
-      continue;
-    }
-
-    // Recursive hard dependencies of all dependencies.
-    recursive_hard_deps_.insert(pair.ptr->recursive_hard_deps().begin(),
-                                pair.ptr->recursive_hard_deps().end());
-  }
-}
-
 void Target::PullRecursiveBundleData() {
+  const bool is_create_bundle = output_type_ == CREATE_BUNDLE;
   for (const auto& pair : GetDeps(DEPS_LINKED)) {
-    // Don't propagate bundle_data once they are added to a bundle.
-    if (pair.ptr->output_type() == CREATE_BUNDLE)
-      continue;
-
     // Don't propagate across toolchain.
     if (pair.ptr->toolchain() != toolchain())
       continue;
 
+    // Don't propagete through create_bundle, unless it is transparent.
+    if (pair.ptr->output_type() == CREATE_BUNDLE &&
+        !pair.ptr->bundle_data().transparent()) {
+      continue;
+    }
+
     // Direct dependency on a bundle_data target.
     if (pair.ptr->output_type() == BUNDLE_DATA) {
-      bundle_data().AddBundleData(pair.ptr);
+      bundle_data().AddBundleData(pair.ptr, is_create_bundle);
     }
 
     // Recursive bundle_data informations from all dependencies.
     if (pair.ptr->has_bundle_data()) {
-      for (auto* target : pair.ptr->bundle_data().bundle_deps())
-        bundle_data().AddBundleData(target);
+      for (const auto* target : pair.ptr->bundle_data().forwarded_bundle_deps())
+        bundle_data().AddBundleData(target, is_create_bundle);
     }
   }
 

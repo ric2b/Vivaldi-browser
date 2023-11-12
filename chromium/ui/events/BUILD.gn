@@ -73,6 +73,10 @@ static_library("dom_keyboard_layout") {
     deps += [ "//ui/events/ozone/layout" ]
   }
 
+  if (is_apple) {
+    configs += [ "//build/config/compiler:enable_arc" ]
+  }
+
   if (!is_ios) {
     deps += [ "//ipc:param_traits" ]
   }
@@ -160,6 +164,10 @@ component("events_base") {
     "//ui/events/types:headers",
     "//ui/gfx/geometry",
   ]
+
+  if (is_apple) {
+    configs += [ "//build/config/compiler:enable_arc" ]
+  }
 
   if (is_fuchsia) {
     sources += [
@@ -249,6 +257,10 @@ component("events") {
       "win/events_win_utils.cc",
       "win/system_event_state_lookup.cc",
     ]
+  }
+
+  if (is_apple) {
+    configs += [ "//build/config/compiler:enable_arc" ]
   }
 
   if (is_mac) {
@@ -429,6 +441,10 @@ component("keyboard_hook") {
     ]
   }
 
+  if (is_apple) {
+    configs += [ "//build/config/compiler:enable_arc" ]
+  }
+
   if (is_mac) {
     sources += [ "mac/keyboard_hook_mac.mm" ]
   }
@@ -525,8 +541,6 @@ static_library("test_support") {
     "test/keyboard_layout.h",
     "test/motion_event_test_utils.cc",
     "test/motion_event_test_utils.h",
-    "test/platform_event_source_test_api.cc",
-    "test/platform_event_source_test_api.h",
     "test/scoped_event_waiter.cc",
     "test/scoped_event_waiter.h",
     "test/test_event.cc",
@@ -545,6 +559,10 @@ static_library("test_support") {
     "test/test_event_targeter.cc",
     "test/test_event_targeter.h",
   ]
+
+  if (is_apple) {
+    configs += [ "//build/config/compiler:enable_arc" ]
+  }
 
   if (is_mac) {
     sources += [
@@ -650,6 +668,10 @@ if (use_blink) {
       "scoped_target_handler_unittest.cc",
       "test/scoped_event_waiter_unittest.cc",
     ]
+
+    if (is_apple) {
+      configs += [ "//build/config/compiler:enable_arc" ]
+    }
 
     if (is_mac) {
       sources += [ "cocoa/events_mac_unittest.mm" ]

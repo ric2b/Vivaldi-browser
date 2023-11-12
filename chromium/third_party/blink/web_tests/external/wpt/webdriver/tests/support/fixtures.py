@@ -211,8 +211,8 @@ def url(server_config):
 
 
 @pytest.fixture
-def modifier_key(session):
-    if session.capabilities["platformName"] == "mac":
+def modifier_key(current_session):
+    if current_session.capabilities["platformName"] == "mac":
         return Keys.META
     else:
         return Keys.CONTROL
@@ -256,13 +256,32 @@ def iframe(inline):
 
 
 @pytest.fixture
+def get_actions_origin_page(inline):
+    """Create a test pagefor action origin tests, recording mouse coordinates
+    automatically on window.coords."""
+
+    def get_actions_origin_page(inner_style, outer_style=""):
+        return inline(
+            f"""
+          <div id="outer" style="{outer_style}"
+               onmousemove="window.coords = {{x: event.clientX, y: event.clientY}}">
+            <div id="inner" style="{inner_style}"></div>
+          </div>
+        """
+        )
+
+    return get_actions_origin_page
+
+
+@pytest.fixture
 def get_test_page(iframe, inline):
     def get_test_page(
         as_frame=False,
         frame_doc=None,
         shadow_doc=None,
         nested_shadow_dom=False,
-        shadow_root_mode="open"
+        shadow_root_mode="open",
+        **kwargs
     ):
         if frame_doc is None:
             frame_doc = """<div id="in-frame"><input type="checkbox"/></div>"""
@@ -337,9 +356,10 @@ def get_test_page(iframe, inline):
             </script>"""
 
         if as_frame:
-            return inline(iframe(page_data))
+            iframe_data = iframe(page_data, **kwargs)
+            return inline(iframe_data, **kwargs)
         else:
-            return inline(page_data)
+            return inline(page_data, **kwargs)
 
     return get_test_page
 

@@ -32,6 +32,7 @@ per-file chrome.json=skylab-test-cros-roller@chops-service-accounts.iam.gservice
 per-file chromium.chromiumos.json=skylab-test-cros-roller@chops-service-accounts.iam.gserviceaccount.com
 per-file chromium.fyi.json=skylab-test-cros-roller@chops-service-accounts.iam.gserviceaccount.com
 per-file internal.chromeos.fyi.json=skylab-test-cros-roller@chops-service-accounts.iam.gserviceaccount.com
+per-file tryserver.chromium.chromiumos.json=skylab-test-cros-roller@chops-service-accounts.iam.gserviceaccount.com
 
 # Perf owners
 per-file *chromium.perf*.json=johnchen@chromium.org
@@ -64,7 +65,6 @@ per-file tryserver.webrtc.json=file://infra/config/subprojects/webrtc/OWNERS
 # Open Screen owners.  Keep in sync with openscreen.py recipe owners.
 per-file *openscreen*.json=jophba@chromium.org
 per-file *openscreen*.json=mfoltz@chromium.org
-per-file *openscreen*.json=rwkeane@google.com
 
 # Code Coverage
 per-file chromium.coverage.json=jeffyoon@google.com

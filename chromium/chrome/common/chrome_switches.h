@@ -80,6 +80,7 @@ extern const char kDisableDefaultApps[];
 extern const char kDisableDomainReliability[];
 extern const char kDisableExtensions[];
 extern const char kDisableExtensionsExcept[];
+extern const char kDisableLazyLoading[];
 extern const char kDisablePrintPreview[];
 extern const char kDisablePromptOnRepost[];
 extern const char kDisableStackProfiler[];
@@ -106,10 +107,10 @@ extern const char kExtensionContentVerificationEnforce[];
 extern const char kExtensionContentVerificationEnforceStrict[];
 extern const char kExtensionsInstallVerification[];
 extern const char kExtensionsNotWebstore[];
-extern const char kIPAnonymizationProxyServer[];
-extern const char kIPAnonymizationProxyAllowList[];
-extern const char kIPAnonymizationProxyPassword[];
 extern const char kForceAppMode[];
+#if BUILDFLAG(IS_CHROMEOS)
+extern const char kForceDevToolsAvailable[];
+#endif
 extern const char kForceFirstRun[];
 extern const char kForceWhatsNew[];
 extern const char kHideCrashRestoreBubble[];
@@ -166,6 +167,7 @@ extern const char kSimulateElevatedRecovery[];
 extern const char kSimulateOutdated[];
 extern const char kSimulateOutdatedNoAU[];
 extern const char kSimulateUpgrade[];
+extern const char kSimulateIdleTimeout[];
 extern const char kSSLVersionMax[];
 extern const char kSSLVersionMin[];
 extern const char kSSLVersionTLSv12[];
@@ -192,6 +194,7 @@ extern const char kWebRtcRemoteEventLogProactivePruningDelta[];
 extern const char kWebRtcRemoteEventLogUploadDelayMs[];
 extern const char kWebRtcRemoteEventLogUploadNoSuppression[];
 extern const char kWebRtcIPHandlingPolicy[];
+extern const char kWindowName[];
 extern const char kWindowPosition[];
 extern const char kWindowSize[];
 extern const char kWindowWorkspace[];
@@ -208,7 +211,6 @@ extern const char kForceShowUpdateMenuItemCustomSummary[];
 extern const char kForceEnableSigninFRE[];
 extern const char kForceDisableSigninFRE[];
 extern const char kForceUpdateMenuType[];
-extern const char kForceHideNonDisplayableAccountEmailFRE[];
 extern const char kMarketUrlForTesting[];
 extern const char kRequestDesktopSites[];
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -242,7 +244,6 @@ extern const char kMakeChromeDefault[];
 #endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_WIN)
-extern const char kDisableWindows10CustomTitlebar[];
 extern const char kEnableProfileShortcutManager[];
 extern const char kFromInstaller[];
 extern const char kHideIcons[];

@@ -22,7 +22,6 @@
 #include "components/autofill/core/common/password_form_generation_data.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/autofill/core/common/signatures.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "content/public/renderer/render_frame.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -30,6 +29,7 @@
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_form_control_element.h"
 #include "third_party/blink/public/web/web_form_element.h"
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
@@ -334,7 +334,10 @@ void PasswordGenerationAgent::GeneratedPasswordAccepted(
   // static cast is workaround for linker error.
   DCHECK_LE(static_cast<size_t>(kMinimumLengthForEditedPassword),
             password.size());
-  DCHECK(current_generation_item_);
+  // Check that the navigation in between didn't reset the state.
+  if (!current_generation_item_) {
+    return;
+  }
   current_generation_item_->password_is_generated_ = true;
   current_generation_item_->password_edited_ = false;
   password_generation::LogPasswordGenerationEvent(
@@ -358,7 +361,7 @@ void PasswordGenerationAgent::GeneratedPasswordAccepted(
   std::u16string generated_password =
       current_generation_item_->generation_element_.Value().Utf16();
   if (presaved_form_data) {
-    DCHECK_NE(std::u16string(), generated_password);
+    CHECK(!generated_password.empty());
     GetPasswordGenerationDriver().PresaveGeneratedPassword(*presaved_form_data,
                                                            generated_password);
   }
@@ -422,7 +425,6 @@ void PasswordGenerationAgent::TriggeredGeneratePassword(
             current_generation_item_->generation_element_),
         current_generation_item_->generation_element_.MaxLength(),
         current_generation_item_->generation_element_.NameForAutofill().Utf16(),
-        current_generation_item_->generation_element_.Value().Utf16(),
         FieldRendererId(current_generation_item_->generation_element_
                             .UniqueRendererFormControlId()),
         is_generation_element_password_type,
@@ -483,7 +485,7 @@ bool PasswordGenerationAgent::SetUpTriggeredGeneration() {
   return true;
 }
 
-bool PasswordGenerationAgent::FocusedNodeHasChanged(
+bool PasswordGenerationAgent::HandleFocusChangeComplete(
     const blink::WebNode& node) {
   if (node.IsNull() || !node.IsElementNode()) {
     return false;
@@ -528,16 +530,11 @@ bool PasswordGenerationAgent::FocusedNodeHasChanged(
     return true;
   }
 
-  // Assume that if the password field has less than or equal to
-  // `kMaximumCharsForGenerationOffer` characters, then the user is not finished
+  // Assume that if the password field has less than
+  // |kMaximumCharsForGenerationOffer| characters then the user is not finished
   // typing their password and display the password suggestion.
-  // With `kPasswordStrengthIndicator` enabled the decision to display the
-  // suggestion needs to be calculated in the browser process based on the
-  // strength of the typed password.
   if (!element.IsReadOnly() && element.IsEnabled() &&
-      (element.Value().length() <= kMaximumCharsForGenerationOffer ||
-       base::FeatureList::IsEnabled(
-           password_manager::features::kPasswordStrengthIndicator))) {
+      element.Value().length() <= kMaximumCharsForGenerationOffer) {
     MaybeOfferAutomaticGeneration();
     return true;
   }
@@ -564,12 +561,18 @@ bool PasswordGenerationAgent::TextDidChangeInTextField(
         current_generation_item_->password_is_generated_ && !element.IsNull() &&
         element.Form() ==
             current_generation_item_->generation_element_.Form()) {
-      std::unique_ptr<FormData> presaved_form_data(CreateFormDataToPresave());
-      std::u16string generated_password =
+      const std::u16string generated_password =
           current_generation_item_->generation_element_.Value().Utf16();
-      if (presaved_form_data) {
-        GetPasswordGenerationDriver().PresaveGeneratedPassword(
-            *presaved_form_data, generated_password);
+      if (generated_password.empty()) {
+        // JS cleared the generated password in the meantime. Consider the user
+        // left the generation state.
+        PasswordNoLongerGenerated();
+      } else {
+        std::unique_ptr<FormData> presaved_form_data(CreateFormDataToPresave());
+        if (presaved_form_data) {
+          GetPasswordGenerationDriver().PresaveGeneratedPassword(
+              *presaved_form_data, generated_password);
+        }
       }
     }
     return false;
@@ -581,9 +584,7 @@ bool PasswordGenerationAgent::TextDidChangeInTextField(
   }
 
   if (!current_generation_item_->password_is_generated_ &&
-      element.Value().length() > kMaximumCharsForGenerationOffer &&
-      !base::FeatureList::IsEnabled(
-          password_manager::features::kPasswordStrengthIndicator)) {
+      element.Value().length() > kMaximumCharsForGenerationOffer) {
     // User has rejected the feature and has started typing a password.
     GenerationRejectedByTyping();
   } else {
@@ -611,6 +612,7 @@ bool PasswordGenerationAgent::TextDidChangeInTextField(
       std::u16string generated_password =
           current_generation_item_->generation_element_.Value().Utf16();
       if (presaved_form_data) {
+        CHECK(!generated_password.empty());
         GetPasswordGenerationDriver().PresaveGeneratedPassword(
             *presaved_form_data, generated_password);
       }
@@ -619,8 +621,9 @@ bool PasswordGenerationAgent::TextDidChangeInTextField(
     // Notify `password_agent_` of text changes to the other confirmation
     // password fields.
     for (const auto& password_element :
-         current_generation_item_->password_elements_)
+         current_generation_item_->password_elements_) {
       password_agent_->UpdateStateForTextChange(password_element);
+    }
   }
   return true;
 }
@@ -649,7 +652,6 @@ void PasswordGenerationAgent::AutomaticGenerationAvailable() {
           current_generation_item_->generation_element_),
       current_generation_item_->generation_element_.MaxLength(),
       current_generation_item_->generation_element_.NameForAutofill().Utf16(),
-      current_generation_item_->generation_element_.Value().Utf16(),
       FieldRendererId(current_generation_item_->generation_element_
                           .UniqueRendererFormControlId()),
       is_generation_element_password_type,
@@ -691,8 +693,10 @@ void PasswordGenerationAgent::PasswordNoLongerGenerated() {
   // Do not treat the password as generated, either here or in the browser.
   current_generation_item_->password_is_generated_ = false;
   current_generation_item_->password_edited_ = false;
-  for (WebInputElement& password : current_generation_item_->password_elements_)
+  for (WebInputElement& password :
+       current_generation_item_->password_elements_) {
     password.SetAutofillState(WebAutofillState::kNotFilled);
+  }
   password_generation::LogPasswordGenerationEvent(
       password_generation::PASSWORD_DELETED);
   // Clear all other password fields.

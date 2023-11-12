@@ -10,7 +10,7 @@
 namespace network {
 namespace {
 
-void RunTaksAndCallback(
+void RunTaskAndCallback(
     base::OnceCallback<int(net::CompletionOnceCallback)> task,
     net::CompletionOnceCallback callback) {
   auto split_callback = base::SplitOnceCallback(std::move(callback));
@@ -123,7 +123,7 @@ int SharedDictionaryDiskCache::DoomEntry(const std::string& key,
       // `SharedDictionaryDiskCache::DoomEntry()` will be called only when
       // `this` is available.
       pending_disk_cache_tasks_.push_back(
-          base::BindOnce(&RunTaksAndCallback,
+          base::BindOnce(&RunTaskAndCallback,
                          base::BindOnce(&SharedDictionaryDiskCache::DoomEntry,
                                         base::Unretained(this), key),
                          std::move(callback)));
@@ -147,7 +147,7 @@ int SharedDictionaryDiskCache::ClearAll(net::CompletionOnceCallback callback) {
       // `SharedDictionaryDiskCache::ClearAll()` will be called only when `this`
       // is available.
       pending_disk_cache_tasks_.push_back(
-          base::BindOnce(&RunTaksAndCallback,
+          base::BindOnce(&RunTaskAndCallback,
                          base::BindOnce(&SharedDictionaryDiskCache::ClearAll,
                                         base::Unretained(this)),
                          std::move(callback)));
@@ -157,6 +157,32 @@ int SharedDictionaryDiskCache::ClearAll(net::CompletionOnceCallback callback) {
       return backend_->DoomAllEntries(std::move(callback));
     case State::kFailed:
       return net::ERR_FAILED;
+  }
+}
+
+void SharedDictionaryDiskCache::CreateIterator(
+    base::OnceCallback<void(std::unique_ptr<disk_cache::Backend::Iterator>)>
+        callback) {
+  switch (state_) {
+    case State::kBeforeInitialize:
+      NOTREACHED();
+      return;
+    case State::kInitializing:
+      // It is safe to use Unretained() below because
+      // `pending_disk_cache_tasks_` is owned by `this` and the passed task
+      // `SharedDictionaryDiskCache::CreateIterator()` will be called only when
+      // `this` is available.
+      pending_disk_cache_tasks_.push_back(
+          base::BindOnce(&SharedDictionaryDiskCache::CreateIterator,
+                         base::Unretained(this), std::move(callback)));
+      return;
+    case State::kInitialized:
+      DCHECK(backend_);
+      std::move(callback).Run(backend_->CreateIterator());
+      return;
+    case State::kFailed:
+      std::move(callback).Run(nullptr);
+      return;
   }
 }
 

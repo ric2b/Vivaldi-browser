@@ -297,7 +297,7 @@ public class PseudoTab {
     private static @Nullable List<Tab> getRelatedTabList(
             @NonNull TabModelSelector tabModelSelector, int tabId) {
         if (!tabModelSelector.isTabStateInitialized()) {
-            assert ChromeFeatureList.sInstantStart.isEnabled();
+            if (!ChromeFeatureList.sInstantStart.isEnabled()) throw new IllegalStateException();
             return null;
         }
         TabModelFilterProvider provider = tabModelSelector.getTabModelFilterProvider();
@@ -324,8 +324,7 @@ public class PseudoTab {
         return sAllTabsFromStateFile;
     }
 
-    @Nullable
-    public static PseudoTab getActiveTabFromStateFile(Context context) {
+    public static @Nullable PseudoTab getActiveTabFromStateFile(Context context) {
         readAllPseudoTabsFromStateFile(context);
         return sActiveTabFromStateFile;
     }

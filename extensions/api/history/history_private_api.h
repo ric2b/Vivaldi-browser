@@ -73,20 +73,6 @@ class HistoryPrivateAPI : public BrowserContextKeyedAPI,
   std::unique_ptr<HistoryPrivateEventRouter> history_event_router_;
 };
 
-class HistoryPrivateDbSearchFunction : public HistoryFunctionWithCallback {
- public:
-  DECLARE_EXTENSION_FUNCTION("historyPrivate.dbSearch", HISTORYPRIVATE_DBSEARCH)
-
- private:
-  ~HistoryPrivateDbSearchFunction() override {}
-
-  // HistoryFunctionWithCallback:
-  ExtensionFunction::ResponseAction Run() override;
-
-  // Callback for the history function to provide results.
-  void SearchComplete(history::QueryResults results);
-};
-
 class HistoryPrivateSearchFunction : public HistoryFunctionWithCallback {
  public:
   DECLARE_EXTENSION_FUNCTION("historyPrivate.search", HISTORYPRIVATE_SEARCH)
@@ -166,6 +152,19 @@ class HistoryPrivateMigrateOldTypedUrlFunction : public HistoryFunction {
  private:
   ~HistoryPrivateMigrateOldTypedUrlFunction() override = default;
   ExtensionFunction::ResponseAction Run() override;
+};
+
+class HistoryPrivateGetDetailedHistoryFunction : public HistoryFunctionWithCallback {
+ public:
+  DECLARE_EXTENSION_FUNCTION("historyPrivate.getDetailedHistory",
+                             HISTORYPRIVATE_GETDETAILEDHISTORY)
+
+ private:
+  ~HistoryPrivateGetDetailedHistoryFunction() override {}
+  ExtensionFunction::ResponseAction Run() override;
+  // Callback for the history function to provide results.
+  void SearchComplete(
+      const history::DetailedHistory::DetailedHistoryList& results);
 };
 
 }  // namespace extensions

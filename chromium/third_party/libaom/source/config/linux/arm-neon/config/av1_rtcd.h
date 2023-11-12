@@ -80,14 +80,21 @@ void aom_comp_avg_upsampled_pred_c(MACROBLOCKD *xd, const struct AV1Common *cons
                                                    const MV *const mv, uint8_t *comp_pred, const uint8_t *pred, int width,
                                                    int height, int subpel_x_q3, int subpel_y_q3, const uint8_t *ref,
                                                    int ref_stride, int subpel_search);
-#define aom_comp_avg_upsampled_pred aom_comp_avg_upsampled_pred_c
-
-void aom_comp_mask_upsampled_pred_c(MACROBLOCKD *xd, const struct AV1Common *const cm, int mi_row, int mi_col,
-                                                       const MV *const mv, uint8_t *comp_pred, const uint8_t *pred, int width,
-                                                       int height, int subpel_x_q3, int subpel_y_q3, const uint8_t *ref,
-                                                       int ref_stride, const uint8_t *mask, int mask_stride, int invert_mask,
-                                                       int subpel_search);
-#define aom_comp_mask_upsampled_pred aom_comp_mask_upsampled_pred_c
+void aom_comp_avg_upsampled_pred_neon(MACROBLOCKD* xd,
+                                      const struct AV1Common* const cm,
+                                      int mi_row,
+                                      int mi_col,
+                                      const MV* const mv,
+                                      uint8_t* comp_pred,
+                                      const uint8_t* pred,
+                                      int width,
+                                      int height,
+                                      int subpel_x_q3,
+                                      int subpel_y_q3,
+                                      const uint8_t* ref,
+                                      int ref_stride,
+                                      int subpel_search);
+#define aom_comp_avg_upsampled_pred aom_comp_avg_upsampled_pred_neon
 
 void aom_dist_wtd_comp_avg_upsampled_pred_c(MACROBLOCKD *xd, const struct AV1Common *const cm, int mi_row, int mi_col,
                                                        const MV *const mv, uint8_t *comp_pred, const uint8_t *pred, int width,
@@ -102,7 +109,20 @@ void aom_quantize_b_helper_neon(const tran_low_t *coeff_ptr, intptr_t n_coeffs, 
 void aom_upsampled_pred_c(MACROBLOCKD *xd, const struct AV1Common *const cm, int mi_row, int mi_col,
                                           const MV *const mv, uint8_t *comp_pred, int width, int height, int subpel_x_q3,
                                           int subpel_y_q3, const uint8_t *ref, int ref_stride, int subpel_search);
-#define aom_upsampled_pred aom_upsampled_pred_c
+void aom_upsampled_pred_neon(MACROBLOCKD* xd,
+                             const struct AV1Common* const cm,
+                             int mi_row,
+                             int mi_col,
+                             const MV* const mv,
+                             uint8_t* comp_pred,
+                             int width,
+                             int height,
+                             int subpel_x_q3,
+                             int subpel_y_q3,
+                             const uint8_t* ref,
+                             int ref_stride,
+                             int subpel_search);
+#define aom_upsampled_pred aom_upsampled_pred_neon
 
 void av1_apply_selfguided_restoration_c(const uint8_t *dat, int width, int height, int stride, int eps, const int *xqd, uint8_t *dst, int dst_stride, int32_t *tmpbuf, int bit_depth, int highbd);
 void av1_apply_selfguided_restoration_neon(const uint8_t *dat, int width, int height, int stride, int eps, const int *xqd, uint8_t *dst, int dst_stride, int32_t *tmpbuf, int bit_depth, int highbd);
@@ -127,10 +147,22 @@ int64_t av1_calc_frame_error_c(const uint8_t *const ref, int stride, const uint8
 #define av1_calc_frame_error av1_calc_frame_error_c
 
 void av1_calc_indices_dim1_c(const int16_t *data, const int16_t *centroids, uint8_t *indices, int64_t *total_dist, int n, int k);
-#define av1_calc_indices_dim1 av1_calc_indices_dim1_c
+void av1_calc_indices_dim1_neon(const int16_t* data,
+                                const int16_t* centroids,
+                                uint8_t* indices,
+                                int64_t* total_dist,
+                                int n,
+                                int k);
+#define av1_calc_indices_dim1 av1_calc_indices_dim1_neon
 
 void av1_calc_indices_dim2_c(const int16_t *data, const int16_t *centroids, uint8_t *indices, int64_t *total_dist, int n, int k);
-#define av1_calc_indices_dim2 av1_calc_indices_dim2_c
+void av1_calc_indices_dim2_neon(const int16_t* data,
+                                const int16_t* centroids,
+                                uint8_t* indices,
+                                int64_t* total_dist,
+                                int n,
+                                int k);
+#define av1_calc_indices_dim2 av1_calc_indices_dim2_neon
 
 void av1_convolve_2d_scale_c(const uint8_t *src, int src_stride, uint8_t *dst, int dst_stride, int w, int h, const InterpFilterParams *filter_params_x, const InterpFilterParams *filter_params_y, const int subpel_x_qn, const int x_step_qn, const int subpel_y_qn, const int y_step_qn, ConvolveParams *conv_params);
 #define av1_convolve_2d_scale av1_convolve_2d_scale_c

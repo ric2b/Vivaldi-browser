@@ -256,20 +256,6 @@ class UtilitiesCanOpenUrlExternallyFunction : public ExtensionFunction {
 
 // This is implemented in VivaldiUtilitiesHookDelegate and only here to satisfy
 // various JS bindings constrains.
-class UtilitiesGenerateGUIDFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.generateGUID", UTILITIES_GENERATE_GUID)
-  UtilitiesGenerateGUIDFunction() = default;
-
- private:
-  ~UtilitiesGenerateGUIDFunction() override = default;
-
-  // ExtensionFunction:
-  ResponseAction Run() override;
-};
-
-// This is implemented in VivaldiUtilitiesHookDelegate and only here to satisfy
-// various JS bindings constrains.
 class UtilitiesGetUrlFragmentsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getUrlFragments",
@@ -805,8 +791,7 @@ class UtilitiesGenerateQRCodeFunction : public ExtensionFunction {
   void RespondOnUiThreadForFile(base::FilePath path);
 
   // Remote to service instance to generate QR code images.
-  mojo::Remote<qrcode_generator::mojom::QRCodeGeneratorService>
-      qr_code_service_remote_;
+  std::unique_ptr<qrcode_generator::QRImageGenerator> qr_generator_;
 
   vivaldi::utilities::CaptureQRDestination dest_ =
       vivaldi::utilities::CAPTURE_QR_DESTINATION_DATAURL;
@@ -901,6 +886,17 @@ class UtilitiesGetVivaldiNetOAuthClientIdFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class UtilitiesGetFOAuthClientIdFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getFOAuthClientId",
+                             UTILITIES_GET_FASTMAIL_API_CLIENT_ID)
+  UtilitiesGetFOAuthClientIdFunction() = default;
+
+ private:
+  ~UtilitiesGetFOAuthClientIdFunction() override = default;
+  ResponseAction Run() override;
+};
+
 class UtilitiesGetCommandLineValueFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getCommandLineValue",
@@ -973,6 +969,39 @@ class UtilitiesSetProtocolHandlingFunction : public ExtensionFunction {
 
  private:
   ~UtilitiesSetProtocolHandlingFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesConnectProxyFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.connectProxy",
+                             UTILITIES_PROXY_CONNECT)
+  UtilitiesConnectProxyFunction() = default;
+
+ private:
+  ~UtilitiesConnectProxyFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesDisconnectProxyFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.disconnectProxy",
+                             UTILITIES_PROXY_DISCONNECT)
+  UtilitiesDisconnectProxyFunction() = default;
+
+ private:
+  ~UtilitiesDisconnectProxyFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesSupportsProxyFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.supportsProxy",
+                             UTILITIES_PROXY_SUPPORT)
+  UtilitiesSupportsProxyFunction() = default;
+
+ private:
+  ~UtilitiesSupportsProxyFunction() override = default;
   ResponseAction Run() override;
 };
 

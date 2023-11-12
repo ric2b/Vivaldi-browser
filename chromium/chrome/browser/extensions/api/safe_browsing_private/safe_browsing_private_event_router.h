@@ -31,10 +31,6 @@ namespace extensions {
 class EventRouter;
 }
 
-namespace signin {
-class IdentityManager;
-}
-
 class GURL;
 
 namespace safe_browsing {
@@ -83,15 +79,19 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
   static const char kKeyUrlCategory[];
   static const char kKeyAction[];
 
-  static const char kKeyUrlFilteringInterstitialEvent[];
-  static const char kKeyPasswordReuseEvent[];
-  static const char kKeyPasswordChangedEvent[];
-  static const char kKeyDangerousDownloadEvent[];
-  static const char kKeyInterstitialEvent[];
-  static const char kKeySensitiveDataEvent[];
-  static const char kKeyUnscannedFileEvent[];
-  static const char kKeyLoginEvent[];
-  static const char kKeyPasswordBreachEvent[];
+  // All new event names should be added to the array
+  // `enterprise_connectors::ReportingServiceSettings::kAllReportingEvents` in
+  // chrome/browser/enterprise/connectors/reporting/reporting_service_settings.h
+  static constexpr char kKeyUrlFilteringInterstitialEvent[] =
+      "urlFilteringInterstitialEvent";
+  static constexpr char kKeyPasswordReuseEvent[] = "passwordReuseEvent";
+  static constexpr char kKeyPasswordChangedEvent[] = "passwordChangedEvent";
+  static constexpr char kKeyDangerousDownloadEvent[] = "dangerousDownloadEvent";
+  static constexpr char kKeyInterstitialEvent[] = "interstitialEvent";
+  static constexpr char kKeySensitiveDataEvent[] = "sensitiveDataEvent";
+  static constexpr char kKeyUnscannedFileEvent[] = "unscannedFileEvent";
+  static constexpr char kKeyLoginEvent[] = "loginEvent";
+  static constexpr char kKeyPasswordBreachEvent[] = "passwordBreachEvent";
 
   static const char kKeyUnscannedReason[];
 
@@ -248,8 +248,6 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
       const std::string& threat_type,
       const safe_browsing::RTLookupResponse& response);
 
-  void SetIdentityManagerForTesting(signin::IdentityManager* identity_manager);
-
  private:
   // Removes any path information and returns just the basename.
   static std::string GetBaseName(const std::string& filename);
@@ -290,7 +288,6 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
       safe_browsing::EventResult event_result);
 
   raw_ptr<content::BrowserContext> context_;
-  raw_ptr<signin::IdentityManager> identity_manager_ = nullptr;
   raw_ptr<EventRouter> event_router_ = nullptr;
   raw_ptr<enterprise_connectors::RealtimeReportingClient> reporting_client_ =
       nullptr;

@@ -11,8 +11,9 @@
 #import "base/strings/stringprintf.h"
 #import "base/time/time.h"
 #import "build/build_config.h"
-#import "components/grit/components_resources.h"
 #import "components/grit/components_scaled_resources.h"
+#import "components/grit/version_ui_resources.h"
+#import "components/grit/version_ui_resources_map.h"
 #import "components/strings/grit/components_chromium_strings.h"
 #import "components/strings/grit/components_google_chrome_strings.h"
 #import "components/strings/grit/components_strings.h"
@@ -20,10 +21,10 @@
 #import "components/version_info/version_info.h"
 #import "components/version_ui/version_handler_helper.h"
 #import "components/version_ui/version_ui_constants.h"
-#import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/ui/webui/version_handler.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/web/public/web_client.h"
@@ -54,11 +55,12 @@ web::WebUIIOSDataSource* CreateVersionUIDataSource() {
   html_source->AddLocalizedString(version_ui::kApplicationLabel,
                                   IDS_IOS_PRODUCT_NAME);
   html_source->AddString(version_ui::kVersion,
-                         version_info::GetVersionNumber());
+                         std::string(version_info::GetVersionNumber()));
   html_source->AddString(version_ui::kVersionModifier,
-                         GetChannelString(GetChannel()));
+                         std::string(GetChannelString(GetChannel())));
   html_source->AddLocalizedString(version_ui::kOSName, IDS_VERSION_UI_OS);
-  html_source->AddString(version_ui::kOSType, version_info::GetOSType());
+  html_source->AddString(version_ui::kOSType,
+                         std::string(version_info::GetOSType()));
 
   html_source->AddLocalizedString(version_ui::kCompany,
                                   IDS_IOS_ABOUT_VERSION_COMPANY_NAME);
@@ -72,7 +74,7 @@ web::WebUIIOSDataSource* CreateVersionUIDataSource() {
                                  base::NumberToString16(exploded_time.year)));
   html_source->AddLocalizedString(version_ui::kRevision,
                                   IDS_VERSION_UI_REVISION);
-  std::string last_change = version_info::GetLastChange();
+  std::string last_change(version_info::GetLastChange());
   // Shorten the git hash to display it correctly on small devices.
   if ((ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET) &&
       last_change.length() > 12) {
@@ -115,18 +117,16 @@ web::WebUIIOSDataSource* CreateVersionUIDataSource() {
       version_ui::SeedTypeToUiString(
           GetApplicationContext()->GetVariationsService()->GetSeedType()));
 
-  html_source->AddString(version_ui::kSanitizer, version_info::GetSanitizerList());
+  html_source->AddString(version_ui::kSanitizer,
+                         std::string(version_info::GetSanitizerList()));
 
   html_source->UseStringsJs();
-  html_source->AddResourcePath(version_ui::kVersionJS, IDR_VERSION_UI_JS);
-  html_source->AddResourcePath(version_ui::kAboutVersionCSS,
-                               IDR_VERSION_UI_CSS);
-  html_source->AddResourcePath(version_ui::kAboutVersionMobileCSS,
-                               IDR_VERSION_UI_MOBILE_CSS);
+  html_source->AddResourcePaths(
+      base::make_span(kVersionUiResources, kVersionUiResourcesSize));
   html_source->AddResourcePath("images/product_logo.png", IDR_PRODUCT_LOGO);
   html_source->AddResourcePath("images/product_logo_white.png",
                                IDR_PRODUCT_LOGO_WHITE);
-  html_source->SetDefaultResource(IDR_VERSION_UI_HTML);
+  html_source->SetDefaultResource(IDR_VERSION_UI_ABOUT_VERSION_HTML);
 
   if (vivaldi::IsVivaldiRunning()) {
     vivaldi::UpdateVersionUIIOSDataSource(html_source);

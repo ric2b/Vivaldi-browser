@@ -221,6 +221,7 @@ var PIP = {
       this.pipButton_ = document.createElement('input');
       this.pipButton_.setAttribute('type', 'button');
       this.pipButton_.classList.add('vivaldi-picture-in-picture-button');
+      this.pipButton_.setAttribute('aria-label', 'picture-in-picture-button');
       this.containerElm_.appendChild(this.pipButton_);
 
       this.containerElm_.addEventListener('mousemove',

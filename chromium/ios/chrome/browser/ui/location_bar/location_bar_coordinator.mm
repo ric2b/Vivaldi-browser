@@ -19,20 +19,22 @@
 #import "components/search_engines/util.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/browser_state_metrics/browser_state_metrics.h"
 #import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/url_drag_drop_handler.h"
 #import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/infobars/infobar_metrics_recorder.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/new_tab_page_util.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/shared/coordinator/default_browser_promo/non_modal_default_browser_promo_scheduler_scene_agent.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
@@ -43,7 +45,6 @@
 #import "ios/chrome/browser/ui/badges/badge_delegate.h"
 #import "ios/chrome/browser/ui/badges/badge_mediator.h"
 #import "ios/chrome/browser/ui/badges/badge_view_controller.h"
-#import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
@@ -55,19 +56,17 @@
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view_mediator.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_url_loader.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_view_controller.h"
-#import "ios/chrome/browser/ui/main/default_browser_scene_agent.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_controller_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_coordinator.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_focus_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_coordinator.h"
-#import "ios/chrome/browser/ui/omnibox/web_omnibox_edit_model_delegate_impl.h"
+#import "ios/chrome/browser/ui/omnibox/web_location_bar_impl.h"
 #import "ios/chrome/browser/url_loading/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/url_loading/url_loading_util.h"
 #import "ios/chrome/browser/web/web_navigation_util.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/public/provider/chrome/browser/lens/lens_api.h"
 #import "ios/public/provider/chrome/browser/voice_search/voice_search_api.h"
 #import "ios/web/public/navigation/navigation_manager.h"
@@ -82,7 +81,6 @@
 #import "ios/chrome/browser/ui/sharing/activity_services/canonical_url_retriever.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
-#import "ios/ui/ad_tracker_blocker/vivaldi_atb_item.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_summery_view_controller.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -91,6 +89,10 @@ using vivaldi::IsVivaldiRunning;
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+BASE_FEATURE(kEnableFocusOmniboxWorkaround,
+             "EnableFocusOmniboxWorkaround",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 namespace {
 const size_t kMaxURLDisplayChars = 32 * 1024;
@@ -101,14 +103,9 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
                                       LocationBarConsumer,
                                       LocationBarSteadyViewConsumer,
                                       OmniboxControllerDelegate,
-
-                                      // Vivaldi
-                                      VivaldiATBConsumer,
-                                      // End Vivaldi
-
                                       URLDragDataSource> {
   // API endpoint for omnibox.
-  std::unique_ptr<WebOmniboxEditModelDelegateImpl> _editModelDelegate;
+  std::unique_ptr<WebLocationBarImpl> _locationBar;
   // Observer that updates `viewController` for fullscreen events.
   std::unique_ptr<FullscreenUIUpdater> _omniboxFullscreenUIUpdater;
   // Observer that updates BadgeViewController for fullscreen events.
@@ -206,9 +203,8 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   self.viewController.layoutGuideCenter =
       LayoutGuideCenterForBrowser(self.browser);
 
-  _editModelDelegate =
-      std::make_unique<WebOmniboxEditModelDelegateImpl>(self, self.delegate);
-  _editModelDelegate->SetURLLoader(self);
+  _locationBar = std::make_unique<WebLocationBarImpl>(self, self.delegate);
+  _locationBar->SetURLLoader(self);
   _locationBarModelDelegate.reset(new LocationBarModelDelegateIOS(
       self.browser->GetWebStateList(), self.browserState));
   _locationBarModel = std::make_unique<LocationBarModelImpl>(
@@ -217,7 +213,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   self.omniboxCoordinator =
       [[OmniboxCoordinator alloc] initWithBaseViewController:nil
                                                      browser:self.browser];
-  self.omniboxCoordinator.editModelDelegate = _editModelDelegate.get();
+  self.omniboxCoordinator.locationBar = _locationBar.get();
   self.omniboxCoordinator.presenterDelegate = self.popupPresenterDelegate;
   [self.omniboxCoordinator start];
 
@@ -242,7 +238,12 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   [self.viewController setBadgeView:self.badgeViewController.view];
   [self.badgeViewController didMoveToParentViewController:self.viewController];
   // Create BadgeMediator and set the viewController as its consumer.
-  self.badgeMediator = [[BadgeMediator alloc] initWithBrowser:self.browser];
+  OverlayPresenter* overlayPresenter = OverlayPresenter::FromBrowser(
+      self.browser, OverlayModality::kInfobarBanner);
+  self.badgeMediator =
+      [[BadgeMediator alloc] initWithWebStateList:self.webStateList
+                                 overlayPresenter:overlayPresenter
+                                      isIncognito:isIncognito];
   self.badgeMediator.consumer = self.badgeViewController;
   // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
   // clean up.
@@ -289,7 +290,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   [self.omniboxCoordinator stop];
   [self.badgeMediator disconnect];
   self.badgeMediator = nil;
-  _editModelDelegate.reset();
+  _locationBar.reset();
 
   self.viewController = nil;
   [self.mediator disconnect];
@@ -348,7 +349,12 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   if (immediately) {
     [self loadURLForQuery:sanitizedQuery];
   } else {
-    [self.omniboxCoordinator focusOmnibox];
+    // TODO(crbug.com/1463766): Clean up the kill switch and else branch.
+    if (base::FeatureList::IsEnabled(kEnableFocusOmniboxWorkaround)) {
+      [self focusOmnibox];
+    } else {
+      [self.omniboxCoordinator focusOmnibox];
+    }
     [self.omniboxCoordinator
         insertTextToOmnibox:base::SysUTF16ToNSString(sanitizedQuery)];
   }
@@ -468,9 +474,8 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
   SceneState* sceneState =
       SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
-  DefaultBrowserSceneAgent* agent =
-      [DefaultBrowserSceneAgent agentFromScene:sceneState];
-  [agent.nonModalScheduler logUserPastedInOmnibox];
+  [[NonModalDefaultBrowserPromoSchedulerSceneAgent agentFromScene:sceneState]
+      logUserPastedInOmnibox];
   LogToFETUserPastedURLIntoOmnibox(
       feature_engagement::TrackerFactory::GetForBrowserState(
           self.browser->GetBrowserState()));
@@ -512,11 +517,23 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   [self.omniboxCoordinator updateOmniboxState];
   [self.viewController updateLocationText:text clipTail:clipTail];
   [self.viewController updateForNTP:NO];
+
+  // Vivaldi
+  [self.steadyViewConsumer updateLocationText:text
+                                     clipTail:clipTail];
+  // End Vivaldi
+
 }
 
 - (void)updateLocationIcon:(UIImage*)icon
         securityStatusText:(NSString*)statusText {
   [self.viewController updateLocationIcon:icon securityStatusText:statusText];
+
+  // Vivaldi
+  [self.steadyViewConsumer updateLocationIcon:icon
+                           securityStatusText:statusText];
+  // End Vivaldi
+
 }
 
 - (void)updateAfterNavigatingToNTP {
@@ -623,9 +640,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   if (!self.browser)
     return;
   self.adblockManager =
-  [[VivaldiATBManager alloc] initWithBrowser:self.browser];
-  self.adblockManager.consumer = self;
-  [self updateVivaldiShieldState];
+    [[VivaldiATBManager alloc] initWithBrowser:self.browser];
 }
 
 - (void)observeSiteSettingChanges {
@@ -650,11 +665,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   if ([hostString isEqualToString:_currentHost]) {
     [self reloadCurrentWebState];
   }
-}
-
-- (void)updateVivaldiShieldState {
-  [self.viewController
-      updateVivaldiShieldState:[self.adblockManager globalBlockingSetting]];
 }
 
 - (void)showTrackerBlockerManager {
@@ -692,21 +702,15 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   UINavigationController* navController =
     [[UINavigationController alloc] initWithRootViewController:controller];
 
-  if (@available(iOS 15.0, *)) {
-    UISheetPresentationController* sheetPc =
-      navController.sheetPresentationController;
-    sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
-                        UISheetPresentationControllerDetent.largeDetent];
-    sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
-    sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
-    [self.viewController presentViewController:navController
-                       animated:YES
-                     completion:nil];
-  } else {
-    [self.viewController presentViewController:navController
-                       animated:YES
-                     completion:nil];
-  }
+  UISheetPresentationController* sheetPc =
+    navController.sheetPresentationController;
+  sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                      UISheetPresentationControllerDetent.largeDetent];
+  sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
+  sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
+  [self.viewController presentViewController:navController
+                     animated:YES
+                   completion:nil];
 }
 
 - (void)reloadCurrentWebState {
@@ -721,16 +725,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
 - (id<SharingPositioner>)vivaldiPositioner {
   return [self.viewController steadyView];
-}
-
-#pragma mark: - VivaldiATBConsumer
-- (void)didRefreshSettingOptions:(NSArray*)options {
-  if (options.count > 0)
-    [self updateVivaldiShieldState];
-}
-
-- (void)ruleServiceStateDidLoad {
-  [self updateVivaldiShieldState];
 }
 // End Vivaldi
 

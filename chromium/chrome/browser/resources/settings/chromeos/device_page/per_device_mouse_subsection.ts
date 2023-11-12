@@ -8,27 +8,26 @@
  * subsection settings in system settings.
  */
 
-import '../../icons.html.js';
-import '../../settings_shared.css.js';
+import '../icons.html.js';
+import '../settings_shared.css.js';
 import 'chrome://resources/cr_components/localized_link/localized_link.js';
 import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-import '../../controls/settings_radio_group.js';
-import '../../controls/settings_slider.js';
-import '../../controls/settings_toggle_button.js';
-import '../../settings_shared.css.js';
+import '/shared/settings/controls/settings_radio_group.js';
+import '/shared/settings/controls/settings_slider.js';
+import '/shared/settings/controls/settings_toggle_button.js';
 import './input_device_settings_shared.css.js';
 import 'chrome://resources/cr_elements/cr_slider/cr_slider.js';
 
+import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route} from '../router.js';
+import {Route, routes} from '../router.js';
 
 import {getInputDeviceSettingsProvider} from './input_device_mojo_interface_provider.js';
 import {InputDeviceSettingsProviderInterface, Mouse, MousePolicies, MouseSettings} from './input_device_settings_types.js';
@@ -36,7 +35,7 @@ import {getPrefPolicyFields, settingsAreEqual} from './input_device_settings_uti
 import {getTemplate} from './per_device_mouse_subsection.html.js';
 
 const SettingsPerDeviceMouseSubsectionElementBase =
-    DeepLinkingMixin(RouteObserverMixin(PolymerElement));
+    DeepLinkingMixin(RouteObserverMixin(I18nMixin(PolymerElement)));
 export class SettingsPerDeviceMouseSubsectionElement extends
     SettingsPerDeviceMouseSubsectionElementBase {
   static get is(): string {
@@ -173,6 +172,11 @@ export class SettingsPerDeviceMouseSubsectionElement extends
       mouseIndex: {
         type: Number,
       },
+
+      isLastDevice: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
     };
   }
 
@@ -213,6 +217,7 @@ export class SettingsPerDeviceMouseSubsectionElement extends
   private inputDeviceSettingsProvider: InputDeviceSettingsProviderInterface =
       getInputDeviceSettingsProvider();
   private mouseIndex: number;
+  private isLastDevice: boolean;
 
   private updateSettingsToCurrentPrefs(): void {
     // `updateSettingsToCurrentPrefs` gets called when the `keyboard` object
@@ -275,6 +280,27 @@ export class SettingsPerDeviceMouseSubsectionElement extends
     this.mouse.settings = newSettings;
     this.inputDeviceSettingsProvider.setMouseSettings(
         this.mouse.id, this.mouse.settings);
+  }
+
+  private getLabelWithoutLearnMore(stringName: string): string|TrustedHTML {
+    const tempEl = document.createElement('div');
+    const localizedString = this.i18nAdvanced(stringName);
+    tempEl.innerHTML = localizedString;
+
+    const nodesToDelete: Node[] = [];
+    tempEl.childNodes.forEach((node) => {
+      // Remove elements with the <a> tag
+      if (node.nodeType === Node.ELEMENT_NODE && node.nodeName === 'A') {
+        nodesToDelete.push(node);
+        return;
+      }
+    });
+
+    nodesToDelete.forEach((node) => {
+      tempEl.removeChild(node);
+    });
+
+    return tempEl.innerHTML;
   }
 }
 

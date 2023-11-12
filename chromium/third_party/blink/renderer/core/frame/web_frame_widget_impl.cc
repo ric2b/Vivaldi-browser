@@ -325,9 +325,10 @@ WebFrameWidgetImpl::~WebFrameWidgetImpl() {
 
 void WebFrameWidgetImpl::BindLocalRoot(WebLocalFrame& local_root) {
   local_root_ = To<WebLocalFrameImpl>(local_root);
-  if (RuntimeEnabledFeatures::LongAnimationFrameMonitoringEnabled() &&
+  CHECK(local_root_ && local_root_->GetFrame());
+  if (RuntimeEnabledFeatures::LongAnimationFrameMonitoringEnabled(
+          local_root_->GetFrame()->DomWindow()) &&
       !IsHidden()) {
-    DCHECK(local_root_->GetFrame());
     animation_frame_timing_monitor_ =
         MakeGarbageCollected<AnimationFrameTimingMonitor>(
             *this, local_root_->GetFrame()->GetProbeSink());
@@ -588,7 +589,7 @@ void WebFrameWidgetImpl::OnStartStylusWriting(
     OnStartStylusWritingCallback callback) {
   // Focus the stylus writable element for current touch sequence as we have
   // detected writing has started.
-  LocalFrame* frame = GetPage()->GetFocusController().FocusedFrame();
+  LocalFrame* frame = LocalRootImpl()->GetFrame();
   if (!frame) {
     std::move(callback).Run(absl::nullopt, absl::nullopt);
     return;
@@ -668,10 +669,11 @@ void WebFrameWidgetImpl::GetStringAtPoint(const gfx::Point& point_in_local_root,
                                           GetStringAtPointCallback callback) {
   gfx::Point baseline_point;
   ui::mojom::blink::AttributedStringPtr attributed_string = nullptr;
-  CFAttributedStringRef string = SubstringUtil::AttributedWordAtPoint(
-      this, point_in_local_root, baseline_point);
+  base::ScopedCFTypeRef<CFAttributedStringRef> string =
+      SubstringUtil::AttributedWordAtPoint(this, point_in_local_root,
+                                           baseline_point);
   if (string) {
-    attributed_string = ui::mojom::blink::AttributedString::From(string);
+    attributed_string = ui::mojom::blink::AttributedString::From(string.get());
   }
 
   std::move(callback).Run(std::move(attributed_string), baseline_point);
@@ -686,13 +688,9 @@ void WebFrameWidgetImpl::BindWidgetCompositor(
 void WebFrameWidgetImpl::BindInputTargetClient(
     mojo::PendingReceiver<viz::mojom::blink::InputTargetClient> receiver) {
   DCHECK(!input_target_receiver_.is_bound());
-  TaskType priority = TaskType::kInternalDefault;
-  if (base::FeatureList::IsEnabled(
-          blink::features::kInputTargetClientHighPriority)) {
-    priority = TaskType::kInternalInputBlocking;
-  }
-  input_target_receiver_.Bind(std::move(receiver),
-                              local_root_->GetTaskRunner(priority));
+  input_target_receiver_.Bind(
+      std::move(receiver),
+      local_root_->GetTaskRunner(TaskType::kInternalInputBlocking));
 }
 
 void WebFrameWidgetImpl::FrameSinkIdAt(const gfx::PointF& point,
@@ -1492,8 +1490,13 @@ void WebFrameWidgetImpl::WillBeginMainFrame() {
     animation_frame_timing_monitor_->WillBeginMainFrame();
   }
 
-  if (!RuntimeEnabledFeatures::ViewTransitionOnNavigationEnabled())
+  NotifyViewTransitionRenderingHasBegun();
+}
+
+void WebFrameWidgetImpl::NotifyViewTransitionRenderingHasBegun() {
+  if (!RuntimeEnabledFeatures::ViewTransitionOnNavigationEnabled()) {
     return;
+  }
 
   ForEachLocalFrameControlledByWidget(
       local_root_->GetFrame(), [](WebLocalFrameImpl* local_frame) {
@@ -1520,6 +1523,23 @@ void WebFrameWidgetImpl::ReportLongAnimationFrameTiming(
       local_root_->GetFrame(), [&](WebLocalFrameImpl* local_frame) {
         DOMWindowPerformance::performance(*local_frame->GetFrame()->DomWindow())
             ->ReportLongAnimationFrameTiming(timing_info);
+      });
+}
+
+void WebFrameWidgetImpl::ReportLongTaskTiming(base::TimeTicks start_time,
+                                              base::TimeTicks end_time,
+                                              ExecutionContext* task_context) {
+  CHECK(local_root_);
+  CHECK(local_root_->GetFrame());
+  ForEachLocalFrameControlledByWidget(
+      local_root_->GetFrame(), [&](WebLocalFrameImpl* local_frame) {
+        CHECK(local_frame->GetFrame());
+        CHECK(local_frame->GetFrame()->DomWindow());
+        // Note: |task_context| could be the execution context of any same-agent
+        // frame.
+        DOMWindowPerformance::performance(*local_frame->GetFrame()->DomWindow())
+            ->ReportLongTask(start_time, end_time, task_context,
+                             /*has_multiple_contexts=*/false);
       });
 }
 
@@ -2351,16 +2371,6 @@ void WebFrameWidgetImpl::BeginMainFrame(base::TimeTicks last_frame_time) {
       ->GetEventHandler()
       .RecomputeMouseHoverStateIfNeeded();
 
-  ForEachLocalFrameControlledByWidget(
-      LocalRootImpl()->GetFrame(), [](WebLocalFrameImpl* local_frame) {
-        // A frame in the frame tree is fully attached and must always have a
-        // view.
-        LocalFrameView* view = local_frame->GetFrameView();
-        DCHECK(view);
-        if (FragmentAnchor* anchor = view->GetFragmentAnchor())
-          anchor->PerformScriptableActions();
-      });
-
   absl::optional<LocalFrameUkmAggregator::ScopedUkmHierarchicalTimer> ukm_timer;
   if (WidgetBase::ShouldRecordBeginMainFrameMetrics()) {
     ukm_timer.emplace(
@@ -2525,7 +2535,7 @@ std::unique_ptr<cc::WebVitalMetrics> WebFrameWidgetImpl::GetWebVitalMetrics() {
 
   base::TimeTicks start = perf.NavigationStartAsMonotonicTime();
   base::TimeTicks largest_contentful_paint =
-      perf.LargestContentfulPaintAsMonotonicTimeForMetrics();
+      perf.LargestContentfulDetailsForMetrics().paint_time;
   if (largest_contentful_paint >= start) {
     metrics->largest_contentful_paint = largest_contentful_paint - start;
     metrics->has_lcp = true;
@@ -3871,6 +3881,19 @@ void WebFrameWidgetImpl::ExtendSelectionAndDelete(int32_t before,
   focused_frame->ExtendSelectionAndDelete(before, after);
 }
 
+void WebFrameWidgetImpl::ExtendSelectionAndReplace(
+    uint32_t before,
+    uint32_t after,
+    const String& replacement_text) {
+  WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
+  if (!focused_frame) {
+    return;
+  }
+  focused_frame->ExtendSelectionAndReplace(base::checked_cast<int>(before),
+                                           base::checked_cast<int>(after),
+                                           replacement_text);
+}
+
 void WebFrameWidgetImpl::DeleteSurroundingText(int32_t before, int32_t after) {
   WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
   if (!focused_frame)
@@ -4427,9 +4450,10 @@ void WebFrameWidgetImpl::WasShown(bool was_evicted) {
         &RemoteFrame::ResendVisualProperties);
   }
 
+  CHECK(local_root_ && local_root_->GetFrame());
   if (!animation_frame_timing_monitor_ &&
-      RuntimeEnabledFeatures::LongAnimationFrameTimingEnabled()) {
-    DCHECK(local_root_->GetFrame());
+      RuntimeEnabledFeatures::LongAnimationFrameMonitoringEnabled(
+          local_root_->GetFrame()->DomWindow())) {
     animation_frame_timing_monitor_ =
         MakeGarbageCollected<AnimationFrameTimingMonitor>(
             *this, local_root_->GetFrame()->GetProbeSink());
@@ -4566,6 +4590,8 @@ WebFrameWidgetImpl::GetFrameWidgetTestHelperForTesting() {
 }
 
 void WebFrameWidgetImpl::PrepareForFinalLifecyclUpdateForTesting() {
+  NotifyViewTransitionRenderingHasBegun();
+
   ForEachLocalFrameControlledByWidget(
       LocalRootImpl()->GetFrame(), [](WebLocalFrameImpl* local_frame) {
         LocalFrame* core_frame = local_frame->GetFrame();

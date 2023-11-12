@@ -101,7 +101,9 @@
 #include "ui/compositor/layer.h"
 #endif
 
+//Includes for Vivaldi:
 #include "app/vivaldi_apptools.h"
+#include "browser/sessions/vivaldi_session_utils.h"
 
 using content::NavigationController;
 using content::RenderWidgetHost;
@@ -994,11 +996,15 @@ class SessionRestoreImpl : public BrowserListObserver {
       int add_types = AddTabTypes::ADD_FORCE_INDEX;
       if (is_first_tab)
         add_types |= AddTabTypes::ADD_ACTIVE;
+      if (startup_tab.vivaldi_commandline_tab) {
+        sessions::AddCommandLineTab(browser);//Vivaldi-specific.
+      }
       NavigateParams params(browser, url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
       params.disposition = is_first_tab
                                ? WindowOpenDisposition::NEW_FOREGROUND_TAB
                                : WindowOpenDisposition::NEW_BACKGROUND_TAB;
       params.tabstrip_add_types = add_types;
+      params.suggested_system_entropy = blink::mojom::SystemEntropy::kHigh;
       is_first_tab = false;
       Navigate(&params);
     }

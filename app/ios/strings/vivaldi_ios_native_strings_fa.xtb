@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">بر اساس محتوا</translation>
 <translation id="2129408066358825297">سن</translation>
 <translation id="2148384276939959392">همگام‌سازی موارد انتخاب شده</translation>
+<translation id="21693288559538605">خلاصه اقدامات مسدودساز ردیاب و تبلیغات</translation>
 <translation id="2195713384412091023">با این کار تمامی اطلاعات همگام‌سازی شده بر روی سرورهای ما حذف خواهد شد، رمزعبوری که برای رمزگذاری تعیین نموده‌اید، بازنشانی شده، و شما نیز از حساب کاربری خارج خواهید شد.</translation>
 <translation id="2243210264130642074">یادداشت ذخیره شد</translation>
 <translation id="2272338747456392228">حساب کاربری مسدود شده است</translation>
 <translation id="2273327106802955778">گزینه‌های بیشتر</translation>
 <translation id="2324160330092901720">کد فعال‌سازی به این آدرس ارسال شد: <ph name="EMAIL_ID" /></translation>
+<translation id="2336309953058658733">خالی کردن سطل زباله</translation>
 <translation id="2359808026110333948">ادامه</translation>
 <translation id="2386793615875593361">۱ مورد انتخاب شد</translation>
 <translation id="2388224692799337242">با شروع وب‌گردی، تاریخچه‌ی آن در این‌جا نمایش داده می‌شود</translation>
@@ -117,6 +119,7 @@
 <translation id="3699026013955941879">کد منقضی شده است. لطفاً کد فعال‌سازی جدید درخواست دهید.</translation>
 <translation id="3700829948786686853">به ویوالدی خوش آمدید</translation>
 <translation id="3766350025418769949">از گذرواژه‌هایی که در قسمت مدیریت رمز عبور ویوالدی ذخیره کرده‌اید، می‌توانید در سایر برنامه‌های آی‌پد خود استفاده کنید.</translation>
+<translation id="3845564230651302310">اعمال تنظیمات جدید مسدودساز...</translation>
 <translation id="3858860766373142691">نام</translation>
 <translation id="3866249974567520381">توضیحات</translation>
 <translation id="3872195896030547485">لطفاً یک آدرس ایمیل معتبر وارد کنید.</translation>
@@ -225,6 +228,7 @@
 <translation id="6406506848690869874">همگام‌سازی</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> یادداشت انتخاب شد</translation>
 <translation id="6468130661190228905">متأسفیم، به‌نظر می‌رسد قبل از پیوستن به انجمن ما باید کمی صبر کنید. زیرا اعضای ما باید حداقل ۱۶ سال سن داشته باشند.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />وارد کردن<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">کلید رمزگذاری پشتیبان</translation>
 <translation id="6527303717912515753">اشتراک‌گذاری</translation>
 <translation id="6535988230515403205">لهستانی (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@
 <translation id="7461899062138731833">منابع</translation>
 <translation id="750493650310597496">یادداشتی انتخاب نشده است</translation>
 <translation id="7525067979554623046">ایجاد</translation>
-<translation id="7541020606126512786">خلاصه‌ی فعالیت مسدودساز ردیاب و تبلیغات</translation>
 <translation id="7573518470897278603">مشاهده‌ی نسخه‌ی موبایل سایت</translation>
 <translation id="7574321014880720413">افزودن دامنه‌ی جدید</translation>
 <translation id="7587132259180664054">ایمیل با موفقیت ارسال شد</translation>

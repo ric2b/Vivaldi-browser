@@ -49,7 +49,6 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/view_type_utils.h"
-#include "extensions/common/constants.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/mojom/view_type.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -95,7 +94,8 @@ bool GetExtensionInfo(content::WebContents* wc,
 
   auto view_type = extensions::GetViewType(wc);
   if (view_type == extensions::mojom::ViewType::kExtensionPopup ||
-      view_type == extensions::mojom::ViewType::kExtensionSidePanel) {
+      view_type == extensions::mojom::ViewType::kExtensionSidePanel ||
+      view_type == extensions::mojom::ViewType::kOffscreenDocument) {
     // Note that we are intentionally not setting name here, so that we can
     // construct a name based on the URL or page title in
     // RenderFrameDevToolsAgentHost::GetTitle()
@@ -261,17 +261,6 @@ bool ChromeDevToolsManagerDelegate::AllowInspection(
       // profiles.
       if (extensions::Manifest::IsComponentLocation(extension->location()) &&
           profile->GetProfilePolicyConnector()->IsManaged()) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-        // This is an ugly carve out, but Tast tests for ChromeOS require the
-        // ability inspect these specific component extensions in order to run.
-        // TODO(crbug.com/1439649): Remove both of these extension ID based
-        // exceptions after modifying the Tast tests to always allow inspecting
-        // extensions.
-        if (extension->id() == extension_misc::kGuestModeTestExtensionId ||
-            extension->id() == extension_misc::kChromeOSXKB) {
-          return true;
-        }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
         return false;
       }
       return true;

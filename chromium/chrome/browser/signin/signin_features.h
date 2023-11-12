@@ -7,6 +7,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "build/branding_buildflags.h"
 #include "components/signin/public/base/signin_buildflags.h"
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
@@ -23,8 +24,11 @@ BASE_DECLARE_FEATURE(kForYouFreSyntheticTrialRegistration);
 
 extern const base::FeatureParam<std::string> kForYouFreStudyGroup;
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
-BASE_DECLARE_FEATURE(kEnterpriseWelcomeTangibleSyncStyle);
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(ENABLE_WAFFLE_DESKTOP)
+BASE_DECLARE_FEATURE(kWaffle);
+#endif  // BUILDFLAG(ENABLE_WAFFLE_DESKTOP)
 
 BASE_DECLARE_FEATURE(kProcessGaiaRemoveLocalAccountHeader);
 
@@ -35,7 +39,5 @@ BASE_DECLARE_FEATURE(kSigninInterceptBubbleV2);
 BASE_DECLARE_FEATURE(kShowEnterpriseDialogForAllManagedAccountsSignin);
 
 BASE_DECLARE_FEATURE(kDisallowManagedProfileSignout);
-
-BASE_DECLARE_FEATURE(kPromoGaiaFlow);
 
 #endif  // CHROME_BROWSER_SIGNIN_SIGNIN_FEATURES_H_

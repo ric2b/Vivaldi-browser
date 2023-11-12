@@ -16,6 +16,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "components/content_settings/core/browser/content_settings_info.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
@@ -26,6 +27,7 @@
 #include "components/content_settings/core/common/content_settings_constraints.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "services/preferences/public/cpp/dictionary_value_update.h"
@@ -40,6 +42,7 @@ const char kLastVisitKey[] = "last_visit";
 const char kSessionModelKey[] = "model";
 const char kSettingKey[] = "setting";
 const char kLastModifiedKey[] = "last_modified";
+const char kLifetimeKey[] = "lifetime";
 
 bool IsValueAllowedForType(const base::Value& value, ContentSettingsType type) {
   const content_settings::ContentSettingsInfo* info =
@@ -64,6 +67,13 @@ base::Time GetTimeFromDictKey(const base::Value::Dict& dict,
   return base::ValueToTime(dict.Find(key)).value_or(base::Time());
 }
 
+// Extract a timestamp from `dict[key]`.
+// Will return base::Time() if no timestamp exists.
+base::TimeDelta GetTimeDeltaFromDictKey(const base::Value::Dict& dict,
+                                        const std::string& key) {
+  return base::ValueToTimeDelta(dict.Find(key)).value_or(base::TimeDelta());
+}
+
 // Extract a timestamp from `dictionary[kLastModifiedKey]`.
 // Will return base::Time() if no timestamp exists.
 base::Time GetLastModified(const base::Value::Dict& dictionary) {
@@ -80,6 +90,12 @@ base::Time GetExpiration(const base::Value::Dict& dictionary) {
 // Will return base::Time() if no timestamp exists.
 base::Time GetLastVisit(const base::Value::Dict& dictionary) {
   return GetTimeFromDictKey(dictionary, kLastVisitKey);
+}
+
+// Extract a TimeDelta from `dictionary[kLifetimeKey]`.
+// Will return base::TimeDelta() if no value exists for that key.
+base::TimeDelta GetLifetime(const base::Value::Dict& dictionary) {
+  return GetTimeDeltaFromDictKey(dictionary, kLifetimeKey);
 }
 
 // Extract a SessionModel from |dictionary[kSessionModelKey]|. Will return
@@ -102,6 +118,10 @@ bool ShouldRemoveSetting(bool off_the_record,
                          base::Time expiration,
                          bool restore_session,
                          content_settings::SessionModel session_model) {
+  if (base::FeatureList::IsEnabled(
+          content_settings::features::kActiveContentSettingExpiry)) {
+    return false;
+  }
   // Delete if an expriation date is set and in the past.
   if (!expiration.is_null() && (expiration < base::Time::Now()))
     return true;
@@ -158,8 +178,8 @@ ContentSettingsPref::~ContentSettingsPref() = default;
 std::unique_ptr<RuleIterator> ContentSettingsPref::GetRuleIterator(
     bool off_the_record) const {
   if (off_the_record)
-    return off_the_record_value_map_.GetRuleIterator(content_type_, &lock_);
-  return value_map_.GetRuleIterator(content_type_, &lock_);
+    return off_the_record_value_map_.GetRuleIterator(content_type_);
+  return value_map_.GetRuleIterator(content_type_);
 }
 
 void ContentSettingsPref::SetWebsiteSetting(
@@ -179,7 +199,7 @@ void ContentSettingsPref::SetWebsiteSetting(
     map_to_modify = &value_map_;
 
   {
-    base::AutoLock auto_lock(lock_);
+    base::AutoLock auto_lock(map_to_modify->GetLock());
     if (!value.is_none()) {
       map_to_modify->SetValue(primary_pattern, secondary_pattern, content_type_,
                               value.Clone(), metadata);
@@ -201,7 +221,7 @@ void ContentSettingsPref::ClearPref() {
   DCHECK(prefs_);
 
   {
-    base::AutoLock auto_lock(lock_);
+    base::AutoLock auto_lock(value_map_.GetLock());
     value_map_.clear();
   }
 
@@ -217,7 +237,7 @@ void ContentSettingsPref::ClearAllContentSettingsRules() {
   DCHECK(prefs_);
 
   if (off_the_record_) {
-    base::AutoLock auto_lock(lock_);
+    base::AutoLock auto_lock(off_the_record_value_map_.GetLock());
     off_the_record_value_map_.clear();
   } else {
     ClearPref();
@@ -228,13 +248,15 @@ void ContentSettingsPref::ClearAllContentSettingsRules() {
 }
 
 size_t ContentSettingsPref::GetNumExceptions() {
+  base::AutoLock auto_lock(value_map_.GetLock());
   return value_map_.size();
 }
 
 bool ContentSettingsPref::TryLockForTesting() const {
-  if (!lock_.Try())
+  if (!value_map_.GetLock().Try()) {
     return false;
-  lock_.Release();
+  }
+  value_map_.GetLock().Release();
   return true;
 }
 
@@ -246,7 +268,7 @@ void ContentSettingsPref::ReadContentSettingsFromPref() {
   // notification.
   base::AutoReset<bool> auto_reset(&updating_preferences_, true);
   prefs::ScopedDictionaryPrefUpdate update(prefs_, *pref_name_);
-  base::AutoLock auto_lock(lock_);
+  base::AutoLock auto_lock(value_map_.GetLock());
 
   value_map_.clear();
 
@@ -308,6 +330,15 @@ void ContentSettingsPref::ReadContentSettingsFromPref() {
       expired_patterns_to_remove.push_back(pattern_str);
       continue;
     }
+    // TODO(https://crbug.com/1455435): The use of ComputeLifetime here should
+    // be temporary. Once all persisted RuleMetaData instances include
+    // lifetimes, we can remove this, and just use the stored lifetime directly.
+    // We can do this after all lifetime-less settings have expired.
+    // Realistically this will take only one or two milestones, so this can
+    // safely be removed in M118 or M119.
+    base::TimeDelta lifetime = content_settings::RuleMetaData::ComputeLifetime(
+        /*lifetime=*/GetLifetime(settings_dictionary),
+        /*expiration=*/expiration);
 
     const base::Value* value = settings_dictionary.Find(kSettingKey);
     if (value) {
@@ -321,15 +352,14 @@ void ContentSettingsPref::ReadContentSettingsFromPref() {
         last_visited = GetLastVisit(settings_dictionary);
       }
       DCHECK(IsValueAllowedForType(*value, content_type_));
+      RuleMetaData metadata;
+      metadata.set_last_modified(last_modified);
+      metadata.set_last_visited(last_visited);
+      metadata.SetExpirationAndLifetime(expiration, lifetime);
+      metadata.set_session_model(session_model);
       value_map_.SetValue(std::move(pattern_pair.first),
                           std::move(pattern_pair.second), content_type_,
-                          value->Clone(),
-                          {
-                              .last_modified = last_modified,
-                              .last_visited = last_visited,
-                              .expiration = expiration,
-                              .session_model = session_model,
-                          });
+                          value->Clone(), metadata);
     }
   }
 
@@ -411,24 +441,29 @@ void ContentSettingsPref::UpdatePref(
                                                         nullptr);
         settings_dictionary->RemoveWithoutPathExpansion(kSessionModelKey,
                                                         nullptr);
+        settings_dictionary->RemoveWithoutPathExpansion(kLifetimeKey, nullptr);
       } else {
         settings_dictionary->SetKey(kSettingKey, std::move(value));
-        if (metadata.last_modified != base::Time()) {
+        if (metadata.last_modified() != base::Time()) {
           settings_dictionary->SetKey(
-              kLastModifiedKey, base::TimeToValue(metadata.last_modified));
+              kLastModifiedKey, base::TimeToValue(metadata.last_modified()));
         }
-        if (metadata.expiration != base::Time()) {
+        if (metadata.expiration() != base::Time()) {
           settings_dictionary->SetKey(kExpirationKey,
-                                      base::TimeToValue(metadata.expiration));
+                                      base::TimeToValue(metadata.expiration()));
         }
-        if (metadata.session_model != SessionModel::Durable) {
+        if (metadata.session_model() != SessionModel::Durable) {
           settings_dictionary->SetKey(
               kSessionModelKey,
-              base::Value(static_cast<int>(metadata.session_model)));
+              base::Value(static_cast<int>(metadata.session_model())));
         }
-        if (metadata.last_visited != base::Time()) {
-          settings_dictionary->SetKey(kLastVisitKey,
-                                      base::TimeToValue(metadata.last_visited));
+        if (metadata.last_visited() != base::Time()) {
+          settings_dictionary->SetKey(
+              kLastVisitKey, base::TimeToValue(metadata.last_visited()));
+        }
+        if (!metadata.lifetime().is_zero()) {
+          settings_dictionary->SetKey(
+              kLifetimeKey, base::TimeDeltaToValue(metadata.lifetime()));
         }
       }
 
@@ -444,8 +479,8 @@ void ContentSettingsPref::UpdatePref(
 void ContentSettingsPref::AssertLockNotHeld() const {
 #if !defined(NDEBUG)
   // |Lock::Acquire()| will assert if the lock is held by this thread.
-  lock_.Acquire();
-  lock_.Release();
+  value_map_.GetLock().Acquire();
+  value_map_.GetLock().Release();
 #endif
 }
 

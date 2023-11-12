@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Натиснете бутона за презареждане за препредаване на данните, необходими за зареждане на страницата.</translation>
 <translation id="3234666976984236645">Откривай винаги важното съдържание в сайта</translation>
 <translation id="3308738399950580893">реклами</translation>
+<translation id="3384522979010096022">Вашата организация не позволява да преглеждате сайта</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> е недостъпен в момента.</translation>
 <translation id="3427092606871434483">Позволи (фабрично)</translation>
 <translation id="3447661539832366887">Собственикът на устройството е изключил играта с динозавъра.</translation>
@@ -163,7 +164,7 @@
 <translation id="7113310725918019676">Позволи <ph name="BLOCKED_TYPE" /> от <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> не се придържа към стандартите за защита.</translation>
 <translation id="7219179957768738017">Съединението ползва <ph name="SSL_VERSION" />.</translation>
-<translation id="7221855153210829124">Показвай известия</translation>
+<translation id="7221855153210829124">Показвай известяване</translation>
 <translation id="7260504762447901703">Оттегляне на достъпа</translation>
 <translation id="7353601530677266744">Команден ред</translation>
 <translation id="7364115444476960850">Достъпът до страницата се блокира от <ph name="BLOCKER_NAME" /> във Vivaldi.</translation>
@@ -193,7 +194,6 @@
 <translation id="8150722005171944719">Прочитане на файла от <ph name="URL" /> е невъзможно. Вероятно е премахнат, преместен или е с разрешения, препятстващи достъп.</translation>
 <translation id="8184538546369750125">Ползвай всеобщо „Позволи“</translation>
 <translation id="8211406090763984747">Съединението е защитено</translation>
-<translation id="8225771182978767009">Лицето, настроило компютъра, е избрало да блокира сайта.</translation>
 <translation id="8241707690549784388">Търсената страница ползва въведени от вас данни. Връщането към нея може да изисква повторение на вече извършено от вас действие. Продължаване?</translation>
 <translation id="8241712895048303527">Блокирай в сайта</translation>
 <translation id="8286036467436129157">Впиши ме</translation>
@@ -214,7 +214,6 @@
 <translation id="9062620674789239642">Възможно е преместен, редактиран или изтрит.</translation>
 <translation id="9069693763241529744">Блокирано от разширение</translation>
 <translation id="9073799351042754113">Избрахте да изключите предупрежденията за защита за сайта.</translation>
-<translation id="910924428752220542">Пароли във Vivaldi</translation>
 <translation id="9169664750068251925">Блокирай винаги в сайта</translation>
 <translation id="9180553614777056266">Блокер на реклами</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> ползва неподдържан протокол.</translation>

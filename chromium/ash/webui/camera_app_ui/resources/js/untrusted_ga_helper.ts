@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import {assert, assertExists} from './assert.js';
+import {WaitableEvent} from './waitable_event.js';
 
 /**
  * The GA library URL in trusted type.
@@ -28,41 +29,77 @@ declare global {
   }
 }
 
+type SendGA4Event = typeof sendGA4Event;
+const sendGA4EventReady = new WaitableEvent<SendGA4Event>();
+interface InitGAIdParams {
+  gaId: string;
+  ga4Id: string;
+  clientId: string;
+  ga4ApiSecret: string;
+  ga4SessionId: string;
+}
+
 /**
- * Initializes GA for sending metrics.
+ * Initializes GA and GA4 for sending metrics.
  *
- * @param id The GA tracker ID to send metrics.
- * @param clientId The GA client ID representing the current client.
+ * @param idParams The parameters to initialize GA and GA4.
+ * @param idParams.gaId The GA tracker ID to send events.
+ * @param idParams.ga4Id The GA4 measurement ID to send events.
+ * @param idParams.clientId The client ID for the current client for GA and GA4.
  * @param setClientIdCallback Callback to store client id.
  */
 function initGA(
-    id: string, clientId: string,
+    idParams: InitGAIdParams,
     setClientIdCallback: (clientId: string) => void): void {
   // GA initialization function which is copied and inlined from
   // https://developers.google.com/analytics/devguides/collection/analyticsjs.
   window.GoogleAnalyticsObject = 'ga';
   // Creates an initial ga() function.
   // The queued commands will be executed once analytics.js loads.
+  //
+  // The type of .ga on Window doesn't include undefined, but since this part
+  // is setup code for ga, it's possible to have a undefined case here. Disable
+  // eslint which would think the condition is always true.
+  //
+  // The type assertion is also needed since this part of invariant is
+  // maintained by ga itself, and all our usage only use the function call
+  // interface.
+  /* eslint-disable
+       @typescript-eslint/strict-boolean-expressions,
+       @typescript-eslint/consistent-type-assertions */
   window.ga = window.ga || ((...args: unknown[]) => {
                              (window.ga.q = window.ga.q || []).push(args);
                            }) as UniversalAnalytics.ga;
+  /* eslint-enable
+       @typescript-eslint/strict-boolean-expressions,
+       @typescript-eslint/consistent-type-assertions */
   window.ga.l = Date.now();
   const a = document.createElement('script');
   const m = document.getElementsByTagName('script')[0];
   a.async = true;
   // TypeScript doesn't support setting .src to TrustedScriptURL yet.
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
   a.src = gaLibraryURL as unknown as string;
   assert(m.parentNode !== null);
   m.parentNode.insertBefore(a, m);
 
-  window.ga('create', id, {
+  const {gaId, ga4Id, clientId, ga4ApiSecret, ga4SessionId} = idParams;
+  window.ga('create', gaId, {
     storage: 'none',
     clientId: clientId,
   });
 
   window.ga((tracker?: UniversalAnalytics.Tracker) => {
     assert(tracker !== undefined);
-    setClientIdCallback(tracker.get('clientId'));
+    const clientId = tracker.get('clientId');
+    setClientIdCallback(clientId);
+    sendGA4EventReady.signal(genSendGA4Event({
+      ga4Id,
+      gaId,
+      clientId,
+      ga4ApiSecret,
+      ga4SessionId,
+    }));
   });
 
   // By default GA uses a fake image and sets its source to the target URL to
@@ -79,6 +116,52 @@ function initGA(
   window.ga('set', 'anonymizeIp', true);
 }
 
+function genSendGA4Event({gaId, ga4Id, clientId, ga4ApiSecret, ga4SessionId}:
+                             InitGAIdParams): SendGA4Event {
+  return (event: UniversalAnalytics.FieldsObject,
+          dimensions: Record<string, string>) => {
+    if (window[`ga-disable-${gaId}`]) {
+      return;
+    }
+    // TODO(b/267265966): Use gtag.js instead of measurement protocol when
+    // gtag.js supports sending events under non-http/https protocols. GA4 uses
+    // `engagement_time_msec` and `session_id` to calculate user activity.
+    // Remove these parameters as they are sent automatically by gtag.js.
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const params: Record<string, unknown> = {
+      ...dimensions,
+      // Set '1' here as it's enough for GA4 to generate the metrics for n-day
+      // active users and we don't want to reimplement how gtag.js calculate the
+      // engagement time for each event.
+      engagement_time_msec: '1',
+      session_id: ga4SessionId,
+    };
+    if (event.eventLabel !== undefined) {
+      params['event_label'] = event.eventLabel;
+    }
+    if (event.eventCategory !== undefined) {
+      params['event_category'] = event.eventCategory;
+    }
+    if (event.eventValue !== undefined) {
+      params['value'] = event.eventValue;
+    }
+    void fetch(
+        `https://www.google-analytics.com/mp/collect?measurement_id=${
+            ga4Id}&api_secret=${ga4ApiSecret}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            client_id: clientId,
+            events: [{
+              name: event.eventAction,
+              params,
+            }],
+          }),
+        });
+    /* eslint-enable @typescript-eslint/naming-convention */
+  };
+}
+
 /**
  * Sends event to GA.
  *
@@ -86,6 +169,19 @@ function initGA(
  */
 function sendGAEvent(event: UniversalAnalytics.FieldsObject): void {
   window.ga('send', 'event', event);
+}
+
+/**
+ * Sends events to GA4.
+ *
+ * @param event Event to send.
+ * @param dimensions Custom dimensions to include in the event.
+ */
+function sendGA4Event(
+    event: UniversalAnalytics.FieldsObject,
+    dimensions: Record<string, string>): void {
+  void sendGA4EventReady.wait().then(
+      (sendEvent) => sendEvent(event, dimensions));
 }
 
 /**
@@ -101,6 +197,7 @@ function setMetricsEnabled(id: string, enabled: boolean): void {
 export interface GAHelper {
   initGA: typeof initGA;
   sendGAEvent: typeof sendGAEvent;
+  sendGA4Event: SendGA4Event;
   setMetricsEnabled: typeof setMetricsEnabled;
 }
-export {initGA, sendGAEvent, setMetricsEnabled};
+export {initGA, sendGAEvent, sendGA4Event, setMetricsEnabled};

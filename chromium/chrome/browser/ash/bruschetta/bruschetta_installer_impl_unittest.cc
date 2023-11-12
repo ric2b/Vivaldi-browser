@@ -10,8 +10,10 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/run_loop.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/values.h"
+#include "chrome/browser/ash/bruschetta/bruschetta_download.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_download_client.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_installer.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_pref_names.h"
@@ -47,7 +49,7 @@ using testing::InvokeWithoutArgs;
 using testing::Sequence;
 
 // Total number of stopping points in ::ExpectStopOnStepN
-constexpr int kMaxSteps = 26;
+constexpr int kMaxSteps = 24;
 
 // Total number of stopping points in ::ExpectStopOnStepN when we don't install
 // a pflash file.
@@ -69,6 +71,21 @@ class MockObserver : public BruschettaInstaller::Observer {
               (BruschettaInstaller::State state),
               (override));
   MOCK_METHOD(void, Error, (BruschettaInstallResult), (override));
+};
+
+class StubDownload : public BruschettaDownload {
+ public:
+  StubDownload(base::FilePath path, std::string hash)
+      : path_(std::move(path)), hash_(std::move(hash)) {}
+  ~StubDownload() override = default;
+  void StartDownload(
+      Profile* profile,
+      GURL url,
+      base::OnceCallback<void(base::FilePath, std::string)> callback) override {
+    std::move(callback).Run(path_, hash_);
+  }
+  base::FilePath path_;
+  std::string hash_;
 };
 
 class BruschettaInstallerTest : public testing::TestWithParam<int>,
@@ -104,7 +121,6 @@ class BruschettaInstallerTest : public testing::TestWithParam<int>,
     config.Set(prefs::kPolicyEnabledKey,
                static_cast<int>(prefs::PolicyEnabledState::INSTALL_ALLOWED));
     config.Set(prefs::kPolicyImageKey, image.Clone());
-    config.Set(prefs::kPolicyUefiKey, image.Clone());
     prefs_installable_no_pflash_.Set(kVmConfigId, config.Clone());
 
     config.Set(prefs::kPolicyPflashKey, image.Clone());
@@ -136,6 +152,18 @@ class BruschettaInstallerTest : public testing::TestWithParam<int>,
                                   base::Unretained(this)));
 
     installer_->AddObserver(&observer_);
+    ConfigureDownloadFactory(base::FilePath(), "");
+  }
+
+  // Configures the Bruschetta installer to use a fake downloader which
+  // immediately completes returning |path| and |hash|.
+  void ConfigureDownloadFactory(base::FilePath path, std::string hash) {
+    installer_->SetDownloadFactoryForTesting(base::BindLambdaForTesting(
+        [path = std::move(path), hash = std::move(hash)]() {
+          std::unique_ptr<BruschettaDownload> d =
+              std::make_unique<StubDownload>(std::move(path), std::move(hash));
+          return d;
+        }));
   }
 
   void TearDown() override {
@@ -178,16 +206,14 @@ class BruschettaInstallerTest : public testing::TestWithParam<int>,
   }
 
   auto DownloadErrorCallback(bool fail_at_start) {
-    return [this, fail_at_start]() {
-      download_service_->SetFailedDownload(
-          installer_->GetDownloadGuid().AsLowercaseString(), fail_at_start);
-    };
+    return [this]() { ConfigureDownloadFactory(base::FilePath(), ""); };
   }
 
   auto DownloadBadHashCallback() {
     return [this]() {
-      download_service_->SetHash256(kBadHash);
-      download_service_->SetFailedDownload("", false);
+      base::FilePath path;
+      base::CreateTemporaryFile(&path);
+      ConfigureDownloadFactory(path, kBadHash);
     };
   }
 
@@ -195,9 +221,7 @@ class BruschettaInstallerTest : public testing::TestWithParam<int>,
     return [this]() {
       base::FilePath path;
       base::CreateTemporaryFile(&path);
-      download_service_->SetHash256(kVmConfigHash);
-      download_service_->SetFilePath(path);
-      download_service_->SetFailedDownload("", false);
+      ConfigureDownloadFactory(path, kVmConfigHash);
     };
   }
 
@@ -297,14 +321,15 @@ class BruschettaInstallerTest : public testing::TestWithParam<int>,
       }
     }
 
-    // DLC install step
+    // Tools DLC install step
     {
       if (out_result) {
-        *out_result = BruschettaInstallResult::kDlcInstallError;
+        *out_result = BruschettaInstallResult::kToolsDlcInstallError;
       }
       auto& expectation =
-          EXPECT_CALL(observer_,
-                      StateChanged(BruschettaInstaller::State::kDlcInstall))
+          EXPECT_CALL(
+              observer_,
+              StateChanged(BruschettaInstaller::State::kToolsDlcInstall))
               .Times(1)
               .InSequence(seq);
 
@@ -321,15 +346,15 @@ class BruschettaInstallerTest : public testing::TestWithParam<int>,
           InvokeWithoutArgs(DlcCallback(dlcservice::kErrorNone)));
     }
 
-    // Firmware image download step
+    // UEFI DLC install step
     {
       if (out_result) {
-        *out_result = BruschettaInstallResult::kDownloadError;
+        *out_result = BruschettaInstallResult::kFirmwareDlcInstallError;
       }
       auto& expectation =
           EXPECT_CALL(
               observer_,
-              StateChanged(BruschettaInstaller::State::kFirmwareDownload))
+              StateChanged(BruschettaInstaller::State::kFirmwareDlcInstall))
               .Times(1)
               .InSequence(seq);
 
@@ -338,22 +363,12 @@ class BruschettaInstallerTest : public testing::TestWithParam<int>,
         return false;
       }
       if (!n--) {
-        MakeErrorPoint(expectation, seq, DownloadErrorCallback(true));
-        return true;
-      }
-      if (!n--) {
-        MakeErrorPoint(expectation, seq, DownloadErrorCallback(false));
-        return true;
-      }
-      if (out_result) {
-        *out_result = BruschettaInstallResult::kInvalidFirmware;
-      }
-      if (!n--) {
-        MakeErrorPoint(expectation, seq, DownloadBadHashCallback());
+        MakeErrorPoint(expectation, seq, DlcCallback("Install Error"));
         return true;
       }
 
-      expectation.WillOnce(InvokeWithoutArgs(DownloadSuccessCallback()));
+      expectation.WillOnce(
+          InvokeWithoutArgs(DlcCallback(dlcservice::kErrorNone)));
     }
 
     // Boot disk download step
@@ -564,7 +579,7 @@ class BruschettaInstallerTest : public testing::TestWithParam<int>,
       prefs_not_installable_;
 
   TestingProfile profile_;
-  std::unique_ptr<BruschettaInstaller> installer_;
+  std::unique_ptr<BruschettaInstallerImpl> installer_;
 
   MockObserver observer_;
   // Pointer owned by DiskMountManager

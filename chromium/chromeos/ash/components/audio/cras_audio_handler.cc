@@ -108,6 +108,8 @@ void CrasAudioHandler::AudioObserver::OnOutputChannelRemixingChanged(
 
 void CrasAudioHandler::AudioObserver::OnNoiseCancellationStateChanged() {}
 
+void CrasAudioHandler::AudioObserver::OnForceRespectUiGainsStateChanged() {}
+
 void CrasAudioHandler::AudioObserver::OnHotwordTriggered(
     uint64_t /* tv_sec */,
     uint64_t /* tv_nsec */) {}
@@ -131,6 +133,9 @@ void CrasAudioHandler::AudioObserver::OnSurveyTriggered(
     const AudioSurveyData& /*survey_specific_data */) {}
 
 void CrasAudioHandler::AudioObserver::OnSpeakOnMuteDetected() {}
+
+void CrasAudioHandler::AudioObserver::OnNumStreamIgnoreUiGainsChanged(
+    int32_t num) {}
 
 void CrasAudioHandler::NumberOfNonChromeOutputStreamsChanged() {
   GetNumberOfNonChromeOutputStreams();
@@ -596,6 +601,23 @@ void CrasAudioHandler::SetNoiseCancellationSupportedForTesting(bool supported) {
   noise_cancellation_supported_ = supported;
 }
 
+bool CrasAudioHandler::GetForceRespectUiGainsState() const {
+  return audio_pref_handler_->GetForceRespectUiGainsState();
+}
+
+void CrasAudioHandler::RefreshForceRespectUiGainsState() {
+  SetForceRespectUiGainsState(GetForceRespectUiGainsState());
+}
+
+void CrasAudioHandler::SetForceRespectUiGainsState(bool state) {
+  CrasAudioClient::Get()->SetForceRespectUiGains(state);
+  audio_pref_handler_->SetForceRespectUiGainsState(state);
+
+  for (auto& observer : observers_) {
+    observer.OnForceRespectUiGainsStateChanged();
+  }
+}
+
 void CrasAudioHandler::SetKeyboardMicActive(bool active) {
   const AudioDevice* keyboard_mic = GetKeyboardMic();
   if (!keyboard_mic)
@@ -607,6 +629,10 @@ void CrasAudioHandler::SetKeyboardMicActive(bool active) {
     AddActiveNode(keyboard_mic->id, true);
   else
     RemoveActiveNodeInternal(keyboard_mic->id, true);
+}
+
+void CrasAudioHandler::SetSpeakOnMuteDetection(bool som_on) {
+  CrasAudioClient::Get()->SetSpeakOnMuteDetection(som_on);
 }
 
 void CrasAudioHandler::AddActiveNode(uint64_t node_id, bool notify) {
@@ -1239,6 +1265,13 @@ void CrasAudioHandler::SpeakOnMuteDetected() {
   }
 }
 
+void CrasAudioHandler::NumStreamIgnoreUiGains(int32_t num) {
+  num_stream_ignore_ui_gains_ = num;
+  for (auto& observer : observers_) {
+    observer.OnNumStreamIgnoreUiGainsChanged(num);
+  }
+}
+
 void CrasAudioHandler::ResendBluetoothBattery() {
   CrasAudioClient::Get()->ResendBluetoothBattery();
 }
@@ -1400,6 +1433,7 @@ void CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable(
   GetNumberOfOutputStreams();
   GetNumberOfNonChromeOutputStreams();
   GetNumberOfInputStreamsWithPermissionInternal();
+  GetNumStreamIgnoreUiGains();
   CrasAudioClient::Get()->SetFixA2dpPacketSize(
       base::FeatureList::IsEnabled(features::kBluetoothFixA2dpPacketSize));
 
@@ -1419,10 +1453,6 @@ void CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable(
   input_muted_by_microphone_mute_switch_ = IsMicrophoneMuteSwitchOn();
   if (input_muted_by_microphone_mute_switch_)
     SetInputMute(true, InputMuteChangeMethod::kPhysicalShutter);
-
-  // Sets speak-on-mute detection enabled based on feature flag.
-  CrasAudioClient::Get()->SetSpeakOnMuteDetection(
-      features::IsSpeakOnMuteEnabled());
 }
 
 void CrasAudioHandler::ApplyAudioPolicy() {
@@ -2455,6 +2485,10 @@ bool CrasAudioHandler::system_agc_supported() const {
   return system_agc_supported_;
 }
 
+int32_t CrasAudioHandler::num_stream_ignore_ui_gains() const {
+  return num_stream_ignore_ui_gains_;
+}
+
 // GetSystemAgcSupported() is only called in the same thread
 // as the CrasAudioHandler constructor. We are safe here without
 // thread check, because unittest may not have the task runner
@@ -2472,6 +2506,30 @@ void CrasAudioHandler::HandleGetSystemAgcSupported(
     return;
   }
   system_agc_supported_ = system_agc_supported.value();
+}
+
+void CrasAudioHandler::GetNumStreamIgnoreUiGains() {
+  CrasAudioClient::Get()->GetNumStreamIgnoreUiGains(
+      base::BindOnce(&CrasAudioHandler::HandleGetNumStreamIgnoreUiGains,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void CrasAudioHandler::HandleGetNumStreamIgnoreUiGains(
+    absl::optional<int32_t> new_stream_ignore_ui_gains_count) {
+  if (!new_stream_ignore_ui_gains_count.has_value()) {
+    LOG(ERROR) << "Failed to retrieve number of ignore ui gains streams.";
+    return;
+  }
+  DCHECK_GE(*new_stream_ignore_ui_gains_count, 0);
+
+  if (*new_stream_ignore_ui_gains_count != num_stream_ignore_ui_gains_) {
+    for (auto& observer : observers_) {
+      observer.OnNumStreamIgnoreUiGainsChanged(
+          *new_stream_ignore_ui_gains_count);
+    }
+  }
+
+  num_stream_ignore_ui_gains_ = *new_stream_ignore_ui_gains_count;
 }
 
 ScopedCrasAudioHandlerForTesting::ScopedCrasAudioHandlerForTesting() {

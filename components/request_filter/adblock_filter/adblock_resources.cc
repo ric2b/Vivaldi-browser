@@ -218,7 +218,7 @@ absl::optional<std::string> Resources::GetRedirect(
   }
 
   const std::string* resource =
-      redirectable_resources_.FindStringKey(actual_name);
+      redirectable_resources_.GetDict().FindString(actual_name);
   if (!resource)
     return absl::nullopt;
 

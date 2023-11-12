@@ -35,6 +35,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chrome/test/views/chrome_test_views_delegate.h"
+#include "components/content_settings/core/browser/content_settings_uma_util.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/history/core/browser/history_service.h"
@@ -290,6 +291,7 @@ class PageInfoBubbleViewTestApi {
   void SetPermissionInfo(const PermissionInfoList& list) {
     for (const PageInfo::PermissionInfo& info : list) {
       presenter_->OnSitePermissionChanged(info.type, info.setting,
+                                          info.requesting_origin,
                                           /*is_one_time=*/false);
     }
     CreateView();
@@ -321,11 +323,13 @@ class PageInfoBubbleViewTestApi {
     quit_closure.Run();
   }
 
-  raw_ptr<views::BubbleDialogDelegateView> bubble_delegate_;
-  raw_ptr<PageInfo> presenter_ = nullptr;
-  raw_ptr<std::vector<PermissionToggleRowView*>> toggle_rows_ = nullptr;
+  raw_ptr<views::BubbleDialogDelegateView, DanglingUntriaged> bubble_delegate_;
+  raw_ptr<PageInfo, DanglingUntriaged> presenter_ = nullptr;
+  raw_ptr<std::vector<PermissionToggleRowView*>, DanglingUntriaged>
+      toggle_rows_ = nullptr;
 
-  raw_ptr<PageInfoNavigationHandler> navigation_handler_ = nullptr;
+  raw_ptr<PageInfoNavigationHandler, DanglingUntriaged> navigation_handler_ =
+      nullptr;
 
   // For recreating the view.
   gfx::NativeWindow parent_;
@@ -445,7 +449,7 @@ class PageInfoBubbleViewTest : public testing::Test {
   std::unique_ptr<views::ScopedViewsTestHelper> views_helper_;
   raw_ptr<MockTrustSafetySentimentService> mock_sentiment_service_;
 
-  raw_ptr<views::Widget> parent_window_ =
+  raw_ptr<views::Widget, DanglingUntriaged> parent_window_ =
       nullptr;  // Weak. Owned by the NativeWidget.
   std::unique_ptr<test::PageInfoBubbleViewTestApi> api_;
 };
@@ -498,10 +502,9 @@ TEST_F(PageInfoBubbleViewTest, NotificationPermissionRevokeUkm) {
   ukm_recorder.ExpectEntrySourceHasUrl(entry, origin_url);
   EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "Source"),
             static_cast<int64_t>(permissions::PermissionSourceUI::OIB));
-  size_t num_values = 0;
   EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "PermissionType"),
-            ContentSettingTypeToHistogramValue(
-                ContentSettingsType::NOTIFICATIONS, &num_values));
+            content_settings_uma_util::ContentSettingTypeToHistogramValue(
+                ContentSettingsType::NOTIFICATIONS));
   EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "Action"),
             static_cast<int64_t>(permissions::PermissionAction::REVOKED));
 }

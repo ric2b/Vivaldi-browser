@@ -285,7 +285,7 @@ void ToolbarButton::UpdateColorsAndInsets() {
   if (!GetBorder() || target_insets != current_insets ||
       last_border_color_ != border_color ||
       last_paint_insets_ != paint_insets) {
-    if (border_color) {
+    if (ShouldPaintBorder() && border_color) {
       int border_thickness_dp = GetText().empty()
                                     ? kBorderThicknessDpWithoutLabel
                                     : kBorderThicknessDpWithLabel;
@@ -349,6 +349,26 @@ int ToolbarButton::GetIconSize() const {
 
   return features::IsChromeRefresh2023() ? kDefaultIconSizeChromeRefresh
                                          : kDefaultIconSize;
+}
+
+bool ToolbarButton::ShouldPaintBorder() const {
+  return true;
+}
+
+bool ToolbarButton::ShouldBlendHighlightColor() const {
+  return !features::IsChromeRefresh2023();
+}
+
+bool ToolbarButton::ShouldDirectlyUseHighlightAsBackground() const {
+  return true;
+}
+
+absl::optional<SkColor> ToolbarButton::GetHighlightTextColor() const {
+  return absl::nullopt;
+}
+
+absl::optional<SkColor> ToolbarButton::GetHighlightBorderColor() const {
+  return absl::nullopt;
 }
 
 void ToolbarButton::SetVectorIcon(const gfx::VectorIcon& icon) {
@@ -722,8 +742,15 @@ absl::optional<SkColor> ToolbarButton::HighlightColorAnimation::GetTextColor()
     const {
   if (!IsShown() || !parent_->GetColorProvider())
     return absl::nullopt;
+
+  // Use the overridden value supplied by the button.
+  const absl::optional<SkColor> text_color_overridden =
+      parent_->GetHighlightTextColor();
   SkColor text_color;
-  if (highlight_color_) {
+
+  if (text_color_overridden.has_value()) {
+    text_color = *text_color_overridden;
+  } else if (highlight_color_) {
     text_color = *highlight_color_;
   } else {
     text_color = parent_->GetColorProvider()->GetColor(kColorToolbarButtonText);
@@ -737,9 +764,15 @@ absl::optional<SkColor> ToolbarButton::HighlightColorAnimation::GetBorderColor()
     return absl::nullopt;
   }
 
+  // Use the overridden value is supplied by the button
+  const absl::optional<SkColor> border_color_overridden =
+      parent_->GetHighlightBorderColor();
   SkColor border_color;
-  if (highlight_color_) {
-    border_color = *highlight_color_;
+
+  if (border_color_overridden.has_value()) {
+    border_color = border_color_overridden.value();
+  } else if (highlight_color_.has_value()) {
+    border_color = highlight_color_.value();
   } else {
     border_color =
         parent_->GetColorProvider()->GetColor(kColorToolbarButtonBorder);
@@ -754,10 +787,13 @@ ToolbarButton::HighlightColorAnimation::GetBackgroundColor() const {
     return absl::nullopt;
   SkColor bg_color =
       color_provider->GetColor(kColorToolbarButtonBackgroundHighlightedDefault);
-  if (highlight_color_) {
-    bg_color = color_utils::AlphaBlend(*highlight_color_,
-                                       color_provider->GetColor(kColorToolbar),
-                                       kToolbarInkDropHighlightVisibleAlpha);
+  if (highlight_color_.has_value()) {
+    bg_color =
+        parent_->ShouldBlendHighlightColor()
+            ? color_utils::AlphaBlend(highlight_color_.value(),
+                                      color_provider->GetColor(kColorToolbar),
+                                      kToolbarInkDropHighlightVisibleAlpha)
+            : highlight_color_.value();
   }
   return FadeWithAnimation(bg_color, highlight_color_animation_);
 }

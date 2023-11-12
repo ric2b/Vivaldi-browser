@@ -120,8 +120,8 @@ TEST_P(UploadClientTest, CreateUploadClientAndUploadRecords) {
   static constexpr int64_t kExpectedCallTimes = 10;
   static constexpr int64_t kGenerationId = 1234;
 
-  base::Value data{base::Value::Type::DICT};
-  data.SetKey("TEST_KEY", base::Value("TEST_VALUE"));
+  base::Value::Dict data;
+  data.Set("TEST_KEY", "TEST_VALUE");
 
   std::string json_data;
   ASSERT_TRUE(base::JSONWriter::Write(data, &json_data));
@@ -164,7 +164,7 @@ TEST_P(UploadClientTest, CreateUploadClientAndUploadRecords) {
 
   ReportingServerConnector::TestEnvironment test_env;
   test_env.client()->SetDMToken(
-      policy::DMToken::CreateValidTokenForTesting("FAKE_DM_TOKEN").value());
+      policy::DMToken::CreateValidToken("FAKE_DM_TOKEN").value());
 
   static constexpr char matched_record_template[] =
       R"JSON(

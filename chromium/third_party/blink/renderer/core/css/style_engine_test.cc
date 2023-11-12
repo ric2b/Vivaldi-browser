@@ -3992,7 +3992,7 @@ TEST_F(StyleEngineContainerQueryTest,
   //
   // See implementation of `NodeLayoutUpgrade::ShouldUpgrade` for more
   // information.
-  GetDocument().UpdateStyleAndLayoutTreeForNode(a);
+  GetDocument().UpdateStyleAndLayoutTreeForNode(a, DocumentUpdateReason::kTest);
   EXPECT_FALSE(GetStyleEngine().StyleAffectedByLayout());
   EXPECT_FALSE(GetDocument().View()->NeedsLayout());
   EXPECT_FALSE(GetDocument().NeedsLayoutTreeUpdateForNode(*a));
@@ -4237,6 +4237,42 @@ TEST_F(StyleEngineTest, NoFastRejectForMultipleIs) {
   EXPECT_EQ(0u, stats->rules_fast_rejected);
 }
 
+TEST_F(StyleEngineTest, ScrollbarPartPseudoDoesNotMatchElement) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      .parent ::-webkit-scrollbar-button { background-color: red; }
+      .parent ::-webkit-scrollbar-corner { background-color: red; }
+      .parent ::-webkit-scrollbar-thumb { background-color: red; }
+      .parent ::-webkit-scrollbar-track { background-color: red; }
+      .parent ::-webkit-scrollbar-track-piece { background-color: red; }
+    </style>
+    <div class="parent">
+      <div class="child"></div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+
+  StyleEngine& engine = GetStyleEngine();
+  // Even if the Stats() were already enabled, the following resets it to 0.
+  engine.SetStatsEnabled(true);
+
+  StyleResolverStats* stats = engine.Stats();
+  ASSERT_TRUE(stats);
+  EXPECT_EQ(0u, stats->rules_matched);
+
+  Element* div = GetDocument().QuerySelector(".child");
+  ASSERT_TRUE(div);
+  div->SetInlineStyleProperty(CSSPropertyID::kColor, "green");
+
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
+  GetStyleEngine().RecalcStyle();
+
+  // We have one UA rule for <div> that matches.
+  // None of the ::-webkit-scrollbar-* rules should match.
+  EXPECT_EQ(1u, stats->rules_matched);
+}
+
 TEST_F(StyleEngineTest, AudioUAStyleNameSpace) {
   GetDocument().body()->setInnerHTML(R"HTML(
     <audio id="html-audio"></audio>
@@ -4333,6 +4369,30 @@ TEST_F(StyleEngineTest, AtContainerUseCount) {
   )HTML");
   UpdateAllLifecyclePhases();
   EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSAtRuleContainer));
+}
+
+TEST_F(StyleEngineTest, StyleQueryUseCount) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @container (width = 200px) {
+        body { background: red; }
+      }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSAtRuleContainer));
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kCSSStyleContainerQuery));
+
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @container ((width > 0px) and style(--foo: bar)) {
+        body { background: lime; }
+      }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSAtRuleContainer));
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSStyleContainerQuery));
 }
 
 TEST_F(StyleEngineTest, NestingUseCount) {
@@ -5870,44 +5930,6 @@ TEST_F(StyleEngineTest, BorderWidthsAreRecalculatedWhenZoomChanges) {
   checkBorderWidth(1.0f);
 }
 
-TEST_F(StyleEngineTest, SubsequentSiblingRecalcFlatTree) {
-  GetDocument()
-      .documentElement()
-      ->setInnerHTMLWithDeclarativeShadowDOMForTesting(R"HTML(
-    <div id="host">
-      <template shadowroot=open>
-        <slot name=a></slot>
-      </template>
-      <div slot=a id=target></div>
-      <div></div>
-      <div></div>
-      <div></div>
-      <div></div>
-      <div slot=a></div>
-      <div></div>
-      <div></div>
-      <div></div>
-      <div></div>
-      <div slot=a></div>
-    </div>
-  )HTML");
-
-  UpdateAllLifecyclePhasesForTest();
-
-  unsigned before_count = GetStyleEngine().StyleForElementCount();
-
-  Element* target = GetElementById("target");
-  ASSERT_TRUE(target);
-
-  target->SetInlineStyleProperty(CSSPropertyID::kScrollTimelineName, "foo");
-  UpdateAllLifecyclePhasesForTest();
-
-  unsigned after_count = GetStyleEngine().StyleForElementCount();
-
-  // Only the slotted elements should get style recalc.
-  EXPECT_EQ(3u, after_count - before_count);
-}
-
 TEST_F(StyleEngineTest, AnimationDelayShorthandFlags) {
   String css = "animation-delay:1s";
   {
@@ -5954,6 +5976,7 @@ TEST_F(StyleEngineTest, AnimationShorthandFlags) {
   {
     ScopedScrollTimelineForTest scroll_timeline_enabled(false);
     ScopedCSSAnimationDelayStartEndForTest start_end_enabled(false);
+    ScopedScrollTimelineCurrentTimeForTest current_time_enabled(false);
     const CSSPropertyValueSet* set =
         css_test_helpers::ParseDeclarationBlock(css);
     ASSERT_TRUE(set);
@@ -6018,7 +6041,7 @@ TEST_F(StyleEngineTest, InitialStyle_Recalc) {
     <style>
       #target {
         background-color: green;
-        @initial { background-color: red; }
+        @starting-style { background-color: red; }
       }
     </style>
     <div id="target"></div>
@@ -6036,12 +6059,12 @@ TEST_F(StyleEngineTest, InitialStyle_Recalc) {
   UpdateAllLifecyclePhasesForTest();
 
   EXPECT_EQ(GetStyleEngine().StyleForElementCount() - before_count, 1u)
-      << "The style recalc should not do a separate @initial pass since the "
-         "element already has a style";
+      << "The style recalc should not do a separate @starting-style pass since "
+         "the element already has a style";
   EXPECT_EQ(target->ComputedStyleRef().VisitedDependentColor(
                 GetCSSPropertyBackgroundColor()),
             green)
-      << "Make sure @initial rules do not apply for the second pass";
+      << "Make sure @starting-style rules do not apply for the second pass";
   EXPECT_EQ(
       target->ComputedStyleRef().VisitedDependentColor(GetCSSPropertyColor()),
       lime)
@@ -6053,7 +6076,7 @@ TEST_F(StyleEngineTest, InitialStyle_FromDisplayNone) {
     <style>
       #target {
         background-color: green;
-        @initial { background-color: red; }
+        @starting-style { background-color: red; }
       }
     </style>
     <div id="target" style="display:none"></div>
@@ -6071,11 +6094,11 @@ TEST_F(StyleEngineTest, InitialStyle_FromDisplayNone) {
 
   EXPECT_EQ(GetStyleEngine().StyleForElementCount() - before_count, 2u)
       << "The style recalc needs to do two passes because the element was "
-         "display:none and @initial styles are matching";
+         "display:none and @starting-style styles are matching";
   EXPECT_EQ(target->ComputedStyleRef().VisitedDependentColor(
                 GetCSSPropertyBackgroundColor()),
             green)
-      << "Make sure @initial do not apply for the second pass";
+      << "Make sure @starting-style do not apply for the second pass";
 }
 
 TEST_F(StyleEngineTest, InitialStyleCount_EnsureComputedStyle) {
@@ -6084,7 +6107,7 @@ TEST_F(StyleEngineTest, InitialStyleCount_EnsureComputedStyle) {
       #target {
         background-color: green;
         transition: background-color 100s step-end;
-        @initial { background-color: red; }
+        @starting-style { background-color: red; }
       }
     </style>
     <div id="target" style="display:none"></div>
@@ -6104,12 +6127,12 @@ TEST_F(StyleEngineTest, InitialStyleCount_EnsureComputedStyle) {
   ASSERT_TRUE(none_style);
 
   EXPECT_EQ(GetStyleEngine().StyleForElementCount() - before_count, 1u)
-      << "No @initial pass for EnsureComputedStyle";
+      << "No @starting-style pass for EnsureComputedStyle";
 
   EXPECT_EQ(target->ComputedStyleRef().VisitedDependentColor(
                 GetCSSPropertyBackgroundColor()),
             green)
-      << "Transitions are not started and @initial does not apply in "
+      << "Transitions are not started and @starting-style does not apply in "
          "display:none";
 }
 

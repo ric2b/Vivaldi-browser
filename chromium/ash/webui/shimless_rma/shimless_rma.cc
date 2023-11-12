@@ -11,6 +11,7 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/network_config_service.h"
+#include "ash/webui/common/trusted_types_util.h"
 #include "ash/webui/grit/ash_shimless_rma_resources.h"
 #include "ash/webui/grit/ash_shimless_rma_resources_map.h"
 #include "ash/webui/shimless_rma/backend/shimless_rma_delegate.h"
@@ -407,6 +408,17 @@ bool HasLaunchRmaSwitchAndIsAllowed() {
 
 }  // namespace shimless_rma
 
+ShimlessRMADialogUIConfig::ShimlessRMADialogUIConfig(
+    CreateWebUIControllerFunc create_controller_func)
+    : ChromeOSWebUIConfig(content::kChromeUIScheme,
+                          ash::kChromeUIShimlessRMAHost,
+                          create_controller_func) {}
+
+bool ShimlessRMADialogUIConfig::IsWebUIEnabled(
+    content::BrowserContext* browser_context) {
+  return shimless_rma::HasLaunchRmaSwitchAndIsAllowed();
+}
+
 ShimlessRMADialogUI::ShimlessRMADialogUI(
     content::WebUI* web_ui,
     std::unique_ptr<shimless_rma::ShimlessRmaDelegate> shimless_rma_delegate)
@@ -421,7 +433,7 @@ ShimlessRMADialogUI::ShimlessRMADialogUI(
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test chrome://webui-test "
       "'self';");
-  html_source->DisableTrustedTypesCSP();
+  ash::EnableTrustedTypesCSP(html_source);
 
   const auto resources =
       base::make_span(kAshShimlessRmaResources, kAshShimlessRmaResourcesSize);

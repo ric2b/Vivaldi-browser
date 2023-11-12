@@ -4,24 +4,6 @@ update_template_instance("//ios/chrome/app/resources:launchscreen_xib") {
   source = "//vivaldi/ios/app/resources/LaunchScreen.xib"
 }
 
-update_target("//ios/chrome/browser/ui/bookmarks/folder_chooser:ui") {
-  sources += [
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.mm",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_folder_view_controller.h",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_folder_view_controller.mm",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_url_view_controller.h",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_url_view_controller.mm",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_parent_folder_view.h",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_parent_folder_view.mm",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_folder_selection_header_view.h",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_folder_selection_header_view.mm",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_controller_delegate.h",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_prefs.h",
-    "//vivaldi/ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_prefs.mm",
-  ]
-}
-
 update_target("//ios/chrome/browser/ui/browser_view:browser_view") {
   sources += [
     "//vivaldi/ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h",
@@ -90,7 +72,7 @@ update_target("//ios/chrome/browser/shared/ui/table_view/cells:cells") {
   ]
 }
 
-update_target("//ios/chrome/browser/browser_state:browser_state_impl") {
+update_target("//ios/chrome/browser/browser_state:browser_state") {
   sources += [
     "//vivaldi/ios/ad_blocker/adblock_rule_service_factory.h",
     "//vivaldi/ios/ad_blocker/adblock_rule_service_factory.mm",
@@ -117,6 +99,8 @@ update_target("//ios/chrome/browser/ui/toolbar:toolbar_ui") {
     sources += [
     "//vivaldi/ios/ui/toolbar/vivaldi_toolbar_constants.h",
     "//vivaldi/ios/ui/toolbar/vivaldi_toolbar_constants.mm",
+    "//vivaldi/ios/ui/toolbar/vivaldi_sticky_toolbar_view.h",
+    "//vivaldi/ios/ui/toolbar/vivaldi_sticky_toolbar_view.mm",
   ]
 }
 

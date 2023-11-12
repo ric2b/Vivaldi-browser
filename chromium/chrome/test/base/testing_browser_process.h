@@ -90,11 +90,12 @@ class TestingBrowserProcess : public BrowserProcess {
   metrics_services_manager::MetricsServicesManager* GetMetricsServicesManager()
       override;
   metrics::MetricsService* metrics_service() override;
-  device::GeolocationManager* geolocation_manager() override;
   SystemNetworkContextManager* system_network_context_manager() override;
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory()
       override;
   network::NetworkQualityTracker* network_quality_tracker() override;
+  embedder_support::OriginTrialsSettingsStorage*
+  GetOriginTrialsSettingsStorage() override;
   ProfileManager* profile_manager() override;
   PrefService* local_state() override;
   variations::VariationsService* variations_service() override;
@@ -107,8 +108,6 @@ class TestingBrowserProcess : public BrowserProcess {
   void set_background_mode_manager_for_test(
       std::unique_ptr<BackgroundModeManager> manager) override;
 #endif
-  void SetGeolocationManager(
-      std::unique_ptr<device::GeolocationManager>) override;
   StatusTray* status_tray() override;
   safe_browsing::SafeBrowsingService* safe_browsing_service() override;
   subresource_filter::RulesetService* subresource_filter_ruleset_service()
@@ -155,7 +154,6 @@ class TestingBrowserProcess : public BrowserProcess {
       override;
 #if !BUILDFLAG(IS_ANDROID)
   SerialPolicyAllowedPorts* serial_policy_allowed_ports() override;
-  HidPolicyAllowedDevices* hid_policy_allowed_devices() override;
   HidSystemTrayIcon* hid_system_tray_icon() override;
 #endif
   BuildState* GetBuildState() override;
@@ -204,7 +202,6 @@ class TestingBrowserProcess : public BrowserProcess {
   bool created_browser_policy_connector_ = false;
   std::unique_ptr<network::TestNetworkQualityTracker>
       test_network_quality_tracker_;
-  std::unique_ptr<device::GeolocationManager> geolocation_manager_;
   raw_ptr<metrics::MetricsService> metrics_service_ = nullptr;
   std::unique_ptr<ProfileManager> profile_manager_;
 
@@ -215,6 +212,9 @@ class TestingBrowserProcess : public BrowserProcess {
   std::unique_ptr<NotificationPlatformBridge> notification_platform_bridge_;
   std::unique_ptr<SystemNotificationHelper> system_notification_helper_;
   scoped_refptr<DownloadRequestLimiter> download_request_limiter_;
+
+  std::unique_ptr<embedder_support::OriginTrialsSettingsStorage>
+      origin_trials_settings_storage_;
 
 #if BUILDFLAG(ENABLE_PRINTING)
   std::unique_ptr<printing::PrintJobManager> print_job_manager_;
@@ -234,7 +234,7 @@ class TestingBrowserProcess : public BrowserProcess {
   std::unique_ptr<network_time::NetworkTimeTracker> network_time_tracker_;
 
   // The following objects are not owned by TestingBrowserProcess:
-  raw_ptr<PrefService> local_state_ = nullptr;
+  raw_ptr<PrefService, DanglingUntriaged> local_state_ = nullptr;
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
 
   std::unique_ptr<TestingBrowserProcessPlatformPart> platform_part_;
@@ -253,7 +253,6 @@ class TestingBrowserProcess : public BrowserProcess {
 
 #if !BUILDFLAG(IS_ANDROID)
   std::unique_ptr<SerialPolicyAllowedPorts> serial_policy_allowed_ports_;
-  std::unique_ptr<HidPolicyAllowedDevices> hid_policy_allowed_devices_;
   std::unique_ptr<HidSystemTrayIcon> hid_system_tray_icon_;
   BuildState build_state_;
 #endif

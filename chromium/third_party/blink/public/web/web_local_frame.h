@@ -34,6 +34,7 @@
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/media_player_action.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-shared.h"
+#include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom-forward.h"
 #include "third_party/blink/public/mojom/loader/resource_cache.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-shared.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-shared.h"
@@ -228,6 +229,11 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
   // Sets BackForwardCache NotRestoredReasons for the current frame.
   virtual void SetNotRestoredReasons(
       const mojom::BackForwardCacheNotRestoredReasonsPtr&) = 0;
+
+  // Sets LCP Critical Path Detector hint for the current frame that was
+  // available at the navigation commit timing.
+  virtual void SetLCPPHint(
+      const mojom::LCPCriticalPathPredictorNavigationTimeHintPtr&) = 0;
 
   // Hierarchy ----------------------------------------------------------
 
@@ -562,6 +568,9 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
       int composition_end,
       const WebVector<ui::ImeTextSpan>& ime_text_spans) = 0;
   virtual void ExtendSelectionAndDelete(int before, int after) = 0;
+  virtual void ExtendSelectionAndReplace(int before,
+                                         int after,
+                                         const WebString& replacement_text) = 0;
 
   // Moves the selection extent point. This function does not allow the
   // selection to collapse. If the new extent is set to the same position as
@@ -767,10 +776,8 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
   // not in printing mode.
   virtual float GetPrintPageShrink(uint32_t page) = 0;
 
-  // Prints one page, and returns the calculated page shrinking factor
-  // (usually between 1/1.33 and 1/2).  Returns 0 if the page number is
-  // invalid or not in printing mode.
-  virtual float PrintPage(uint32_t page_to_print, cc::PaintCanvas*) = 0;
+  // Prints one page.
+  virtual void PrintPage(uint32_t page_to_print, cc::PaintCanvas*) = 0;
 
   // Reformats the WebFrame for screen display.
   virtual void PrintEnd() = 0;

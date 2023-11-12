@@ -109,12 +109,11 @@ _BLOCK_LIST_TEST_MODULES = {
 _BLOCK_LIST_TEST_NAMES = [
     'memory.long_running_idle_gmail_background_tbmv2',
     'tab_switching.typical_25',
-    'tracing.tracing_with_background_memory_infra',  # crbug.com/1301865
     'UNSCHEDULED_oortonline_tbmv2',
     'webrtc',  # crbug.com/932036
     'v8.runtime_stats.top_25',  # Fails in Windows, crbug.com/1043048
     'wasmpspdfkit',  # Fails in Chrome OS, crbug.com/1191938
-    'memory.desktop' if sys.platform == 'darwin' else None,  # crbug.com/1277277
+    'memory.desktop',  # crbug.com/1277277 and b/286898261
     'desktop_ui' if sys.platform == 'darwin' else None,  # crbug.com/1370958
     'power.desktop' if sys.platform == 'darwin' else None,  # crbug.com/1370958
 ]

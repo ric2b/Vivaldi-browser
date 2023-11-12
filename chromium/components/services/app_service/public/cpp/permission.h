@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SERVICES_APP_SERVICE_PUBLIC_CPP_PERMISSION_H_
 #define COMPONENTS_SERVICES_APP_SERVICE_PUBLIC_CPP_PERMISSION_H_
 
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -53,7 +54,8 @@ using PermissionValuePtr = std::unique_ptr<PermissionValue>;
 struct COMPONENT_EXPORT(APP_TYPES) Permission {
   Permission(PermissionType permission_type,
              PermissionValuePtr value,
-             bool is_managed);
+             bool is_managed,
+             absl::optional<std::string> details = absl::nullopt);
   Permission(const Permission&) = delete;
   Permission& operator=(const Permission&) = delete;
   ~Permission();
@@ -73,6 +75,12 @@ struct COMPONENT_EXPORT(APP_TYPES) Permission {
   std::unique_ptr<PermissionValue> value;
   // If the permission is managed by an enterprise policy.
   bool is_managed;
+
+  // Human-readable string to provide more detail about the state of a
+  // permission. May be displayed next to the permission value in UI surfaces.
+  // e.g. a kLocation permission might have `details` of "While in use" or
+  // "Approximate location only".
+  absl::optional<std::string> details;
 };
 
 using PermissionPtr = std::unique_ptr<Permission>;

@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/printing/print_job.h"
 #include "chrome/browser/ui/webui/print_preview/printer_handler.h"
@@ -50,8 +51,8 @@ class PrinterQuery;
 class PrintViewManagerBase : public PrintManager, public PrintJob::Observer {
  public:
   // An observer interface implemented by classes which are interested
-  // in `PrintViewManagerBase` events.
-  class Observer : public base::CheckedObserver {
+  // in `PrintViewManagerBase` events. Only used for testing.
+  class TestObserver : public base::CheckedObserver {
    public:
     virtual void OnPrintNow(const content::RenderFrameHost* rfh) {}
 
@@ -71,10 +72,19 @@ class PrintViewManagerBase : public PrintManager, public PrintJob::Observer {
 
   ~PrintViewManagerBase() override;
 
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  // Disables the blocking of third-party modules in the browser process.
+  static void DisableThirdPartyBlocking();
+#endif
+
   // Prints the current document immediately. Since the rendering is
   // asynchronous, the actual printing will not be completed on the return of
   // this function. Returns false if printing is impossible at the moment.
   virtual bool PrintNow(content::RenderFrameHost* rfh);
+
+  // Like PrintNow(), but for the node under the context menu, instead of the
+  // entire frame.
+  void PrintNodeUnderContextMenu(content::RenderFrameHost* rfh);
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // Prints the document in `print_data` with settings specified in
@@ -132,8 +142,8 @@ class PrintViewManagerBase : public PrintManager, public PrintJob::Observer {
   // Adds and removes observers for `PrintViewManagerBase` events. The order in
   // which notifications are sent to observers is undefined. Observers must be
   // sure to remove the observer before they go away.
-  void AddObserver(Observer& observer);
-  void RemoveObserver(Observer& observer);
+  void AddTestObserver(TestObserver& observer);
+  void RemoveTestObserver(TestObserver& observer);
 
  protected:
   explicit PrintViewManagerBase(content::WebContents* web_contents);
@@ -142,6 +152,10 @@ class PrintViewManagerBase : public PrintManager, public PrintJob::Observer {
   bool IsCrashed();
 
   void SetPrintingRFH(content::RenderFrameHost* rfh);
+
+  // Helper method to do some common operations and checks when starting to
+  // printing.
+  bool StartPrintCommon(content::RenderFrameHost* rfh);
 
 #if BUILDFLAG(ENABLE_OOP_PRINTING)
   // Register with the `PrintBackendServiceManager` as a client for queries
@@ -178,7 +192,9 @@ class PrintViewManagerBase : public PrintManager, public PrintJob::Observer {
   void OnCanceling() override;
   void OnFailed() override;
 
-  base::ObserverList<Observer>& GetObservers() { return observers_; }
+  base::ObserverList<TestObserver>& GetTestObservers() {
+    return test_observers_;
+  }
 
   // Prints the document by posting on the IO thread. This should only be called
   // by `ScriptedPrint()` and `CompleteScriptedPrintAfterContentAnalysis()`.
@@ -206,8 +222,8 @@ class PrintViewManagerBase : public PrintManager, public PrintJob::Observer {
       mojom::PrintCompositor::Status status,
       base::ReadOnlySharedMemoryRegion page_region);
 
-  // Helper method to set `snapshotting_for_content_analysis_` in child classes.
-  void set_snapshotting_for_content_analysis();
+  // Helper method to set `analyzing_content_` in child classes.
+  void set_analyzing_content(bool analyzing);
 #endif  // BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
 
   // Manages the low-level talk to the printer.
@@ -375,13 +391,13 @@ class PrintViewManagerBase : public PrintManager, public PrintJob::Observer {
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
-  // Indicates that a snapshot of the page/document is currently being made.
-  bool snapshotting_for_content_analysis_ = false;
+  // Indicates that the page/document is currently undergoing content analysis.
+  bool analyzing_content_ = false;
 #endif  // BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
 
   const scoped_refptr<PrintQueriesQueue> queue_;
 
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<TestObserver> test_observers_;
 
   base::WeakPtrFactory<PrintViewManagerBase> weak_ptr_factory_{this};
 };

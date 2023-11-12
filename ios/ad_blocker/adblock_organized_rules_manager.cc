@@ -14,6 +14,8 @@
 #include "ios/ad_blocker/utils.h"
 
 namespace adblock_filter {
+
+namespace {
 const base::FilePath::StringType kOrganizedRulesFileName =
     FILE_PATH_LITERAL("Organized");
 
@@ -39,21 +41,16 @@ std::unique_ptr<base::Value> GetJsonFromFile(
   return result;
 }
 
-// WriteFile takes a StringPiece. We need to ensure that the backing for it
-// doesn't go out of scope when called from a different sequence.
-bool WriteFileWrapper(const base::FilePath& filename, std::string data) {
-  return base::WriteFile(filename, data);
-}
-
-std::string WriteRulesAndGetChecksum(const base::FilePath& filename,
-                                     base::Value rules) {
+std::string WriteMetadataAndGetChecksum(const base::FilePath& filename,
+                                        base::Value metadata) {
   std::string json;
-  if (!JSONStringValueSerializer(&json).Serialize(rules))
+  if (!JSONStringValueSerializer(&json).Serialize(metadata))
     NOTREACHED();
   if (!base::WriteFile(filename, json))
     return "";
   return CalculateBufferChecksum(json);
 }
+}  // namespace
 
 OrganizedRulesManager::OrganizedRulesManager(
     RuleService* rule_service,
@@ -241,6 +238,9 @@ void OrganizedRulesManager::ReorganizeRules() {
     return;
   }
 
+  if (rule_sources_.empty())
+    Disable();
+
   organized_rules_ready_callback_.Reset(
       base::BindOnce(&OrganizedRulesManager::OnOrganizedRulesReady,
                      weak_factory_.GetWeakPtr()));
@@ -260,22 +260,46 @@ void OrganizedRulesManager::ReorganizeRules() {
 
 void OrganizedRulesManager::OnOrganizedRulesLoaded(
     std::string checksum,
-    std::unique_ptr<base::Value> rules) {
+    std::unique_ptr<base::Value> metadata) {
   is_loaded_ = true;
-  if (!rules) {
-    if (!rule_sources_.empty())
-      ReorganizeRules();
+  if (rule_sources_.empty()) {
+    Disable();
     return;
   }
-  DCHECK(rules->is_dict());
-  base::Value::Dict* lists_info =
-      rules->GetDict().FindDict(rules_json::kListsInfo);
-  DCHECK(lists_info);
 
-  if (lists_info->size() != compiled_rules_.size()) {
+  if (!metadata) {
     ReorganizeRules();
+    return;
+  }
+  DCHECK(metadata->is_dict());
+
+  // Older versions of the files contained all the rules and were systematically
+  // used to reload rules on startup. If we get one of those old versions, we
+  // can't assume that the rules stored on the webkit side are sound. Try
+  // starting fresh instead.
+  if (metadata->GetDict().contains(rules_json::kOrganizedRules)) {
+    content_rule_list_provider_->InstallContentRuleLists(base::Value::List());
+    ReorganizeRules();
+    return;
+  }
+
+  absl::optional<int> version =
+      metadata->GetDict().FindInt(rules_json::kVersion);
+  DCHECK(version);
+  if (*version != GetOrganizedRulesVersionNumber()) {
+    ReorganizeRules();
+    return;
+  }
+
+  base::Value::Dict* list_checksums =
+      metadata->GetDict().FindDict(rules_json::kListChecksums);
+  DCHECK(list_checksums);
+
+  if (list_checksums->size() != compiled_rules_.size()) {
+    ReorganizeRules();
+    return;
   } else {
-    for (auto [string_id, list_checksum] : *lists_info) {
+    for (auto [string_id, list_checksum] : *list_checksums) {
       DCHECK(list_checksum.is_string());
       uint32_t id = 0;
       bool result = base::StringToUint(string_id, &id);
@@ -284,23 +308,32 @@ void OrganizedRulesManager::OnOrganizedRulesLoaded(
       if (compiled_rules == compiled_rules_.end() ||
           compiled_rules->second->checksum() != list_checksum.GetString()) {
         ReorganizeRules();
+        return;
       }
     }
   }
 
-  organized_rules_checksum_ = checksum;
-
-  ApplyOrganizedRules(std::move(*rules), false);
-}
-
-void OrganizedRulesManager::OnOrganizedRulesReady(base::Value rules) {
-  build_result_ = rules.is_none() ? RuleService::kTooManyAllowRules
-                                  : RuleService::kBuildSuccess;
-  if (build_result_ != RuleService::kBuildSuccess) {
-    organized_rules_changed_callback_.Run(build_result_);
+  std::string* exceptions_checksum =
+      metadata->GetDict().FindString(rules_json::kExceptionRule);
+  if ((exceptions_checksum == nullptr) != exception_rule_.is_none()) {
+    ReorganizeRules();
     return;
   }
-  ApplyOrganizedRules(std::move(rules), true);
+
+  if (exceptions_checksum) {
+    DCHECK(exception_rule_.is_dict());
+    std::string serialized_exception;
+    if (!JSONStringValueSerializer(&serialized_exception)
+            .Serialize(exception_rule_))
+      NOTREACHED();
+    if (*exceptions_checksum != CalculateBufferChecksum(serialized_exception)) {
+      ReorganizeRules();
+      return;
+    }
+  }
+
+  content_rule_list_provider_->ApplyLoadedRules();
+  organized_rules_checksum_ = checksum;
 }
 
 void OrganizedRulesManager::Disable() {
@@ -310,22 +343,28 @@ void OrganizedRulesManager::Disable() {
   organized_rules_changed_callback_.Run(build_result_);
 }
 
-void OrganizedRulesManager::ApplyOrganizedRules(base::Value rules, bool save) {
-  DCHECK(rules.is_dict());
-  base::Value::List* orgnized_rules =
-      rules.GetDict().FindList(rules_json::kOrganizedRules);
-  DCHECK(orgnized_rules);
-  content_rule_list_provider_->InstallContentRuleLists(*orgnized_rules);
-
-  if (!save) {
+void OrganizedRulesManager::OnOrganizedRulesReady(base::Value rules) {
+  build_result_ = rules.is_none() ? RuleService::kTooManyAllowRules
+                                  : RuleService::kBuildSuccess;
+  if (build_result_ != RuleService::kBuildSuccess) {
+    organized_rules_changed_callback_.Run(build_result_);
     return;
   }
 
+  DCHECK(rules.is_dict());
+  base::Value::List* organized_rules =
+      rules.GetDict().FindList(rules_json::kOrganizedRules);
+  DCHECK(organized_rules);
+  content_rule_list_provider_->InstallContentRuleLists(*organized_rules);
+
+  base::Value::Dict* metadata = rules.GetDict().FindDict(rules_json::kMetadata);
+  DCHECK(metadata);
+
   file_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
-      base::BindOnce(&WriteRulesAndGetChecksum,
+      base::BindOnce(&WriteMetadataAndGetChecksum,
                      rules_list_folder_.Append(kOrganizedRulesFileName),
-                     std::move(rules)),
+                     base::Value(std::move(*metadata))),
       base::BindOnce(
           [](base::WeakPtr<OrganizedRulesManager> self,
              RuleService::IndexBuildResult build_result, std::string checksum) {

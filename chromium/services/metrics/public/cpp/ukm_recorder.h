@@ -34,20 +34,12 @@ class PaymentAppProviderUtil;
 class RenderFrameHostImpl;
 }  // namespace content
 
-namespace web_app {
-class DesktopWebAppUkmRecorder;
-}
-
 namespace extensions {
 class ExtensionMessagePort;
 }
 
 namespace weblayer {
 class BackgroundSyncDelegateImpl;
-}
-
-namespace page_load_metrics {
-class PageLoadTracker;
 }
 
 namespace ukm {
@@ -101,12 +93,6 @@ class METRICS_EXPORT UkmRecorder {
   static SourceId GetSourceIdForWebApkManifestUrl(
       base::PassKey<WebApkUkmRecorder>,
       const GURL& manifest_url);
-
-  // Gets new source ID for a desktop web app, using the start_url from the web
-  // app manifest. This method should only be called by DailyMetricsHelper.
-  static SourceId GetSourceIdForDesktopWebAppStartUrl(
-      base::PassKey<web_app::DesktopWebAppUkmRecorder>,
-      const GURL& start_url);
 
   // Gets new source Id for PAYMENT_APP_ID type and updates the source url to
   // the scope of the app. This method should only be called by
@@ -172,7 +158,6 @@ class METRICS_EXPORT UkmRecorder {
   friend metrics::UkmRecorderInterface;
   friend PermissionUmaUtil;
   friend content::RenderFrameHostImpl;
-  friend page_load_metrics::PageLoadTracker;
 
   // Associates the SourceId with a URL. Most UKM recording code should prefer
   // to use a shared SourceId that is already associated with a URL, rather

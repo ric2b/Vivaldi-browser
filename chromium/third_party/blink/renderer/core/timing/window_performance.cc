@@ -31,6 +31,7 @@
 
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 
+#include "base/metrics/histogram_macros.h"
 #include "base/trace_event/common/trace_event_common.h"
 #include "base/trace_event/trace_event.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -56,6 +57,7 @@
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/lcp_critical_path_predictor/lcp_critical_path_predictor.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/interactive_detector.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -91,6 +93,9 @@ namespace blink {
 
 namespace {
 
+const char kEventTimingPendingPresentationPromiseCount[] =
+    "PageLoad.Internal.EventTiming.PendingPresentationPromiseCount";
+
 AtomicString GetFrameAttribute(HTMLFrameOwnerElement* frame_owner,
                                const QualifiedName& attr_name) {
   AtomicString attr_value;
@@ -103,22 +108,22 @@ AtomicString GetFrameAttribute(HTMLFrameOwnerElement* frame_owner,
 AtomicString GetFrameOwnerType(HTMLFrameOwnerElement* frame_owner) {
   switch (frame_owner->OwnerType()) {
     case FrameOwnerElementType::kNone:
-      return "window";
+      return AtomicString("window");
     case FrameOwnerElementType::kIframe:
-      return "iframe";
+      return html_names::kIFrameTag.LocalName();
     case FrameOwnerElementType::kObject:
-      return "object";
+      return html_names::kObjectTag.LocalName();
     case FrameOwnerElementType::kEmbed:
-      return "embed";
+      return html_names::kEmbedTag.LocalName();
     case FrameOwnerElementType::kFrame:
-      return "frame";
+      return html_names::kFrameTag.LocalName();
     case FrameOwnerElementType::kPortal:
-      return "portal";
+      return html_names::kPortalTag.LocalName();
     case FrameOwnerElementType::kFencedframe:
-      return "fencedframe";
+      return html_names::kFencedframeTag.LocalName();
   }
   NOTREACHED();
-  return "";
+  return g_empty_atom;
 }
 
 AtomicString GetFrameSrc(HTMLFrameOwnerElement* frame_owner) {
@@ -197,8 +202,10 @@ WindowPerformance::WindowPerformance(LocalDOMWindow* window)
           MakeGarbageCollected<ResponsivenessMetrics>(this)) {
   DCHECK(window);
   DCHECK(window->GetFrame()->GetPerformanceMonitor());
-  window->GetFrame()->GetPerformanceMonitor()->Subscribe(
-      PerformanceMonitor::kLongTask, kLongTaskObserverThreshold, this);
+  if (!RuntimeEnabledFeatures::LongTaskFromLongAnimationFrameEnabled()) {
+    window->GetFrame()->GetPerformanceMonitor()->Subscribe(
+        PerformanceMonitor::kLongTask, kLongTaskObserverThreshold, this);
+  }
   if (RuntimeEnabledFeatures::VisibilityStateEntryEnabled()) {
     DCHECK(GetPage());
     AddVisibilityStateEntry(GetPage()->IsPageVisible(), base::TimeTicks());
@@ -375,8 +382,9 @@ void WindowPerformance::ReportLongTask(base::TimeTicks start_time,
   DOMWindow* culprit_dom_window = attribution.second;
   if (!culprit_dom_window || !culprit_dom_window->GetFrame() ||
       !culprit_dom_window->GetFrame()->DeprecatedLocalOwner()) {
-    AddLongTaskTiming(start_time, end_time, attribution.first, "window",
-                      g_empty_atom, g_empty_atom, g_empty_atom);
+    AddLongTaskTiming(start_time, end_time, attribution.first,
+                      AtomicString("window"), g_empty_atom, g_empty_atom,
+                      g_empty_atom);
   } else {
     HTMLFrameOwnerElement* frame_owner =
         culprit_dom_window->GetFrame()->DeprecatedLocalOwner();
@@ -481,6 +489,20 @@ void WindowPerformance::OnPresentationPromiseResolved(
     return;
   }
 
+  CHECK(!events_data_.empty());
+  const bool is_painted_presentation_promise =
+      presentation_index < event_presentation_promise_count_ ||
+      need_new_promise_for_event_presentation_time_;
+  if (is_painted_presentation_promise &&
+      events_data_.front()->GetPresentationIndex() < presentation_index) {
+    // Counts when a painted presentation promise got resolved but an earlier
+    // one is still pending.
+    UseCounter::Count(
+        GetExecutionContext(),
+        WebFeature::
+            kEventTimingPaintedPresentationPromiseResolvedWithEarlierPromiseUnresolved);
+  }
+
   // If the resolved presentation promise is the latest one we registered, then
   // events arrive after will need a new presentation promise to provide
   // presentation feedback.
@@ -497,6 +519,14 @@ void WindowPerformance::OnPresentationPromiseResolved(
   DOMHighResTimeStamp end_time =
       MonotonicTimeToDOMHighResTimeStamp(presentation_timestamp);
   responsiveness_metrics_->MaybeFlushKeyboardEntries(end_time);
+
+  // Record histogram for pending presentation promise count.
+  UMA_HISTOGRAM_COUNTS_1000(
+      kEventTimingPendingPresentationPromiseCount,
+      events_data_.empty()
+          ? 0
+          : static_cast<int>(event_presentation_promise_count_ -
+                             events_data_.front()->GetPresentationIndex() + 1));
 }
 
 void WindowPerformance::ReportEventTimings() {
@@ -543,8 +573,22 @@ void WindowPerformance::ReportEvent(InteractiveDetector* interactive_detector,
   base::TimeDelta time_to_next_paint =
       base::Milliseconds(entry_end_time - entry->processingEnd());
 
-  if (last_visibility_change_timestamp_ > event_timestamp &&
-      last_visibility_change_timestamp_ < presentation_timestamp) {
+  const bool is_artificial_pointerup_or_click =
+      (entry->name() == event_type_names::kPointerup ||
+       entry->name() == event_type_names::kClick) &&
+      entry->startTime() == pending_pointer_down_start_time_;
+
+  if (is_artificial_pointerup_or_click) {
+    UseCounter::Count(GetExecutionContext(),
+                      WebFeature::kEventTimingArtificialPointerupOrClick);
+  }
+
+  if ((last_visibility_change_timestamp_ > event_timestamp &&
+       last_visibility_change_timestamp_ < presentation_timestamp)
+#if BUILDFLAG(IS_MAC)
+      || is_artificial_pointerup_or_click
+#endif  // BUILDFLAG(IS_MAC)
+  ) {
     // The page visibility was changed. Ignore the presentation_timestamp and
     // fallback to processingEnd (as if there was no next paint needed).
     entry_end_time = entry->processingEnd();
@@ -563,6 +607,7 @@ void WindowPerformance::ReportEvent(InteractiveDetector* interactive_detector,
   entry->SetUnsafePresentationTimestamp(entry_presentation_timestamp);
 
   if (entry->name() == "pointerdown") {
+    pending_pointer_down_start_time_ = entry->startTime();
     pending_pointer_down_input_delay_ = input_delay;
     pending_pointer_down_processing_time_ = processing_time;
     pending_pointer_down_time_to_next_paint_ = time_to_next_paint;
@@ -844,8 +889,14 @@ void WindowPerformance::OnLargestContentfulPaintUpdated(
     image_element->SetIsLCPElement();
   }
 
-  if (element)
+  if (element) {
     element->GetDocument().OnLargestContentfulPaintUpdated();
+
+    if (LCPCriticalPathPredictor* lcpp =
+            element->GetDocument().GetFrame()->GetLCPP()) {
+      lcpp->OnLargestContentfulPaintUpdated(element);
+    }
+  }
 }
 
 void WindowPerformance::OnPaintFinished() {

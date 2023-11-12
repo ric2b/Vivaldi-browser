@@ -29,9 +29,6 @@ class VivaldiUtilitiesHookDelegate : public APIBindingHooksDelegate {
 
  private:
   // Request handlers for the corresponding API methods.
-  APIBindingHooks::RequestResult HandleGenerateGUID(
-      v8::Local<v8::Context> context,
-      const std::vector<v8::Local<v8::Value>>& arguments);
   APIBindingHooks::RequestResult HandleGetUrlFragments(
       v8::Local<v8::Context> context,
       const std::vector<v8::Local<v8::Value>>& arguments);
@@ -39,6 +36,9 @@ class VivaldiUtilitiesHookDelegate : public APIBindingHooksDelegate {
       v8::Local<v8::Context> context,
       const std::vector<v8::Local<v8::Value>>& arguments);
   APIBindingHooks::RequestResult HandleIsUrlValid(
+      v8::Local<v8::Context> context,
+      const std::vector<v8::Local<v8::Value>>& arguments);
+  APIBindingHooks::RequestResult HandleSupportsProxy(
       v8::Local<v8::Context> context,
       const std::vector<v8::Local<v8::Value>>& arguments);
 };

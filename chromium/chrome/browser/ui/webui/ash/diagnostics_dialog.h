@@ -35,7 +35,7 @@ class DiagnosticsDialog : public SystemWebDialogDelegate {
 
   // |page| is the initial page shown when the app is opened.
   static void ShowDialog(DiagnosticsPage page = DiagnosticsPage::kDefault,
-                         gfx::NativeWindow parent = gfx::kNullNativeWindow);
+                         gfx::NativeWindow parent = gfx::NativeWindow());
 
   // Closes an existing Diagnostics dialog if it exists.
   static void MaybeCloseExistingDialog();
@@ -48,10 +48,15 @@ class DiagnosticsDialog : public SystemWebDialogDelegate {
   DiagnosticsDialog& operator=(const DiagnosticsDialog&) = delete;
 
   // SystemWebDialogDelegate
+  const std::string& Id() override;
   bool ShouldCloseDialogOnEscape() const override;
 
   // ui::WebDialogDelegate
   void GetDialogSize(gfx::Size* size) const override;
+
+ private:
+  const std::string dialog_id_ = kDiagnosticsDialogId;
+  friend class DiagnosticsDialogTest;
 };
 }  // namespace ash
 

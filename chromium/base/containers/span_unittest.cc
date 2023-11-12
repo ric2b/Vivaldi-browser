@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <string>
@@ -14,7 +15,6 @@
 
 #include "base/containers/adapters.h"
 #include "base/containers/checked_iterators.h"
-#include "base/cxx17_backports.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_piece.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -1066,6 +1066,9 @@ TEST(SpanTest, ConstexprIterator) {
 
   static_assert(1 == *((span.begin() + 1) -= 1), "");
   static_assert(6 == *((span.begin() + 1) -= 0), "");
+
+  static_assert(0 + span.begin() == span.begin() + 0);
+  static_assert(1 + span.begin() == span.begin() + 1);
 }
 
 TEST(SpanTest, ReverseIterator) {

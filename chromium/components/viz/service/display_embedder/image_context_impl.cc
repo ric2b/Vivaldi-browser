@@ -8,18 +8,21 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
-#include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
-#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/command_buffer/service/texture_manager.h"
+#include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
-#include "third_party/skia/include/core/SkPromiseImageTexture.h"
 #include "third_party/skia/include/gpu/GrContextThreadSafeProxy.h"
+#include "third_party/skia/include/gpu/graphite/Recorder.h"
+#include "third_party/skia/include/gpu/graphite/Surface.h"
+#include "third_party/skia/include/private/chromium/GrPromiseImageTexture.h"
 
 namespace {
 
@@ -66,7 +69,7 @@ ImageContextImpl::ImageContextImpl(
       raw_draw_if_possible_(raw_draw_if_possible) {}
 
 ImageContextImpl::~ImageContextImpl() {
-  DeleteFallbackGrBackendTextures();
+  DeleteFallbackTextures();
 }
 
 void ImageContextImpl::OnContextLost() {
@@ -84,11 +87,12 @@ void ImageContextImpl::OnContextLost() {
   if (fallback_context_state_) {
     fallback_context_state_ = nullptr;
     fallback_textures_.clear();
+    graphite_fallback_textures_.clear();
   }
 }
 
 void ImageContextImpl::SetPromiseImageTextures(
-    std::vector<sk_sp<SkPromiseImageTexture>> promise_image_textures) {
+    std::vector<sk_sp<GrPromiseImageTexture>> promise_image_textures) {
   owned_promise_image_textures_ = std::move(promise_image_textures);
   promise_image_textures_.clear();
   for (auto& owned_texture : owned_promise_image_textures_) {
@@ -96,13 +100,25 @@ void ImageContextImpl::SetPromiseImageTextures(
   }
 }
 
-void ImageContextImpl::DeleteFallbackGrBackendTextures() {
+void ImageContextImpl::DeleteFallbackTextures() {
   if (fallback_context_state_) {
-    for (auto& fallback_texture : fallback_textures_)
-      gpu::DeleteGrBackendTexture(fallback_context_state_, &fallback_texture);
+    if (fallback_context_state_->gr_context()) {
+      CHECK(graphite_fallback_textures_.empty());
+      for (auto& fallback_texture : fallback_textures_) {
+        gpu::DeleteGrBackendTexture(fallback_context_state_, &fallback_texture);
+      }
+    } else {
+      CHECK(fallback_context_state_->gpu_main_graphite_recorder());
+      CHECK(fallback_textures_.empty());
+      for (auto& fallback_texture : graphite_fallback_textures_) {
+        fallback_context_state_->gpu_main_graphite_recorder()
+            ->deleteBackendTexture(fallback_texture);
+      }
+    }
   }
   fallback_context_state_ = nullptr;
   fallback_textures_.clear();
+  graphite_fallback_textures_.clear();
 }
 
 void ImageContextImpl::CreateFallbackImage(
@@ -113,8 +129,47 @@ void ImageContextImpl::CreateFallbackImage(
   LOG_IF(DFATAL, is_for_render_pass_)
       << "Expected to fulfill promise texture for render pass backing.";
 
+  const int num_planes = format().NumberOfPlanes();
+
+  if (context_state->graphite_context()) {
+    const auto& tex_infos = texture_infos();
+    if (tex_infos.size() != static_cast<size_t>(num_planes) ||
+        base::ranges::any_of(tex_infos, [](const auto& tex_info) {
+          return !tex_info.isValid();
+        })) {
+      DLOG(ERROR) << "Invalid Graphite texture infos for format: "
+                  << format().ToString();
+      return;
+    }
+    for (int plane_index = 0; plane_index < num_planes; plane_index++) {
+      SkISize sk_size =
+          gfx::SizeToSkISize(format().GetPlaneSize(plane_index, size()));
+
+      graphite_fallback_textures_.push_back(
+          context_state->gpu_main_graphite_recorder()->createBackendTexture(
+              sk_size, tex_infos[plane_index]));
+
+      SkColorType color_type =
+          ToClosestSkColorType(/*gpu_compositing=*/true, format(), plane_index);
+
+      auto sk_surface = SkSurfaces::WrapBackendTexture(
+          context_state->gpu_main_graphite_recorder(),
+          graphite_fallback_textures_[plane_index], color_type, color_space(),
+          /*props=*/nullptr);
+      if (!sk_surface) {
+        DLOG(ERROR) << "Failed to create fallback graphite backend texture";
+        DeleteFallbackTextures();
+        return;
+      }
+      sk_surface->getCanvas()->clear(
+          GetFallbackColorForPlane(format(), plane_index));
+    }
+    graphite_textures_ = graphite_fallback_textures_;
+    return;
+  }
+
   // We can't allocate a fallback texture as the original texture was externally
-  // allocated. Skia will skip drawing a null SkPromiseImageTexture, do nothing
+  // allocated. Skia will skip drawing a null GrPromiseImageTexture, do nothing
   // and leave it null.
   const auto& formats = backend_formats();
   if (formats.empty() || formats[0].textureType() == GrTextureType::kExternal)
@@ -123,9 +178,8 @@ void ImageContextImpl::CreateFallbackImage(
   DCHECK(!fallback_context_state_);
   fallback_context_state_ = context_state;
 
-  std::vector<sk_sp<SkPromiseImageTexture>> promise_textures;
-  for (int plane_index = 0; plane_index < format().NumberOfPlanes();
-       plane_index++) {
+  std::vector<sk_sp<GrPromiseImageTexture>> promise_textures;
+  for (int plane_index = 0; plane_index < num_planes; plane_index++) {
     DCHECK_NE(formats[plane_index].textureType(), GrTextureType::kExternal);
     auto fallback_texture =
         fallback_context_state_->gr_context()->createBackendTexture(
@@ -134,11 +188,11 @@ void ImageContextImpl::CreateFallbackImage(
             GrRenderable::kYes);
 
     if (!fallback_texture.isValid()) {
-      DeleteFallbackGrBackendTextures();
+      DeleteFallbackTextures();
       DLOG(ERROR) << "Could not create backend texture.";
       return;
     }
-    auto promise_texture = SkPromiseImageTexture::Make(fallback_texture);
+    auto promise_texture = GrPromiseImageTexture::Make(fallback_texture);
     promise_textures.push_back(std::move(promise_texture));
     fallback_textures_.push_back(fallback_texture);
   }
@@ -167,14 +221,18 @@ void ImageContextImpl::BeginAccessIfNecessary(
   // Prepare for accessing legacy mailbox.
   // The promise images have been fulfilled once, so we don't need to do
   // anything.
-  if (!promise_image_textures_.empty())
+  if (!promise_image_textures_.empty()) {
     return;
+  }
+
+  if (!graphite_textures_.empty()) {
+    return;
+  }
 
   if (!context_state->GrContextIsGL()) {
-    // Probably this texture is created with wrong interface
-    // (GLES2Interface).
+    // Probably this texture is created with wrong interface (GLES2Interface).
     DLOG(ERROR) << "Failed to fulfill the promise texture whose backend is not "
-                   "compatible with vulkan.";
+                   "compatible with vulkan or graphite.";
     CreateFallbackImage(context_state);
     return;
   }
@@ -222,7 +280,7 @@ void ImageContextImpl::BeginAccessIfNecessary(
     CreateFallbackImage(context_state);
     return;
   }
-  SetPromiseImageTextures({SkPromiseImageTexture::Make(backend_texture)});
+  SetPromiseImageTextures({GrPromiseImageTexture::Make(backend_texture)});
 
   // Hold onto a reference to legacy GL textures while still in use, see
   // https://crbug.com/1118166 for why this is necessary.
@@ -270,16 +328,22 @@ bool ImageContextImpl::BeginAccessIfNecessaryForSharedImage(
     std::vector<GrBackendSemaphore>* end_semaphores) {
   // Skip the context if it has been processed.
   if (representation_scoped_read_access_) {
-    DCHECK(owned_promise_image_textures_.empty());
-    DCHECK(!promise_image_textures_.empty());
+    CHECK(owned_promise_image_textures_.empty());
+    CHECK(!context_state->gr_context() || !promise_image_textures_.empty());
+    CHECK(!context_state->graphite_context() || !graphite_textures_.empty());
     return true;
   }
 
   // promise_image_textures_ are not empty here, it means we are using a
   // fallback image.
   if (!promise_image_textures_.empty()) {
-    DCHECK_EQ(promise_image_textures_.size(),
-              owned_promise_image_textures_.size());
+    CHECK_EQ(promise_image_textures_.size(),
+             owned_promise_image_textures_.size());
+    return true;
+  }
+
+  if (!graphite_textures_.empty()) {
+    CHECK_EQ(graphite_textures_.size(), graphite_fallback_textures_.size());
     return true;
   }
 
@@ -321,9 +385,18 @@ bool ImageContextImpl::BeginAccessIfNecessaryForSharedImage(
   // Only one promise texture for external sampler case.
   int num_planes =
       format().PrefersExternalSampler() ? 1 : format().NumberOfPlanes();
-  for (int plane_index = 0; plane_index < num_planes; plane_index++) {
-    promise_image_textures_.push_back(
-        representation_scoped_read_access_->promise_image_texture(plane_index));
+  if (context_state->graphite_context()) {
+    for (int plane_index = 0; plane_index < num_planes; plane_index++) {
+      graphite_textures_.push_back(
+          representation_scoped_read_access_->graphite_texture(plane_index));
+    }
+  } else {
+    CHECK(context_state->gr_context());
+    for (int plane_index = 0; plane_index < num_planes; plane_index++) {
+      promise_image_textures_.push_back(
+          representation_scoped_read_access_->promise_image_texture(
+              plane_index));
+    }
   }
 
   return true;
@@ -347,6 +420,7 @@ void ImageContextImpl::EndAccessIfNecessary() {
 
   representation_scoped_read_access_.reset();
   promise_image_textures_.clear();
+  graphite_textures_.clear();
 }
 
 }  // namespace viz

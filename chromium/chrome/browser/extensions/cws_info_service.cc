@@ -17,27 +17,41 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/extensions/cws_info_service_factory.h"
 #include "chrome/browser/extensions/cws_item_service.pb.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/pref_names.h"
+#include "google_apis/google_api_keys.h"
+#include "net/base/load_flags.h"
+#include "net/http/http_status_code.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 
 namespace {
 
-constexpr int kMaxExtensionIdsPerRequest = 100;
+constexpr int kMaxExtensionIdsPerRequest = 3;
+constexpr int kMaxRetriesPerRequest = 2;
+
 constexpr int kStartupCheckDelaySeconds = 30;
+// Default check and fetch intervals.
 constexpr int kCheckIntervalSeconds = 3 * 60 * 60;
 constexpr int kFetchIntervalSeconds = 24 * 60 * 60;
+// Fast mode check and fetch intervals. These intervals are used to
+// facilitate end-end testing.
+constexpr int kFastCheckIntervalSeconds = 1 * 60;
+constexpr int kFastFetchIntervalSeconds = 5 * 60;
+
 constexpr char kRequestUrl[] =
-    "https://chromewebstore.googleapis.com/v2/items/-/StoreMetadata:batchGet";
+    "https://chromewebstore.googleapis.com/v2/items/-/storeMetadata:batchGet";
 constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("cws_info_service", R"(
       semantics {
@@ -99,6 +113,39 @@ std::string GetNameFromId(const std::string& id) {
   return "items/" + id + "/storeMetadata";
 }
 
+// Histogram helpers.
+void RecordFetchSuccess(bool success) {
+  base::UmaHistogramBoolean("Extensions.CWSInfoService.FetchSuccess", success);
+}
+void RecordMetadataChanged(bool changed) {
+  base::UmaHistogramBoolean("Extensions.CWSInfoService.MetadataChanged",
+                            changed);
+}
+void RecordNumRequestsInFetch(int num_requests) {
+  base::UmaHistogramCounts100("Extensions.CWSInfoService.NumRequestsInFetch",
+                              num_requests);
+}
+void RecordNetworkHistograms(const network::SimpleURLLoader* url_loader) {
+  int net_error = url_loader->NetError();
+  int response_code = 0;
+  if (url_loader->ResponseInfo() && url_loader->ResponseInfo()->headers) {
+    response_code = url_loader->ResponseInfo()->headers->response_code();
+  }
+  base::UmaHistogramSparse(
+      "Extensions.CWSInfoService.NetworkResponseCodeOrError",
+      net_error == net::OK || net_error == net::ERR_HTTP_RESPONSE_CODE_FAILURE
+          ? response_code
+          : net_error);
+  if (net_error == net::OK && response_code == net::HTTP_OK) {
+    base::UmaHistogramExactLinear(
+        "Extensions.CWSInfoService.NetworkRetriesTillSuccess",
+        url_loader->GetNumRetries(), kMaxRetriesPerRequest + 1);
+  } else {
+    DVLOG(1) << "Request net error:" << net_error
+             << ", response code:" << response_code;
+  }
+}
+
 }  // namespace
 
 namespace extensions {
@@ -108,6 +155,12 @@ namespace extensions {
 BASE_FEATURE(kCWSInfoService,
              "CWSInfoService",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Increase the frequency of periodic retrieval of extensions metadata from
+// CWS. This feature is used only for testing purposes.
+BASE_FEATURE(kCWSInfoFastCheck,
+             "CWSInfoFastCheck",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 namespace {
 
@@ -167,6 +220,11 @@ struct CWSInfoService::FetchContext {
   bool metadata_changed = false;
 };
 
+// static
+CWSInfoService* CWSInfoService::Get(Profile* profile) {
+  return CWSInfoServiceFactory::GetInstance()->GetForProfile(profile);
+}
+
 CWSInfoService::CWSInfoService(Profile* profile)
     : profile_(profile),
       pref_service_(profile->GetPrefs()),
@@ -177,6 +235,7 @@ CWSInfoService::CWSInfoService(Profile* profile)
   ScheduleCheck(kStartupCheckDelaySeconds);
 }
 
+CWSInfoService::CWSInfoService() = default;
 CWSInfoService::~CWSInfoService() = default;
 
 void CWSInfoService::Shutdown() {
@@ -239,8 +298,11 @@ void CWSInfoService::CheckAndMaybeFetchInfo() {
     base::TimeDelta elapsed_time =
         base::Time::Now() - pref_service_->GetTime(prefs::kCWSInfoTimestamp);
     // Enough time has elapsed since the last fetch.
+    int fetch_interval_seconds = base::FeatureList::IsEnabled(kCWSInfoFastCheck)
+                                     ? kFastFetchIntervalSeconds
+                                     : kFetchIntervalSeconds;
     bool data_refresh_needed =
-        elapsed_time >= base::Seconds(kFetchIntervalSeconds);
+        elapsed_time >= base::Seconds(fetch_interval_seconds);
 
     bool new_info_requested = false;
     std::unique_ptr<FetchContext> fetch_context =
@@ -252,20 +314,26 @@ void CWSInfoService::CheckAndMaybeFetchInfo() {
       info_check_timer_.Stop();
       // Save the fetch context and send the (first) request.
       active_fetch_ = std::move(fetch_context);
+      RecordNumRequestsInFetch(active_fetch_->requests.size());
       SendRequest();
       return;
     }
   }
 
   // No info request necessary at this time. Schedule the next check.
-  ScheduleCheck(kCheckIntervalSeconds);
+  int check_interval_seconds = base::FeatureList::IsEnabled(kCWSInfoFastCheck)
+                                   ? kFastCheckIntervalSeconds
+                                   : kCheckIntervalSeconds;
+  ScheduleCheck(check_interval_seconds);
 }
 
 bool CWSInfoService::CanFetchInfo() const {
-  // TODO(anunoy): Remove this check after policy is end-end tested with server
-  // endpoint and admin console UI.
+  // TODO(anunoy): These two checks are needed to support the enterprise policy
+  // and safety check extensions module respectively. Once safety check is
+  // launched, we can remove this method completely.
   return pref_service_->GetInteger(
-             pref_names::kExtensionUnpublishedAvailability) == 1;
+             pref_names::kExtensionUnpublishedAvailability) == 1 ||
+         base::FeatureList::IsEnabled(features::kSafetyCheckExtensions);
 }
 
 void CWSInfoService::ScheduleCheck(int seconds) {
@@ -321,6 +389,7 @@ std::unique_ptr<CWSInfoService::FetchContext> CWSInfoService::CreateRequests(
     // No extensions require a CWS info fetch.
     return nullptr;
   }
+
   // Return the fetch context - contains information about number of requests to
   // send and which ids are included in each request.
   return fetch_context;
@@ -331,11 +400,16 @@ void CWSInfoService::SendRequest() {
   resource_request->url = GURL(kRequestUrl);
   // A POST request is sent with an override to GET due to server requirements.
   resource_request->method = "POST";
+  resource_request->load_flags = net::LOAD_DISABLE_CACHE;
   resource_request->headers.SetHeader("X-HTTP-Method-Override", "GET");
+  resource_request->headers.SetHeader("X-Goog-Api-Key",
+                                      google_apis::GetAPIKey());
   resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
 
   url_loader_ = network::SimpleURLLoader::Create(std::move(resource_request),
                                                  kTrafficAnnotation);
+  url_loader_->SetRetryOptions(kMaxRetriesPerRequest,
+                               network::SimpleURLLoader::RETRY_ON_5XX);
   std::string request_str =
       active_fetch_->requests.front().proto.SerializeAsString();
   url_loader_->AttachStringForUpload(request_str, "application/x-protobuf");
@@ -348,6 +422,8 @@ void CWSInfoService::SendRequest() {
 
 void CWSInfoService::OnResponseReceived(std::unique_ptr<std::string> response) {
   CHECK(url_loader_);
+  RecordNetworkHistograms(url_loader_.get());
+
   bool error = false;
   if (response) {
     BatchGetStoreMetadatasResponse response_proto;
@@ -363,7 +439,6 @@ void CWSInfoService::OnResponseReceived(std::unique_ptr<std::string> response) {
       error = true;
     }
   } else {
-    DVLOG(1) << "Request failed with error: " << url_loader_->NetError();
     info_errors_++;
     error = true;
   }
@@ -382,17 +457,23 @@ void CWSInfoService::OnResponseReceived(std::unique_ptr<std::string> response) {
     // prefs.
     pref_service_->SetTime(prefs::kCWSInfoTimestamp, base::Time::Now());
 
+    RecordMetadataChanged(active_fetch_->metadata_changed);
     if (active_fetch_->metadata_changed) {
       // Notify observers if the metadata changed.
       for (auto& observer : observers_) {
-        observer.OnInfoChanged();
+        observer.OnCWSInfoChanged();
       }
     }
   }
 
-  // All requests completed. Schedule the next check.
+  // All requests completed successfully OR a request failed. In either case,
+  // schedule the next check.
+  RecordFetchSuccess(!error);
   active_fetch_.reset();
-  ScheduleCheck(kCheckIntervalSeconds);
+  int check_interval_seconds = base::FeatureList::IsEnabled(kCWSInfoFastCheck)
+                                   ? kFastCheckIntervalSeconds
+                                   : kCheckIntervalSeconds;
+  ScheduleCheck(check_interval_seconds);
 }
 
 bool CWSInfoService::MaybeSaveResponseToPrefs(

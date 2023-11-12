@@ -111,8 +111,6 @@ HRESULT GetSidIntegrityLevel(PSID sid, MANDATORY_LEVEL* level) {
 }
 
 // Gets the mandatory integrity level of a process.
-// TODO(crbug.com/1233748): consider reusing
-// base::GetCurrentProcessIntegrityLevel().
 HRESULT GetProcessIntegrityLevel(DWORD process_id, MANDATORY_LEVEL* level) {
   HANDLE process = ::OpenProcess(PROCESS_QUERY_INFORMATION, false, process_id);
   if (!process)
@@ -357,6 +355,14 @@ std::wstring GetAppClientStateKey(const std::wstring& app_id) {
   return base::StrCat({CLIENT_STATE_KEY, app_id});
 }
 
+std::wstring GetAppCohortKey(const std::string& app_id) {
+  return GetAppCohortKey(base::ASCIIToWide(app_id));
+}
+
+std::wstring GetAppCohortKey(const std::wstring& app_id) {
+  return base::StrCat({COHORT_KEY, app_id});
+}
+
 std::wstring GetAppCommandKey(const std::wstring& app_id,
                               const std::wstring& command_id) {
   return base::StrCat(
@@ -425,11 +431,6 @@ base::win::ScopedHandle GetUserTokenFromCurrentSessionId() {
   return token_handle;
 }
 
-bool PathOwnedByUser(const base::FilePath& path) {
-  // TODO(crbug.com/1147094): Implement for Win.
-  return true;
-}
-
 HResultOr<bool> IsTokenAdmin(HANDLE token) {
   SID_IDENTIFIER_AUTHORITY nt_authority = SECURITY_NT_AUTHORITY;
   PSID administrators_group = nullptr;
@@ -445,7 +446,6 @@ HResultOr<bool> IsTokenAdmin(HANDLE token) {
   return base::ok(is_member);
 }
 
-// TODO(crbug.com/1212187): maybe handle filtered tokens.
 HResultOr<bool> IsUserAdmin() {
   return IsTokenAdmin(NULL);
 }
@@ -469,36 +469,37 @@ HResultOr<bool> IsUserNonElevatedAdmin() {
 }
 
 HResultOr<bool> IsCOMCallerAdmin() {
-  ScopedKernelHANDLE token;
+  HRESULT hr = ::CoImpersonateClient();
+  if (hr == RPC_E_CALL_COMPLETE) {
+    // RPC_E_CALL_COMPLETE indicates that the caller is in-proc.
+    return base::ok(::IsUserAnAdmin());
+  }
 
-  {
-    HRESULT hr = ::CoImpersonateClient();
-    if (hr == RPC_E_CALL_COMPLETE) {
-      // RPC_E_CALL_COMPLETE indicates that the caller is in-proc.
-      return base::ok(::IsUserAnAdmin());
-    }
+  if (FAILED(hr)) {
+    return base::unexpected(hr);
+  }
 
-    if (FAILED(hr)) {
-      return base::unexpected(hr);
-    }
-
+  HResultOr<ScopedKernelHANDLE> token = []() -> decltype(token) {
+    ScopedKernelHANDLE token;
     absl::Cleanup co_revert_to_self = [] { ::CoRevertToSelf(); };
     if (!::OpenThreadToken(::GetCurrentThread(), TOKEN_QUERY, TRUE,
                            ScopedKernelHANDLE::Receiver(token).get())) {
-      hr = HRESULTFromLastError();
-      LOG(ERROR) << __func__ << ": ::OpenThreadToken failed: " << std::hex
-                 << hr;
+      HRESULT hr = HRESULTFromLastError();
+      LOG(ERROR) << "::OpenThreadToken failed: " << std::hex << hr;
       return base::unexpected(hr);
     }
+    return token;
+  }();
+
+  if (!token.has_value()) {
+    return base::unexpected(token.error());
   }
 
-  HResultOr<bool> result = IsTokenAdmin(token.get());
-  if (!result.has_value()) {
-    HRESULT hr = result.error();
-    CHECK(FAILED(hr));
-    LOG(ERROR) << __func__ << ": IsTokenAdmin failed: " << std::hex << hr;
-  }
-  return result;
+  return IsTokenAdmin(token.value().get()).transform_error([](HRESULT error) {
+    CHECK(FAILED(error));
+    LOG(ERROR) << "IsTokenAdmin failed: " << std::hex << error;
+    return error;
+  });
 }
 
 bool IsUACOn() {
@@ -679,15 +680,9 @@ absl::optional<base::FilePath> GetGoogleUpdateExePath(UpdaterScope scope) {
     return absl::nullopt;
   }
 
-  base::FilePath goopdate_dir =
-      goopdate_base_dir.AppendASCII(COMPANY_SHORTNAME_STRING)
-          .AppendASCII("Update");
-  if (!base::CreateDirectory(goopdate_dir)) {
-    LOG(ERROR) << "Can't create GoogleUpdate directory: " << goopdate_dir;
-    return absl::nullopt;
-  }
-
-  return goopdate_dir.AppendASCII(base::WideToASCII(kLegacyExeName));
+  return goopdate_base_dir.AppendASCII(COMPANY_SHORTNAME_STRING)
+      .AppendASCII("Update")
+      .Append(kLegacyExeName);
 }
 
 HRESULT DisableCOMExceptionHandling() {
@@ -1105,7 +1100,6 @@ void LogClsidEntries(REFCLSID clsid) {
       base::StrCat({base::StrCat({L"Software\\Classes\\CLSID\\",
                                   base::win::WStringFromGUID(clsid)}),
                     L"\\LocalServer32"}));
-
   for (const HKEY root : {HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER}) {
     for (const REGSAM key_flag : {KEY_WOW64_32KEY, KEY_WOW64_64KEY}) {
       base::win::RegKey key;

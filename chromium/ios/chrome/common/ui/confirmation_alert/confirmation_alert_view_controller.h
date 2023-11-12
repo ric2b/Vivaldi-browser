@@ -57,13 +57,17 @@
 // The image. May be updated after the view is loaded.
 @property(nonatomic, strong) UIImage* image;
 
-// Sets the custom spacing between the top and the image, if there is no
-// navigation bar. Must be set before the view is loaded.
+// Sets the custom spacing at the top if there is no navigation bar. If image is
+// set, the spacing is before the image. Otherwise, the spacing is before the
+// title label. Must be set before the view is loaded.
 @property(nonatomic, assign) CGFloat customSpacingBeforeImageIfNoNavigationBar;
 
 // Sets the custom spacing between the image and the title / subtitle. Must be
 // set before the view is loaded.
 @property(nonatomic, assign) CGFloat customSpacingAfterImage;
+
+// Sets the custom size for the favicon.
+@property(nonatomic, assign) CGFloat customFaviconSideLength;
 
 // Sets the custom spacing of the stackview. Values for
 // `customSpacingBeforeImageIfNoNavigationBar` and `customSpacingAfterImage` are
@@ -85,6 +89,10 @@
 // Set to YES to enclose the image in a frame with a shadow and a corner badge
 // with a green checkmark. Must be set before the view is loaded. Default is NO.
 @property(nonatomic) BOOL imageEnclosedWithShadowAndBadge;
+
+// Set to YES to enclose the image in a frame with a shadow without a corner
+// green checkmark badge. Must be set before the view is loaded. Default is NO.
+@property(nonatomic, assign) BOOL imageEnclosedWithShadowWithoutBadge;
 
 // Set to NO to prevent the scroll view from showing a vertical scrollbar
 // indicator. Must be set before the view is loaded. Default is YES.
@@ -118,6 +126,9 @@
 - (instancetype)initWithNibName:(NSString*)name
                          bundle:(NSBundle*)bundle NS_UNAVAILABLE;
 
+// Sets the custom scroll view bottom insets.
+@property(nonatomic, assign) CGFloat customScrollViewBottomInsets;
+
 // Can be overridden by subclasses to customize the secondary title, e.g. set a
 // different style, or a UITextViewDelegate. The default implementation does
 // nothing.
@@ -127,6 +138,16 @@
 // different style, or a UITextViewDelegate. The default implementation does
 // nothing.
 - (void)customizeSubtitle:(UITextView*)subtitle;
+
+// Sets the custom height for the gradient view.
+- (void)updateCustomGradientViewHeight:(CGFloat)height;
+
+// Sets the new constant value for the scroll view bottom anchor constraint.
+- (void)changeScrollViewBottomAnchorConstant:(CGFloat)constant;
+
+// Reset the constant value for the scroll view bottom anchor constraint to the
+// default one.
+- (void)resetScrollViewBottomAnchorConstant;
 
 // Detent that attempts to fit the preferred height of the content. Detent may
 // be inactive in some size classes, so it should be used together with at

@@ -100,12 +100,12 @@ bool ParsePartnerDatabaseDetailsList(
       } else if (property == kGuidKey || property == kGuid2Key) {
         if (!v.is_string())
           return error(property + " is not a string");
-        base::GUID guid_value = base::GUID::ParseCaseInsensitive(v.GetString());
-        if (!guid_value.is_valid())
-          return error(property + " is not a valid GUID - " + v.GetString());
-        base::GUID* guid =
-            (property == kGuidKey ? &details.guid : &details.guid2);
-        *guid = std::move(guid_value);
+        base::Uuid uuid_value = base::Uuid::ParseCaseInsensitive(v.GetString());
+        if (!uuid_value.is_valid())
+          return error(property + " is not a valid Uuid - " + v.GetString());
+        base::Uuid* uuid =
+            (property == kGuidKey ? &details.uuid : &details.uuid2);
+        *uuid = std::move(uuid_value);
         if (property == kGuid2Key) {
           bookmark_only = true;
         }
@@ -148,14 +148,14 @@ bool ParsePartnerDatabaseDetailsList(
     }
     if (details.name.empty())
       return error(std::string("missing ") + kNameKey + " property");
-    if (!details.guid.is_valid())
+    if (!details.uuid.is_valid())
       return error(std::string("missing ") + kGuidKey + " property");
     if (is_folder) {
       if (details.title.empty()) {
         details.title = details.name;
       }
     } else {
-      if (!details.guid2.is_valid())
+      if (!details.uuid2.is_valid())
         return error(std::string("missing ") + kGuid2Key + " property");
     }
     details_list.push_back(std::move(details));
@@ -191,21 +191,21 @@ class PartnerDatabase {
   }
 
   const PartnerDetails* FindDetailsByPartner(
-      const base::GUID& partner_id) const {
-    auto i = locale_id_guid_map_.find(partner_id);
-    const base::GUID* id = &partner_id;
-    if (i != locale_id_guid_map_.end()) {
+      const base::Uuid& partner_id) const {
+    auto i = locale_id_uuid_map_.find(partner_id);
+    const base::Uuid* id = &partner_id;
+    if (i != locale_id_uuid_map_.end()) {
       id = &i->second;
     }
-    auto i2 = guid_index_.find(*id);
-    if (i2 == guid_index_.end())
+    auto i2 = uuid_index_.find(*id);
+    if (i2 == uuid_index_.end())
       return nullptr;
     return i2->second;
   }
 
-  bool MapLocaleIdToGUID(base::GUID& id) const {
-    auto i = locale_id_guid_map_.find(id);
-    if (i == locale_id_guid_map_.end())
+  bool MapLocaleIdToUuid(base::Uuid& id) const {
+    auto i = locale_id_uuid_map_.find(id);
+    if (i == locale_id_uuid_map_.end())
       return false;
     id = i->second;
     return true;
@@ -219,12 +219,12 @@ class PartnerDatabase {
   // Map partner details name to its details.
   base::flat_map<base::StringPiece, const PartnerDetails*> name_index_;
 
-  // Map locale-independent guid or guid2 to its details.
-  base::flat_map<base::GUID, const PartnerDetails*> guid_index_;
+  // Map locale-independent uuid or uuid2 to its details.
+  base::flat_map<base::Uuid, const PartnerDetails*> uuid_index_;
 
-  // Map old locale-based partner id to the guid or guid2 if the old id is for
+  // Map old locale-based partner id to the uuid or uuid2 if the old id is for
   // an url under Bookmarks folder.
-  base::flat_map<base::GUID, base::GUID> locale_id_guid_map_;
+  base::flat_map<base::Uuid, base::Uuid> locale_id_uuid_map_;
 };
 
 // Global singleton.
@@ -279,27 +279,27 @@ bool PartnerDatabase::ParseJson(base::Value root_value,
   // for unique values.
   std::vector<std::pair<base::StringPiece, const PartnerDetails*>> names;
   names.reserve(details_list_.size());
-  std::vector<std::pair<base::GUID, const PartnerDetails*>> guids;
-  guids.reserve(details_list_.size() * 2);
+  std::vector<std::pair<base::Uuid, const PartnerDetails*>> uuids;
+  uuids.reserve(details_list_.size() * 2);
   for (const PartnerDetails& details : details_list_) {
     names.emplace_back(details.name, &details);
-    guids.emplace_back(details.guid, &details);
-    if (details.guid2.is_valid()) {
-      guids.emplace_back(details.guid2, &details);
+    uuids.emplace_back(details.uuid, &details);
+    if (details.uuid2.is_valid()) {
+      uuids.emplace_back(details.uuid2, &details);
     }
   }
   name_index_ = base::flat_map<base::StringPiece, const PartnerDetails*>(
       std::move(names));
   if (name_index_.size() != details_list_.size())
-    return error("duplicatd names");
-  size_t added_guids = guids.size();
-  guid_index_ =
-      base::flat_map<base::GUID, const PartnerDetails*>(std::move(guids));
-  if (guid_index_.size() != added_guids)
-    return error("duplicatd GUIDs");
+    return error("duplicated names");
+  size_t added_uuids = uuids.size();
+  uuid_index_ =
+      base::flat_map<base::Uuid, const PartnerDetails*>(std::move(uuids));
+  if (uuid_index_.size() != added_uuids)
+    return error("duplicated Uuids");
 
   // Parse mapping from old locale-based ids to the new universal ids.
-  std::vector<std::pair<base::GUID, base::GUID>> locale_id_guid_list;
+  std::vector<std::pair<base::Uuid, base::Uuid>> locale_id_uuid_list;
   if (!partners_locale_value.is_dict())
     return error("partner local map json is not an object");
   for (auto name_key_value : partners_locale_value.GetDict()) {
@@ -313,14 +313,14 @@ bool PartnerDatabase::ParseJson(base::Value root_value,
       return error(std::string(kPartnerLocaleMapFile) + "." + name +
                    " is not a dictionary");
 
-    for (auto guid_key_value : locale_dict.GetDict()) {
-      const std::string& guid_key = guid_key_value.first;
-      base::Value& v = guid_key_value.second;
-      base::GUID guid;
+    for (auto uuid_key_value : locale_dict.GetDict()) {
+      const std::string& guid_key = uuid_key_value.first;
+      base::Value& v = uuid_key_value.second;
+      base::Uuid uuid;
       if (guid_key == kGuidKey) {
-        guid = details->guid;
+        uuid = details->uuid;
       } else if (guid_key == kGuid2Key) {
-        guid = details->guid2;
+        uuid = details->uuid2;
       } else {
         return error(std::string("unknown key ") + guid_key + " in " +
                      kPartnerLocaleMapFile + "." + name);
@@ -333,20 +333,20 @@ bool PartnerDatabase::ParseJson(base::Value root_value,
           return error(std::string("Partner id in ") +
                        std::string(kPartnerLocaleMapFile) + "." + name + "." +
                        guid_key + " is not a string");
-        base::GUID locale_id =
-            base::GUID::ParseCaseInsensitive(id_value.GetString());
+        base::Uuid locale_id =
+            base::Uuid::ParseCaseInsensitive(id_value.GetString());
         if (!locale_id.is_valid()) {
           return error(std::string("Partner id in ") +
                        std::string(kPartnerLocaleMapFile) + "." + name + "." +
-                       guid_key + " is not a valid GUID - " +
+                       guid_key + " is not a valid Uuid - " +
                        id_value.GetString());
         }
-        locale_id_guid_list.emplace_back(std::move(locale_id), std::move(guid));
+        locale_id_uuid_list.emplace_back(std::move(locale_id), std::move(uuid));
       }
     }
   }
-  locale_id_guid_map_ =
-      base::flat_map<base::GUID, base::GUID>(std::move(locale_id_guid_list));
+  locale_id_uuid_map_ =
+      base::flat_map<base::Uuid, base::Uuid>(std::move(locale_id_uuid_list));
   return true;
 }
 
@@ -358,13 +358,13 @@ const PartnerDetails* FindDetailsByName(base::StringPiece name) {
   return g_partner_db->FindDetailsByName(name);
 }
 
-bool MapLocaleIdToGUID(base::GUID& id) {
+bool MapLocaleIdToUuid(base::Uuid& id) {
   if (!g_partner_db)
     return false;
-  return g_partner_db->MapLocaleIdToGUID(id);
+  return g_partner_db->MapLocaleIdToUuid(id);
 }
 
-const std::string& GetThumbnailUrl(const base::GUID& partner_id) {
+const std::string& GetThumbnailUrl(const base::Uuid& partner_id) {
   DCHECK(partner_id.is_valid());
   if (!g_partner_db)
     return base::EmptyString();

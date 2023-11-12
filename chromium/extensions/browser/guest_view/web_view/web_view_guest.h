@@ -21,6 +21,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 #include "extensions/browser/script_executor.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 
 #ifdef VIVALDI_BUILD
@@ -28,6 +29,10 @@
 #include "extensions/api/guest_view/vivaldi_web_view_guest_top.inc"
 #include "third_party/blink/public/common/security/security_style.h"
 #endif // VIVALDI_BUILD
+
+namespace content {
+class StoragePartitionConfig;
+}
 
 namespace extensions {
 
@@ -197,7 +202,6 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   bool ZoomPropagatesFromEmbedderToGuest() const final;
   const char* GetAPINamespace() const final;
   int GetTaskPrefix() const final;
-  void GuestReady() final;
   void GuestSizeChangedDueToAutoSize(const gfx::Size& old_size,
                                      const gfx::Size& new_size) final;
   void GuestViewDidStopLoading() final;
@@ -325,7 +329,13 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
 
   void ApplyAttributes(const base::Value::Dict& params);
 
-  void SetTransparency();
+  void SetTransparency(content::RenderFrameHost* render_frame_host);
+
+  void CreateWebContentsWithStoragePartition(
+      std::unique_ptr<GuestViewBase> owned_this,
+      const base::Value::Dict& create_params,
+      WebContentsCreatedCallback callback,
+      absl::optional<content::StoragePartitionConfig> storage_partition_config);
 
   bool IsBackForwardCacheSupported() override;
 

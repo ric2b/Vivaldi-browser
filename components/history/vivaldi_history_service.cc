@@ -35,20 +35,23 @@ base::CancelableTaskTracker::TaskId HistoryService::VisitSearch(
       std::move(callback));
 }
 
-base::CancelableTaskTracker::TaskId HistoryService::QueryHistoryWStatement(
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+base::CancelableTaskTracker::TaskId
+HistoryService::QueryDetailedHistoryWStatement(
     const char* sql_statement,
     const std::string& search_string,
     int max_hits,
-    QueryHistoryCallback callback,
+    DetailedHistoryCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
-      base::BindOnce(&HistoryBackend::QueryHistoryWStatement,
+      base::BindOnce(&HistoryBackend::QueryDetailedHistoryWStatement,
                      history_backend_.get(), sql_statement, search_string,
                      max_hits),
       std::move(callback));
 }
+#endif
 
 }  // namespace history

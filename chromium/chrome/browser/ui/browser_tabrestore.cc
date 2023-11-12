@@ -244,7 +244,6 @@ WebContents* AddRestoredTabImpl(std::unique_ptr<WebContents> web_contents,
 #if BUILDFLAG(IS_MAC)
   if (browser->type() != Browser::Type::TYPE_APP)
 #endif  // BUILDFLAG(IS_MAC)
-  if (!browser->is_vivaldi())
     LoadRestoredTabIfVisible(browser, raw_web_contents);
 
   return raw_web_contents;
@@ -275,7 +274,8 @@ WebContents* AddRestoredTab(
       extra_data, initially_hidden, from_session_restore,
       viv_page_action_overrides, viv_ext_data);
 
-  // Always allow lazyload/discard the webcontents. We must load it after it has been attached in a webview .
+  // Always allow lazyload/discard the webcontents. We must load it after it has
+  // been attached in a webview .
   web_contents->SetUserData(&vivaldi::LazyLoadService::kLazyLoadIsSafe,
                             std::make_unique<base::SupportsUserData::Data>());
 

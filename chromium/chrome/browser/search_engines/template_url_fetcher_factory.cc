@@ -17,7 +17,8 @@ TemplateURLFetcher* TemplateURLFetcherFactory::GetForProfile(
 
 // static
 TemplateURLFetcherFactory* TemplateURLFetcherFactory::GetInstance() {
-  return base::Singleton<TemplateURLFetcherFactory>::get();
+  static base::NoDestructor<TemplateURLFetcherFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -30,12 +31,16 @@ void TemplateURLFetcherFactory::ShutdownForProfile(Profile* profile) {
 TemplateURLFetcherFactory::TemplateURLFetcherFactory()
     : ProfileKeyedServiceFactory(
           "TemplateURLFetcher",
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   DependsOn(TemplateURLServiceFactory::GetInstance());
 }
 
-TemplateURLFetcherFactory::~TemplateURLFetcherFactory() {
-}
+TemplateURLFetcherFactory::~TemplateURLFetcherFactory() = default;
 
 KeyedService* TemplateURLFetcherFactory::BuildServiceInstanceFor(
     content::BrowserContext* profile) const {

@@ -120,6 +120,7 @@ if (is_linux && !is_component_build) {
       "//vivaldi/installer/linux/common/wrapper",
       "//vivaldi/installer/linux/common/xfce-helper.template",
       "//vivaldi/installer/win/EULA.html",
+      "//vivaldi/relayproxy/linux/relayproxy-linux",
     ]
   }
 }
@@ -147,35 +148,35 @@ if (is_ios) {
     ]
   }
 
-  update_template_instance("//ios/chrome/content_widget_extension:entitlements") {
+  update_template_instance("//ios/chrome/content_widget_extension/appex:entitlements") {
     entitlements_templates -= [ "entitlements/external/content_widget_extension.appex.entitlements" ]
     entitlements_templates += [
       "//vivaldi/ios/app/entitlements/content_widget_extension.appex.entitlements",
     ]
   }
 
-  update_template_instance("//ios/chrome/search_widget_extension:entitlements") {
+  update_template_instance("//ios/chrome/search_widget_extension/appex:entitlements") {
     entitlements_templates -= [ "entitlements/external/search_widget_extension.appex.entitlements" ]
     entitlements_templates += [
       "//vivaldi/ios/app/entitlements/search_widget_extension.appex.entitlements",
     ]
   }
 
-  update_template_instance("//ios/chrome/widget_kit_extension:entitlements") {
+  update_template_instance("//ios/chrome/widget_kit_extension/appex:entitlements") {
     entitlements_templates -= [ "entitlements/external/widget_kit_extension.appex.entitlements" ]
     entitlements_templates += [
       "//vivaldi/ios/app/entitlements/widget_kit_extension.appex.entitlements",
     ]
   }
 
-  update_template_instance("//ios/chrome/share_extension:entitlements") {
+  update_template_instance("//ios/chrome/share_extension/appex:entitlements") {
     entitlements_templates -= [ "entitlements/external/share_extension.appex.entitlements" ]
     entitlements_templates += [
       "//vivaldi/ios/app/entitlements/share_extension.appex.entitlements",
     ]
   }
 
-  update_template_instance("//ios/chrome/credential_provider_extension:entitlements") {
+  update_template_instance("//ios/chrome/credential_provider_extension/appex:entitlements") {
     entitlements_templates -= [ "entitlements/external/credential_provider_extension.appex.entitlements" ]
     entitlements_templates += [
       "//vivaldi/ios/app/entitlements/credential_provider_extension.appex.entitlements",

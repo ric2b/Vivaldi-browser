@@ -12,8 +12,8 @@
 #import "components/signin/public/identity_manager/tribool.h"
 #import "google_apis/gaia/core_account_id.h"
 #import "google_apis/gaia/gaia_auth_util.h"
-#import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/signin/signin_util_internal.h"
 #import "ios/chrome/browser/signin/system_identity.h"
 #import "ios/public/provider/chrome/browser/signin/signin_error_api.h"
@@ -90,6 +90,9 @@ CGSize GetSizeForIdentityAvatarSize(IdentityAvatarSize avatar_size) {
       break;
     case IdentityAvatarSize::Large:
       size = 48.;
+      break;
+    case IdentityAvatarSize::ExtraLarge:
+      size = 60.;
       break;
   }
   DCHECK_NE(size, 0);

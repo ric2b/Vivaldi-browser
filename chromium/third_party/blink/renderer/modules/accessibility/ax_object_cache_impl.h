@@ -168,13 +168,14 @@ class MODULES_EXPORT AXObjectCacheImpl
   // recompute the parent's children and reserialize the parent.
   void Remove(AXObject*, bool notify_parent);
   void Remove(Node*, bool notify_parent);
-  // This will remove all AXObjects in the subtree, whether they or not they are
-  // marked as included for serialization. They can only be called while flat
-  // tree traversal is safe and there are no slot assignments pending.
-  // To remove only included nodes, use RemoveIncludedSubtree(), which can be
-  // called at any time.
-  void RemoveSubtreeWithFlatTraversal(Node* node);
-  void RemoveSubtreeWithFlatTraversal(AXObject*, bool notify_parent);
+
+  // If |remove_root|, remove the root of the subtree, otherwise only
+  // descendants are removed. If |notify_parent|, call ChildrenChanged() on the
+  // parent.
+  void RemoveSubtreeWithFlatTraversal(Node*,
+                                      bool remove_root = true,
+                                      bool notify_parent = true);
+  void RemoveSubtreeWhenSafe(Node*) override;
 
   // For any ancestor that could contain the passed-in AXObject* in their cached
   // children, clear their children and set needs to update children on them.
@@ -232,8 +233,10 @@ class MODULES_EXPORT AXObjectCacheImpl
   void InlineTextBoxesUpdated(LayoutObject*) override;
   // Called during the accessibility lifecycle to refresh the AX tree.
   void ProcessDeferredAccessibilityEvents(Document&) override;
+  // Remove AXObject subtrees (once flat tree traversal is safe).
+  void ProcessSubtreeRemovals() override;
   // Is there work to be done when layout becomes clean?
-  bool IsDirty() const override;
+  bool IsDirty() override;
 
   // Called when a HTMLFrameOwnerElement (such as an iframe element) changes the
   // embedding token of its child frame.
@@ -514,6 +517,10 @@ class MODULES_EXPORT AXObjectCacheImpl
   void ResetSerializer() override;
   void MarkElementDirty(const Node*) override;
 
+  // Returns true if UpdateTreeIfNeeded has been called and has not yet
+  /// finished.
+  bool UpdatingTree() { return updating_tree_; }
+
  protected:
   void PostPlatformNotification(
       AXObject* obj,
@@ -565,6 +572,17 @@ class MODULES_EXPORT AXObjectCacheImpl
         "blink::WebAXObject");
   };
 
+  // Calls UpdateTreeIfNeededOnce if NeedsUpdate is true on the root AXObject,
+  // and a second time if it is still true.
+  void UpdateTreeIfNeeded();
+  // Updates the AX tree once by walking from the root, calling AXObject::
+  // UpdateChildrenIfNecessary on each AXObject for which NeedsUpdate is true.
+  // This method is part of a11y-during-render, and in particular transitioning
+  // to an eager (as opposed to lazy) AX tree update pattern. See
+  // https://bugs.chromium.org/p/chromium/issues/detail?id=1342801#c12 for more
+  // details.
+  void UpdateTreeIfNeededOnce();
+
   // Create an AXObject, and do not check if a previous one exists.
   // Also, initialize the object and add it to maps for later retrieval.
   AXObject* CreateAndInit(Node*,
@@ -587,7 +605,7 @@ class MODULES_EXPORT AXObjectCacheImpl
 
   // Remove the cached subtree of included AXObjects. If |remove_root| is false,
   // then only descendants will be removed. To remove unincluded AXObjects as
-  // well, call RemoveSubtreeWithFlatTraversal().
+  // well, call RemoveSubtreeWithFlatTraversal() or RemoveSubtreeWhenSafe().
   void RemoveIncludedSubtree(AXObject* object, bool remove_root);
 
   // Helper to remove the object from the cache.
@@ -687,9 +705,8 @@ class MODULES_EXPORT AXObjectCacheImpl
   HeapHashMap<Member<AccessibleNode>, AXID> accessible_node_mapping_;
   HeapHashMap<Member<const LayoutObject>, AXID> layout_object_mapping_;
   HeapHashMap<Member<const Node>, AXID> node_object_mapping_;
-  // NGAbstractInlineTextBox are not on the Oilpan heap so we do not use
-  // HeapHashMap for those mappings.
-  HashMap<NGAbstractInlineTextBox*, AXID> inline_text_box_object_mapping_;
+  HeapHashMap<Member<NGAbstractInlineTextBox>, AXID>
+      inline_text_box_object_mapping_;
   int modification_count_;
 
   // Used for a mock AXObject representing the message displayed in the
@@ -876,6 +893,9 @@ class MODULES_EXPORT AXObjectCacheImpl
   // Nodes with document markers that have received accessibility updates.
   HeapHashSet<WeakMember<Node>> nodes_with_spelling_or_grammar_markers_;
 
+  // Nodes renoved from flat tree.
+  HeapVector<Member<Node>> nodes_for_subtree_removal_;
+
   // True when layout has changed, and changed locations must be serialized.
   bool need_to_send_location_changes_ = false;
 
@@ -936,6 +956,7 @@ class MODULES_EXPORT AXObjectCacheImpl
 
   Deque<ui::AXEvent> pending_events_;
 
+  bool updating_tree_ = false;
   // Make sure the next serialization sends everything.
   bool mark_all_dirty_ = false;
 

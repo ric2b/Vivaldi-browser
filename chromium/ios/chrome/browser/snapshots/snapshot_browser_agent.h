@@ -7,9 +7,9 @@
 
 #import <Foundation/Foundation.h>
 
-#import "ios/chrome/browser/main/browser_observer.h"
-#import "ios/chrome/browser/main/browser_user_data.h"
-#import "ios/chrome/browser/web_state_list/web_state_list_observer.h"
+#import "ios/chrome/browser/shared/model/browser/browser_observer.h"
+#import "ios/chrome/browser/shared/model/browser/browser_user_data.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer.h"
 
 @class SnapshotCache;
 
@@ -47,19 +47,15 @@ class SnapshotBrowserAgent : public BrowserObserver,
   void BrowserDestroyed(Browser* browser) override;
 
   // WebStateListObserver methods
-  void WebStateInsertedAt(WebStateList* web_state_list,
-                          web::WebState* web_state,
-                          int index,
-                          bool activating) override;
-  void WebStateReplacedAt(WebStateList* web_state_list,
-                          web::WebState* old_web_state,
-                          web::WebState* new_web_state,
-                          int index) override;
-  void WebStateDetachedAt(WebStateList* web_state_list,
-                          web::WebState* web_state,
-                          int index) override;
+  void WebStateListChanged(WebStateList* web_state_list,
+                           const WebStateListChange& change,
+                           const WebStateSelection& selection) override;
   void WillBeginBatchOperation(WebStateList* web_state_list) override;
   void BatchOperationEnded(WebStateList* web_state_list) override;
+
+  // Helper methods to set a snapshot cache for `web_state`.
+  void InsertWebState(web::WebState* web_state);
+  void DetachWebState(web::WebState* web_state);
 
   // Migrates the snapshot storage if a folder exists in the old snapshots
   // storage location.
@@ -68,8 +64,8 @@ class SnapshotBrowserAgent : public BrowserObserver,
   // Purges the snapshots folder of unused snapshots.
   void PurgeUnusedSnapshots();
 
-  // Returns the Tab IDs of all the WebStates in the Browser.
-  NSSet<NSString*>* GetTabIDs();
+  // Returns the snapshot IDs of all the WebStates in the Browser.
+  NSSet<NSString*>* GetSnapshotIDs();
 
   __strong SnapshotCache* snapshot_cache_;
 

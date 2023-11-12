@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://os-settings/chromeos/lazy_load.js';
+import 'chrome://os-settings/lazy_load.js';
 
 import {webUIListenerCallback} from 'chrome://resources/ash/common/cr.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-
 import {assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
 suite('SwitchAccessSetupGuideDialogTest', function() {
@@ -339,30 +338,30 @@ suite('SwitchAccessSetupGuideDialogTest', function() {
   });
 
   test('Illustration changes with switch count', function() {
-    const switchCountIllustration = dialog.$.chooseSwitchCountIllustration;
-    assertTrue(!!switchCountIllustration);
-    assertEquals('illustration one-switch', switchCountIllustration.className);
+    const chooseSwitchCountEl =
+        dialog.shadowRoot.querySelector('#chooseSwitchCount');
+    assertTrue(!!chooseSwitchCountEl);
+    assertEquals('1', chooseSwitchCountEl.getAttribute('data-switch-count'));
 
-    const switchCountGroup = dialog.$.switchCountGroup;
+    const switchCountGroup =
+        dialog.shadowRoot.querySelector('#switchCountGroup');
     assertTrue(!!switchCountGroup);
 
     const twoSwitches = switchCountGroup.querySelector('[name="two-switches"]');
     assertTrue(!!twoSwitches);
     switchCountGroup.select_(twoSwitches);
-    assertEquals(
-        'illustration two-switches', switchCountIllustration.className);
+    assertEquals('2', chooseSwitchCountEl.getAttribute('data-switch-count'));
 
     const threeSwitches =
         switchCountGroup.querySelector('[name="three-switches"]');
     assertTrue(!!threeSwitches);
     switchCountGroup.select_(threeSwitches);
-    assertEquals(
-        'illustration three-switches', switchCountIllustration.className);
+    assertEquals('3', chooseSwitchCountEl.getAttribute('data-switch-count'));
 
     const oneSwitch = switchCountGroup.querySelector('[name="one-switch"]');
     assertTrue(!!oneSwitch);
     switchCountGroup.select_(oneSwitch);
-    assertEquals('illustration one-switch', switchCountIllustration.className);
+    assertEquals('1', chooseSwitchCountEl.getAttribute('data-switch-count'));
   });
 
   test('Assignment pane behaves correctly', function() {

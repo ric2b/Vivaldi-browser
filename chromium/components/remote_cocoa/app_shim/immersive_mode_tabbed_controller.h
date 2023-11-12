@@ -7,7 +7,6 @@
 
 #include "components/remote_cocoa/app_shim/immersive_mode_controller.h"
 
-#include "base/mac/scoped_nsobject.h"
 #import "components/remote_cocoa/app_shim/bridged_content_view.h"
 
 @class TabTitlebarViewController;
@@ -19,8 +18,7 @@ class REMOTE_COCOA_APP_SHIM_EXPORT ImmersiveModeTabbedController
  public:
   explicit ImmersiveModeTabbedController(NSWindow* browser_window,
                                          NSWindow* overlay_window,
-                                         NSWindow* tab_window,
-                                         base::OnceClosure callback);
+                                         NSWindow* tab_window);
   ImmersiveModeTabbedController(const ImmersiveModeTabbedController&) = delete;
   ImmersiveModeTabbedController& operator=(
       const ImmersiveModeTabbedController&) = delete;
@@ -32,7 +30,6 @@ class REMOTE_COCOA_APP_SHIM_EXPORT ImmersiveModeTabbedController
   // UpdateToolbarVisibility(). Remove this comment once the bug has been
   // resolved.
   void Enable() override;
-  void FullscreenTransitionCompleted() override;
   void UpdateToolbarVisibility(mojom::ToolbarVisibilityStyle style) override;
   void OnTopViewBoundsChanged(const gfx::Rect& bounds) override;
   void RevealLock() override;
@@ -49,10 +46,14 @@ class REMOTE_COCOA_APP_SHIM_EXPORT ImmersiveModeTabbedController
   void AddController();
   void RemoveController();
 
-  NSWindow* const tab_window_;
-  BridgedContentView* tab_content_view_;
-  base::scoped_nsobject<NSTitlebarAccessoryViewController>
-      tab_titlebar_view_controller_;
+  // Ensure tab window is z-order on top of any siblings. Tab window will be
+  // parented to overlay window regardless of the current parent.
+  void OrderTabWindowZOrderOnTop();
+
+  // TODO(https://crbug.com/1280317): Merge the contents back into the header
+  // file once all files that include this header are compiled with ARC.
+  struct ObjCStorage;
+  std::unique_ptr<ObjCStorage> objc_storage_;
 };
 
 }  // namespace remote_cocoa

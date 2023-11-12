@@ -26,7 +26,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/webui/file_manager/url_constants.h"
-#include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
+#include "chrome/browser/ash/policy/dlp/dlp_files_controller_ash.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace policy {
@@ -128,7 +128,7 @@ DlpRulesManager::Level IsDataTransferAllowed(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     case ui::EndpointType::kCrostini: {
       level = dlp_rules_manager.IsRestrictedComponent(
-          src_url, DlpRulesManager::Component::kCrostini,
+          src_url, data_controls::Component::kCrostini,
           DlpRulesManager::Restriction::kClipboard, src_pattern,
           out_rule_metadata);
       break;
@@ -136,7 +136,7 @@ DlpRulesManager::Level IsDataTransferAllowed(
 
     case ui::EndpointType::kPluginVm: {
       level = dlp_rules_manager.IsRestrictedComponent(
-          src_url, DlpRulesManager::Component::kPluginVm,
+          src_url, data_controls::Component::kPluginVm,
           DlpRulesManager::Restriction::kClipboard, src_pattern,
           out_rule_metadata);
       break;
@@ -144,7 +144,7 @@ DlpRulesManager::Level IsDataTransferAllowed(
 
     case ui::EndpointType::kArc: {
       level = dlp_rules_manager.IsRestrictedComponent(
-          src_url, DlpRulesManager::Component::kArc,
+          src_url, data_controls::Component::kArc,
           DlpRulesManager::Restriction::kClipboard, src_pattern,
           out_rule_metadata);
       break;
@@ -358,7 +358,8 @@ void DataTransferDlpController::DropIfAllowed(
 
   if (drag_data->HasFile() && !IsFilesApp(data_dst)) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    auto* files_controller = dlp_rules_manager_->GetDlpFilesController();
+    auto* files_controller = static_cast<policy::DlpFilesControllerAsh*>(
+        dlp_rules_manager_->GetDlpFilesController());
     if (files_controller) {
       std::vector<ui::FileInfo> dropped_files;
       drag_data->GetFilenames(&dropped_files);
@@ -538,21 +539,21 @@ void DataTransferDlpController::ReportEvent(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     case ui::EndpointType::kCrostini:
       reporting_manager->ReportEvent(
-          src_pattern, DlpRulesManager::Component::kCrostini,
+          src_pattern, data_controls::Component::kCrostini,
           DlpRulesManager::Restriction::kClipboard, level, rule_metadata.name,
           rule_metadata.obfuscated_id);
       break;
 
     case ui::EndpointType::kPluginVm:
       reporting_manager->ReportEvent(
-          src_pattern, DlpRulesManager::Component::kPluginVm,
+          src_pattern, data_controls::Component::kPluginVm,
           DlpRulesManager::Restriction::kClipboard, level, rule_metadata.name,
           rule_metadata.obfuscated_id);
       break;
 
     case ui::EndpointType::kArc:
       reporting_manager->ReportEvent(
-          src_pattern, DlpRulesManager::Component::kArc,
+          src_pattern, data_controls::Component::kArc,
           DlpRulesManager::Restriction::kClipboard, level, rule_metadata.name,
           rule_metadata.obfuscated_id);
       break;

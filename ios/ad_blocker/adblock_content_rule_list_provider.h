@@ -22,10 +22,12 @@ class AdBlockerContentRuleListProvider {
   static std::unique_ptr<AdBlockerContentRuleListProvider> Create(
       web::BrowserState* browser_state,
       RuleGroup group,
+      base::OnceClosure on_loaded,
       base::RepeatingClosure on_rules_applied);
   virtual ~AdBlockerContentRuleListProvider();
 
   virtual void InstallContentRuleLists(const base::Value::List& lists) = 0;
+  virtual void ApplyLoadedRules() = 0;
 };
 
 }  // namespace adblock_filter

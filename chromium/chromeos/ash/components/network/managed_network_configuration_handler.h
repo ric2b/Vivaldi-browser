@@ -99,6 +99,13 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) ManagedNetworkConfigurationHandler {
                              base::OnceClosure callback,
                              network_handler::ErrorCallback error_callback) = 0;
 
+  // Clears Shill properties in |names| of a network with |service_path|.
+  virtual void ClearShillProperties(
+      const std::string& service_path,
+      const std::vector<std::string>& names,
+      base::OnceClosure callback,
+      network_handler::ErrorCallback error_callback) = 0;
+
   // Initially configures an unconfigured network with the given user settings
   // and returns the new identifier to |callback| if successful. Fails if the
   // network was already configured by a call to this function or because of a
@@ -235,6 +242,10 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) ManagedNetworkConfigurationHandler {
 
   // Return the list of blocked WiFi networks (identified by HexSSIDs).
   virtual std::vector<std::string> GetBlockedHexSSIDs() const = 0;
+
+  // Called after either secure DNS status or deviceReportXDREvents policy is
+  // updated.
+  virtual void OnEnterpriseMonitoredWebPoliciesApplied() const = 0;
 
   // Called just before destruction to give observers a chance to remove
   // themselves and disable any networking.

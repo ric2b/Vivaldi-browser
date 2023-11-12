@@ -23,16 +23,19 @@
 #import "components/omnibox/common/omnibox_focus_state.h"
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/feature_engagement/tracker_factory.h"
+#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/ntp/metrics/home_metrics.h"
 #import "ios/chrome/browser/ui/omnibox/chrome_omnibox_client_ios.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_metrics_helper.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_util.h"
-#import "ios/chrome/browser/ui/omnibox/web_omnibox_edit_model_delegate.h"
+#import "ios/chrome/browser/ui/omnibox/web_location_bar.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/grit/ios_theme_resources.h"
 #import "ios/web/public/navigation/referrer.h"
@@ -52,17 +55,19 @@ using base::UserMetricsAction;
 #pragma mark - OminboxViewIOS
 
 OmniboxViewIOS::OmniboxViewIOS(OmniboxTextFieldIOS* field,
-                               WebOmniboxEditModelDelegate* edit_model_delegate,
+                               WebLocationBar* location_bar,
                                ChromeBrowserState* browser_state,
                                id<OmniboxCommands> omnibox_focuser)
     : OmniboxView(
-          edit_model_delegate,
-          edit_model_delegate
-              ? std::make_unique<ChromeOmniboxClientIOS>(edit_model_delegate,
-                                                         browser_state)
+          location_bar
+              ? std::make_unique<ChromeOmniboxClientIOS>(
+                    location_bar,
+                    browser_state,
+                    feature_engagement::TrackerFactory::GetForBrowserState(
+                        browser_state))
               : nullptr),
       field_(field),
-      edit_model_delegate_(edit_model_delegate),
+      location_bar_(location_bar),
       omnibox_focuser_(omnibox_focuser),
       ignore_popup_updates_(false),
       popup_provider_(nullptr) {
@@ -306,11 +311,11 @@ size_t OmniboxViewIOS::GetAllSelectionsLength() const {
 }
 
 gfx::NativeView OmniboxViewIOS::GetNativeView() const {
-  return nullptr;
+  return gfx::NativeView();
 }
 
 gfx::NativeView OmniboxViewIOS::GetRelativeWindowForPopup() const {
-  return nullptr;
+  return gfx::NativeView();
 }
 
 void OmniboxViewIOS::OnDidBeginEditing() {
@@ -345,11 +350,11 @@ void OmniboxViewIOS::OnDidBeginEditing() {
   if (!popup_was_open_before_editing_began)
     [field_ enterPreEditState];
 
-  // `edit_model_delegate_` is only forwarding the call to the BVC. This should
-  // only happen when the omnibox is being focused and it starts showing the
-  // popup; if the popup was already open, no need to call this.
+  // `location_bar_` is only forwarding the call to the BVC. This should only
+  // happen when the omnibox is being focused and it starts showing the popup;
+  // if the popup was already open, no need to call this.
   if (!popup_was_open_before_editing_began)
-    edit_model_delegate_->OnSetFocus();
+    location_bar_->OnSetFocus();
 }
 
 void OmniboxViewIOS::OnWillEndEditing() {
@@ -494,10 +499,10 @@ void OmniboxViewIOS::OnDidChange(bool processing_user_event) {
 
     // The IME exception kicks in if the current marked text is not equal to the
     // previous marked text.  Two nil strings should be considered equal, so
-    // There is logic to avoid calling into isEqual: in that case.
+    // There is logic to avoid calling into isEqualToString: in that case.
     proceed_without_user_event =
         (marked_text_before_change_ || current_marked_text) &&
-        ![current_marked_text isEqual:marked_text_before_change_];
+        ![current_marked_text isEqualToString:marked_text_before_change_];
   }
 
   if (!processing_user_event && !proceed_without_user_event)
@@ -513,6 +518,12 @@ void OmniboxViewIOS::OnDidChange(bool processing_user_event) {
 
 void OmniboxViewIOS::OnAccept() {
   base::RecordAction(UserMetricsAction("MobileOmniboxUse"));
+  NewTabPageTabHelper* NTPTabHelper =
+      NewTabPageTabHelper::FromWebState(location_bar_->GetWebState());
+  if (NTPTabHelper->IsActive()) {
+    RecordHomeAction(IOSHomeActionType::kOmnibox,
+                     NTPTabHelper->ShouldShowStartSurface());
+  }
 
   if (model()) {
     model()->OpenSelection();
@@ -610,8 +621,6 @@ void OmniboxViewIOS::OnDeleteBackward() {
       // never sets the input-in-progress flag.
       if (model())
         model()->SetInputInProgress(YES);
-    } else {
-      RemoveQueryRefinementChip();
     }
   }
 }
@@ -621,11 +630,8 @@ void OmniboxViewIOS::ClearText() {
   // user can start typing a new query.
   if (![field_ isFirstResponder])
     [field_ becomeFirstResponder];
-  if (field_.text.length == 0) {
-    // If `field_` is empty, remove the query refinement chip.
-    RemoveQueryRefinementChip();
-  } else {
-    // Otherwise, just remove the text in the omnibox.
+  if (field_.text.length != 0) {
+    // Remove the text in the omnibox.
     // Calling -[UITextField setText:] does not trigger
     // -[id<UITextFieldDelegate> textDidChange] so it must be called explicitly.
     OnClear();
@@ -635,10 +641,6 @@ void OmniboxViewIOS::ClearText() {
   // Calling OnDidChange() can trigger a scroll event, which removes focus from
   // the omnibox.
   [field_ becomeFirstResponder];
-}
-
-void OmniboxViewIOS::RemoveQueryRefinementChip() {
-  edit_model_delegate_->OnChanged();
 }
 
 void OmniboxViewIOS::EndEditing() {
@@ -656,7 +658,7 @@ void OmniboxViewIOS::EndEditing() {
 
     // The controller looks at the current pre-edit state, so the call to
     // OnKillFocus() must come after exiting pre-edit.
-    edit_model_delegate_->OnKillFocus();
+    location_bar_->OnKillFocus();
 
     // Blow away any in-progress edits.
     RevertAll();

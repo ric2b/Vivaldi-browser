@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
+#include "chrome/browser/enterprise/connectors/reporting/metrics_utils.h"
 #include "chrome/browser/enterprise/connectors/reporting/reporting_service_settings.h"
 #include "chrome/browser/enterprise/identifiers/profile_id_service_factory.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
@@ -73,6 +75,7 @@ namespace enterprise_connectors {
 
 const char RealtimeReportingClient::kKeyProfileIdentifier[] =
     "profileIdentifier";
+const char RealtimeReportingClient::kKeyProfileUserName[] = "profileUserName";
 
 RealtimeReportingClient::RealtimeReportingClient(
     content::BrowserContext* context)
@@ -329,21 +332,26 @@ void RealtimeReportingClient::ReportRealtimeEvent(
     const std::string& name,
     const ReportingSettings& settings,
     base::Value::Dict event) {
-  ReportEventWithTimestamp(name, settings, std::move(event), base::Time::Now());
+  ReportEventWithTimestamp(name, settings, std::move(event), base::Time::Now(),
+                           /*include_profile_user_name=*/true);
 }
 
 void RealtimeReportingClient::ReportPastEvent(const std::string& name,
                                               const ReportingSettings& settings,
                                               base::Value::Dict event,
                                               const base::Time& time) {
-  ReportEventWithTimestamp(name, settings, std::move(event), time);
+  // Do not include profile information for past events because for crash events
+  // we do not necessarily know which profile caused the crash .
+  ReportEventWithTimestamp(name, settings, std::move(event), time,
+                           /*include_profile_user_name=*/false);
 }
 
 void RealtimeReportingClient::ReportEventWithTimestamp(
     const std::string& name,
     const ReportingSettings& settings,
     base::Value::Dict event,
-    const base::Time& time) {
+    const base::Time& time,
+    bool include_profile_user_name) {
   if (rejected_dm_token_timers_.contains(settings.dm_token)) {
     return;
   }
@@ -380,11 +388,15 @@ void RealtimeReportingClient::ReportEventWithTimestamp(
   base::Value::Dict wrapper;
   wrapper.Set("time", time_str);
   event.Set(kKeyProfileIdentifier, GetProfileIdentifier());
+  if (include_profile_user_name) {
+    event.Set(kKeyProfileUserName, GetProfileUserName());
+  }
   // TODO(b/270589536): also move other common field setting here.
   wrapper.Set(name, std::move(event));
 
   auto upload_callback = base::BindOnce(
       [](base::Value::Dict wrapper, bool per_profile, std::string dm_token,
+         EnterpriseReportingEventType eventType,
          policy::CloudPolicyClient::Result upload_result) {
         // TODO(b/256553070): Do not crash if the client is unregistered.
         CHECK(!upload_result.IsClientNotRegisteredError());
@@ -395,8 +407,17 @@ void RealtimeReportingClient::ReportEventWithTimestamp(
                     std::move(dm_token));
         safe_browsing::WebUIInfoSingleton::GetInstance()->AddToReportingEvents(
             std::move(wrapper));
+
+        if (upload_result.IsSuccess()) {
+          base::UmaHistogramEnumeration(
+              "Enterprise.ReportingEventUploadSuccess", eventType);
+        } else {
+          base::UmaHistogramEnumeration(
+              "Enterprise.ReportingEventUploadFailure", eventType);
+        }
       },
-      wrapper.Clone(), settings.per_profile, client->dm_token());
+      wrapper.Clone(), settings.per_profile, client->dm_token(),
+      GetUmaEnumFromEventName(name));
 
   base::Value::List event_list;
   event_list.Append(std::move(wrapper));
@@ -464,9 +485,13 @@ void RealtimeReportingClient::OnClientError(policy::CloudPolicyClient* client) {
       rejected_dm_token_timers_[client->dm_token()]->Start(
           FROM_HERE, base::Hours(24),
           base::BindOnce(&RealtimeReportingClient::RemoveDmTokenFromRejectedSet,
-                         weak_ptr_factory_.GetWeakPtr(), client->dm_token()));
+                         GetWeakPtr(), client->dm_token()));
     }
   }
+}
+
+base::WeakPtr<RealtimeReportingClient> RealtimeReportingClient::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 }  // namespace enterprise_connectors

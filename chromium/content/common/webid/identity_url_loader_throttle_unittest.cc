@@ -46,10 +46,7 @@ class IdentityUrlLoaderThrottleTestParameterized
 
 TEST_F(IdentityUrlLoaderThrottleTest, DisabledByKillSwitch) {
   base::test::ScopedFeatureList list;
-  list.InitAndEnableFeatureWithParameters(
-      features::kFedCm,
-      {{features::kFedCmIdpSigninStatusMetricsOnlyFieldTrialParamName,
-        "false"}});
+  list.InitAndDisableFeature(features::kFedCmIdpSigninStatusMetrics);
 
   std::unique_ptr<blink::URLLoaderThrottle> throttle =
       MaybeCreateIdentityUrlLoaderThrottle(CreateCallback());
@@ -133,6 +130,33 @@ TEST_F(IdentityUrlLoaderThrottleTest, NoRelevantHeader) {
   EXPECT_FALSE(defer);
 
   EXPECT_EQ(0, cb_num_calls_);
+}
+
+TEST_F(IdentityUrlLoaderThrottleTest, HeaderHasToken) {
+  scoped_refptr<net::HttpResponseHeaders> headers =
+      net::HttpResponseHeaders::TryToCreate("HTTP/1.1 200 OK\n");
+  EXPECT_FALSE(
+      IdentityUrlLoaderThrottle::HeaderHasToken(*headers, "Signin", "val"));
+
+  headers =
+      net::HttpResponseHeaders::TryToCreate("HTTP/1.1 200 OK\nSignin: val");
+  EXPECT_TRUE(
+      IdentityUrlLoaderThrottle::HeaderHasToken(*headers, "Signin", "val"));
+
+  headers = net::HttpResponseHeaders::TryToCreate(
+      "HTTP/1.1 200 OK\nSignIn: val; type=idp");
+  EXPECT_TRUE(
+      IdentityUrlLoaderThrottle::HeaderHasToken(*headers, "Signin", "val"));
+
+  headers = net::HttpResponseHeaders::TryToCreate(
+      "HTTP/1.1 200 OK\nSignin:  val ; type=idp");
+  EXPECT_TRUE(
+      IdentityUrlLoaderThrottle::HeaderHasToken(*headers, "Signin", "val"));
+
+  headers = net::HttpResponseHeaders::TryToCreate(
+      "HTTP/1.1 200 OK\nSignin:  val ; type=idp");
+  EXPECT_TRUE(IdentityUrlLoaderThrottle::HeaderHasToken(*headers, "Signin",
+                                                        "type=idp"));
 }
 
 }  // namespace content

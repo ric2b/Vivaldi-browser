@@ -20,8 +20,11 @@
 #include "services/shape_detection/barcode_detection_impl_mac_vision.h"
 #include "services/shape_detection/barcode_detection_provider_mac.h"
 #include "services/shape_detection/public/mojom/barcodedetection_provider.mojom.h"
-#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 using base::test::RunClosure;
 using ::testing::NiceMock;
@@ -52,8 +55,15 @@ static NSArray<VNBarcodeSymbology>* MockVisionSupportedSymbologyStrings = @[
 
 class MockVisionAPI : public VisionAPIInterface {
  public:
-  MOCK_CONST_METHOD0(GetSupportedSymbologies,
-                     NSArray<VNBarcodeSymbology>*(void));
+  explicit MockVisionAPI(NSArray<VNBarcodeSymbology>* symbologies)
+      : symbologies_(symbologies) {}
+
+  NSArray<VNBarcodeSymbology>* GetSupportedSymbologies() const override {
+    return symbologies_;
+  }
+
+ private:
+  NSArray<VNBarcodeSymbology>* __strong symbologies_;
 };
 
 std::unique_ptr<mojom::BarcodeDetectionProvider> CreateBarcodeProviderMac(
@@ -71,11 +81,7 @@ std::unique_ptr<VisionAPIInterface> CreateVisionAPI() {
 
 std::unique_ptr<VisionAPIInterface> CreateMockVisionAPI(
     NSArray<VNBarcodeSymbology>* returned_symbologies) {
-  std::unique_ptr<NiceMock<MockVisionAPI>> mock_vision_api =
-      std::make_unique<NiceMock<MockVisionAPI>>();
-  ON_CALL(*mock_vision_api, GetSupportedSymbologies())
-      .WillByDefault(Return(returned_symbologies));
-  return mock_vision_api;
+  return std::make_unique<MockVisionAPI>(returned_symbologies);
 }
 
 using VisionAPIInterfaceFactory =
@@ -100,7 +106,7 @@ class BarcodeDetectionProviderMacTest
   ~BarcodeDetectionProviderMacTest() override = default;
 
   void SetUp() override {
-    ASSERT_EQ([MockVisionSupportedSymbologyStrings count],
+    ASSERT_EQ(MockVisionSupportedSymbologyStrings.count,
               MockVisionSupportedFormats.size());
   }
 
@@ -142,10 +148,8 @@ INSTANTIATE_TEST_SUITE_P(,
                          ValuesIn(kTestParams));
 
 TEST_F(BarcodeDetectionProviderMacTest, EnumerateSupportedBarcodesCached) {
-  auto mock_vision_api = std::make_unique<MockVisionAPI>();
-  ON_CALL(*mock_vision_api, GetSupportedSymbologies())
-      .WillByDefault(Return(MockVisionSupportedSymbologyStrings));
-  EXPECT_CALL(*mock_vision_api, GetSupportedSymbologies());
+  std::unique_ptr<VisionAPIInterface> mock_vision_api =
+      CreateMockVisionAPI(MockVisionSupportedSymbologyStrings);
 
   provider_ = CreateBarcodeProviderMac(std::move(mock_vision_api));
   provider_->EnumerateSupportedFormats(base::BindOnce(

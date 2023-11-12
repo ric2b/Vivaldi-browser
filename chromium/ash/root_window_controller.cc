@@ -103,6 +103,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/layout/fill_layout.h"
 #include "ui/views/view_model.h"
 #include "ui/views/view_model_utils.h"
 #include "ui/views/widget/widget.h"
@@ -835,7 +836,8 @@ void RootWindowController::ShowContextMenu(const gfx::Point& location_in_screen,
       Shell::Get()->tablet_mode_controller()->InTabletMode();
   root_window_menu_model_adapter_ =
       std::make_unique<RootWindowMenuModelAdapter>(
-          std::make_unique<ShelfContextMenuModel>(nullptr, display_id),
+          std::make_unique<ShelfContextMenuModel>(nullptr, display_id,
+                                                  /*menu_in_shelf=*/false),
           wallpaper_widget_controller()->GetWidget(), source_type,
           base::BindOnce(&RootWindowController::OnMenuClosed,
                          base::Unretained(this)),
@@ -932,7 +934,7 @@ void RootWindowController::CreateAmbientWidget() {
   DCHECK(!ambient_widget_);
 
   auto* ambient_controller = Shell::Get()->ambient_controller();
-  if (ambient_controller && ambient_controller->IsShown()) {
+  if (ambient_controller && ambient_controller->ShouldShowAmbientUi()) {
     ambient_widget_ = ambient_controller->CreateWidget(
         GetRootWindow()->GetChildById(kShellWindowId_AmbientModeContainer));
   }
@@ -1301,6 +1303,12 @@ void RootWindowController::CreateContainers() {
   settings_bubble_container->SetProperty(::wm::kUsesScreenCoordinatesKey, true);
   settings_bubble_container->SetProperty(kLockedToRootKey, true);
 
+  aura::Window* help_bubble_container =
+      CreateContainer(kShellWindowId_HelpBubbleContainer, "HelpBubbleContainer",
+                      lock_screen_related_containers);
+  ::wm::SetChildWindowVisibilityChangesAnimated(help_bubble_container);
+  help_bubble_container->SetProperty(::wm::kUsesScreenCoordinatesKey, true);
+
   aura::Window* virtual_keyboard_parent_container = CreateContainer(
       kShellWindowId_ImeWindowParentContainer, "ImeWindowParentContainer",
       lock_screen_related_containers);
@@ -1374,6 +1382,16 @@ void RootWindowController::CreateContainers() {
 
   CreateContainer(kShellWindowId_PowerButtonAnimationContainer,
                   "PowerButtonAnimationContainer", magnified_container);
+
+  // Make sure booting animation container is always on top of all other
+  // siblings under the `magnified_container`.
+  if (ash::features::IsOobeSimonEnabled()) {
+    aura::Window* booting_animation_container =
+        CreateContainer(kShellWindowId_BootingAnimationContainer,
+                        "BootingAnimationContainer", magnified_container);
+    booting_animation_container->SetLayoutManager(
+        std::make_unique<FillLayoutManager>(booting_animation_container));
+  }
 }
 
 aura::Window* RootWindowController::CreateContainer(int window_id,

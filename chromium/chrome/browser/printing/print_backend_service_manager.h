@@ -11,6 +11,7 @@
 
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
 #include "base/types/strong_alias.h"
@@ -587,7 +588,7 @@ class PrintBackendServiceManager {
   template <class... T>
   void RunSavedCallbacks(RemoteSavedCallbacks<T...>& saved_callbacks,
                          const RemoteId& remote_id,
-                         std::remove_reference<T>::type... result);
+                         typename std::remove_reference<T>::type... result);
 
   // Test support for client ID management.
   static void SetClientsForTesting(
@@ -708,9 +709,9 @@ class PrintBackendServiceManager {
   std::unique_ptr<crash_keys::ScopedPrinterInfo> crash_keys_;
 
   // Override of service to use for testing.
-  raw_ptr<mojo::Remote<mojom::PrintBackendService>>
+  raw_ptr<mojo::Remote<mojom::PrintBackendService>, LeakedDanglingUntriaged>
       sandboxed_service_remote_for_test_ = nullptr;
-  raw_ptr<mojo::Remote<mojom::PrintBackendService>>
+  raw_ptr<mojo::Remote<mojom::PrintBackendService>, LeakedDanglingUntriaged>
       unsandboxed_service_remote_for_test_ = nullptr;
 };
 

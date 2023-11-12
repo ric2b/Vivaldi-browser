@@ -10,7 +10,7 @@
 #import "components/ad_blocker/adblock_known_sources_handler.h"
 #import "components/ad_blocker/adblock_rule_manager.h"
 #import "components/ad_blocker/adblock_rule_service.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_consumer.h"
 
 using adblock_filter::FetchResult;

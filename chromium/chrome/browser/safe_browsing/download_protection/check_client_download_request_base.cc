@@ -12,6 +12,7 @@
 #include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
+#include "base/task/bind_post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
@@ -49,20 +50,6 @@ void RecordFileExtensionType(const std::string& metric_name,
                              const base::FilePath& file) {
   base::UmaHistogramSparse(
       metric_name, FileTypePolicies::GetInstance()->UmaValueForFile(file));
-}
-
-bool CheckUrlAgainstAllowlist(
-    const GURL& url,
-    scoped_refptr<SafeBrowsingDatabaseManager> database_manager) {
-  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)
-                          ? content::BrowserThread::UI
-                          : content::BrowserThread::IO);
-
-  if (!database_manager.get()) {
-    return false;
-  }
-
-  return (url.is_valid() && database_manager->MatchDownloadAllowlistUrl(url));
 }
 
 std::string SanitizeUrl(const std::string& url) {
@@ -142,25 +129,27 @@ void CheckClientDownloadRequestBase::Start() {
     return;
   }
 
+  if (!database_manager_ || !source_url_.is_valid()) {
+    OnUrlAllowlistCheckDone(false);
+    return;
+  }
+
   // If allowlist check passes, FinishRequest() will be called to avoid
   // analyzing file. Otherwise, AnalyzeFile() will be called to continue with
   // analysis.
+  auto callback = base::BindOnce(
+      &CheckClientDownloadRequestBase::OnUrlAllowlistCheckDone, GetWeakPtr());
   if (base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)) {
-    auto weak_ptr = GetWeakPtr();
-    bool is_allowlisted =
-        CheckUrlAgainstAllowlist(source_url_, database_manager_);
-    if (!weak_ptr) {
-      // `CheckUrlAgainstAllowlist` could delete this object.
-      return;
-    }
-    OnUrlAllowlistCheckDone(is_allowlisted);
+    database_manager_->MatchDownloadAllowlistUrl(source_url_,
+                                                 std::move(callback));
   } else {
-    content::GetIOThreadTaskRunner({})->PostTaskAndReplyWithResult(
+    content::GetIOThreadTaskRunner({})->PostTask(
         FROM_HERE,
-        base::BindOnce(&CheckUrlAgainstAllowlist, source_url_,
-                       database_manager_),
-        base::BindOnce(&CheckClientDownloadRequestBase::OnUrlAllowlistCheckDone,
-                       GetWeakPtr()));
+        base::BindOnce(&safe_browsing::SafeBrowsingDatabaseManager::
+                           MatchDownloadAllowlistUrl,
+                       database_manager_, source_url_,
+                       base::BindPostTask(content::GetUIThreadTaskRunner({}),
+                                          std::move(callback))));
   }
 }
 
@@ -315,7 +304,8 @@ void CheckClientDownloadRequestBase::OnRequestBuilt(
            ClientDownloadRequest::RAR_COMPRESSED_EXECUTABLE ||
        client_download_request_->download_type() ==
            ClientDownloadRequest::SEVEN_ZIP_COMPRESSED_EXECUTABLE) &&
-      client_download_request_->archive_valid() &&
+      client_download_request_->archive_summary().parser_status() ==
+          ClientDownloadRequest::ArchiveSummary::VALID &&
       base::ranges::all_of(
           client_download_request_->archived_binary(),
           [](const ClientDownloadRequest::ArchivedBinary& archived_binary) {
@@ -464,6 +454,13 @@ void CheckClientDownloadRequestBase::SendRequest() {
   if (!access_token_.empty()) {
     SetAccessTokenAndClearCookieInResourceRequest(resource_request.get(),
                                                   access_token_);
+  }
+
+  network::mojom::URLLoaderFactory* url_loader_factory =
+      service_->GetURLLoaderFactory(GetBrowserContext()).get();
+  if (!url_loader_factory) {
+    FinishRequest(DownloadCheckResult::UNKNOWN, REASON_SERVER_PING_FAILED);
+    return;
   }
 
   loader_ = network::SimpleURLLoader::Create(std::move(resource_request),

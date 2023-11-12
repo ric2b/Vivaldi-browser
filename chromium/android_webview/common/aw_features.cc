@@ -17,7 +17,7 @@ namespace features {
 // flag
 BASE_FEATURE(kWebViewAppsPackageNamesServerSideAllowlist,
              "WebViewAppsPackageNamesServerSideAllowlist",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enable brotli compression support in WebView.
 BASE_FEATURE(kWebViewBrotliSupport,
@@ -32,6 +32,12 @@ BASE_FEATURE(kWebViewCheckReturnResources,
 // Server side sampling switch.
 BASE_FEATURE(kWebViewServerSideSampling,
              "WebViewServerSideSampling",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Whether to destroy the WebView rendering functor when after a WebView window
+// becomes invisible.
+BASE_FEATURE(kWebViewClearFunctorInBackground,
+             "WebViewClearFunctorInBackground",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Use the SafeBrowsingApiHandlerBridge which uses the connectionless GMS APIs.
@@ -97,6 +103,12 @@ BASE_FEATURE(kWebViewOriginTrials,
 // histogram Android.WebView.AppDataDirectorySize.
 BASE_FEATURE(kWebViewRecordAppDataDirectorySize,
              "WebViewRecordAppDataDirectorySize",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Whether to report frame metrics to the Android.Jank.FrameDuration and
+// Android.Jank.FrameJankStatus histograms.
+BASE_FEATURE(kWebViewReportFrameMetrics,
+             "WebViewReportFrameMetrics",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Flag to restrict main frame Web Content to verified web content. Verification
@@ -166,7 +178,7 @@ BASE_FEATURE(kWebViewUmaUploadQualityOfServiceSetToDefault,
 // This enables zoom keyboard shortcuts for zoom-in, zoom-out and zoom reset.
 BASE_FEATURE(kWebViewZoomKeyboardShortcuts,
              "WebViewZoomKeyboardShortcuts",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace features
 }  // namespace android_webview

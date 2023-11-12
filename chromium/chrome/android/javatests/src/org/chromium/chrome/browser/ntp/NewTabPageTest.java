@@ -27,12 +27,12 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.espresso.contrib.RecyclerViewActions;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -82,8 +82,8 @@ import org.chromium.chrome.browser.suggestions.tile.Tile;
 import org.chromium.chrome.browser.suggestions.tile.TileGroup;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.util.BrowserUiUtils;
 import org.chromium.chrome.browser.util.BrowserUiUtils.ModuleTypeOnStartAndNTP;
@@ -96,12 +96,14 @@ import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
+import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 import org.chromium.chrome.test.util.browser.suggestions.mostvisited.FakeMostVisitedSites;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.components.search_engines.TemplateUrlService;
+import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TestTouchUtils;
@@ -132,7 +134,7 @@ import java.util.concurrent.TimeUnit;
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @CommandLineFlags.
 Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "disable-features=IPH_FeedHeaderMenu"})
-@Features.DisableFeatures({ChromeFeatureList.QUERY_TILES, ChromeFeatureList.VIDEO_TUTORIALS})
+@Features.DisableFeatures({ChromeFeatureList.QUERY_TILES})
 public class NewTabPageTest {
     /**
      * Parameter set controlling whether scrollable mvt is enabled.
@@ -146,7 +148,6 @@ public class NewTabPageTest {
     }
 
     private static final int ARTICLE_SECTION_HEADER_POSITION = 1;
-    private static final int SIGNIN_PROMO_POSITION = 2;
 
     private static final int RENDER_TEST_REVISION = 5;
 
@@ -187,6 +188,9 @@ public class NewTabPageTest {
     private static final String TEST_FEED =
             UrlUtils.getIsolatedTestFilePath("/chrome/test/data/android/feed/hello_world.gcl.bin");
     private static final String TEST_URL = "https://www.example.com/";
+
+    private static final String EMAIL = "email@gmail.com";
+    private static final String NAME = "Email Emailson";
 
     private Tab mTab;
     private TemplateUrlService mTemplateUrlService;
@@ -830,13 +834,15 @@ public class NewTabPageTest {
      */
     @Test
     @SmallTest
-    @DisabledTest(message = "https://crbug.com/1433093")
     public void testRecordHistogramProfileButtonClick_Ntp() {
+        // Identity Disc should be shown on sign-in state.
+        waitForSignIn();
         HistogramWatcher histogramWatcher = HistogramWatcher.newSingleRecordWatcher(
                 HISTOGRAM_NTP_MODULE_CLICK, BrowserUiUtils.ModuleTypeOnStartAndNTP.PROFILE_BUTTON);
         onView(withId(R.id.optional_toolbar_button)).perform(click());
         histogramWatcher.assertExpected(HISTOGRAM_NTP_MODULE_CLICK
                 + " is not recorded correctly when click on the profile button.");
+        mSigninTestRule.signOut();
     }
 
     /**
@@ -967,14 +973,8 @@ public class NewTabPageTest {
                 singleTabCardView.getVisibility());
 
         TabObserver tabObserver = ntp.getTabObserverForTesting();
-        ntp.setShownAsHomeSurfaceForTesting(false);
-        Assert.assertFalse(
-                "The variable controlling whether to show the single tab card hasn't been "
-                        + "set to false.",
-                ntp.getShownAsHomeSurfaceForTesting());
-        ntpLayout.setMostVisitedTilesCoordinatorForTesting(null);
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> { tabObserver.onShown(newTab, TabSelectionType.FROM_NEW); });
+                () -> { tabObserver.onHidden(newTab, TabHidingType.ACTIVITY_HIDDEN); });
         assertEquals("The single tab card container is still visible after hiding it.", View.GONE,
                 singleTabCardViewContainer.getVisibility());
         assertEquals("The single tab card is still visible after hiding it.", View.GONE,
@@ -1071,13 +1071,6 @@ public class NewTabPageTest {
         assertEquals("The single tab card is still visible after updating with the new tab "
                         + "page information.",
                 View.GONE, singleTabCardView.getVisibility());
-        TextView new_title = singleTabCardView.findViewById(R.id.tab_title_view);
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            String newMostRecentTabTitleForCheck = "";
-            assertEquals("The title of the single tab card is wrong after updating with "
-                            + "the new tab page information.",
-                    newMostRecentTabTitleForCheck, new_title.getText());
-        });
     }
 
     private void captureThumbnail() {
@@ -1166,5 +1159,18 @@ public class NewTabPageTest {
 
     private static HistogramWatcher expectNoRecordsForNtpModuleClick() {
         return HistogramWatcher.newBuilder().expectNoRecords(HISTOGRAM_NTP_MODULE_CLICK).build();
+    }
+
+    /**
+     * Transform the New Tab Page into the signed-in state.
+     */
+    private void waitForSignIn() {
+        CoreAccountInfo coreAccountInfo = mSigninTestRule.addAccount(
+                EMAIL, NAME, SigninTestRule.NON_DISPLAYABLE_EMAIL_ACCOUNT_CAPABILITIES);
+        mSigninTestRule.waitForSeeding();
+        SigninTestUtil.signin(coreAccountInfo);
+        // TODO(https://crbug.com/1132291): Remove the reload once the sign-in without sync observer
+        //  is implemented.
+        TestThreadUtils.runOnUiThreadBlocking(mTab::reload);
     }
 }

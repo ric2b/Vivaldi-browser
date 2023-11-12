@@ -54,18 +54,19 @@ BASE_DECLARE_FEATURE(kPerformanceControlsBatterySaverOptOutSurvey);
 extern const base::FeatureParam<base::TimeDelta>
     kPerformanceControlsBatterySurveyLookback;
 
-// On certain platforms (ChromeOS), the battery level displayed to the user is
-// artificially lower than the actual battery level. Unfortunately, the battery
-// level that Battery Saver Mode looks at is the "actual" level, so users on
-// that platform may see Battery Saver Mode trigger at say 17% rather than the
-// "advertised" 20%. This parameter allows us to heuristically tweak the
-// threshold on those platforms, by being added to the 20% threshold value (so
-// setting this parameter to 3 would result in battery saver being activated at
-// 23% actual battery level).
-extern const base::FeatureParam<int>
-    kBatterySaverModeThresholdAdjustmentForDisplayLevel;
-
-// When enabled, the memory saver policy used is HeuristicMemorySaverPolicy.
+// Controls whether HeuristicMemorySaverPolicy is used as the memory saver
+// policy:
+//
+// * If neither this nor kHighEfficiencyMultistateMode are enabled, the
+//   timer-based memory saver policy is used.
+// * If this is enabled but kHighEfficiencyMultistateMode is not, the heuristic
+//   memory saver is used, with parameters set from the feature params.
+// * If this and kHighEfficiencyMultistateMode are both enabled, the policy
+//   that's used is controlled by the multistate UI, and the heuristic policy
+//   parameters are set from the feature params.
+// * If kHighEfficiencyMultistateMode is enabled and this is not, heuristic
+//   memory saver is enabled if chosen by the user, but the policy params use
+//   default values.
 BASE_DECLARE_FEATURE(kHeuristicMemorySaver);
 
 // Controls the interval at which HeuristicMemorySaverPolicy checks whether the
@@ -73,10 +74,10 @@ BASE_DECLARE_FEATURE(kHeuristicMemorySaver);
 // "ThresholdReached" version is used when the device is past the threshold
 // specified by `kHeuristicMemorySaverAvailableMemoryThresholdPercent` and the
 // "ThresholdNotReached" version is used otherwise.
-extern const base::FeatureParam<int>
-    kHeuristicMemorySaverThresholdReachedHeartbeatSeconds;
-extern const base::FeatureParam<int>
-    kHeuristicMemorySaverThresholdNotReachedHeartbeatSeconds;
+extern const base::FeatureParam<base::TimeDelta>
+    kHeuristicMemorySaverThresholdReachedHeartbeatInterval;
+extern const base::FeatureParam<base::TimeDelta>
+    kHeuristicMemorySaverThresholdNotReachedHeartbeatInterval;
 
 // The amount of available physical memory at which
 // HeuristicMemorySaverPolicy will start discarding tabs. The amount of
@@ -107,15 +108,53 @@ extern const base::FeatureParam<int>
 // more information.
 extern const base::FeatureParam<int> kHeuristicMemorySaverPageCacheDiscountMac;
 
-// The minimum amount of minutes a tab has to spend in the background before
+// The minimum amount of time a tab has to spend in the background before
 // HeuristicMemorySaverPolicy will consider it eligible for discarding.
-extern const base::FeatureParam<int>
-    kHeuristicMemorySaverMinimumMinutesInBackground;
+extern const base::FeatureParam<base::TimeDelta>
+    kHeuristicMemorySaverMinimumTimeInBackground;
+
+// If enabled, the kHeuristicMemorySaver feature controls the memory saver
+// policy regardless of the state of the UI:
+//
+// * If kHeuristicMemorySaver is enabled, HeuristicMemorySaverPolicy will be
+//   turned on.
+// * If kHeuristicMemorySaver is disabled, all memory saver policies will be
+//   turned off (for the control group of experiments).
+//
+// This only affects the original UI. If the experimental multistate UI is
+// enabled (through the kHighEfficiencyMultistateMode feature), this is not
+// checked.
+//
+// Note: to get uniform control and experiment groups,
+// kForceHeuristicMemorySaver should only be tested for users who are valid for
+// randomized studies (eg. not for users with the HighEfficiencyModeState pref
+// managed by enterprise policy). It's always safe to read kHeuristicMemorySaver
+// without kForceHeuristicMemorySaver to get the policy params.
+//
+// To run an A/B experiment, the following feature configs should be used:
+//
+// * Experiment group(s):
+//   * kForceHeuristicMemorySaver ON
+//   * kHeuristicMemorySaver ON (with parameters to control the policy)
+//   * kHighEfficiencyMultistateMode OFF
+// * Control group:
+//   * kForceHeuristicMemorySaver ON
+//   * kHeuristicMemorySaver OFF
+//   * kHighEfficiencyMultistateMode OFF
+//
+// Users who enable kHighEfficiencyMultistateMode through chrome://flags will
+// be excluded from the experiment.
+BASE_DECLARE_FEATURE(kForceHeuristicMemorySaver);
 
 // Round 2 Performance Controls features
 
 // This enables the UI for the multi-state version of high efficiency mode.
 BASE_DECLARE_FEATURE(kHighEfficiencyMultistateMode);
+// When true, the default value of the memory saver pref will be the heuristic
+// based option, and a recommended badge will be shown in the UI. When false,
+// the default will be the disabled state.
+extern const base::FeatureParam<bool> kHighEfficiencyDefaultHeuristicMode;
+
 // This shows more information about discarded tabs in the tab strip and
 // hovercards.
 BASE_DECLARE_FEATURE(kDiscardedTabTreatment);
@@ -138,6 +177,27 @@ extern const base::FeatureParam<int> kExpandedHighEfficiencyChipThresholdBytes;
 // expanded.
 extern const base::FeatureParam<base::TimeDelta>
     kExpandedHighEfficiencyChipDiscardedDuration;
+
+// Percentiles of PMF across all tabs on all browsers.
+extern const base::FeatureParam<int> kHighEfficiencyChartPmf25PercentileBytes;
+extern const base::FeatureParam<int> kHighEfficiencyChartPmf50PercentileBytes;
+extern const base::FeatureParam<int> kHighEfficiencyChartPmf75PercentileBytes;
+extern const base::FeatureParam<int> kHighEfficiencyChartPmf99PercentileBytes;
+
+// Final opacity of the favicon after the discard animation completes
+extern const base::FeatureParam<double> kDiscardedTabTreatmentOpacity;
+
+// The version of the tab discard treatment on the favicon should be shown
+extern const base::FeatureParam<int> kDiscardedTabTreatmentOption;
+
+// Threshold for when memory usage is labeled as "high".
+extern const base::FeatureParam<int> kMemoryUsageInHovercardsHighThresholdBytes;
+
+enum class DiscardTabTreatmentOptions {
+  kNone = 0,
+  kFadeFullsizedFavicon = 1,
+  kFadeSmallFaviconWithRing = 2
+};
 
 #endif
 

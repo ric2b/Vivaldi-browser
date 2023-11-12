@@ -24,6 +24,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/content_settings/core/browser/content_settings_uma_util.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -356,13 +357,15 @@ IN_PROC_BROWSER_TEST_P(ExtensionContentSettingsApiTestWithContextType,
   const char kExtensionPath[] = "content_settings/embeddedsettingsmetric";
   EXPECT_TRUE(RunExtensionTest(kExtensionPath)) << message_;
 
-  size_t num_values = 0;
-  int images_type = ContentSettingTypeToHistogramValue(
-      ContentSettingsType::IMAGES, &num_values);
-  int geolocation_type = ContentSettingTypeToHistogramValue(
-      ContentSettingsType::GEOLOCATION, &num_values);
-  int cookies_type = ContentSettingTypeToHistogramValue(
-      ContentSettingsType::COOKIES, &num_values);
+  int images_type =
+      content_settings_uma_util::ContentSettingTypeToHistogramValue(
+          ContentSettingsType::IMAGES);
+  int geolocation_type =
+      content_settings_uma_util::ContentSettingTypeToHistogramValue(
+          ContentSettingsType::GEOLOCATION);
+  int cookies_type =
+      content_settings_uma_util::ContentSettingTypeToHistogramValue(
+          ContentSettingsType::COOKIES);
 
   histogram_tester.ExpectBucketCount(
       "ContentSettings.ExtensionEmbeddedSettingSet", images_type, 1);

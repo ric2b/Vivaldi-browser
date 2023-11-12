@@ -249,6 +249,38 @@ STICKY_SETTING_NAMES.push('pin', 'pinValue');
  */
 const MINIMUM_HEIGHT_MICRONS: number = 25400;
 
+// <if expr="is_chromeos">
+/**
+ * Helper function for configurePolicySetting_(). Calculates default duplex
+ * value based on allowed and default policies.
+ * @param allowedMode Duplex allowed mode set by policy.
+ * @param defaultMode Duplex default mode set by policy.
+ */
+function getDuplexDefaultValue(
+    allowedMode: DuplexModeRestriction,
+    defaultMode: DuplexModeRestriction): DuplexModeRestriction {
+  if (allowedMode !== DuplexModeRestriction.DUPLEX) {
+    return allowedMode === DuplexModeRestriction.UNSET ? defaultMode :
+                                                         allowedMode;
+  }
+
+  // If allowedMode === DUPLEX, then we need to use defaultMode as the
+  // default value if it's compliant with allowedMode. That's because
+  // "DUPLEX" is not a single mode, but a group of modes, so we have to
+  // pick one of them as a default value. Other two-sided modes are also
+  // available in this case.
+  if (defaultMode === DuplexModeRestriction.SHORT_EDGE ||
+      defaultMode === DuplexModeRestriction.LONG_EDGE) {
+    return defaultMode;
+  }
+
+  // In this case defaultMode is non-compliant with allowedMode, so we can
+  // choose any allowed default value.
+  return DuplexModeRestriction.LONG_EDGE;
+}
+// </if>
+
+
 export class PrintPreviewModelElement extends PolymerElement {
   static get is() {
     return 'print-preview-model';
@@ -566,7 +598,9 @@ export class PrintPreviewModelElement extends PolymerElement {
       'updateSettingsFromDestination_(destination.capabilities)',
       'updateSettingsAvailabilityFromDocumentSettings_(' +
           'documentSettings.isModifiable, documentSettings.isFromArc,' +
-          'documentSettings.hasCssMediaStyles, documentSettings.hasSelection)',
+          'documentSettings.allPagesHaveCustomSize,' +
+          'documentSettings.allPagesHaveCustomOrientation,' +
+          'documentSettings.hasSelection)',
       'updateHeaderFooterAvailable_(' +
           'margins, settings.margins.value, settings.mediaSize.value)',
 
@@ -775,7 +809,7 @@ export class PrintPreviewModelElement extends PolymerElement {
     const isSaveAsPDF = this.destination.type === PrinterType.PDF_PRINTER;
     const knownSizeToSaveAsPdf = isSaveAsPDF &&
         (!this.documentSettings.isModifiable ||
-         this.documentSettings.hasCssMediaStyles);
+         this.documentSettings.allPagesHaveCustomSize);
     const scalingAvailable =
         !knownSizeToSaveAsPdf && !this.documentSettings.isFromArc;
     this.setSettingPath_('scaling.available', scalingAvailable);
@@ -912,7 +946,7 @@ export class PrintPreviewModelElement extends PolymerElement {
     if (!caps || !caps.page_orientation || !caps.page_orientation.option ||
         (!this.documentSettings.isModifiable &&
          !this.documentSettings.isFromArc) ||
-        this.documentSettings.hasCssMediaStyles) {
+        this.documentSettings.allPagesHaveCustomOrientation) {
       return false;
     }
     let hasAutoOrPortraitOption = false;
@@ -986,23 +1020,25 @@ export class PrintPreviewModelElement extends PolymerElement {
 
     if (!this.settings.duplex.setFromUi && this.settings.duplex.available) {
       const defaultOption = caps!.duplex!.option.find(o => !!o.is_default);
-      this.setSetting(
-          'duplex',
-          defaultOption ? (defaultOption.type === DuplexType.LONG_EDGE ||
-                           defaultOption.type === DuplexType.SHORT_EDGE) :
-                          false,
-          true);
-      this.setSetting(
-          'duplexShortEdge',
-          defaultOption ? defaultOption.type === DuplexType.SHORT_EDGE : false,
-          true);
+      if (defaultOption !== undefined) {
+        const defaultOptionIsDuplex =
+            defaultOption.type === DuplexType.SHORT_EDGE ||
+            defaultOption.type === DuplexType.LONG_EDGE;
+        this.setSetting('duplex', defaultOptionIsDuplex, true);
+        if (defaultOptionIsDuplex) {
+          this.setSetting(
+              'duplexShortEdge', defaultOption.type === DuplexType.SHORT_EDGE,
+              true);
+        }
 
-      if (!this.settings.duplexShortEdge.available) {
-        // Duplex is available, so must have only one two sided printing option.
-        // Set duplexShortEdge's unavailable value based on the printer.
-        this.setSettingPath_(
-            'duplexShortEdge.unavailableValue',
-            caps!.duplex!.option.some(o => o.type === DuplexType.SHORT_EDGE));
+        if (!this.settings.duplexShortEdge.available) {
+          // Duplex is available, so must have only one two sided printing
+          // option. Set duplexShortEdge's unavailable value based on the
+          // printer.
+          this.setSettingPath_(
+              'duplexShortEdge.unavailableValue',
+              caps!.duplex!.option.some(o => o.type === DuplexType.SHORT_EDGE));
+        }
       }
     } else if (
         !this.settings.duplex.available && caps && caps.duplex &&
@@ -1152,6 +1188,7 @@ export class PrintPreviewModelElement extends PolymerElement {
         }
         break;
       }
+      // <if expr="is_chromeos">
       case 'color': {
         const value = allowedMode ? allowedMode : defaultMode;
         if (value !== undefined) {
@@ -1162,12 +1199,10 @@ export class PrintPreviewModelElement extends PolymerElement {
         break;
       }
       case 'duplex': {
-        const value = allowedMode ? allowedMode : defaultMode;
-        if (value !== undefined) {
-          this.setPolicySetting_(
-              settingName, value, !!allowedMode,
-              /*applyOnDestinationUpdate=*/ false);
-        }
+        const value = getDuplexDefaultValue(allowedMode, defaultMode);
+        this.setPolicySetting_(
+            settingName, value, !!allowedMode,
+            /*applyOnDestinationUpdate=*/ false);
         break;
       }
       case 'pin': {
@@ -1179,6 +1214,8 @@ export class PrintPreviewModelElement extends PolymerElement {
         }
         break;
       }
+      // </if>
+      // <if expr="is_win or is_macosx">
       case 'printPdfAsImageAvailability': {
         const value = allowedMode !== undefined ? allowedMode : defaultMode;
         if (value !== undefined) {
@@ -1188,6 +1225,7 @@ export class PrintPreviewModelElement extends PolymerElement {
         }
         break;
       }
+      // </if>
       case 'printPdfAsImage': {
         if (defaultMode !== undefined) {
           this.setPolicySetting_(
@@ -1326,21 +1364,20 @@ export class PrintPreviewModelElement extends PolymerElement {
           continue;
         }
         if (settingName === 'duplex') {
-          let setDuplexTypeByPolicy = false;
-          this.set(
-              'settings.duplex.value',
-              policyEntry.value !== DuplexModeRestriction.SIMPLEX);
-          if (policyEntry.value === DuplexModeRestriction.SHORT_EDGE) {
-            this.set('settings.duplexShortEdge.value', true);
-            setDuplexTypeByPolicy = true;
-          } else if (policyEntry.value === DuplexModeRestriction.LONG_EDGE) {
-            this.set('settings.duplexShortEdge.value', false);
-            setDuplexTypeByPolicy = true;
+          const isDuplex =
+              (policyEntry.value === DuplexModeRestriction.SHORT_EDGE ||
+               policyEntry.value === DuplexModeRestriction.LONG_EDGE);
+
+          this.set('settings.duplex.value', isDuplex);
+          if (isDuplex) {
+            this.set(
+                'settings.duplexShortEdge.value',
+                policyEntry.value === DuplexModeRestriction.SHORT_EDGE);
           }
+
           this.set('settings.duplex.setByPolicy', policyEntry.managed);
-          this.set(
-              'settings.duplexShortEdge.setByPolicy',
-              policyEntry.managed && setDuplexTypeByPolicy);
+          // Duplex mode is never set by policy
+          this.set('settings.duplexShortEdge.setByPolicy', false);
           continue;
         }
         if (settingName === 'pin') {

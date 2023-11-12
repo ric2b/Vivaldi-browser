@@ -34,6 +34,7 @@ chromium-metrics-reviews@google.com.
   <variant name="Lens"/>
   <variant name="ReadAnything"/>
   <variant name="ReadingList"/>
+  <variant name="ShoppingInsights"/>
   <variant name="SideSearch"/>
   <variant name="UserNotes"/>
   <variant name="WebView"/>
@@ -90,6 +91,7 @@ chromium-metrics-reviews@google.com.
   <token key="Survey">
     <variant name=".ArcGames"/>
     <variant name=".Audio"/>
+    <variant name=".BorealisGames"/>
     <variant name=".CameraApp"/>
     <variant name=".Ent"/>
     <variant name=".General"/>
@@ -108,7 +110,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.ChromeOS.HatsStatus" enum="HatsStatus"
-    expires_after="2023-08-27">
+    expires_after="2023-11-12">
   <owner>aalsum@chromium.org</owner>
   <owner>cros-telemetry@google.com</owner>
   <summary>
@@ -121,7 +123,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.DarkModeStatus" enum="DarkModeStatus"
-    expires_after="2023-09-10">
+    expires_after="2023-11-12">
   <owner>lgrey@chromium.org</owner>
   <owner>robliao@chromium.org</owner>
   <summary>
@@ -143,7 +145,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.ERP.EventUploadSizeAdjustment.{Param}" units="bytes"
-    expires_after="2023-06-30">
+    expires_after="2024-05-23">
   <owner>xuhong@chromium.org</owner>
   <owner>lbaraz@chromium.org</owner>
   <owner>cros-reporting-team@google.com</owner>
@@ -160,6 +162,24 @@ chromium-metrics-reviews@google.com.
     <variant name="RemainingStorageCapacity"
         summary="The remaining storage capacity"/>
   </token>
+</histogram>
+
+<histogram name="Browser.ERP.FilteredOutEvents" units="BooleanFiltered"
+    expires_after="2024-05-23">
+  <owner>lbaraz@chromium.org</owner>
+  <owner>cros-reporting-team@google.com</owner>
+  <summary>
+    Records whether an event is filtered out by FilteredReportQueue.
+  </summary>
+</histogram>
+
+<histogram name="Browser.ERP.RateLimitedEvents" units="BooleanAccepted"
+    expires_after="2024-05-23">
+  <owner>lbaraz@chromium.org</owner>
+  <owner>cros-reporting-team@google.com</owner>
+  <summary>
+    Records whether an event is accepted by ReportQueue rate limiter.
+  </summary>
 </histogram>
 
 <histogram name="Browser.ERP.RecordsPerUpload" units="records"
@@ -247,6 +267,26 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
+<histogram name="Browser.MainThreadsCongestion.Used" units="janks"
+    expires_after="2024-03-31">
+  <owner>pmonette@chromium.org</owner>
+  <owner>catan-team@chromium.org</owner>
+  <summary>
+    This metric is emitted every 30 seconds after main message loop start, when
+    there is user activity. Each 30 second duration is divided into 100ms
+    intervals. This metric counts the number of these intervals that were
+    &quot;congested&quot;. An interval is congested if during it the UI or IO
+    thread executes an &quot;important&quot; task that was queued more than 100
+    ms ago, or a non-important task or a native event handler that started
+    executing more than 100 ms ago. See
+    https://docs.google.com/document/d/1vDSGFvJblh7yJ3U3RVB_7qZLubyfTbQdQjuN1GoUNkc/edit
+    for more details.
+
+    This metric is only recorded if Chrome is either visible, playing audio, or
+    capturing video.
+  </summary>
+</histogram>
+
 <histogram name="Browser.MainThreadsCongestion{Phase}" units="janks"
     expires_after="never">
 <!-- expires-never: guiding metric (internal: go/chrome-browser-guiding-metrics) -->
@@ -288,6 +328,72 @@ chromium-metrics-reviews@google.com.
                  congestion."/>
     <variant name=".RunningOnly.Periodic"
         summary="All RunningOnly intervals but the first one."/>
+  </token>
+</histogram>
+
+<histogram name="Browser.MainThreadsCongestion{UsageScenario}" units="janks"
+    expires_after="2024-03-31">
+  <owner>pmonette@chromium.org</owner>
+  <owner>catan-team@chromium.org</owner>
+  <summary>
+    This metric is emitted every 30 seconds after main message loop start, when
+    there is user activity. Each 30 second duration is divided into 100ms
+    intervals. This metric counts the number of these intervals that were
+    &quot;congested&quot;. An interval is congested if during it the UI or IO
+    thread executes an &quot;important&quot; task that was queued more than 100
+    ms ago, or a non-important task or a native event handler that started
+    executing more than 100 ms ago. See
+    https://docs.google.com/document/d/1vDSGFvJblh7yJ3U3RVB_7qZLubyfTbQdQjuN1GoUNkc/edit
+    for more details.
+
+    This metric is split by usage scenarios (go/chrome_power_use_per_scenario).
+    This version is recorded for {UsageScenario}.
+  </summary>
+  <token key="UsageScenario">
+<!--
+  Variants describing the usage scenario for a time interval. Consider updating
+  both "UsageScenario" and "UsageScenario10Sec" in
+  tools/metrics/histograms/metadata/power/histograms.xml when updating this.
+-->
+
+    <variant name=".AllTabsHidden_Audio"
+        summary="intervals during which there was no visible tab and no video
+                 capture, but there was audio"/>
+    <variant name=".AllTabsHidden_NoVideoCaptureOrAudio"
+        summary="intervals during which there was no visible tab, no video
+                 capture and no audio"/>
+    <variant name=".AllTabsHidden_VideoCapture"
+        summary="intervals during which there was no visible tab, but there
+                 was video capture"/>
+    <variant name=".Audio"
+        summary="intervals during which there was audio and at least 1
+                 visible tab, but there was no video playback or video
+                 capture"/>
+    <variant name=".EmbeddedVideo_NoNavigation"
+        summary="intervals during which a video played in a visible tab and
+                 there was no navigation and no video capture"/>
+    <variant name=".EmbeddedVideo_WithNavigation"
+        summary="intervals during which a video played in a visible tab and
+                 there was a navigation, but no video capture"/>
+    <variant name=".FullscreenVideo"
+        summary="intervals during which a video played in fullscreen and
+                 there was no video capture"/>
+    <variant name=".Interaction"
+        summary="intervals during which there was at least 1 visible tab and
+                 a user interaction, but no navigation, audio, video playback
+                 or video capture"/>
+    <variant name=".Navigation"
+        summary="intervals during which there was at least 1 visible tab and
+                 a navigation, but no audio, video playback or video capture"/>
+    <variant name=".Passive"
+        summary="intervals during which there was at least 1 visible tab, but
+                 no user interaction, navigation, audio, video playback or
+                 video capture"/>
+    <variant name=".VideoCapture"
+        summary="intervals during which there was at least 1 visible tab and
+                 video capture"/>
+    <variant name=".ZeroWindow"
+        summary="intervals during which there was no window"/>
   </token>
 </histogram>
 
@@ -479,7 +585,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.Responsiveness.IOJanksTotalPerMinute" units="janks"
-    expires_after="2023-08-27">
+    expires_after="2023-11-12">
   <owner>gab@chromium.org</owner>
   <owner>olivierli@chromium.org</owner>
   <summary>
@@ -493,7 +599,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.Responsiveness.IOJankyIntervalsPerMinute"
-    units="janks" expires_after="2023-08-27">
+    units="janks" expires_after="2023-11-12">
   <owner>gab@chromium.org</owner>
   <owner>olivierli@chromium.org</owner>
   <summary>
@@ -508,6 +614,50 @@ chromium-metrics-reviews@google.com.
     responsive but the application is not (because things aren't loading). Not
     reported across system sleep. More details @
     https://bit.ly/chrome-io-jank-metric
+  </summary>
+</histogram>
+
+<histogram name="Browser.TabDragging.DragAmongTabsPresentationTime" units="ms"
+    expires_after="2023-12-07">
+  <owner>robliao@chromium.org</owner>
+  <owner>yuhengh@chromium.org</owner>
+  <summary>
+    Compositor presentation time when dragging tabs left or right to a different
+    index. This metric is used to measure tab dragging performance. Record on
+    the next compositor frame when the data is collected.
+  </summary>
+</histogram>
+
+<histogram name="Browser.TabDragging.DragToNewBrowserPresentationTime"
+    units="ms" expires_after="2023-12-07">
+  <owner>robliao@chromium.org</owner>
+  <owner>yuhengh@chromium.org</owner>
+  <summary>
+    Compositor presentation time when dragging tabs out to a new browser. This
+    metric is used to measure tab dragging performance. Record on the next
+    compositor frame when the data is collected.
+  </summary>
+</histogram>
+
+<histogram name="Browser.TabDragging.PresentationTime" units="ms"
+    expires_after="2023-12-07">
+  <owner>robliao@chromium.org</owner>
+  <owner>yuhengh@chromium.org</owner>
+  <summary>
+    Compositor presentation time when dragging tabs. This metric is used to
+    measure tab dragging performance. Record on the next compositor frame when
+    the data is collected.
+  </summary>
+</histogram>
+
+<histogram name="Browser.TabDragging.PresentationTimeMax" units="ms"
+    expires_after="2023-12-07">
+  <owner>robliao@chromium.org</owner>
+  <owner>yuhengh@chromium.org</owner>
+  <summary>
+    Maxinum compositor presentation time when dragging tabs. This metric is used
+    to measure tab dragging performance. Record after a drag and drop session is
+    ended.
   </summary>
 </histogram>
 
@@ -579,7 +729,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.WindowCount.Guest" units="units"
-    expires_after="2023-09-03">
+    expires_after="2023-11-12">
   <owner>rhalavati@chromium.org</owner>
   <owner>chrome-privacy-core@google.com</owner>
   <summary>
@@ -591,7 +741,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Browser.WindowCount.Incognito" units="units"
-    expires_after="2023-09-03">
+    expires_after="2023-11-12">
   <owner>rhalavati@chromium.org</owner>
   <owner>chrome-privacy-core@google.com</owner>
   <summary>
@@ -665,6 +815,28 @@ chromium-metrics-reviews@google.com.
   <summary>Count of renderer process launch failures grouped by type.</summary>
 </histogram>
 
+<histogram name="BrowserRenderProcessHost.Cleanup.DelayReason"
+    enum="RenderProcessHostDelayShutdownReason" expires_after="2023-12-15">
+  <owner>mych@chromium.org</owner>
+  <owner>bfcache-dev@chromium.org</owner>
+  <summary>
+    Recorded whenever a RenderProcessHost is cleaned up, with the reason the
+    cleanup fails or is delayed, or kNoDelay if it succeeded quickly.
+
+    The total count of this histogram should be equal to
+    BrowserRenderProcessHost.Cleanup.Total.
+  </summary>
+</histogram>
+
+<histogram name="BrowserRenderProcessHost.Cleanup.Total" enum="Boolean"
+    expires_after="2023-12-15">
+  <owner>mych@chromium.org</owner>
+  <owner>bfcache-dev@chromium.org</owner>
+  <summary>
+    Records true when an attempt is made to clean up a RenderProcessHost.
+  </summary>
+</histogram>
+
 <histogram name="BrowserRenderProcessHost.DisconnectedAlive"
     enum="RendererType" expires_after="never">
 <!-- expires-never: For monitoring stability regressions. -->
@@ -677,8 +849,30 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="BrowserRenderProcessHost.FastShutdownIfPossible.DelayReason"
+    enum="RenderProcessHostDelayShutdownReason" expires_after="2023-12-15">
+  <owner>mych@chromium.org</owner>
+  <owner>bfcache-dev@chromium.org</owner>
+  <summary>
+    Recorded whenever a RenderProcessHost is fast shutting down, with the reason
+    the shutdown fails or is delayed, or kNoDelay if it succeeded quickly.
+
+    The total count of this histogram should be equal to
+    BrowserRenderProcessHost.FastShutdownIfPossible.Total.
+  </summary>
+</histogram>
+
+<histogram name="BrowserRenderProcessHost.FastShutdownIfPossible.Total"
+    enum="Boolean" expires_after="2023-12-15">
+  <owner>mych@chromium.org</owner>
+  <owner>bfcache-dev@chromium.org</owner>
+  <summary>
+    Records true when an attempt is made to fast shutdown a RenderProcessHost.
+  </summary>
+</histogram>
+
 <histogram name="BrowserRenderProcessHost.LabeledInTaskManager"
-    enum="BooleanLabeledRendererTask" expires_after="2023-06-04">
+    enum="BooleanLabeledRendererTask" expires_after="2023-12-04">
   <owner>creis@chromium.org</owner>
   <owner>avi@chromium.org</owner>
   <summary>
@@ -804,7 +998,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserSwitcher.CacheFile.MkDirSuccess" enum="BooleanSuccess"
-    expires_after="2023-10-16">
+    expires_after="2023-12-17">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -814,7 +1008,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserSwitcher.CacheFile.MkTempSuccess" enum="BooleanSuccess"
-    expires_after="2023-10-16">
+    expires_after="2023-12-17">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -825,7 +1019,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowserSwitcher.CacheFile.MoveSuccess" enum="BooleanSuccess"
-    expires_after="2023-10-16">
+    expires_after="2023-12-17">
   <owner>nicolaso@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -1014,7 +1208,14 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="SidePanel.OpenDuration" units="ms" expires_after="2023-10-08">
+<histogram name="SidePanel.ComboboxMenuShown" enum="Boolean"
+    expires_after="2023-10-08">
+  <owner>corising@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <summary>Records true when the side panel combobox is opened.</summary>
+</histogram>
+
+<histogram name="SidePanel.OpenDuration" units="ms" expires_after="2023-12-10">
   <owner>corising@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <summary>
@@ -1026,7 +1227,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SidePanel.OpenTrigger" enum="SidePanelOpenTrigger"
-    expires_after="2023-10-08">
+    expires_after="2023-12-10">
   <owner>corising@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <summary>

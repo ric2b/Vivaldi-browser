@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">点击刷新按钮以重新提交加载该网页所需的数据。</translation>
 <translation id="3234666976984236645">始终检测此网站上的重要内容</translation>
 <translation id="3308738399950580893">广告</translation>
+<translation id="3384522979010096022">贵组织不允许您查看此网站</translation>
 <translation id="3422472998109090673">目前无法访问 <ph name="HOST_NAME" />。</translation>
 <translation id="3427092606871434483">允许（默认）</translation>
 <translation id="3447661539832366887">此设备的所有者已关闭恐龙游戏。</translation>
@@ -193,7 +194,6 @@
 <translation id="8150722005171944719">无法读取 <ph name="URL" /> 上的文件。该文件可能已遭到删除、移动，或者文件权限不允许进行访问。</translation>
 <translation id="8184538546369750125">使用全局默认设置（允许）</translation>
 <translation id="8211406090763984747">连接是安全的</translation>
-<translation id="8225771182978767009">设置此计算机的用户已选择屏蔽此网站。</translation>
 <translation id="8241707690549784388">您所查找的网页要使用已输入的信息。返回此页可能需要重复已进行的所有操作。是否要继续操作？</translation>
 <translation id="8241712895048303527">在此网站上拦截</translation>
 <translation id="8286036467436129157">登录</translation>
@@ -214,7 +214,6 @@
 <translation id="9062620674789239642">该文件可能已被移动、修改或删除。</translation>
 <translation id="9069693763241529744">已被某款扩展程序阻止</translation>
 <translation id="9073799351042754113">您已选择为此网站关闭安全警告。</translation>
-<translation id="910924428752220542">Vivaldi 密码</translation>
 <translation id="9169664750068251925">在此网站上始终阻止</translation>
 <translation id="9180553614777056266">广告拦截器</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不受支持的协议。</translation>

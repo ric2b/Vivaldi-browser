@@ -12,14 +12,19 @@
     padding-inline-start: var(--cr-section-indent-padding);
   }
 
-  .underbar {
-    border-bottom: var(--cr-separator-line);
-  }
-
   .left-float-graphic {
     float: left;
     height: 200px;
     margin-inline-end: 10px;
+    width: 200px;
+  }
+
+  :host-context(body.jelly-enabled) #smartPrivacyIllo {
+    display: none;
+  }
+
+  :host-context(body:not(.jelly-enabled)) #smartPrivacyIlloJelly {
+    display: none;
   }
 
   .large-icon {
@@ -40,11 +45,18 @@
 <iron-media-query query="(prefers-color-scheme: dark)"
     query-matches="{{isDarkModeActive_}}">
 </iron-media-query>
-<div class="banner underbar">
+<div class="banner">
   <!-- No alt since image is purely decorative. -->
-  <img class="left-float-graphic"
-       src="[[getImageSource_(isDarkModeActive_)]]"
-       alt="" aria-hidden="true">
+  <img id="smartPrivacyIllo"
+      class="left-float-graphic"
+      src="[[getImageSource_(isDarkModeActive_)]]"
+      alt="" aria-hidden="true">
+
+  <iron-icon id="smartPrivacyIlloJelly"
+      icon="os-settings-illo:smart-privacy"
+      class="left-float-graphic">
+  </iron-icon>
+
   <div>
     <iron-icon class="large-icon" icon="cr:security">
     </iron-icon>
@@ -62,13 +74,13 @@
       id="quickDimToggle"
       label="$i18n{smartPrivacyQuickDimTitle}"
       sub-label="$i18n{smartPrivacyQuickDimSubtext}"
-      deep-link-focus-id$="[[Setting.kQuickDim]]">
+      deep-link-focus-id$="[[Setting.kQuickDim]]"
+      class="hr">
   </settings-toggle-button>
   <iron-collapse id="quickDimOptions"
       opened="[[prefs.power.quick_dim_enabled.value]]">
     <div class="doubly-indented">
-      <div class="underbar indented"></div>
-      <div class="settings-box continuation">
+      <div class="settings-box">
         <div class="start" aria-hidden="true">
           $i18n{smartPrivacyQuickLockTitle}
         </div>
@@ -82,12 +94,6 @@
       </div>
     </div>
   </iron-collapse>
-
-  <!-- Underbar is only needed if we need to separate the two
-       settings. -->
-   <template is="dom-if" if="[[isSnoopingProtectionEnabled_]]" restamp>
-     <div class="underbar"></div>
-   </template>
 </template>
 <template is="dom-if" if="[[isSnoopingProtectionEnabled_]]" restamp>
   <settings-toggle-button
@@ -95,16 +101,16 @@
       id="snoopingProtectionToggle"
       label="$i18n{smartPrivacySnoopingTitle}"
       sub-label="$i18n{smartPrivacySnoopingSubtext}"
-      deep-link-focus-id$="[[Setting.kSnoopingProtection]]">
+      deep-link-focus-id$="[[Setting.kSnoopingProtection]]"
+      class="hr">
   </settings-toggle-button>
   <iron-collapse id="snoopingProtectionOptions"
       opened="[[prefs.ash.privacy.snooping_protection_enabled.value]]">
     <div class="doubly-indented">
-      <div class="underbar indented"></div>
       <settings-toggle-button
-          class="settings-box continuation"
           pref="{{prefs.ash.privacy.snooping_protection_notification_suppression_enabled}}"
-          label="$i18n{smartPrivacySnoopingNotifications}">
+          label="$i18n{smartPrivacySnoopingNotifications}"
+          class="hr">
       </settings-toggle-button>
     </div>
   </iron-collapse>

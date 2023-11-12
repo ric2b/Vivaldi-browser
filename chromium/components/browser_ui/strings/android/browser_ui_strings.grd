@@ -353,9 +353,6 @@
       <message name="IDS_ACCESSIBILITY_EXPAND_BUTTON" desc="Content description for the expand button in the expand_arrow_with_separator layout.">
         Expand
       </message>
-      <message name="IDS_ACCESSIBILITY_EXPAND_BUTTON_WITH_TARGET_DESCRIPTION" desc="Content description for the expand button in the RadioButtonWithDescriptionAndAuxButton.">
-        Expand <ph name="TARGET_DESCRIPTION">%1$s<ex>Block third-party cookies</ex></ph>
-      </message>
 
       <message name="IDS_SELECTED_ITEMS" desc="Content description for a number indicating how many items are selected. [ICU Syntax]">
         {NUM_SELECTED, plural,
@@ -886,6 +883,9 @@
       <!-- Fullscreen -->
       <message name="IDS_IMMERSIVE_FULLSCREEN_API_NOTIFICATION" desc="Notification message when a site has entered immersive fullscreen and the directions of how to exit.">
         Drag from top and touch the back button to exit full screen.
+      </message>
+      <message name="IDS_IMMERSIVE_FULLSCREEN_API_NOTIFICATION_AUTOMOTIVE" desc="Notification message when a site has entered immersive fullscreen and the directions of how to exit.">
+        Press the back button to exit full screen.
       </message>
 
       <!-- WebApk name/icon report abuse dialog -->

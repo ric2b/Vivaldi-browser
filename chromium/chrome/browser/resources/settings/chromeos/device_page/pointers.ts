@@ -9,10 +9,10 @@
 import 'chrome://resources/cr_components/localized_link/localized_link.js';
 import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-import '../../controls/settings_radio_group.js';
-import '../../controls/settings_slider.js';
-import '../../controls/settings_toggle_button.js';
-import '../../settings_shared.css.js';
+import '/shared/settings/controls/settings_radio_group.js';
+import '/shared/settings/controls/settings_slider.js';
+import '/shared/settings/controls/settings_toggle_button.js';
+import '../settings_shared.css.js';
 import 'chrome://resources/cr_elements/cr_slider/cr_slider.js';
 
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
@@ -21,9 +21,8 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route} from '../router.js';
+import {Route, Router, routes} from '../router.js';
 
 import {getTemplate} from './pointers.html.js';
 
@@ -140,8 +139,21 @@ class SettingsPointersElement extends SettingsPointersElementBase {
           Setting.kMouseSpeed,
         ]),
       },
+
+      /**
+       * Whether settings should be split per device.
+       */
+      isDeviceSettingsSplitEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('enableInputDeviceSettingsSplit');
+        },
+        readOnly: true,
+      },
     };
   }
+
+  private isDeviceSettingsSplitEnabled_: boolean;
 
   /**
    * Headings should only be visible if more than one subsection is present.
@@ -172,7 +184,16 @@ class SettingsPointersElement extends SettingsPointersElementBase {
     if (route !== routes.POINTERS) {
       return;
     }
-
+    if (Router.getInstance().currentRoute === routes.POINTERS &&
+        this.isDeviceSettingsSplitEnabled_) {
+      // Call setCurrentRoute function to go to the device page when
+      // the feature flag is turned on. We don't use navigateTo function since
+      // we don't want to navigate back to the previous point page.
+      setTimeout(() => {
+        Router.getInstance().setCurrentRoute(
+            routes.DEVICE, new URLSearchParams(), false);
+      });
+    }
     this.attemptDeepLink();
   }
 

@@ -30,15 +30,14 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/accessibility/non_accessible_image_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/download/bubble/download_bubble_partial_view.h"
+#include "chrome/browser/ui/views/download/bubble/download_bubble_contents_view.h"
 #include "chrome/browser/ui/views/download/bubble/download_bubble_row_list_view.h"
 #include "chrome/browser/ui/views/download/bubble/download_bubble_row_view.h"
-#include "chrome/browser/ui/views/download/bubble/download_bubble_security_view.h"
 #include "chrome/browser/ui/views/download/bubble/download_bubble_started_animation_views.h"
-#include "chrome/browser/ui/views/download/bubble/download_dialog_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/components/kiosk/kiosk_utils.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/user_education/common/user_education_class_properties.h"
 #include "content/public/browser/browser_thread.h"
@@ -74,7 +73,7 @@ using GetBadgeTextCallback = base::RepeatingCallback<gfx::RenderText&()>;
 
 constexpr int kProgressRingRadius = 9;
 constexpr int kProgressRingRadiusTouchMode = 12;
-constexpr float kProgressRingStrokeWidth = 1.7f;
+constexpr float kProgressRingStrokeWidth = 2.0f;
 
 // Close the partial bubble after 5 seconds if the user doesn't interact with
 // it.
@@ -122,6 +121,12 @@ gfx::Insets GetPrimaryViewMargin() {
 }
 
 gfx::Insets GetSecurityViewMargin() {
+  if (features::IsChromeRefresh2023()) {
+    return gfx::Insets::VH(ChromeLayoutProvider::Get()->GetDistanceMetric(
+                               views::DISTANCE_RELATED_CONTROL_VERTICAL),
+                           0);
+  }
+
   return gfx::Insets(ChromeLayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_RELATED_CONTROL_VERTICAL));
 }
@@ -139,7 +144,8 @@ DownloadToolbarButtonView::DownloadToolbarButtonView(BrowserView* browser_view)
                      : kDownloadToolbarButtonIcon,
                  kDownloadToolbarButtonIcon);
   GetViewAccessibility().OverrideHasPopup(ax::mojom::HasPopup::kDialog);
-  SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_DOWNLOAD_ICON));
+  tooltip_texts_[0] = l10n_util::GetStringUTF16(IDS_TOOLTIP_DOWNLOAD_ICON);
+  SetTooltipText(tooltip_texts_.at(0));
   SetVisible(false);
   SetProperty(views::kElementIdentifierKey, kDownloadToolbarButtonElementId);
 
@@ -292,7 +298,7 @@ void DownloadToolbarButtonView::Disable() {
 }
 
 void DownloadToolbarButtonView::UpdateDownloadIcon(bool show_animation) {
-  if (show_animation && gfx::Animation::ShouldRenderRichAnimation()) {
+  if (show_animation && show_download_started_animation_) {
     has_pending_download_started_animation_ = true;
     // Invalidate the layout to show the animation in Layout().
     PreferredSizeChanged();
@@ -305,16 +311,35 @@ bool DownloadToolbarButtonView::IsFullscreenWithParentViewHidden() {
          !browser_->window()->IsToolbarVisible();
 }
 
+bool DownloadToolbarButtonView::ShouldShowExclusiveAccessBubble() {
+  if (!IsFullscreenWithParentViewHidden()) {
+    return false;
+  }
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
+  if (!browser_view) {
+    return false;
+  }
+  return !browser_view->IsImmersiveModeEnabled() &&
+         browser_view->CanUserExitFullscreen() && !chromeos::IsKioskSession();
+}
+
 // This function shows the partial view. If the main view is already showing,
 // we do not show the partial view. If the partial view is already showing,
 // there is nothing to do here, the controller should update the partial view.
 void DownloadToolbarButtonView::ShowDetails() {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
+  // If we are in immersive fullscreen, reveal the toolbar to show the bubble.
+  if (browser_view && browser_view->immersive_mode_controller()) {
+    immersive_revealed_lock_ =
+        browser_view->immersive_mode_controller()->GetRevealedLock(
+            ImmersiveModeController::ANIMATE_REVEAL_YES);
+  }
   if (!bubble_delegate_) {
     is_primary_partial_view_ = true;
-    if (!auto_close_bubble_timer_) {
+    if (create_auto_close_timer_ && !auto_close_bubble_timer_) {
       CreateAutoCloseTimer();
     }
-    CreateBubbleDialogDelegate(GetPrimaryView());
+    CreateBubbleDialogDelegate();
   }
   if (auto_close_bubble_timer_) {
     auto_close_bubble_timer_->Reset();
@@ -326,7 +351,8 @@ void DownloadToolbarButtonView::HideDetails() {
 }
 
 bool DownloadToolbarButtonView::IsShowingDetails() {
-  return bubble_delegate_ != nullptr;
+  return bubble_delegate_ != nullptr &&
+         bubble_delegate_->GetWidget()->IsVisible();
 }
 
 void DownloadToolbarButtonView::UpdateIcon() {
@@ -364,11 +390,24 @@ void DownloadToolbarButtonView::UpdateIcon() {
       ui::ImageModel::FromVectorIcon(
           *new_icon, GetForegroundColor(ButtonState::STATE_DISABLED)));
 
-  badge_image_view_->SetImage(GetBadgeImage(
-      icon_info.is_active, controller_->GetProgress().download_count,
-      GetProgressColor(GetVisualState() == Button::STATE_DISABLED,
-                       icon_info.is_active),
-      GetColorProvider()->GetColor(kColorToolbar)));
+  int progress_download_count = controller_->GetProgress().download_count;
+  badge_image_view_->SetImage(
+      GetBadgeImage(icon_info.is_active, progress_download_count,
+                    GetProgressColor(GetVisualState() == Button::STATE_DISABLED,
+                                     icon_info.is_active),
+                    GetColorProvider()->GetColor(kColorToolbar)));
+
+  // Update the toolbar button's tooltip.
+  std::u16string& tooltip_for_progress_count =
+      tooltip_texts_[progress_download_count];
+  if (tooltip_for_progress_count.empty()) {
+    // We already initialized the text for 0 downloads in the constructor.
+    CHECK_GT(progress_download_count, 0);
+    // "1 download in progress" or "N downloads in progress".
+    tooltip_for_progress_count = l10n_util::GetPluralStringFUTF16(
+        IDS_DOWNLOAD_BUBBLE_TOOLTIP_IN_PROGRESS_COUNT, progress_download_count);
+  }
+  SetTooltipText(tooltip_texts_.at(progress_download_count));
 }
 
 void DownloadToolbarButtonView::Layout() {
@@ -395,41 +434,31 @@ bool DownloadToolbarButtonView::ShouldShowInkdropAfterIphInteraction() {
   return false;
 }
 
-std::unique_ptr<views::View> DownloadToolbarButtonView::GetPrimaryView() {
-  if (is_primary_partial_view_) {
-    return DownloadBubblePartialView::Create(
-        browser_, bubble_controller_.get(), this,
-        bubble_controller_->GetPartialView(),
-        base::BindOnce(&DownloadToolbarButtonView::DeactivateAutoClose,
-                       base::Unretained(this)));
-  }
-
-  std::unique_ptr<views::View> rows_with_scroll =
-      DownloadBubbleRowListView::CreateWithScroll(
-          /*is_partial_view=*/false, browser_, bubble_controller_.get(), this,
-          bubble_controller_->GetMainView(),
-          ChromeLayoutProvider::Get()->GetDistanceMetric(
-              views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
-  // raw ptr is safe as the toolbar view owns the bubble.
-  return std::make_unique<DownloadDialogView>(
-      browser_, std::move(rows_with_scroll), this);
+std::vector<DownloadUIModel::DownloadUIModelPtr>
+DownloadToolbarButtonView::GetPrimaryViewModels() {
+  return is_primary_partial_view_ ? bubble_controller_->GetPartialView()
+                                  : bubble_controller_->GetMainView();
 }
 
 void DownloadToolbarButtonView::OpenPrimaryDialog() {
-  primary_view_->SetVisible(true);
-  security_view_->SetVisible(false);
+  if (!bubble_delegate_) {
+    return;
+  }
+  bubble_contents_->ShowPage(DownloadBubbleContentsView::Page::kPrimary);
   bubble_delegate_->SetButtons(ui::DIALOG_BUTTON_NONE);
+  bubble_delegate_->SetDefaultButton(ui::DIALOG_BUTTON_NONE);
   bubble_delegate_->set_margins(GetPrimaryViewMargin());
   ResizeDialog();
 }
 
 void DownloadToolbarButtonView::OpenSecurityDialog(
     DownloadBubbleRowView* download_row_view) {
-  security_view_->UpdateSecurityView(download_row_view);
-  primary_view_->SetVisible(false);
-  security_view_->SetVisible(true);
+  if (!bubble_delegate_) {
+    return;
+  }
+  bubble_contents_->UpdateSecurityView(download_row_view);
+  bubble_contents_->ShowPage(DownloadBubbleContentsView::Page::kSecurity);
   bubble_delegate_->set_margins(GetSecurityViewMargin());
-  security_view_->UpdateAccessibilityTextAndFocus();
   ResizeDialog();
 }
 
@@ -446,16 +475,27 @@ void DownloadToolbarButtonView::ResizeDialog() {
     bubble_delegate_->SizeToContents();
 }
 
-void DownloadToolbarButtonView::OnBubbleDelegateDeleted() {
-  bubble_delegate_ = nullptr;
-  primary_view_ = nullptr;
-  security_view_ = nullptr;
+void DownloadToolbarButtonView::OnDialogInteracted() {
+  DeactivateAutoClose();
 }
 
-void DownloadToolbarButtonView::CreateBubbleDialogDelegate(
-    std::unique_ptr<View> bubble_contents_view) {
-  if (!bubble_contents_view)
+base::WeakPtr<DownloadBubbleNavigationHandler>
+DownloadToolbarButtonView::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
+void DownloadToolbarButtonView::OnBubbleClosing() {
+  immersive_revealed_lock_.reset();
+  bubble_delegate_ = nullptr;
+  bubble_contents_ = nullptr;
+}
+
+void DownloadToolbarButtonView::CreateBubbleDialogDelegate() {
+  std::vector<DownloadUIModel::DownloadUIModelPtr> primary_view_models =
+      GetPrimaryViewModels();
+  if (primary_view_models.empty()) {
     return;
+  }
   // If the IPH is showing, close it to avoid showing the download dialog over
   // it.
   browser_->window()->CloseFeaturePromo(
@@ -468,20 +508,16 @@ void DownloadToolbarButtonView::CreateBubbleDialogDelegate(
   bubble_delegate->SetShowTitle(false);
   bubble_delegate->SetShowCloseButton(false);
   bubble_delegate->SetButtons(ui::DIALOG_BUTTON_NONE);
-  bubble_delegate->RegisterDeleteDelegateCallback(
-      base::BindOnce(&DownloadToolbarButtonView::OnBubbleDelegateDeleted,
-                     weak_factory_.GetWeakPtr()));
-  auto* switcher_view =
-      bubble_delegate->SetContentsView(std::make_unique<views::View>());
-  switcher_view->SetLayoutManager(std::make_unique<views::FlexLayout>())
-      ->SetOrientation(views::LayoutOrientation::kVertical);
-  primary_view_ = switcher_view->AddChildView(std::move(bubble_contents_view));
-  // raw ptr for this and member fields are safe as Toolbar Button view owns the
-  // Bubble.
-  security_view_ =
-      switcher_view->AddChildView(std::make_unique<DownloadBubbleSecurityView>(
-          bubble_controller_.get(), this, bubble_delegate.get()));
-  security_view_->SetVisible(false);
+  bubble_delegate->SetDefaultButton(ui::DIALOG_BUTTON_NONE);
+  bubble_delegate->RegisterWindowClosingCallback(base::BindOnce(
+      &DownloadToolbarButtonView::OnBubbleClosing, weak_factory_.GetWeakPtr()));
+  auto bubble_contents = std::make_unique<DownloadBubbleContentsView>(
+      browser_->AsWeakPtr(), bubble_controller_->GetWeakPtr(), GetWeakPtr(),
+      is_primary_partial_view_, std::move(primary_view_models),
+      bubble_delegate.get());
+  bubble_contents_ = bubble_contents.get();
+  bubble_delegate->SetContentsView(std::move(bubble_contents));
+  // The contents view displays the primary view by default.
   bubble_delegate->set_margins(GetPrimaryViewMargin());
   bubble_delegate->SetEnableArrowKeyTraversal(true);
   bubble_delegate_ = bubble_delegate.get();
@@ -500,7 +536,7 @@ void DownloadToolbarButtonView::CreateBubbleDialogDelegate(
   if (is_primary_partial_view_) {
     bubble_delegate_->SetCloseCallback(
         base::BindOnce(&DownloadToolbarButtonView::OnPartialViewClosed,
-                       base::Unretained(this)));
+                       weak_factory_.GetWeakPtr()));
   }
 }
 
@@ -510,7 +546,8 @@ void DownloadToolbarButtonView::CreateBubbleDialogDelegate(
 // browser becomes active, so that clicking outside the bubble will deactivate
 // and close it.
 void DownloadToolbarButtonView::OnBrowserSetLastActive(Browser* browser) {
-  if (browser == browser_ && bubble_delegate_) {
+  if (browser == browser_ && bubble_delegate_ &&
+      !bubble_delegate_->GetWidget()->IsClosed()) {
     // We need to defer activating the download bubble when the browser window
     // is being activated, otherwise this is ineffective on macOS.
     content::GetUIThreadTaskRunner()->PostTask(
@@ -524,14 +561,18 @@ void DownloadToolbarButtonView::OnPartialViewClosed() {
           browser_->profile()->GetOriginalProfile())) {
     return;
   }
+
   browser_->window()->MaybeShowFeaturePromo(
       feature_engagement::kIPHDownloadToolbarButtonFeature);
 }
 
 void DownloadToolbarButtonView::CreateAutoCloseTimer() {
+  CHECK(create_auto_close_timer_);
   auto_close_bubble_timer_ = std::make_unique<base::RetainingOneShotTimer>(
       FROM_HERE, kAutoClosePartialViewDelay,
       base::BindRepeating(&DownloadToolbarButtonView::AutoClosePartialView,
+                          // This is safe because `this` owns
+                          // `auto_close_bubble_timer_`.
                           base::Unretained(this)));
 }
 
@@ -540,10 +581,20 @@ void DownloadToolbarButtonView::DeactivateAutoClose() {
 }
 
 void DownloadToolbarButtonView::AutoClosePartialView() {
+  // Nothing to do if the bubble is not open.
+  if (!bubble_contents_) {
+    return;
+  }
+  // Don't close the security page.
+  if (bubble_contents_->VisiblePage() ==
+      DownloadBubbleContentsView::Page::kSecurity) {
+    return;
+  }
   if (!is_primary_partial_view_ || !auto_close_bubble_timer_) {
     return;
   }
-  if (primary_view_ && primary_view_->IsMouseHovered()) {
+  // Don't close if the user is hovering over the bubble.
+  if (bubble_contents_->IsMouseHovered()) {
     return;
   }
   HideDetails();
@@ -556,7 +607,7 @@ void DownloadToolbarButtonView::AutoClosePartialView() {
 void DownloadToolbarButtonView::ButtonPressed() {
   if (!bubble_delegate_) {
     is_primary_partial_view_ = false;
-    CreateBubbleDialogDelegate(GetPrimaryView());
+    CreateBubbleDialogDelegate();
   }
   controller_->OnButtonPressed();
 }
@@ -568,6 +619,11 @@ void DownloadToolbarButtonView::OnThemeChanged() {
 
 void DownloadToolbarButtonView::ShowPendingDownloadStartedAnimation() {
   if (!has_pending_download_started_animation_) {
+    return;
+  }
+  CHECK(show_download_started_animation_);
+  has_pending_download_started_animation_ = false;
+  if (!gfx::Animation::ShouldRenderRichAnimation()) {
     return;
   }
   content::WebContents* const web_contents =
@@ -582,7 +638,6 @@ void DownloadToolbarButtonView::ShowPendingDownloadStartedAnimation() {
       web_contents, image()->GetBoundsInScreen(),
       color_provider->GetColor(kColorDownloadToolbarButtonAnimationForeground),
       color_provider->GetColor(kColorDownloadToolbarButtonAnimationBackground));
-  has_pending_download_started_animation_ = false;
 }
 
 SkColor DownloadToolbarButtonView::GetIconColor() const {
@@ -611,6 +666,14 @@ SkColor DownloadToolbarButtonView::GetProgressColor(bool is_disabled,
   }
   return icon_color_.value_or(
       GetColorProvider()->GetColor(kColorDownloadToolbarButtonInactive));
+}
+
+void DownloadToolbarButtonView::DisableAutoCloseTimerForTesting() {
+  create_auto_close_timer_ = false;
+}
+
+void DownloadToolbarButtonView::DisableDownloadStartedAnimationForTesting() {
+  show_download_started_animation_ = false;
 }
 
 BEGIN_METADATA(DownloadToolbarButtonView, ToolbarButton)

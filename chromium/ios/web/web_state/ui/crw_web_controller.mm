@@ -44,7 +44,6 @@
 #import "ios/web/public/annotations/annotations_text_manager.h"
 #import "ios/web/public/browser_state.h"
 #import "ios/web/public/find_in_page/crw_find_interaction.h"
-#import "ios/web/public/js_messaging/web_frame_util.h"
 #import "ios/web/public/permissions/permissions.h"
 #import "ios/web/public/ui/crw_context_menu_item.h"
 #import "ios/web/public/ui/crw_web_view_scroll_view_proxy.h"
@@ -170,14 +169,6 @@ char const kFullScreenStateHistogram[] = "IOS.Fullscreen.State";
 @property(nonatomic, strong, readonly)
     CRWWebRequestController* requestController;
 
-// The web view's view of the current URL. During page transitions
-// this may not be the same as the session history's view of the current URL.
-// This method can change the state of the CRWWebController, as it will display
-// an error if the returned URL is not reliable from a security point of view.
-// Note that this method is expensive, so it should always be cached locally if
-// it's needed multiple times in a method.
-@property(nonatomic, readonly) GURL currentURL;
-
 @property(nonatomic, readonly) web::WebState* webState;
 // WebStateImpl instance associated with this CRWWebController, web controller
 // does not own this pointer.
@@ -206,10 +197,6 @@ char const kFullScreenStateHistogram[] = "IOS.Fullscreen.State";
 
 // ContextMenu controller, handling the interactions with the context menu.
 @property(nonatomic, strong) CRWContextMenuController* contextMenuController;
-
-// Returns the current URL of the web view, and sets `trustLevel` accordingly
-// based on the confidence in the verification.
-- (GURL)webURLWithTrustLevel:(web::URLVerificationTrustLevel*)trustLevel;
 
 // Called following navigation completion to generate final navigation lifecycle
 // events. Navigation is considered complete when the document has finished
@@ -416,13 +403,9 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
         @"serverTrust" : @"webViewSecurityFeaturesDidChange",
         @"hasOnlySecureContent" : @"webViewSecurityFeaturesDidChange",
         @"title" : @"webViewTitleDidChange",
+        @"cameraCaptureState" : @"webViewCameraCaptureStateDidChange",
+        @"microphoneCaptureState" : @"webViewMicrophoneCaptureStateDidChange",
       }];
-  if (web::features::IsMediaPermissionsControlEnabled()) {
-    [observers addEntriesFromDictionary:@{
-      @"cameraCaptureState" : @"webViewCameraCaptureStateDidChange",
-      @"microphoneCaptureState" : @"webViewMicrophoneCaptureStateDidChange",
-    }];
-  }
 
   if (web::features::IsFullscreenAPIEnabled()) {
     [observers addEntriesFromDictionary:@{
@@ -431,12 +414,6 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   }
 
   return observers;
-}
-
-- (GURL)currentURL {
-  web::URLVerificationTrustLevel trustLevel =
-      web::URLVerificationTrustLevel::kNone;
-  return [self currentURLWithTrustLevel:&trustLevel];
 }
 
 - (WebState*)webState {
@@ -526,9 +503,7 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
          web::IsContentTypeHtml(self.webState->GetContentsMimeType());
 }
 
-- (GURL)currentURLWithTrustLevel:(web::URLVerificationTrustLevel*)trustLevel {
-  DCHECK(trustLevel) << "Verification of the trustLevel state is mandatory";
-
+- (GURL)currentURL {
   // The web view URL is the current URL only if it is neither a placeholder URL
   // (used to hold WKBackForwardListItem for WebUI) nor a restore_session.html
   // (used to replay session history in WKWebView).
@@ -536,10 +511,9 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   // it can be implemented using NavigationManager API after removal of legacy
   // navigation stack.
   if (self.webView && !IsWKInternalUrl(self.webView.URL)) {
-    return [self webURLWithTrustLevel:trustLevel];
+    return _documentURL;
   }
-  // Any non-web URL source is trusted.
-  *trustLevel = web::URLVerificationTrustLevel::kAbsolute;
+
   web::NavigationItem* item =
       self.navigationManagerImpl
           ->GetLastCommittedItemInCurrentOrRestoredSession();
@@ -726,8 +700,9 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   web::WKBackForwardListItemHolder* holder =
       web::WKBackForwardListItemHolder::FromNavigationItem(item);
   holder->set_navigation_type(WKNavigationTypeBackForward);
-  context->SetIsPost((holder && [holder->http_method() isEqual:@"POST"]) ||
-                     item->HasPostData());
+  context->SetIsPost(
+      (holder && [holder->http_method() isEqualToString:@"POST"]) ||
+      item->HasPostData());
 
   if (holder) {
     context->SetMimeType(holder->mime_type());
@@ -955,9 +930,9 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   [self.jsNavigationHandler handleNavigationWillChangeState];
 }
 
-- (void)handleNavigationDidPushStateMessage:(base::Value*)message {
+- (void)handleNavigationDidPushStateMessage:(base::Value::Dict*)dict {
   [self.jsNavigationHandler
-      handleNavigationDidPushStateMessage:message
+      handleNavigationDidPushStateMessage:dict
                                  webState:_webStateImpl
                            hasUserGesture:self.isUserInteracting
                      userInteractionState:&_userInteractionState
@@ -965,9 +940,9 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   [self updateSSLStatusForCurrentNavigationItem];
 }
 
-- (void)handleNavigationDidReplaceStateMessage:(base::Value*)message {
+- (void)handleNavigationDidReplaceStateMessage:(base::Value::Dict*)dict {
   [self.jsNavigationHandler
-      handleNavigationDidReplaceStateMessage:message
+      handleNavigationDidReplaceStateMessage:dict
                                     webState:_webStateImpl
                               hasUserGesture:self.isUserInteracting
                         userInteractionState:&_userInteractionState
@@ -1026,6 +1001,10 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   }
   DCHECK([self.webView isKindOfClass:[WKWebView class]]);
   return self.webView;
+}
+
+- (UIColor*)themeColor {
+  return self.webView.themeColor;
 }
 
 #pragma mark - JavaScript
@@ -1179,12 +1158,6 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
           .Record(ukm::UkmRecorder::Get());
     }
   }
-}
-
-- (GURL)webURLWithTrustLevel:(web::URLVerificationTrustLevel*)trustLevel {
-  DCHECK(trustLevel);
-  *trustLevel = web::URLVerificationTrustLevel::kAbsolute;
-  return _documentURL;
 }
 
 - (BOOL)isUserInitiatedAction:(WKNavigationAction*)action {

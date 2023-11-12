@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/keywords.h"
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_elements_helper.h"
 #include "third_party/blink/renderer/modules/media_controls/elements/media_control_overflow_menu_button_element.h"
 #include "third_party/blink/renderer/modules/media_controls/media_controls_impl.h"
@@ -81,14 +82,14 @@ class MediaControlPopupMenuElement::EventListener final
 
       switch (keyboard_event->keyCode()) {
         case VKEY_TAB:
-          keyboard_event->shiftKey() ? popup_menu_->SelectNextItem()
-                                     : popup_menu_->SelectPreviousitem();
+          keyboard_event->shiftKey() ? popup_menu_->SelectPreviousItem()
+                                     : popup_menu_->SelectNextItem();
           break;
         case VKEY_UP:
-          popup_menu_->SelectNextItem();
+          popup_menu_->SelectPreviousItem();
           break;
         case VKEY_DOWN:
-          popup_menu_->SelectPreviousitem();
+          popup_menu_->SelectNextItem();
           break;
         case VKEY_ESCAPE:
           popup_menu_->CloseFromKeyboard();
@@ -202,7 +203,7 @@ void MediaControlPopupMenuElement::Trace(Visitor* visitor) const {
 MediaControlPopupMenuElement::MediaControlPopupMenuElement(
     MediaControlsImpl& media_controls)
     : MediaControlDivElement(media_controls) {
-  setAttribute(html_names::kPopoverAttr, kPopoverTypeValueAuto);
+  setAttribute(html_names::kPopoverAttr, keywords::kAuto);
   SetElementAttribute(html_names::kAnchorAttr, PopupAnchor());
   SetIsWanted(false);
 }
@@ -275,7 +276,7 @@ bool MediaControlPopupMenuElement::FocusListItemIfDisplayed(Node* node) {
 }
 
 void MediaControlPopupMenuElement::SelectFirstItem() {
-  for (Node* target = lastChild(); target; target = target->previousSibling()) {
+  for (Node* target = firstChild(); target; target = target->nextSibling()) {
     if (FocusListItemIfDisplayed(target))
       break;
   }
@@ -286,20 +287,20 @@ void MediaControlPopupMenuElement::SelectNextItem() {
   if (!focused_element || focused_element->parentElement() != this)
     return;
 
-  for (Node* target = focused_element->previousSibling(); target;
-       target = target->previousSibling()) {
+  for (Node* target = focused_element->nextSibling(); target;
+       target = target->nextSibling()) {
     if (FocusListItemIfDisplayed(target))
       break;
   }
 }
 
-void MediaControlPopupMenuElement::SelectPreviousitem() {
+void MediaControlPopupMenuElement::SelectPreviousItem() {
   Element* focused_element = GetDocument().FocusedElement();
   if (!focused_element || focused_element->parentElement() != this)
     return;
 
-  for (Node* target = focused_element->nextSibling(); target;
-       target = target->nextSibling()) {
+  for (Node* target = focused_element->previousSibling(); target;
+       target = target->previousSibling()) {
     if (FocusListItemIfDisplayed(target))
       break;
   }

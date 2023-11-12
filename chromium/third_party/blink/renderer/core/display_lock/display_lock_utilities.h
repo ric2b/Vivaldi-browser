@@ -53,8 +53,12 @@ class CORE_EXPORT DisplayLockUtilities {
     friend void Document::UpdateStyleAndLayoutForRange(
         const Range* range,
         DocumentUpdateReason reason);
-    friend void Document::UpdateStyleAndLayoutTreeForNode(const Node*);
-    friend void Document::UpdateStyleAndLayoutTreeForSubtree(const Node* node);
+    friend void Document::UpdateStyleAndLayoutTreeForNode(
+        const Node* node,
+        DocumentUpdateReason reason);
+    friend void Document::UpdateStyleAndLayoutTreeForSubtree(
+        const Node* node,
+        DocumentUpdateReason reason);
     friend void Document::EnsurePaintLocationDataValidForNode(
         const Node* node,
         DocumentUpdateReason reason);
@@ -210,6 +214,8 @@ class CORE_EXPORT DisplayLockUtilities {
   // Returns true if at least one node gets activated.
   // See: http://bit.ly/2RXULVi, "beforeactivate Event" part.
   static bool ActivateFindInPageMatchRangeIfNeeded(
+      const EphemeralRangeInFlatTree& range);
+  static bool NeedsActivationForFindInPage(
       const EphemeralRangeInFlatTree& range);
 
   // Returns activatable-locked inclusive ancestors of |node|.

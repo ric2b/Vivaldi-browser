@@ -14,6 +14,7 @@
 #include "ash/events/event_rewriter_controller_impl.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/shell.h"
+#include "ash/system/diagnostics/diagnostics_log_controller.h"
 #include "ash/system/diagnostics/keyboard_input_log.h"
 #include "ash/system/diagnostics/mojom/input.mojom.h"
 #include "ash/webui/diagnostics_ui/backend/common/histogram_util.h"
@@ -56,16 +57,18 @@ bool IsTouchInputDevice(InputDeviceInformation* device_info) {
            !device_info->event_device_info.HasStylus()));
 }
 
+bool IsLoggingEnabled() {
+  return diagnostics::DiagnosticsLogController::IsInitialized();
+}
+
 }  // namespace
 
 // Escape should be able to close the dialog as long as shortcuts are not
 // blocked. This boolean is updated within |BlockShortcuts|.
 bool InputDataProvider::should_close_dialog_on_escape_ = true;
 
-InputDataProvider::InputDataProvider(aura::Window* window,
-                                     KeyboardInputLog* keyboard_input_log_ptr)
-    : keyboard_input_log_ptr_(keyboard_input_log_ptr),
-      device_manager_(ui::CreateDeviceManager()),
+InputDataProvider::InputDataProvider(aura::Window* window)
+    : device_manager_(ui::CreateDeviceManager()),
       watcher_factory_(std::make_unique<EventWatcherFactoryImpl>()),
       accelerator_controller_(Shell::Get()->accelerator_controller()),
       event_rewriter_delegate_(Shell::Get()
@@ -78,11 +81,9 @@ InputDataProvider::InputDataProvider(
     aura::Window* window,
     std::unique_ptr<ui::DeviceManager> device_manager_for_test,
     std::unique_ptr<EventWatcherFactory> watcher_factory,
-    KeyboardInputLog* keyboard_input_log_ptr,
     AcceleratorControllerImpl* accelerator_controller,
     ui::EventRewriterAsh::Delegate* event_rewriter_delegate)
-    : keyboard_input_log_ptr_(keyboard_input_log_ptr),
-      device_manager_(std::move(device_manager_for_test)),
+    : device_manager_(std::move(device_manager_for_test)),
       watcher_factory_(std::move(watcher_factory)),
       accelerator_controller_(accelerator_controller),
       event_rewriter_delegate_(event_rewriter_delegate) {
@@ -149,6 +150,31 @@ void InputDataProvider::BindInterface(
 }
 
 void InputDataProvider::GetConnectedDevices(
+    GetConnectedDevicesCallback callback) {
+  bool has_internal_keyboard = false;
+  for (const ui::KeyboardDevice& keyboard :
+       ui::DeviceDataManager::GetInstance()->GetKeyboardDevices()) {
+    if (keyboard.type == ui::InputDeviceType::INPUT_DEVICE_INTERNAL) {
+      has_internal_keyboard = true;
+      break;
+    }
+  }
+
+  // If there is an internal keyboard and keyboards_ size is zero (meaning the
+  // app hasn't added it yet but will), do not execute the callback, instead,
+  // save it to an internal variable and execute until the internal keyboard has
+  // been added.
+  if (has_internal_keyboard && keyboards_.empty()) {
+    get_connected_devices_callback_ =
+        base::BindOnce(&InputDataProvider::GetConnectedDevicesHelper,
+                       weak_factory_.GetWeakPtr(), std::move(callback));
+    return;
+  }
+
+  GetConnectedDevicesHelper(std::move(callback));
+}
+
+void InputDataProvider::GetConnectedDevicesHelper(
     GetConnectedDevicesCallback callback) {
   std::vector<mojom::KeyboardInfoPtr> keyboard_vector;
   keyboard_vector.reserve(keyboards_.size());
@@ -372,7 +398,9 @@ void InputDataProvider::UnforwardKeyboardInput(uint32_t id) {
   }
 
   if (IsLoggingEnabled()) {
-    keyboard_input_log_ptr_->CreateLogAndRemoveKeyboard(id);
+    DiagnosticsLogController::Get()
+        ->GetKeyboardInputLog()
+        .CreateLogAndRemoveKeyboard(id);
   }
 
   healthd_event_reporter_.ReportKeyboardDiagnosticEvent(id, keyboards_[id]);
@@ -389,10 +417,6 @@ void InputDataProvider::UnforwardKeyboardInput(uint32_t id) {
 const std::string InputDataProvider::GetKeyboardName(uint32_t id) {
   auto iter = keyboards_.find(id);
   return iter == keyboards_.end() ? "" : iter->second->name;
-}
-
-bool InputDataProvider::IsLoggingEnabled() const {
-  return keyboard_input_log_ptr_ != nullptr;
 }
 
 void InputDataProvider::OnObservedKeyboardInputDisconnect(
@@ -427,7 +451,8 @@ void InputDataProvider::ObserveKeyEvents(
   }
 
   if (IsLoggingEnabled()) {
-    keyboard_input_log_ptr_->AddKeyboard(id, GetKeyboardName(id));
+    DiagnosticsLogController::Get()->GetKeyboardInputLog().AddKeyboard(
+        id, GetKeyboardName(id));
   }
 
   // When keyboard observer remote set is constructed, establish the
@@ -558,8 +583,10 @@ void InputDataProvider::AddKeyboard(const InputDeviceInformation* device_info) {
 
   mojom::KeyboardInfoPtr keyboard =
       keyboard_helper_.ConstructKeyboard(device_info, aux_data.get());
+  const bool is_internal_keyboard =
+      keyboard->connection_type == mojom::ConnectionType::kInternal;
   if (!features::IsExternalKeyboardInDiagnosticsAppEnabled() &&
-      keyboard->connection_type != mojom::ConnectionType::kInternal) {
+      !is_internal_keyboard) {
     return;
   }
   keyboards_[device_info->evdev_id] = std::move(keyboard);
@@ -577,6 +604,11 @@ void InputDataProvider::AddKeyboard(const InputDeviceInformation* device_info) {
 
   for (const auto& observer : connected_devices_observers_) {
     observer->OnKeyboardConnected(keyboards_[device_info->evdev_id]->Clone());
+  }
+
+  // Check if get_connected_devices_callback_ needs to be executed.
+  if (is_internal_keyboard && !get_connected_devices_callback_.is_null()) {
+    std::move(get_connected_devices_callback_).Run();
   }
 }
 
@@ -608,7 +640,9 @@ void InputDataProvider::SendInputKeyEvent(uint32_t id,
       keyboards_[id], keyboard_aux_data_[id].get(), key_code, scan_code, down);
 
   if (IsLoggingEnabled()) {
-    keyboard_input_log_ptr_->RecordKeyPressForKeyboard(id, event.Clone());
+    DiagnosticsLogController::Get()
+        ->GetKeyboardInputLog()
+        .RecordKeyPressForKeyboard(id, event.Clone());
   }
 
   healthd_event_reporter_.AddKeyEventForNextReport(id, event);

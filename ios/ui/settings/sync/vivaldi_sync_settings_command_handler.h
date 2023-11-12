@@ -7,6 +7,7 @@
 
 @protocol VivaldiSyncSettingsCommandHandler
 
+- (void)resetViewControllers;
 - (void)showActivateAccountView;
 - (void)showSyncCreateAccountUserView;
 - (void)showSyncCreateEncryptionPasswordView;

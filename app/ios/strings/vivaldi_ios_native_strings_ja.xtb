@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">内容順</translation>
 <translation id="2129408066358825297">年齢</translation>
 <translation id="2148384276939959392">選択したデータ項目を同期</translation>
+<translation id="21693288559538605">広告およびトラッカーブロッカーの概要</translation>
 <translation id="2195713384412091023">これを行うと、サーバー上の同期データはすべて消去され、暗号化パスワードもリセットされ、ログアウトされます。</translation>
 <translation id="2243210264130642074">メモが保存されました</translation>
 <translation id="2272338747456392228">アカウントがロックされています</translation>
 <translation id="2273327106802955778">その他のメニュー</translation>
 <translation id="2324160330092901720">有効化コードを<ph name="EMAIL_ID" />に送信しました</translation>
+<translation id="2336309953058658733">ごみ箱を空にする</translation>
 <translation id="2359808026110333948">続ける</translation>
 <translation id="2386793615875593361">１件のアイテムを選択中</translation>
 <translation id="2388224692799337242">ブラウジングを開始すると、履歴がここに表示されます</translation>
@@ -117,6 +119,7 @@
 <translation id="3699026013955941879">コードの有効期限が切れているようです。コードの発行を再リクエストしてください。</translation>
 <translation id="3700829948786686853">Vivaldi へようこそ</translation>
 <translation id="3766350025418769949">iPad の他のアプリで Vivaldi パスワードマネージャーに保存したパスワードを使用できます。</translation>
+<translation id="3845564230651302310">新しいブロッカーの設定を適応中です...</translation>
 <translation id="3858860766373142691">名前</translation>
 <translation id="3866249974567520381">説明</translation>
 <translation id="3872195896030547485">有効なメールアドレスを入力してください。</translation>
@@ -225,6 +228,7 @@
 <translation id="6406506848690869874">同期</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> 件を選択中</translation>
 <translation id="6468130661190228905">すみません、コミュニティへの参加にはもう少しお待ち頂く必要があるようです。メンバーは 16 歳以上の方のみとなっています。</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />インポート<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">バックアップ暗号化キー</translation>
 <translation id="6527303717912515753">共有</translation>
 <translation id="6535988230515403205">ポーランド語 (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@
 <translation id="7461899062138731833">ソース</translation>
 <translation id="750493650310597496">０件選択中</translation>
 <translation id="7525067979554623046">作成</translation>
-<translation id="7541020606126512786">広告・トラッカーブロッカー概略</translation>
 <translation id="7573518470897278603">モバイル用サイトを表示</translation>
 <translation id="7574321014880720413">新しいドメインを追加</translation>
 <translation id="7587132259180664054">メールの送信に成功しました</translation>

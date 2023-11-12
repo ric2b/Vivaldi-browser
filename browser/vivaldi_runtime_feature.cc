@@ -66,30 +66,30 @@ absl::optional<FeatureMap> ParseFeatures(base::Value json) {
       continue;
     }
     Feature feature;
-    if (std::string* value = dict.FindStringKey("description")) {
+    if (std::string* value = dict.GetDict().FindString("description")) {
       feature.description = std::move(*value);
     }
-    if (std::string* value = dict.FindStringKey("friendly_name")) {
+    if (std::string* value = dict.GetDict().FindString("friendly_name")) {
       feature.friendly_name = std::move(*value);
     }
-    if (absl::optional<bool> value = dict.FindBoolKey("value")) {
+    if (absl::optional<bool> value = dict.GetDict().FindBool("value")) {
       if (*value) {
         feature.default_value = true;
       }
     }
 #if !defined(OFFICIAL_BUILD)
-    if (absl::optional<bool> value = dict.FindBoolKey("internal_value")) {
+    if (absl::optional<bool> value = dict.GetDict().FindBool("internal_value")) {
       if (*value) {
         feature.default_value = true;
       }
     }
-    if (absl::optional<bool> value = dict.FindBoolKey("internal_locked")) {
+    if (absl::optional<bool> value = dict.GetDict().FindBool("internal_locked")) {
       if (*value) {
         feature.locked = true;
       }
     }
 #endif
-    if (const std::string* value = dict.FindStringKey("os")) {
+    if (const std::string* value = dict.GetDict().FindString("os")) {
       std::vector<base::StringPiece> os_list = base::SplitStringPiece(
           *value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
       base::StringPiece current_os;

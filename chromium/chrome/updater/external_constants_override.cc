@@ -111,7 +111,7 @@ GURL ExternalConstantsOverrider::DeviceManagementURL() const {
   const base::Value* device_management_url_value =
       override_values_.Find(kDevOverrideKeyDeviceManagementUrl);
   CHECK(device_management_url_value->is_string())
-      << "Unexpected type of override[" << kDevOverrideKeyCrashUploadUrl
+      << "Unexpected type of override[" << kDevOverrideKeyDeviceManagementUrl
       << "]: " << base::Value::GetTypeName(device_management_url_value->type());
   return {GURL(device_management_url_value->GetString())};
 }
@@ -192,6 +192,19 @@ base::TimeDelta ExternalConstantsOverrider::OverinstallTimeout() const {
       override_values_.Find(kDevOverrideKeyOverinstallTimeout);
   CHECK(value->is_int()) << "Unexpected type of override["
                          << kDevOverrideKeyOverinstallTimeout
+                         << "]: " << base::Value::GetTypeName(value->type());
+  return base::Seconds(value->GetInt());
+}
+
+base::TimeDelta ExternalConstantsOverrider::IdleCheckPeriod() const {
+  if (!override_values_.contains(kDevOverrideKeyIdleCheckPeriodSeconds)) {
+    return next_provider_->IdleCheckPeriod();
+  }
+
+  const base::Value* value =
+      override_values_.Find(kDevOverrideKeyIdleCheckPeriodSeconds);
+  CHECK(value->is_int()) << "Unexpected type of override["
+                         << kDevOverrideKeyIdleCheckPeriodSeconds
                          << "]: " << base::Value::GetTypeName(value->type());
   return base::Seconds(value->GetInt());
 }

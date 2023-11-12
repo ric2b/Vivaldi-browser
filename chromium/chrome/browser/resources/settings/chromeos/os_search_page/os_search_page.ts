@@ -12,9 +12,10 @@ import 'chrome://resources/cr_elements/policy/cr_policy_pref_indicator.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import '/shared/settings/controls/extension_controlled_indicator.js';
-import '../../settings_shared.css.js';
-import '../../settings_vars.css.js';
+import '../settings_shared.css.js';
+import '../settings_vars.css.js';
 import '../os_settings_page/os_settings_animated_pages.js';
+import '../os_settings_page/os_settings_section.js';
 import '../os_settings_page/os_settings_subpage.js';
 import './os_search_selection_dialog.js';
 import './search_engine.js';
@@ -25,17 +26,18 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {Section} from '../mojom-webui/routes.mojom-webui.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route, Router} from '../router.js';
+import {Route, Router, routes} from '../router.js';
 
 import {getTemplate} from './os_search_page.html.js';
 
 const OsSettingsSearchPageElementBase =
     DeepLinkingMixin(RouteObserverMixin(I18nMixin(PolymerElement)));
 
-class OsSettingsSearchPageElement extends OsSettingsSearchPageElementBase {
+export class OsSettingsSearchPageElement extends
+    OsSettingsSearchPageElementBase {
   static get is() {
     return 'os-settings-search-page';
   }
@@ -46,6 +48,12 @@ class OsSettingsSearchPageElement extends OsSettingsSearchPageElementBase {
 
   static get properties() {
     return {
+      section_: {
+        type: Number,
+        value: Section.kSearchAndAssistant,
+        readOnly: true,
+      },
+
       focusConfig_: Object,
 
       shouldShowQuickAnswersSettings_: {
@@ -75,6 +83,7 @@ class OsSettingsSearchPageElement extends OsSettingsSearchPageElementBase {
 
   private isAssistantAllowed_: boolean;
   private focusConfig_: Map<string, string>;
+  private section_: Section;
   private shouldShowQuickAnswersSettings_: boolean;
 
   override ready() {

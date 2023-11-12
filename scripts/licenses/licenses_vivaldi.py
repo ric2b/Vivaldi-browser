@@ -88,6 +88,7 @@ for mline in maindeps.splitlines():
     "(MPL-2.0 OR Apache-2.0)",
     "MPL",
     "Public Domain",
+    "Unlicense",
     "WTFPL"
   ]:
     print("ERROR: " + moduledir + " uses a license that hasn't been reviewed for Vivaldi: " + entry["licensetype"])

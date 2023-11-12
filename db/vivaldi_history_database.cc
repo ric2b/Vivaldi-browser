@@ -67,7 +67,7 @@ Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(
       "  (strftime('%s', '1601-01-01')), 'unixepoch')), "
       "  strftime('%HH', datetime(v.visit_time / 1000000 + "
       "  (strftime('%s', '1601-01-01')), 'unixepoch')) "
-      " ORDER BY v.visit_time DESC"));
+      " ORDER BY v.visit_time DESC, v.from_visit DESC"));
   int64_t begin = begin_time.ToInternalValue();
   int64_t end = end_time.ToInternalValue();
   url_sql.BindInt64(0, begin ? begin : std::numeric_limits<int64_t>::min());

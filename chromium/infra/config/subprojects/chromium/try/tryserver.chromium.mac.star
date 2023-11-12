@@ -16,7 +16,7 @@ try_.defaults.set(
     builderless = True,
     os = os.MAC_ANY,
     ssd = True,
-    compilator_reclient_jobs = reclient.jobs.MID_JOBS_FOR_CQ,
+    compilator_reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
     orchestrator_cores = 2,
     reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
@@ -131,7 +131,7 @@ try_.orchestrator_builder(
     experiments = {
         "chromium_rts.inverted_rts": 100,
         # go/nplus1shardsproposal
-        "chromium.add_one_test_shard": 5,
+        "chromium.add_one_test_shard": 10,
     },
     main_list_view = "try",
     tryjob = try_.job(),
@@ -173,14 +173,25 @@ try_.builder(
     ],
 )
 
-try_.orchestrator_builder(
+try_.builder(
     name = "mac12-arm64-rel",
     mirrors = [
         "ci/mac-arm64-rel",
         "ci/mac12-arm64-rel-tests",
     ],
+    builderless = True,
     check_for_flakiness = True,
-    compilator = "mac12-arm64-rel-compilator",
+    main_list_view = "try",
+)
+
+try_.orchestrator_builder(
+    name = "mac13-arm64-rel",
+    mirrors = [
+        "ci/mac-arm64-rel",
+        "ci/mac13-arm64-rel-tests",
+    ],
+    check_for_flakiness = True,
+    compilator = "mac13-arm64-rel-compilator",
     main_list_view = "try",
     tryjob = try_.job(
         experiment_percentage = 100,
@@ -188,7 +199,7 @@ try_.orchestrator_builder(
 )
 
 try_.compilator_builder(
-    name = "mac12-arm64-rel-compilator",
+    name = "mac13-arm64-rel-compilator",
     os = os.MAC_DEFAULT,
     check_for_flakiness = True,
     # TODO (crbug.com/1245171): Revert when root issue is fixed
@@ -272,6 +283,14 @@ try_.builder(
 )
 
 try_.builder(
+    name = "mac13-tests",
+    mirrors = [
+        "ci/Mac Builder",
+        "ci/Mac13 Tests",
+    ],
+)
+
+try_.builder(
     name = "mac_chromium_archive_rel_ng",
     mirrors = [
         "ci/mac-archive-rel",
@@ -320,7 +339,7 @@ try_.builder(
     name = "mac_chromium_dbg_ng",
     mirrors = [
         "ci/Mac Builder (dbg)",
-        "ci/Mac12 Tests (dbg)",
+        "ci/Mac13 Tests (dbg)",
     ],
     reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
 )
@@ -329,7 +348,7 @@ try_.builder(
     name = "mac_upload_clang",
     executable = "recipe:chromium_toolchain/package_clang",
     builderless = False,
-    execution_timeout = 8 * time.hour,
+    execution_timeout = 6 * time.hour,
 )
 
 try_.builder(
@@ -350,7 +369,7 @@ try_.builder(
     name = "mac_upload_rust_arm",
     executable = "recipe:chromium_toolchain/package_rust",
     builderless = False,
-    execution_timeout = 8 * time.hour,
+    execution_timeout = 6 * time.hour,
 )
 
 try_.builder(
@@ -429,7 +448,7 @@ try_.orchestrator_builder(
     coverage_test_types = ["overall", "unit"],
     experiments = {
         # go/nplus1shardsproposal
-        "chromium.add_one_test_shard": 5,
+        "chromium.add_one_test_shard": 10,
     },
     main_list_view = "try",
     tryjob = try_.job(),
@@ -517,23 +536,11 @@ ios_builder(
 )
 
 ios_builder(
-    name = "ios15-beta-simulator",
-    mirrors = ["ci/ios15-beta-simulator"],
-)
-
-ios_builder(
-    name = "ios15-sdk-simulator",
-    mirrors = ["ci/ios15-sdk-simulator"],
-    os = os.MAC_13,
-    cpu = cpu.ARM64,
-)
-
-ios_builder(
     name = "ios16-beta-simulator",
     mirrors = [
         "ci/ios16-beta-simulator",
     ],
-    os = os.MAC_DEFAULT,
+    os = os.MAC_13,
     reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
 )
 
@@ -543,7 +550,22 @@ ios_builder(
         "ci/ios16-sdk-simulator",
     ],
     os = os.MAC_13,
+    cpu = cpu.ARM64,
     xcode = xcode.x14betabots,
+)
+
+ios_builder(
+    name = "ios17-beta-simulator",
+    mirrors = ["ci/ios17-beta-simulator"],
+    os = os.MAC_13,
+)
+
+ios_builder(
+    name = "ios17-sdk-simulator",
+    mirrors = ["ci/ios17-sdk-simulator"],
+    os = os.MAC_13,
+    cpu = cpu.ARM64,
+    xcode = xcode.x15betabots,
 )
 
 ios_builder(
@@ -601,4 +623,10 @@ try_.gpu.optional_tests_builder(
             cq.location_filter(path_regexp = "ui/gl/.+"),
         ],
     ),
+)
+
+try_.builder(
+    name = "mac-cr23-rel",
+    mirrors = ["ci/mac-cr23-rel"],
+    os = os.MAC_DEFAULT,
 )

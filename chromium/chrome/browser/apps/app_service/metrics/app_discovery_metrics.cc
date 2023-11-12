@@ -10,7 +10,7 @@
 #include "components/metrics/structured/structured_events.h"
 #include "components/services/app_service/public/cpp/instance.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/driver/sync_service.h"
+#include "components/sync/service/sync_service.h"
 
 namespace apps {
 namespace {
@@ -26,7 +26,7 @@ AppDiscoveryMetrics::AppDiscoveryMetrics(
     : profile_(profile), app_platform_metrics_(app_platform_metrics) {
   DCHECK(app_platform_metrics);
 
-  apps::InstanceRegistry::Observer::Observe(&instance_registry);
+  instance_registry_observation_.Observe(&instance_registry);
   app_platform_metrics_->AddObserver(this);
 }
 
@@ -134,7 +134,7 @@ void AppDiscoveryMetrics::OnInstanceUpdate(
 
 void AppDiscoveryMetrics::OnInstanceRegistryWillBeDestroyed(
     InstanceRegistry* cache) {
-  apps::InstanceRegistry::Observer::Observe(nullptr);
+  instance_registry_observation_.Reset();
 }
 
 bool AppDiscoveryMetrics::IsAppSyncEnabled() {

@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">По содержимому</translation>
 <translation id="2129408066358825297">Возраст</translation>
 <translation id="2148384276939959392">Синхронизировать выбранное</translation>
+<translation id="21693288559538605">Блокировщик слежки и рекламы</translation>
 <translation id="2195713384412091023">Все данные на сервере будут удалены, Мастер-пароль сброшен, осуществлён выход из учётной записи.</translation>
 <translation id="2243210264130642074">Заметка сохранена</translation>
 <translation id="2272338747456392228">Учётная запись заблокирована</translation>
 <translation id="2273327106802955778">Больше опций</translation>
 <translation id="2324160330092901720">Код подтверждения отправлен на <ph name="EMAIL_ID" /></translation>
+<translation id="2336309953058658733">Очистить корзину</translation>
 <translation id="2359808026110333948">Дальше</translation>
 <translation id="2386793615875593361">Выбрана 1 заметка</translation>
 <translation id="2388224692799337242">История просмотра будет отображаться здесь</translation>
@@ -117,6 +119,7 @@
 <translation id="3699026013955941879">Код уже недействителен. Запросите новый код активации.</translation>
 <translation id="3700829948786686853">Добро пожаловать в Vivaldi</translation>
 <translation id="3766350025418769949">Вы можете использовать пароли, сохранённые в Менеджере паролей Vivaldi, в других приложениях на iPad.</translation>
+<translation id="3845564230651302310">Применение настроек блокировщика...</translation>
 <translation id="3858860766373142691">Имя</translation>
 <translation id="3866249974567520381">Описание</translation>
 <translation id="3872195896030547485">Введите адрес электронной почты.</translation>
@@ -225,6 +228,7 @@
 <translation id="6406506848690869874">Синхронизация</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> выбрано</translation>
 <translation id="6468130661190228905">К сожалению, вам нужно подождать немного. Наши участники сообщества должны быть старше 16 лет.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Импорт<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Запасной ключ шифрования</translation>
 <translation id="6527303717912515753">Поделиться</translation>
 <translation id="6535988230515403205">Польский (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@
 <translation id="7461899062138731833">СПИСКИ</translation>
 <translation id="750493650310597496">Выбрано 0 заметок</translation>
 <translation id="7525067979554623046">Создать</translation>
-<translation id="7541020606126512786">Статистика блокировки</translation>
 <translation id="7573518470897278603">Просмотр мобильной версии</translation>
 <translation id="7574321014880720413">Добавить сайт</translation>
 <translation id="7587132259180664054">Письмо отправлено</translation>

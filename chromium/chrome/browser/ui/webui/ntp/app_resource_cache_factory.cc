@@ -16,17 +16,23 @@ NTPResourceCache* AppResourceCacheFactory::GetForProfile(Profile* profile) {
 
 // static
 AppResourceCacheFactory* AppResourceCacheFactory::GetInstance() {
-  return base::Singleton<AppResourceCacheFactory>::get();
+  static base::NoDestructor<AppResourceCacheFactory> instance;
+  return instance.get();
 }
 
 AppResourceCacheFactory::AppResourceCacheFactory()
     : ProfileKeyedServiceFactory(
           "AppResourceCache",
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   DependsOn(ThemeServiceFactory::GetInstance());
 }
 
-AppResourceCacheFactory::~AppResourceCacheFactory() {}
+AppResourceCacheFactory::~AppResourceCacheFactory() = default;
 
 KeyedService* AppResourceCacheFactory::BuildServiceInstanceFor(
     content::BrowserContext* profile) const {

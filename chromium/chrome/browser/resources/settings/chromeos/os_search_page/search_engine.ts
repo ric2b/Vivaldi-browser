@@ -13,12 +13,12 @@ import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import './os_search_selection_dialog.js';
 import '/shared/settings/controls/extension_controlled_indicator.js';
-import '../../controls/controlled_button.js';
-import '../../controls/settings_toggle_button.js';
+import '/shared/settings/controls/controlled_button.js';
+import '/shared/settings/controls/settings_toggle_button.js';
 import 'chrome://resources/cr_components/settings_prefs/prefs.js';
 import 'chrome://resources/cr_components/settings_prefs/pref_util.js';
-import '../../settings_shared.css.js';
-import '../../settings_vars.css.js';
+import '../settings_shared.css.js';
+import '../settings_vars.css.js';
 
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';

@@ -9,6 +9,7 @@ mojom("mojom") {
   sources = [
     "registration_type.mojom",
     "source_registration_error.mojom",
+    "source_registration_time_config.mojom",
     "trigger_registration_error.mojom",
   ]
   webui_module_path = "/"
@@ -34,6 +35,8 @@ component("attribution_reporting") {
     "destination_set.h",
     "event_trigger_data.cc",
     "event_trigger_data.h",
+    "features.cc",
+    "features.h",
     "filters.cc",
     "filters.h",
     "os_registration.cc",
@@ -55,14 +58,27 @@ component("attribution_reporting") {
     ":source_type_mojom",
     "//base",
     "//components/aggregation_service",
-    "//components/aggregation_service:mojom",
     "//net",
     "//url",
   ]
 
-  deps = [ "//services/network/public/cpp" ]
+  deps = [ ":is_origin_suitable" ]
 
   defines = [ "IS_ATTRIBUTION_REPORTING_IMPL" ]
+}
+
+component("is_origin_suitable") {
+  sources = [
+    "is_origin_suitable.cc",
+    "is_origin_suitable.h",
+  ]
+
+  deps = [
+    "//services/network/public/cpp",
+    "//url",
+  ]
+
+  defines = [ "IS_ATTRIBUTION_REPORTING_IS_ORIGIN_SUITABLE_IMPL" ]
 }
 
 source_set("unit_tests") {
@@ -159,9 +175,10 @@ mojom("registration_mojom") {
   generate_legacy_js_bindings = true
 
   deps = [
-    "//components/aggregation_service:mojom",
+    ":mojom",
     "//mojo/public/mojom/base",
     "//services/network/public/mojom:mojom_schemeful_site",
+    "//url/mojom:url_mojom_gurl",
     "//url/mojom:url_mojom_origin",
   ]
 
@@ -256,6 +273,15 @@ mojom("registration_mojom") {
           forward_declaration =
               "namespace attribution_reporting { class DestinationSet; }"
         },
+        {
+          mojom = "attribution_reporting.mojom.OsRegistration"
+          cpp = "::std::vector<::attribution_reporting::OsRegistrationItem>"
+          move_only = true
+        },
+        {
+          mojom = "attribution_reporting.mojom.OsRegistrationItem"
+          cpp = "::attribution_reporting::OsRegistrationItem"
+        },
       ]
       traits_headers = [ "registration_mojom_traits.h" ]
       traits_public_deps = [ ":registration_mojom_traits" ]
@@ -277,7 +303,6 @@ component("registration_mojom_traits") {
     ":attribution_reporting",
     ":registration_mojom_shared",
     "//base",
-    "//components/aggregation_service:mojom_shared",
     "//mojo/public/cpp/base:shared_typemap_traits",
     "//net",
     "//services/network/public/mojom",

@@ -22,6 +22,7 @@ ts_library("build_ts") {
     "../..:build_ts",
     "//ash/webui/print_management/resources:build_ts",
     "//third_party/polymer/v3_0:library",
+    "//ui/webui/resources/cr_elements:build_ts",
     "//ui/webui/resources/js:build_ts",
   ]
 }
@@ -32,6 +33,6 @@ generate_grd("build_grdp") {
 
   deps = [ ":build_ts" ]
   manifest_files =
-      filter_include(get_target_outputs(":build_ts"), [ "*.manifest" ])
+      filter_include(get_target_outputs(":build_ts"), [ "*_manifest.json" ])
   resource_path_prefix = "chromeos/print_management"
 }

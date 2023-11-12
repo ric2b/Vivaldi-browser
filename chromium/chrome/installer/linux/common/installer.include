@@ -283,6 +283,11 @@ stage_install_common() {
     strippedfile="${OUTPUTDIR}/${file}.stripped"
     install -m ${SHLIB_PERMS} "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/${file}"
   fi
+  if [ -f "${OUTPUTDIR}/libqt6_shim.so" ]; then
+    file="libqt6_shim.so"
+    strippedfile="${OUTPUTDIR}/${file}.stripped"
+    install -m ${SHLIB_PERMS} "${strippedfile}" "${STAGEDIR}/${INSTALLDIR}/${file}"
+  fi
 
   # libc++
   if [ -f "${OUTPUTDIR}/lib/libc++.so" ]; then
@@ -339,6 +344,10 @@ stage_install_common() {
   process_template "${OUTPUTDIR}/installer/common/update-ffmpeg" \
     "${STAGEDIR}/${INSTALLDIR}/update-ffmpeg"
   chmod 755 "${STAGEDIR}/${INSTALLDIR}/update-ffmpeg"
+
+  # Privacy Guard binary (vivaldi)
+  # install -m 755 "${OUTPUTDIR}/installer/common/relayproxy-linux" \
+  # "${STAGEDIR}/${INSTALLDIR}/relayproxy-linux"
 
   # Add License
   install -m 644 "${OUTPUTDIR}/installer/common/EULA.html" \

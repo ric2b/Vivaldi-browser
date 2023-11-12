@@ -9,11 +9,11 @@
 
 #import "components/metrics/metrics_service.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
-#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_service.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_service_factory.h"
 #import "ios/chrome/browser/discover_feed/feed_constants.h"
 #import "ios/chrome/browser/ntp/features.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_constants.h"
@@ -83,7 +83,10 @@ NSString* const kFeedLastBackgroundRefreshTimestamp =
       IsFeedAppCloseBackgroundRefreshEnabled()) {
     [self scheduleBackgroundRefresh];
   } else if (IsFeedAppCloseForegroundRefreshEnabled()) {
-    [self feedService]->RefreshFeed(FeedRefreshTrigger::kForegroundAppClose);
+    if ([self feedServiceIfCreated]) {
+      [self feedServiceIfCreated]->RefreshFeed(
+          FeedRefreshTrigger::kForegroundAppClose);
+    }
   }
 }
 
@@ -106,7 +109,13 @@ NSString* const kFeedLastBackgroundRefreshTimestamp =
   // should create background objects before this method is called. This line is
   // intended to crash if DiscoverFeedService is not available.
   return DiscoverFeedServiceFactory::GetForBrowserState(
-      self.appState.mainBrowserState);
+      self.appState.mainBrowserState, /*create=*/true);
+}
+
+// Returns the DiscoverFeedService if created.
+- (DiscoverFeedService*)feedServiceIfCreated {
+  return DiscoverFeedServiceFactory::GetForBrowserState(
+      self.appState.mainBrowserState, /*create=*/false);
 }
 
 // Returns the FeedMetricsRecorder.

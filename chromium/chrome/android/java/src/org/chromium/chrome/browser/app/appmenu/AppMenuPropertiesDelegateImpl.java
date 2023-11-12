@@ -30,7 +30,6 @@ import com.google.common.primitives.UnsignedLongs;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.CallbackController;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
@@ -91,6 +90,7 @@ import org.chromium.components.webapk.lib.client.WebApkValidator;
 import org.chromium.components.webapps.AppBannerManager;
 import org.chromium.components.webapps.WebappsUtils;
 import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.net.ConnectionType;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modelutil.MVCListAdapter;
@@ -104,14 +104,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 // Vivaldi
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.SuperscriptSpan;
+
 import org.chromium.build.BuildConfig;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.tab.TabUtils;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
+import org.chromium.ui.text.SpanApplier;
 
 import org.vivaldi.browser.appmenu.VivaldiMenuUtils;
+import org.vivaldi.browser.common.VivaldiDefaultBrowserUtils;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
 import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * Base implementation of {@link AppMenuPropertiesDelegate} that handles hiding and showing menu
@@ -549,6 +557,20 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             MenuItem reloadMenuItem =  menu.findItem(R.id.vivaldi_reload_menu_id);
             if (reloadMenuItem != null)
                 reloadMenuItem.setVisible(mIsTablet);
+
+            MenuItem setDefaultBrowserMenuItem = menu.findItem(R.id.set_default_browser_menu_id);
+            if (setDefaultBrowserMenuItem != null) {
+                boolean shouldShowMeuItem =
+                        !BuildConfig.IS_OEM_AUTOMOTIVE_BUILD
+                        || !VivaldiDefaultBrowserUtils.checkIfVivaldiDefaultBrowser(mContext);
+                setDefaultBrowserMenuItem.setVisible(shouldShowMeuItem);
+                if (shouldShowMeuItem) {
+                    boolean showNewTag = VivaldiPreferences.getSharedPreferencesManager()
+                            .readBoolean(VivaldiPreferences.SET_AS_DEFAULT_MENU_HIGHLIGHT, true);
+                    setDefaultBrowserMenuItem.setTitle(addOrRemoveNewLabel(
+                            mContext.getString(R.string.menu_set_default_browser), showNewTag));
+                }
+            }
         }
 
         // Don't allow either "chrome://" pages or interstitial pages to be shared, or when the
@@ -967,9 +989,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         openWebApkItem.setVisible(false);
 
         if (currentTab != null && shouldShowHomeScreenMenuItem) {
-            Context context = ContextUtils.getApplicationContext();
             long addToHomeScreenStart = SystemClock.elapsedRealtime();
-            ResolveInfo resolveInfo = queryWebApkResolveInfo(context, currentTab);
+            ResolveInfo resolveInfo = queryWebApkResolveInfo(mContext, currentTab);
             RecordHistogram.recordTimesHistogram("Android.PrepareMenu.OpenWebApkVisibilityCheck",
                     SystemClock.elapsedRealtime() - addToHomeScreenStart);
 
@@ -977,8 +998,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                     resolveInfo != null && resolveInfo.activityInfo.packageName != null;
 
             if (openWebApkItemVisible) {
-                String appName = resolveInfo.loadLabel(context.getPackageManager()).toString();
-                openWebApkItem.setTitle(context.getString(R.string.menu_open_webapk, appName));
+                String appName = resolveInfo.loadLabel(mContext.getPackageManager()).toString();
+                openWebApkItem.setTitle(mContext.getString(R.string.menu_open_webapk, appName));
                 openWebApkItem.setVisible(true);
             } else {
                 AppBannerManager.InstallStringPair installStrings =
@@ -998,13 +1019,11 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     }
 
     private ResolveInfo queryWebApkResolveInfo(Context context, Tab currentTab) {
-        ResolveInfo resolveInfo = null;
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_APK_UNIQUE_ID)) {
-            String manifestId = AppBannerManager.maybeGetManifestId(currentTab.getWebContents());
-            resolveInfo = WebApkValidator.queryFirstWebApkResolveInfo(context,
-                    currentTab.getUrl().getSpec(),
-                    WebappRegistry.getInstance().findWebApkWithManifestId(manifestId));
-        }
+        String manifestId = AppBannerManager.maybeGetManifestId(currentTab.getWebContents());
+        ResolveInfo resolveInfo =
+                WebApkValidator.queryFirstWebApkResolveInfo(context, currentTab.getUrl().getSpec(),
+                        WebappRegistry.getInstance().findWebApkWithManifestId(manifestId));
+
         if (resolveInfo == null) {
             // If a WebAPK with matching manifestId can't be found, fallback to query without it.
             resolveInfo = WebApkValidator.queryFirstWebApkResolveInfo(
@@ -1223,11 +1242,11 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         startPriceTrackingMenuItem.setEnabled(editEnabled);
         stopPriceTrackingMenuItem.setEnabled(editEnabled);
 
-        if (info != null) {
+        if (info != null && info.productClusterId.isPresent()) {
             CommerceSubscription sub = new CommerceSubscription(SubscriptionType.PRICE_TRACK,
                     IdentifierType.PRODUCT_CLUSTER_ID,
-                    UnsignedLongs.toString(info.productClusterId), ManagementType.USER_MANAGED,
-                    null);
+                    UnsignedLongs.toString(info.productClusterId.get()),
+                    ManagementType.USER_MANAGED, null);
             boolean isSubscribed = service.isSubscribedFromCache(sub);
             startPriceTrackingMenuItem.setVisible(!isSubscribed);
             stopPriceTrackingMenuItem.setVisible(isSubscribed);
@@ -1255,7 +1274,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         // REQUEST_DESKTOP_SITE_EXCEPTIONS is enabled, hide the entry for all native pages.
         boolean itemVisible = currentTab != null && canShowRequestDesktopSite
                 && (!isChromeScheme
-                        || (!ContentFeatureList.isEnabled(
+                        || (!ContentFeatureMap.isEnabled(
                                     ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)
                                 && currentTab.isNativePage()))
                 && !shouldShowReaderModePrefs(currentTab) && currentTab.getWebContents() != null;
@@ -1391,5 +1410,16 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             BrowserUiUtils.recordModuleClickHistogram(
                     HostSurface.NEW_TAB_PAGE, ModuleTypeOnStartAndNTP.MENU_BUTTON);
         }
+    }
+
+    private CharSequence addOrRemoveNewLabel(String menuTitle, boolean showNewLabel) {
+        if (!showNewLabel) {
+            return SpanApplier.removeSpanText(menuTitle,
+                    new SpanApplier.SpanInfo("<new>", "</new>"));
+        }
+        return SpanApplier.applySpans(menuTitle,
+                new SpanApplier.SpanInfo("<new>", "</new>", new SuperscriptSpan(),
+                        new RelativeSizeSpan(0.75f), new ForegroundColorSpan(
+                                SemanticColorUtils.getDefaultTextColorAccent1(mContext))));
     }
 }

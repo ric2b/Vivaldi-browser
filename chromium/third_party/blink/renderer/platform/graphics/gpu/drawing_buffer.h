@@ -202,7 +202,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
   // Note that in rare situations on macOS the drawing buffer can be destroyed
   // during the resolve process, specifically during automatic graphics
   // switching. In this scenario this method returns false.
-  bool ResolveAndBindForReadAndDraw();
+  [[nodiscard]] bool ResolveAndBindForReadAndDraw();
 
   bool Multisample() const;
 
@@ -345,6 +345,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
                 std::unique_ptr<Extensions3DUtil>,
                 Client*,
                 bool discard_framebuffer_supported,
+                bool texture_storage_enabled,
                 bool want_alpha_channel,
                 bool premultiplied_alpha,
                 PreserveDrawingBuffer,
@@ -601,6 +602,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
   std::unique_ptr<Extensions3DUtil> extensions_util_;
   gfx::Size size_;
   const bool discard_framebuffer_supported_;
+  const bool texture_storage_enabled_;
 
   // The alpha type that was requested (opaque, premul, or unpremul).
   SkAlphaType requested_alpha_type_;

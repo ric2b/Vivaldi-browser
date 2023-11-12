@@ -135,13 +135,6 @@ export class SettingsClearBrowsingDataDialogElement extends
         value: false,
       },
 
-      isChildAccount_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean('isChildAccount');
-        },
-      },
-
       showHistoryDeletionDialog_: {
         type: Boolean,
         value: false,
@@ -225,7 +218,6 @@ export class SettingsClearBrowsingDataDialogElement extends
   private clearingInProgress_: boolean;
   private clearingDataAlertString_: string;
   private clearButtonDisabled_: boolean;
-  private isChildAccount_: boolean;
   private showHistoryDeletionDialog_: boolean;
   private showPasswordsDeletionDialogLater_: boolean;
   private showPasswordsDeletionDialog_: boolean;
@@ -345,10 +337,30 @@ export class SettingsClearBrowsingDataDialogElement extends
     return isSyncingHistory ? historySummarySignedInNoLink : historySummary;
   }
 
-  /** Choose a label for the cookie checkbox. */
+  /**
+   * Choose a label for the cookie checkbox
+   * @param shouldShowCookieException boolean whether the exception about not
+   *  being signed out of your Google account should be shown when user is
+   * sync.
+   * @param cookiesSummary string explaining that deleting cookies and site data
+   * will sign the user out of most websites
+   * @param cookiesSummarySignedIn string explaining that deleting cookies and
+   * site data will sign the user out of most websites but Google sign in will
+   * stay.
+   * @param clearCookiesSummarySignedInSupervisedProfile string used for a
+   * supervised user. Gives information about family link controls and that they
+   * will not be signed out on clearing cookies
+   */
   private cookiesCheckboxLabel_(
       shouldShowCookieException: boolean, cookiesSummary: string,
-      cookiesSummarySignedIn: string): string {
+      cookiesSummarySignedIn: string,
+      clearCookiesSummarySignedInSupervisedProfile: string): string {
+    if (loadTimeData.getBoolean('isChildAccount') &&
+        loadTimeData.getBoolean(
+            'clearingCookiesKeepsSupervisedUsersSignedIn')) {
+      return clearCookiesSummarySignedInSupervisedProfile;
+    }
+
     if (shouldShowCookieException) {
       return cookiesSummarySignedIn;
     }

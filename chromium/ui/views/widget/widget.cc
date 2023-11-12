@@ -27,6 +27,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/color/color_provider_manager.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/screen.h"
@@ -500,13 +501,12 @@ void Widget::ShowEmojiPanel() {
 // Unconverted methods (see header) --------------------------------------------
 
 gfx::NativeView Widget::GetNativeView() const {
-  return native_widget_ ? native_widget_->GetNativeView()
-                        : gfx::kNullNativeView;
+  return native_widget_ ? native_widget_->GetNativeView() : gfx::NativeView();
 }
 
 gfx::NativeWindow Widget::GetNativeWindow() const {
   return native_widget_ ? native_widget_->GetNativeWindow()
-                        : gfx::kNullNativeWindow;
+                        : gfx::NativeWindow();
 }
 
 void Widget::AddObserver(WidgetObserver* observer) {
@@ -1395,11 +1395,17 @@ void Widget::NotifyPaintAsActiveChanged() {
 }
 
 void Widget::SetNativeTheme(ui::NativeTheme* native_theme) {
+  const bool is_update = native_theme_ && (native_theme_ != native_theme);
   native_theme_ = native_theme;
   native_theme_observation_.Reset();
   if (native_theme)
     native_theme_observation_.Observe(native_theme);
-  ThemeChanged();
+
+  if (is_update) {
+    OnNativeThemeUpdated(native_theme);
+  } else {
+    ThemeChanged();
+  }
 }
 
 int Widget::GetX() const {
@@ -1975,22 +1981,25 @@ void Widget::SetColorModeOverride(
 // Widget, ui::ColorProviderSource:
 
 ui::ColorProviderManager::Key Widget::GetColorProviderKey() const {
+  // Generally all Widgets should inherit the key of their parent, falling back
+  // to the key set by the NativeTheme otherwise.
+  // TODO(crbug.com/1455535): `parent_` does not always resolve to the logical
+  // parent as expected here (e.g. bubbles). This should be addressed and the
+  // use of parent_ below replaced with something like GetLogicalParent().
   ui::ColorProviderManager::Key key =
-      GetNativeTheme()->GetColorProviderKey(GetCustomTheme());
+      parent_ ? parent_->GetColorProviderKey()
+              : GetNativeTheme()->GetColorProviderKey(GetCustomTheme());
+
+  // Widgets may have specific overrides set on the Widget itself that should
+  // apply specifically to themselves and their children, apply these here.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   key.elevation_mode = background_elevation_;
 #endif
-  key.user_color = GetUserColor();
-  if (color_mode_override_) {
+  if (color_mode_override_.has_value()) {
     key.color_mode = color_mode_override_.value();
   }
-  return key;
-}
 
-absl::optional<SkColor> Widget::GetUserColor() const {
-  // Fall back to the user color defined in the NativeTheme if a user color is
-  // not provided by any widgets in this UI hierarchy.
-  return parent_ ? parent_->GetUserColor() : GetNativeTheme()->user_color();
+  return key;
 }
 
 const ui::ColorProvider* Widget::GetColorProvider() const {

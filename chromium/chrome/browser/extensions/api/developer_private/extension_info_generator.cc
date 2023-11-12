@@ -29,7 +29,9 @@
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/google_chrome_strings.h"
 #include "components/supervised_user/core/common/pref_names.h"
 #include "content/public/browser/render_frame_host.h"
 #include "extensions/browser/blocklist_extension_prefs.h"
@@ -67,8 +69,8 @@
 #include "ui/gfx/skbitmap_operations.h"
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "components/supervised_user/core/browser/supervised_user_service.h"
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 namespace extensions {
@@ -366,6 +368,8 @@ ExtensionInfoGenerator::ExtensionInfoGenerator(
     content::BrowserContext* browser_context)
     : browser_context_(browser_context),
       command_service_(CommandService::Get(browser_context)),
+      cws_info_service_(
+          CWSInfoService::Get(Profile::FromBrowserContext(browser_context))),
       extension_system_(ExtensionSystem::Get(browser_context)),
       extension_prefs_(ExtensionPrefs::Get(browser_context)),
       extension_action_api_(ExtensionActionAPI::Get(browser_context)),
@@ -530,6 +534,15 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
       ExtensionManagementFactory::GetForBrowserContext(browser_context_);
   Profile* profile = Profile::FromBrowserContext(browser_context_);
 
+  // Safety Hub Strings
+  if (base::FeatureList::IsEnabled(kCWSInfoService)) {
+    absl::optional<CWSInfoService::CWSInfo> cws_info =
+        cws_info_service_->GetCWSInfo(extension);
+    if (cws_info.has_value()) {
+      info->safety_check_text = CreateSafetyCheckDisplayString(*cws_info);
+    }
+  }
+
   // ControlledInfo.
   bool is_policy_location = Manifest::IsPolicyLocation(extension.location());
   if (is_policy_location) {
@@ -583,11 +596,15 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   bool permissions_increase =
       (disable_reasons & disable_reason::DISABLE_PERMISSIONS_INCREASE) != 0;
   info->disable_reasons.parent_disabled_permissions =
+      supervised_user_service_ &&
       supervised_user_service_->AreExtensionsPermissionsEnabled() &&
       !profile->GetPrefs()->GetBoolean(
           prefs::kSupervisedUserExtensionsMayRequestPermissions) &&
       (custodian_approval_required || permissions_increase);
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  info->disable_reasons.published_in_store_required =
+      (disable_reasons &
+       disable_reason::DISABLE_PUBLISHED_IN_STORE_REQUIRED_BY_POLICY) != 0;
 
   // Error collection.
   bool error_console_enabled =
@@ -766,6 +783,38 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
         base::BindOnce(&ExtensionInfoGenerator::OnImageLoaded,
                        weak_factory_.GetWeakPtr(), std::move(info)));
   }
+}
+
+developer::SafetyCheckStrings
+ExtensionInfoGenerator::CreateSafetyCheckDisplayString(
+    CWSInfoService::CWSInfo& cws_info) {
+  // TODO(crbug.com/1432194): Add panel_page_string logic.
+  developer::SafetyCheckStrings display_strings;
+  std::string detail_page_string;
+  std::string panel_page_string;
+  if (cws_info.is_present) {
+    switch (cws_info.violation_type) {
+      case CWSInfoService::CWSViolationType::kMalware:
+        detail_page_string =
+            l10n_util::GetStringUTF8(IDS_SAFETY_CHECK_EXTENSIONS_MALWARE);
+        break;
+      case CWSInfoService::CWSViolationType::kPolicy:
+        detail_page_string = l10n_util::GetStringUTF8(
+            IDS_SAFETY_CHECK_EXTENSIONS_POLICY_VIOLATION);
+        break;
+      case CWSInfoService::CWSViolationType::kNone:
+      case CWSInfoService::CWSViolationType::kMinorPolicy:
+      case CWSInfoService::CWSViolationType::kUnknown:
+        if (cws_info.unpublished_long_ago) {
+          detail_page_string =
+              l10n_util::GetStringUTF8(IDS_SAFETY_CHECK_EXTENSIONS_UNPUBLISHED);
+        }
+        break;
+    }
+  }
+  display_strings.detail_string = detail_page_string;
+  display_strings.panel_string = panel_page_string;
+  return display_strings;
 }
 
 std::string ExtensionInfoGenerator::GetDefaultIconUrl(const std::string& name) {

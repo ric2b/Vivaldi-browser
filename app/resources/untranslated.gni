@@ -37,7 +37,11 @@ template("vivaldi_extract_untranslated") {
     grit_defines = []
   }
   grit_defines += grit_args
-  foreach(def, chrome_grit_defines + ["is_cfm=false"]) {
+  _additional_defines =  [
+    "is_cfm=false",
+    "use_blink=$use_blink",
+  ]
+  foreach(def, chrome_grit_defines + _additional_defines) {
     grit_defines += ["-D", def]
   }
 

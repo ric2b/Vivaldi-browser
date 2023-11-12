@@ -135,8 +135,9 @@ class EventListener {
   const std::string event_name_;
   const std::string extension_id_;
   const GURL listener_url_;
-  raw_ptr<content::RenderProcessHost> process_ = nullptr;
-  raw_ptr<content::BrowserContext> browser_context_ = nullptr;
+  raw_ptr<content::RenderProcessHost, DanglingUntriaged> process_ = nullptr;
+  raw_ptr<content::BrowserContext, DanglingUntriaged> browser_context_ =
+      nullptr;
 
   const bool is_for_service_worker_ = false;
 
@@ -220,6 +221,11 @@ class EventListenerMap {
   bool HasProcessListener(content::RenderProcessHost* process,
                           int worker_thread_id,
                           const std::string& extension_id) const;
+  // As above, but checks for a specific event.
+  bool HasProcessListenerForEvent(content::RenderProcessHost* process,
+                                  int worker_thread_id,
+                                  const std::string& extension_id,
+                                  const std::string& event_name) const;
 
   // Removes any listeners that |extension_id| has added, both lazy and regular.
   void RemoveListenersForExtension(const std::string& extension_id);

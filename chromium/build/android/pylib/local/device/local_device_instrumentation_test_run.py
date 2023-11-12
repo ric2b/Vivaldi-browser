@@ -41,6 +41,7 @@ from pylib.instrumentation import instrumentation_test_instance
 from pylib.local.device import local_device_environment
 from pylib.local.device import local_device_test_run
 from pylib.output import remote_output_manager
+from pylib.symbols import stack_symbolizer
 from pylib.utils import chrome_proxy_utils
 from pylib.utils import gold_utils
 from pylib.utils import instrumentation_tracing
@@ -95,6 +96,9 @@ EXTRA_UI_CAPTURE_DIR = (
     'org.chromium.base.test.util.Screenshooter.ScreenshotDir')
 
 EXTRA_TRACE_FILE = ('org.chromium.base.test.BaseJUnit4ClassRunner.TraceFile')
+
+_EXTRA_RUN_DISABLED_TEST = (
+    'org.chromium.base.test.util.DisableIfSkipCheck.RunDisabledTest')
 
 _EXTRA_TEST_LIST = (
     'org.chromium.base.test.BaseChromiumAndroidJUnitRunner.TestList')
@@ -215,7 +219,9 @@ class LocalDeviceInstrumentationTestRun(
         self._env.DenylistDevice)
     @trace_event.traced
     def individual_device_set_up(device, host_device_tuples):
-      steps = []
+      # Functions to run concurrerntly when --concurrent-adb is enabled.
+      install_steps = []
+      post_install_steps = []
 
       if self._test_instance.replace_system_package:
         @trace_event.traced
@@ -237,7 +243,7 @@ class LocalDeviceInstrumentationTestRun(
           # pylint: enable=no-member
           self._context_managers[str(dev)].append(system_app_context)
 
-        steps.append(replace_package)
+        install_steps.append(replace_package)
 
       if self._test_instance.system_packages_to_remove:
 
@@ -252,7 +258,7 @@ class LocalDeviceInstrumentationTestRun(
         # This should be at the front in case we're removing the package to make
         # room for another APK installation later on. Since we disallow
         # concurrent adb with this option specified, this should be safe.
-        steps.insert(0, remove_packages)
+        install_steps.insert(0, remove_packages)
 
       def install_helper(apk,
                          modules=None,
@@ -294,11 +300,11 @@ class LocalDeviceInstrumentationTestRun(
 
         return incremental_install_helper_internal
 
-      steps.extend(
+      install_steps.extend(
           install_apex_helper(apex)
           for apex in self._test_instance.additional_apexs)
 
-      steps.extend(
+      install_steps.extend(
           install_helper(apk, instant_app=self._test_instance.IsApkInstant(apk))
           for apk in self._test_instance.additional_apks)
 
@@ -308,13 +314,13 @@ class LocalDeviceInstrumentationTestRun(
           raise Exception('Test APK cannot be installed as an instant '
                           'app if it is incremental')
 
-        steps.append(
+        install_steps.append(
             incremental_install_helper(
                 self._test_instance.test_apk,
                 self._test_instance.test_apk_incremental_install_json,
                 permissions))
       else:
-        steps.append(
+        install_steps.append(
             install_helper(self._test_instance.test_apk,
                            permissions=permissions,
                            instant_app=self._test_instance.test_apk_as_instant))
@@ -349,7 +355,7 @@ class LocalDeviceInstrumentationTestRun(
           # pylint: enable=no-member
           self._context_managers[str(dev)].append(webview_context)
 
-        steps.append(use_webview_provider)
+        install_steps.append(use_webview_provider)
 
       if self._test_instance.use_voice_interaction_service:
 
@@ -365,7 +371,7 @@ class LocalDeviceInstrumentationTestRun(
           self._context_managers[str(device)].append(
               voice_interaction_service_context)
 
-        steps.append(use_voice_interaction_service)
+        post_install_steps.append(use_voice_interaction_service)
 
       # The apk under test needs to be installed last since installing other
       # apks after will unintentionally clear the fake module directory.
@@ -375,13 +381,13 @@ class LocalDeviceInstrumentationTestRun(
             apk_helper.GetPackageName(self._test_instance.apk_under_test))
         permissions = self._test_instance.apk_under_test.GetPermissions()
         if self._test_instance.apk_under_test_incremental_install_json:
-          steps.append(
+          install_steps.append(
               incremental_install_helper(
                   self._test_instance.apk_under_test,
                   self._test_instance.apk_under_test_incremental_install_json,
                   permissions))
         else:
-          steps.append(
+          install_steps.append(
               install_helper(self._test_instance.apk_under_test,
                              self._test_instance.modules,
                              self._test_instance.fake_modules, permissions,
@@ -396,7 +402,7 @@ class LocalDeviceInstrumentationTestRun(
             logging.info('Running custom setup shell command: %s', cmd)
             dev.RunShellCommand(cmd, shell=True, check_return=True)
 
-        steps.append(run_setup_commands)
+        post_install_steps.append(run_setup_commands)
 
       @trace_event.traced
       def set_debug_app(dev):
@@ -478,21 +484,26 @@ class LocalDeviceInstrumentationTestRun(
         valgrind_tools.SetChromeTimeoutScale(
             dev, self._test_instance.timeout_scale)
 
-      steps += [
-          set_debug_app, edit_shared_prefs, approve_app_links, push_test_data,
-          create_flag_changer, set_vega_permissions, DismissCrashDialogs
+      install_steps += [push_test_data, create_flag_changer]
+      post_install_steps += [
+          set_debug_app, edit_shared_prefs, approve_app_links,
+          set_vega_permissions, DismissCrashDialogs
       ]
 
       def bind_crash_handler(step, dev):
         return lambda: crash_handler.RetryOnSystemCrash(step, dev)
 
-      steps = [bind_crash_handler(s, device) for s in steps]
+      install_steps = [bind_crash_handler(s, device) for s in install_steps]
+      post_install_steps = [
+          bind_crash_handler(s, device) for s in post_install_steps
+      ]
 
       try:
         if self._env.concurrent_adb:
-          reraiser_thread.RunAsync(steps)
+          reraiser_thread.RunAsync(install_steps)
+          reraiser_thread.RunAsync(post_install_steps)
         else:
-          for step in steps:
+          for step in install_steps + post_install_steps:
             step()
         if self._test_instance.store_tombstones:
           tombstones.ClearAllTombstones(device)
@@ -719,6 +730,9 @@ class LocalDeviceInstrumentationTestRun(
   #override
   def _RunTest(self, device, test):
     extras = {}
+
+    if self._test_instance.GetRunDisabledFlag():
+      extras[_EXTRA_RUN_DISABLED_TEST] = 'true'
 
     if self._test_instance.is_unit_test:
       extras[_EXTRA_TEST_IS_UNIT] = 'true'
@@ -1230,15 +1244,19 @@ class LocalDeviceInstrumentationTestRun(
     try:
       with self._env.output_manager.ArchivedTempfile(stream_name,
                                                      'logcat') as logcat_file:
-        with logcat_monitor.LogcatMonitor(
-            device.adb,
-            filter_specs=local_device_environment.LOGCAT_FILTERS,
-            output_file=logcat_file.name,
-            transform_func=self._test_instance.MaybeDeobfuscateLines,
-            check_error=False) as logmon:
-          with contextlib_ext.Optional(trace_event.trace(test_name),
-                                       self._env.trace_output):
-            yield logcat_file
+        symbolizer = stack_symbolizer.PassThroughSymbolizerPool(
+            device.product_cpu_abi)
+        with symbolizer:
+          with logcat_monitor.LogcatMonitor(
+              device.adb,
+              filter_specs=local_device_environment.LOGCAT_FILTERS,
+              output_file=logcat_file.name,
+              transform_func=lambda lines: symbolizer.TransformLines(
+                  self._test_instance.MaybeDeobfuscateLines(lines)),
+              check_error=False) as logmon:
+            with contextlib_ext.Optional(trace_event.trace(test_name),
+                                         self._env.trace_output):
+              yield logcat_file
     finally:
       if logmon:
         logmon.Close()

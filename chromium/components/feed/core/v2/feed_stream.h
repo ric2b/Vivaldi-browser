@@ -44,6 +44,7 @@
 #include "components/feed/core/v2/xsurface_datastore.h"
 #include "components/offline_pages/task/task_queue.h"
 #include "components/prefs/pref_member.h"
+#include "components/search_engines/template_url_service.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 class PrefService;
@@ -78,7 +79,6 @@ class FeedStream : public FeedApi,
     virtual bool IsOffline() = 0;
     virtual DisplayMetrics GetDisplayMetrics() = 0;
     virtual std::string GetLanguageTag() = 0;
-    virtual bool IsAutoplayEnabled() = 0;
     virtual TabGroupEnabledState GetTabGroupEnabledState() = 0;
     virtual void ClearAll() = 0;
     virtual AccountInfo GetAccountInfo() = 0;
@@ -100,6 +100,7 @@ class FeedStream : public FeedApi,
              ImageFetcher* image_fetcher,
              FeedStore* feed_store,
              PersistentKeyValueStoreImpl* persistent_key_value_store,
+             TemplateURLService* template_url_service,
              const ChromeInfo& chrome_info);
   ~FeedStream() override;
 
@@ -150,6 +151,7 @@ class FeedStream : public FeedApi,
                          const LoggingParameters& logging_parameters) override;
   bool WasUrlRecentlyNavigatedFromFeed(const GURL& url) override;
   void InvalidateContentCacheFor(StreamKind stream_kind) override;
+  void RecordContentViewed(uint64_t docid) override;
   DebugStreamData GetDebugStreamData() override;
   void ForceRefreshForDebugging(const StreamType& stream_type) override;
   std::string DumpStateForDebugging() override;
@@ -267,11 +269,6 @@ class FeedStream : public FeedApi,
   LaunchResult ShouldMakeFeedQueryRequest(const StreamType& stream_type,
                                           LoadType load_type,
                                           bool consume_quota = true);
-
-  // Returns true if a FeedQuery request made right now should be made without
-  // user credentials.
-  bool ShouldForceSignedOutFeedQueryRequest(
-      const StreamType& stream_type) const;
 
   // Returns the Chrome sign in status
   feedwire::ChromeSignInStatus::SignInStatus GetSignInStatus() const;
@@ -436,6 +433,8 @@ class FeedStream : public FeedApi,
   void CheckDuplicatedContentsOnRefresh();
   void AddViewedContentHashes(const feedstore::Content& content);
 
+  feedwire::DefaultSearchEngine::SearchEngine GetDefaultSearchEngine() const;
+
   // Unowned.
 
   raw_ptr<RefreshTaskScheduler> refresh_task_scheduler_;
@@ -444,9 +443,11 @@ class FeedStream : public FeedApi,
   raw_ptr<PrefService> profile_prefs_;  // May be null.
   raw_ptr<FeedNetwork> feed_network_;
   raw_ptr<ImageFetcher> image_fetcher_;
-  raw_ptr<FeedStore> store_;
-  raw_ptr<PersistentKeyValueStoreImpl> persistent_key_value_store_;
+  raw_ptr<FeedStore, DanglingUntriaged> store_;
+  raw_ptr<PersistentKeyValueStoreImpl, DanglingUntriaged>
+      persistent_key_value_store_;
   raw_ptr<const WireResponseTranslator> wire_response_translator_;
+  raw_ptr<TemplateURLService> template_url_service_;
 
   StreamModel::Context stream_model_context_;
   // For Xsurface datastore data which applies to all `StreamType`s.
@@ -463,7 +464,6 @@ class FeedStream : public FeedApi,
 
   // Mutable state.
   RequestThrottler request_throttler_;
-  base::TimeTicks signed_out_for_you_refreshes_until_;
 
   BooleanPrefMember has_stored_data_;
   BooleanPrefMember snippets_enabled_by_policy_;

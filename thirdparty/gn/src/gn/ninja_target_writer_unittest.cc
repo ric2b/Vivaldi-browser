@@ -32,6 +32,48 @@ class TestingNinjaTargetWriter : public NinjaTargetWriter {
 
 }  // namespace
 
+TEST(NinjaTargetWriter, ResolvedCreatedOnDemand) {
+  TestWithScope setup;
+  Err err;
+
+  // Make a base target that's a hard dep (action).
+  Target base_target(setup.settings(), Label(SourceDir("//foo/"), "base"));
+  base_target.set_output_type(Target::ACTION);
+  base_target.visibility().SetPublic();
+  base_target.SetToolchain(setup.toolchain());
+  base_target.action_values().set_script(SourceFile("//foo/script.py"));
+  ASSERT_TRUE(base_target.OnResolved(&err));
+
+  std::ostringstream stream;
+  TestingNinjaTargetWriter writer(&base_target, setup.toolchain(), stream);
+
+  const auto* resolved_ptr = &writer.resolved();
+  ASSERT_TRUE(resolved_ptr);
+
+  // Same address should be returned on second call.
+  EXPECT_EQ(resolved_ptr, &writer.resolved());
+}
+
+TEST(NinjaTargetWriter, ResolvedSetExplicitly) {
+  TestWithScope setup;
+  Err err;
+
+  // Make a base target that's a hard dep (action).
+  Target base_target(setup.settings(), Label(SourceDir("//foo/"), "base"));
+  base_target.set_output_type(Target::ACTION);
+  base_target.visibility().SetPublic();
+  base_target.SetToolchain(setup.toolchain());
+  base_target.action_values().set_script(SourceFile("//foo/script.py"));
+  ASSERT_TRUE(base_target.OnResolved(&err));
+
+  ResolvedTargetData resolved;
+  std::ostringstream stream;
+  TestingNinjaTargetWriter writer(&base_target, setup.toolchain(), stream);
+  writer.SetResolvedTargetData(&resolved);
+
+  EXPECT_EQ(&resolved, &writer.resolved());
+}
+
 TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
   TestWithScope setup;
   Err err;

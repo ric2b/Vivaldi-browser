@@ -178,7 +178,7 @@ base::Uuid GetPermanentFolderUuidForServerDefinedUniqueTag(
         bookmarks::BookmarkNode::kMobileBookmarksNodeUuid);
   }
   if (server_defined_unique_tag == kTrashBookmarksTag) {
-    return base::GUID::ParseLowercase(
+    return base::Uuid::ParseLowercase(
         bookmarks::BookmarkNode::kVivaldiTrashNodeUuid);
   }
 
@@ -736,7 +736,7 @@ BookmarkModelMerger::FindGuidMatchesOrReassignLocal(
       // as we want to propagate loss of partner status locally.
       if (GetProtoTypeFromBookmarkNode(node) ==
             remote_entity.specifics.bookmark().type()) {
-        base::GUID vivaldi_partner = vivaldi_bookmark_kit::GetPartner(node);
+        base::Uuid vivaldi_partner = vivaldi_bookmark_kit::GetPartner(node);
         if (vivaldi_partner.is_valid())
           goto vivaldi_force_merge;
       }

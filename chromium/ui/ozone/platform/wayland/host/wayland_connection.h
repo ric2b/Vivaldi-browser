@@ -7,6 +7,7 @@
 
 #include <time.h>
 #include <memory>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -40,6 +41,7 @@ namespace ui {
 struct InputDevice;
 class OrgKdeKwinIdle;
 class SurfaceAugmenter;
+struct KeyboardDevice;
 struct TouchscreenDevice;
 class WaylandBufferFactory;
 class WaylandBufferManagerHost;
@@ -338,6 +340,8 @@ class WaylandConnection {
   const gfx::PointF MaybeConvertLocation(const gfx::PointF& location,
                                          const WaylandWindow* window) const;
 
+  void DumpState(std::ostream& out) const;
+
  private:
   friend class WaylandConnectionTestApi;
 
@@ -380,7 +384,7 @@ class WaylandConnection {
   // how to model these input devices.
   void UpdateInputDevices();
   std::vector<InputDevice> CreateMouseDevices() const;
-  std::vector<InputDevice> CreateKeyboardDevices() const;
+  std::vector<KeyboardDevice> CreateKeyboardDevices() const;
   std::vector<TouchscreenDevice> CreateTouchscreenDevices() const;
 
   // Updates cursor related objects in this instance.

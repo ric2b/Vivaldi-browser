@@ -33,7 +33,12 @@
 #include "components/omnibox/browser/bookmark_provider.h"
 #include "components/omnibox/browser/omnibox_log.h"
 #include "components/omnibox/browser/open_tab_provider.h"
+#include "components/optimization_guide/machine_learning_tflite_buildflags.h"
 #include "third_party/omnibox_proto/types.pb.h"
+
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+#include "components/omnibox/browser/autocomplete_scoring_model_service.h"
+#endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 
 class ClipboardProvider;
 class DocumentProvider;
@@ -115,9 +120,9 @@ class AutocompleteController : public AutocompleteProviderListener,
   AutocompleteController& operator=(const AutocompleteController&) = delete;
 
   // UI elements that need to be notified when the results get updated should
-  // be added as an |observer|. So far there is no need for a RemoveObserver
-  // method because all observers outlive the AutocompleteController.
+  // be added as an |observer|.
   void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
 
   // Starts an autocomplete query, which continues until all providers are
   // done or the query is Stop()ed.  It is safe to Start() a new query without
@@ -234,6 +239,7 @@ class AutocompleteController : public AutocompleteProviderListener,
   size_t InjectAdHocMatch(AutocompleteMatch match);
 
  private:
+  friend class AutocompleteControllerTest;
   friend class FakeAutocompleteController;
   friend class AutocompleteProviderTest;
   friend class OmniboxSuggestionButtonRowBrowserTest;
@@ -274,6 +280,8 @@ class AutocompleteController : public AutocompleteProviderListener,
                            PopupInlineAutocompleteAndTemporaryText);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest,
                            EmitSelectedChildrenChangedAccessibilityEvent);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxEditModelPopupTest,
+                           OpenActionSelectionLogsOmniboxEvent);
 
   // Helpers called by the constructor. These initialize the specified providers
   // and add them `providers_`. Split into 2 methods to avoid accidentally
@@ -307,6 +315,9 @@ class AutocompleteController : public AutocompleteProviderListener,
       const std::u16string& last_default_associated_keyword,
       bool force_notify_default_match_changed,
       absl::optional<AutocompleteMatch> default_match_to_preserve);
+
+  // Attaches actions to matches: pedals, history clusters, tab switch, etc.
+  void AttachActions();
 
   // Updates `result` to populate each match's `associated_keyword` if that
   // match can show a keyword hint. `result` should be sorted by relevance
@@ -349,11 +360,6 @@ class AutocompleteController : public AutocompleteProviderListener,
   // triggered by a user's idleness, i.e., not an explicit user action.
   void StopHelper(bool clear_result, bool due_to_user_inactivity);
 
-  // Helper for UpdateKeywordDescriptions(). Returns whether curbing the keyword
-  // descriptions is enabled, and whether there is enough input to guarantee
-  // that the Omnibox is in keyword mode.
-  bool ShouldCurbKeywordDescriptions(const std::u16string& keyword);
-
   // MemoryDumpProvider:
   bool OnMemoryDump(
       const base::trace_event::MemoryDumpArgs& args,
@@ -365,28 +371,40 @@ class AutocompleteController : public AutocompleteProviderListener,
   // only runs on Lacros and the @tabs scope.
   bool ShouldRunProvider(AutocompleteProvider* provider) const;
 
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
   // Runs the async scoring model for all the eligible matches in
-  // `results_.matches_` and bypasses the ineligible matches. Passes
-  // `completion_callback` to `OnUrlScoringModelDone()` callback which is called
-  // once the model is done for all the eligible matches, whether successfully
-  // or not, and all the ineligible matches are bypassed.
+  // `results_.matches_`. Passes `completion_callback` to
+  // `OnUrlScoringModelDone()` callback which is called once the model is done
+  // for all the eligible matches, whether successfully or not.
   void RunUrlScoringModel(base::OnceClosure completion_callback);
+
+  // Runs the async batch scoring for all the eligible matches in
+  // `results_.matches_`. Passes `completion_callback` to
+  // `OnUrlScoringModelDone()` callback which is called once the model is done
+  // for all the eligible matches, whether successfully or not.
+  void RunBatchUrlScoringModel(base::OnceClosure completion_callback);
+
+  // Called when the async scoring model is done running for all the eligible
+  // matches in `results_.matches_`. Redistributes the existing relevance scores
+  // to the matches based on the model prediction scores (i.e. highest relevance
+  // score is given to the match with the highest prediction score, and vice
+  // versa), and calls `completion_callback`.
+  void OnUrlScoringModelDone(
+      const base::ElapsedTimer elapsed_timer,
+      base::OnceClosure completion_callback,
+      std::vector<AutocompleteScoringModelService::Result> results);
+#endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 
   // Tries to cancel any pending requests to the scoring model and prevents
   // `OnUrlScoringModelDone()` and its completion callback from being called.
   void CancelUrlScoringModel();
 
-  // Called when the async scoring model is done running for all the eligible
-  // matches in `results_.matches_` and all the ineligible matches are bypassed.
-  // Redistributes the existing relevance scores to the matches based on the
-  // model output (i.e. highest relevance now belongs to the match with the
-  // highest output value, and vice versa), re-sorts and trims the matches, and
-  // calls `completion_callback`.
-  void OnUrlScoringModelDone(
-      const base::ElapsedTimer elapsed_timer,
-      base::OnceClosure completion_callback,
-      std::vector<std::tuple<absl::optional<float>, size_t, GURL>>
-          outputs_and_match_info);
+  // Constructs a destination URL from supplied search terms args.
+  // TODO(1418077): look for a way to dissolve this function into direct
+  // application where it's needed.
+  GURL ComputeURLFromSearchTermsArgs(
+      TemplateURL* template_url,
+      const TemplateURLRef::SearchTermsArgs& args) const;
 
   base::ObserverList<Observer> observers_;
 

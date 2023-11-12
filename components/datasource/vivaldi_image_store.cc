@@ -447,7 +447,7 @@ void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmaks(
   std::string id;
   UsedIds used_ids;
 
-  std::vector<std::pair<base::GUID, std::string>>
+  std::vector<std::pair<base::Uuid, std::string>>
       bookmark_thumbnail_ids_to_migrate;
 
   // Find all data url ids in bookmarks.
@@ -550,7 +550,7 @@ void VivaldiImageStore::RemoveUnusedUrlDataOnFileThread(UsedIds used_ids) {
 }
 
 void VivaldiImageStore::MigrateCustomBookmarkThumbnailsOnFileThread(
-    std::vector<std::pair<base::GUID, std::string>> ids_to_migrate) {
+    std::vector<std::pair<base::Uuid, std::string>> ids_to_migrate) {
   for (auto& id_to_migrate : ids_to_migrate) {
     auto node = path_id_map_.extract(id_to_migrate.second);
     if (!node)
@@ -569,18 +569,18 @@ void VivaldiImageStore::MigrateCustomBookmarkThumbnailsOnFileThread(
 }
 
 void VivaldiImageStore::FinishCustomBookmarkThumbnailMigrationOnUIThread(
-    base::GUID bookmark_guid,
+  base::Uuid bookmark_uuid,
     std::vector<uint8_t> content) {
   auto* bookmarks_model = GetBookmarkModel();
   const bookmarks::BookmarkNode* bookmark =
-      bookmarks::GetBookmarkNodeByUuid(bookmarks_model, bookmark_guid);
+      bookmarks::GetBookmarkNodeByUuid(bookmarks_model, bookmark_uuid);
 
   if (!bookmark)
     return;
 
   std::string checksum =
       SyncedFileStoreFactory::GetForBrowserContext(profile_)->SetLocalFile(
-          bookmark_guid, syncer::BOOKMARKS, std::move(content));
+          bookmark_uuid, syncer::BOOKMARKS, std::move(content));
   vivaldi_bookmark_kit::SetBookmarkThumbnail(
       bookmarks_model, bookmark->id(),
       vivaldi_data_url_utils::MakeUrl(
@@ -753,7 +753,7 @@ VivaldiImageStore::GetDataForIdOnFileThread(UrlKind url_kind, std::string id) {
 }
 
 // static
-void VivaldiImageStore::CaptureBookmarkThumbnail(
+vivaldi::ThumbnailCaptureContents* VivaldiImageStore::CaptureBookmarkThumbnail(
     content::BrowserContext* browser_context,
     int64_t bookmark_id,
     const GURL& url,
@@ -762,11 +762,11 @@ void VivaldiImageStore::CaptureBookmarkThumbnail(
   DCHECK(api);
   if (!api) {
     std::move(ui_thread_callback).Run(std::string());
-    return;
+    return nullptr;
   }
   ImagePlace place;
   place.SetBookmarkId(bookmark_id);
-  ::vivaldi::ThumbnailCaptureContents::Capture(
+  return ::vivaldi::ThumbnailCaptureContents::Capture(
       browser_context, url,
       gfx::Size(kOffscreenWindowWidth, kOffscreenWindowHeight),
       gfx::Size(kBookmarkThumbnailWidth, kBookmarkThumbnailHeight),

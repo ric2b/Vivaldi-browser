@@ -7,6 +7,7 @@
 #include "base/supports_user_data.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "renderer/blink/vivaldi_spatial_navigation_controller.h"
 #include "renderer/blink/vivaldi_spatnav_quad.h"
 #include "third_party/blink/public/web/web_element.h"
 
@@ -35,7 +36,6 @@ class VivaldiFrameServiceImpl : public vivaldi::mojom::VivaldiFrameService,
   void AccessKeyAction(const std::string& access_key) override;
   void ScrollPage(vivaldi::mojom::ScrollType scroll_type,
                   int scroll_amount) override;
-  void GetCurrentSpatnavRect(GetCurrentSpatnavRectCallback callback) override;
   void MoveSpatnavRect(vivaldi::mojom::SpatnavDirection dir,
                        MoveSpatnavRectCallback callback) override;
   void GetFocusedElementInfo(GetFocusedElementInfoCallback callback) override;
@@ -56,16 +56,14 @@ class VivaldiFrameServiceImpl : public vivaldi::mojom::VivaldiFrameService,
 
  private:
   blink::Document* GetDocument();
-  void GetScrollCoordinates(int& x, int& y);
+  void HideSpatnavIndicator();
   bool UpdateSpatnavQuads();
   QuadPtr NextQuadInDirection(
       vivaldi::mojom::SpatnavDirection direction);
   vivaldi::mojom::ScrollType ScrollTypeFromSpatnavDir(
       vivaldi::mojom::SpatnavDirection);
 
-  std::vector<blink::WebElement> spatnav_elements_;
-  std::vector<QuadPtr> spatnav_quads_;
-  QuadPtr current_quad_;
+  std::unique_ptr<VivaldiSpatialNavigationController> spatnav_controller_;
 
   void BindService(
       mojo::PendingAssociatedReceiver<vivaldi::mojom::VivaldiFrameService>

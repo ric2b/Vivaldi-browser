@@ -159,6 +159,7 @@
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/scroll/scroll_into_view_util.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
+#include "third_party/blink/renderer/core/speculation_rules/document_speculation_rules.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
@@ -461,7 +462,8 @@ WebView* WebView::Create(
         page_handle,
     scheduler::WebAgentGroupScheduler& agent_group_scheduler,
     const SessionStorageNamespaceId& session_storage_namespace_id,
-    absl::optional<SkColor> page_base_background_color) {
+    absl::optional<SkColor> page_base_background_color,
+    const BrowsingContextGroupInfo& browsing_context_group_info) {
   return WebViewImpl::Create(
       client,
       is_hidden ? mojom::blink::PageVisibilityState::kHidden
@@ -469,7 +471,7 @@ WebView* WebView::Create(
       is_prerendering, is_inside_portal, fenced_frame_mode, compositing_enabled,
       widgets_never_composited, To<WebViewImpl>(opener), std::move(page_handle),
       agent_group_scheduler, session_storage_namespace_id,
-      std::move(page_base_background_color));
+      std::move(page_base_background_color), browsing_context_group_info);
 }
 
 WebViewImpl* WebViewImpl::Create(
@@ -485,14 +487,16 @@ WebViewImpl* WebViewImpl::Create(
     mojo::PendingAssociatedReceiver<mojom::blink::PageBroadcast> page_handle,
     blink::scheduler::WebAgentGroupScheduler& agent_group_scheduler,
     const SessionStorageNamespaceId& session_storage_namespace_id,
-    absl::optional<SkColor> page_base_background_color) {
+    absl::optional<SkColor> page_base_background_color,
+    const BrowsingContextGroupInfo& browsing_context_group_info) {
   // Take a self-reference for WebViewImpl that is released by calling Close(),
   // then return a raw pointer to the caller.
   auto web_view = base::AdoptRef(new WebViewImpl(
       client, visibility, is_prerendering, is_inside_portal, fenced_frame_mode,
       compositing_enabled, widgets_never_composited, opener,
       std::move(page_handle), agent_group_scheduler,
-      session_storage_namespace_id, std::move(page_base_background_color)));
+      session_storage_namespace_id, std::move(page_base_background_color),
+      browsing_context_group_info));
   web_view->AddRef();
   return web_view.get();
 }
@@ -561,7 +565,8 @@ WebViewImpl::WebViewImpl(
     mojo::PendingAssociatedReceiver<mojom::blink::PageBroadcast> page_handle,
     blink::scheduler::WebAgentGroupScheduler& agent_group_scheduler,
     const SessionStorageNamespaceId& session_storage_namespace_id,
-    absl::optional<SkColor> page_base_background_color)
+    absl::optional<SkColor> page_base_background_color,
+    const BrowsingContextGroupInfo& browsing_context_group_info)
     : widgets_never_composited_(widgets_never_composited),
       web_view_client_(client),
       chrome_client_(MakeGarbageCollected<ChromeClientImpl>(this)),
@@ -589,7 +594,8 @@ WebViewImpl::WebViewImpl(
     DCHECK(!does_composite_);
   page_ = Page::CreateOrdinary(*chrome_client_,
                                opener ? opener->GetPage() : nullptr,
-                               agent_group_scheduler.GetAgentGroupScheduler());
+                               agent_group_scheduler.GetAgentGroupScheduler(),
+                               browsing_context_group_info);
   CoreInitializer::GetInstance().ProvideModulesToPage(
       *page_, session_storage_namespace_id_);
 
@@ -1751,72 +1757,6 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   settings->SetPreferredColorScheme(prefs.preferred_color_scheme);
   settings->SetPreferredContrast(prefs.preferred_contrast);
 
-  for (const auto& ect_distance_pair :
-       prefs.lazy_frame_loading_distance_thresholds_px) {
-    switch (ect_distance_pair.first) {
-      case EffectiveConnectionType::kEffectiveConnectionUnknownType:
-        settings->SetLazyFrameLoadingDistanceThresholdPxUnknown(
-            ect_distance_pair.second);
-        continue;
-      case EffectiveConnectionType::kEffectiveConnectionOfflineType:
-        settings->SetLazyFrameLoadingDistanceThresholdPxOffline(
-            ect_distance_pair.second);
-        continue;
-      case EffectiveConnectionType::kEffectiveConnectionSlow2GType:
-        settings->SetLazyFrameLoadingDistanceThresholdPxSlow2G(
-            ect_distance_pair.second);
-        continue;
-      case EffectiveConnectionType::kEffectiveConnection2GType:
-        settings->SetLazyFrameLoadingDistanceThresholdPx2G(
-            ect_distance_pair.second);
-        continue;
-      case EffectiveConnectionType::kEffectiveConnection3GType:
-        settings->SetLazyFrameLoadingDistanceThresholdPx3G(
-            ect_distance_pair.second);
-        continue;
-      case EffectiveConnectionType::kEffectiveConnection4GType:
-        settings->SetLazyFrameLoadingDistanceThresholdPx4G(
-            ect_distance_pair.second);
-        continue;
-      case EffectiveConnectionType::kEffectiveConnectionTypeLast:
-        continue;
-    }
-    NOTREACHED();
-  }
-
-  for (const auto& ect_distance_pair :
-       prefs.lazy_image_loading_distance_thresholds_px) {
-    switch (ect_distance_pair.first) {
-      case EffectiveConnectionType::kEffectiveConnectionUnknownType:
-        settings->SetLazyImageLoadingDistanceThresholdPxUnknown(
-            ect_distance_pair.second);
-        continue;
-      case EffectiveConnectionType::kEffectiveConnectionOfflineType:
-        settings->SetLazyImageLoadingDistanceThresholdPxOffline(
-            ect_distance_pair.second);
-        continue;
-      case EffectiveConnectionType::kEffectiveConnectionSlow2GType:
-        settings->SetLazyImageLoadingDistanceThresholdPxSlow2G(
-            ect_distance_pair.second);
-        continue;
-      case EffectiveConnectionType::kEffectiveConnection2GType:
-        settings->SetLazyImageLoadingDistanceThresholdPx2G(
-            ect_distance_pair.second);
-        continue;
-      case EffectiveConnectionType::kEffectiveConnection3GType:
-        settings->SetLazyImageLoadingDistanceThresholdPx3G(
-            ect_distance_pair.second);
-        continue;
-      case EffectiveConnectionType::kEffectiveConnection4GType:
-        settings->SetLazyImageLoadingDistanceThresholdPx4G(
-            ect_distance_pair.second);
-        continue;
-      case EffectiveConnectionType::kEffectiveConnectionTypeLast:
-        continue;
-    }
-    NOTREACHED();
-  }
-
   settings->SetTouchDragDropEnabled(prefs.touch_drag_drop_enabled);
   settings->SetTouchDragEndContextMenu(prefs.touch_dragend_context_menu);
   settings->SetWebXRImmersiveArAllowed(prefs.webxr_immersive_ar_allowed);
@@ -2531,7 +2471,7 @@ void WebViewImpl::SetPageLifecycleStateInternal(
       auto* local_frame = DynamicTo<LocalFrame>(frame);
       if (local_frame && local_frame->View()) {
         DCHECK(local_frame->DomWindow());
-        local_frame->DomWindow()->IncrementNavigationId();
+        local_frame->DomWindow()->GenerateNewNavigationId();
       }
     }
 
@@ -2543,6 +2483,17 @@ void WebViewImpl::SetPageLifecycleStateInternal(
     if (MainFrame()->IsWebLocalFrame()) {
       LocalFrame* local_frame = To<LocalFrame>(page->MainFrame());
       probe::DidRestoreFromBackForwardCache(local_frame);
+
+      if (base::FeatureList::IsEnabled(
+              blink::features::kRetriggerPreloadingOnBFCacheRestoration)) {
+        if (local_frame->IsOutermostMainFrame()) {
+          Document* document = local_frame->GetDocument();
+          if (auto* document_rules =
+                  DocumentSpeculationRules::FromIfExists(*document)) {
+            document_rules->DocumentRestoredFromBFCache();
+          }
+        }
+      }
     }
   }
 
@@ -2953,9 +2904,8 @@ gfx::Size WebViewImpl::ContentsPreferredMinimumSize() {
 
   // Needed for computing MinPreferredWidth.
   FontCachePurgePreventer fontCachePurgePreventer;
-  int width_scaled = document->GetLayoutView()
-                         ->PreferredLogicalWidths()
-                         .min_size.Round();  // Already accounts for zoom.
+  // Already accounts for zoom.
+  int width_scaled = document->GetLayoutView()->ComputeMinimumWidth().Round();
   int height_scaled =
       document->documentElement()->GetLayoutBox()->ScrollHeight().Round();
   return gfx::Size(width_scaled, height_scaled);
@@ -3364,6 +3314,8 @@ void WebViewImpl::ActivatePrerenderedPage(
     mojom::blink::PrerenderPageActivationParamsPtr
         prerender_page_activation_params,
     ActivatePrerenderedPageCallback callback) {
+  TRACE_EVENT0("navigation", "WebViewImpl::ActivatePrerenderedPage");
+
   // From here all new documents will have prerendering false.
   GetPage()->SetIsPrerendering(false);
 
@@ -4007,6 +3959,14 @@ void WebViewImpl::CreateRemoteMainFrame(
 
 scheduler::WebAgentGroupScheduler& WebViewImpl::GetWebAgentGroupScheduler() {
   return web_agent_group_scheduler_;
+}
+
+void WebViewImpl::UpdatePageBrowsingContextGroup(
+    const BrowsingContextGroupInfo& browsing_context_group_info) {
+  Page* page = GetPage();
+  CHECK(page);
+
+  page->UpdateBrowsingContextGroup(browsing_context_group_info);
 }
 
 }  // namespace blink

@@ -5,7 +5,7 @@
 // clang-format off
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
-import {AppProtocolEntry, ChooserType, ContentSetting, ContentSettingsTypes, HandlerEntry, NotificationPermission, FileSystemGrantsForOrigin, ProtocolEntry, RawChooserException, RawSiteException, RecentSitePermissions, SiteGroup, SiteSettingSource, SiteSettingsPrefsBrowserProxy, ZoomLevelEntry} from 'chrome://settings/lazy_load.js';
+import {AppProtocolEntry, ChooserType, ContentSetting, ContentSettingsTypes, HandlerEntry, FileSystemGrantsForOrigin, ProtocolEntry, RawChooserException, RawSiteException, RecentSitePermissions, SiteGroup, SiteSettingSource, SiteSettingsPrefsBrowserProxy, ZoomLevelEntry} from 'chrome://settings/lazy_load.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
 import {createOriginInfo, createSiteGroup,createSiteSettingsPrefs, getContentSettingsTypeFromChooserType, SiteSettingsPref} from './test_util.js';
@@ -30,7 +30,6 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
   private isPatternValidForType_: boolean = true;
   private cookieSettingDesciption_: string = '';
   private recentSitePermissions_: RecentSitePermissions[] = [];
-  private reviewNotificationList_: NotificationPermission[] = [];
   private fileSystemGrantsList_: FileSystemGrantsForOrigin[] = [];
 
   constructor() {
@@ -62,23 +61,18 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
       'setProtocolDefault',
       'setProtocolHandlerDefault',
       'updateIncognitoStatus',
-      'clearEtldPlus1DataAndCookies',
+      'clearSiteGroupDataAndCookies',
       'clearUnpartitionedOriginDataAndCookies',
       'clearPartitionedOriginDataAndCookies',
       'recordAction',
       'getCookieSettingDescription',
       'getRecentSitePermissions',
-      'getNotificationPermissionReview',
-      'blockNotificationPermissionForOrigins',
-      'ignoreNotificationPermissionForOrigins',
-      'resetNotificationPermissionForOrigins',
-      'allowNotificationPermissionForOrigins',
-      'undoIgnoreNotificationPermissionForOrigins',
       'getFpsMembershipLabel',
       'getNumCookiesString',
       'getExtensionName',
       'getFileSystemGrants',
       'revokeFileSystemGrant',
+      'revokeFileSystemGrants',
     ]);
 
 
@@ -296,7 +290,8 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
         const originInfo = createOriginInfo(origin, {usage: mockUsage});
         existing.origins.push(originInfo);
       } else {
-        const entry = createSiteGroup(etldPlus1Name, [origin], mockUsage);
+        const entry =
+            createSiteGroup(etldPlus1Name, etldPlus1Name, [origin], mockUsage);
         result.push(entry);
       }
     });
@@ -559,8 +554,8 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
   }
 
   /** @override */
-  clearEtldPlus1DataAndCookies() {
-    this.methodCalled('clearEtldPlus1DataAndCookies');
+  clearSiteGroupDataAndCookies() {
+    this.methodCalled('clearSiteGroupDataAndCookies');
   }
 
   /** @override */
@@ -569,9 +564,9 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
   }
 
   /** @override */
-  clearPartitionedOriginDataAndCookies(origin: string, etldPlus1: string) {
+  clearPartitionedOriginDataAndCookies(origin: string, groupingKey: string) {
     this.methodCalled(
-        'clearPartitionedOriginDataAndCookies', [origin, etldPlus1]);
+        'clearPartitionedOriginDataAndCookies', [origin, groupingKey]);
   }
 
   /** @override */
@@ -610,36 +605,6 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
     this.methodCalled('setProtocolHandlerDefault', value);
   }
 
-  getNotificationPermissionReview(): Promise<NotificationPermission[]> {
-    this.methodCalled('getNotificationPermissionReview');
-    return Promise.resolve(this.reviewNotificationList_.slice());
-  }
-
-  setNotificationPermissionReview(reviewNotificationList:
-                                      NotificationPermission[]) {
-    this.reviewNotificationList_ = reviewNotificationList;
-  }
-
-  blockNotificationPermissionForOrigins(origins: string[]): void {
-    this.methodCalled('blockNotificationPermissionForOrigins', origins);
-  }
-
-  ignoreNotificationPermissionForOrigins(origins: string[]): void {
-    this.methodCalled('ignoreNotificationPermissionForOrigins', origins);
-  }
-
-  resetNotificationPermissionForOrigins(origins: string[]): void {
-    this.methodCalled('resetNotificationPermissionForOrigins', origins);
-  }
-
-  allowNotificationPermissionForOrigins(origins: string[]): void {
-    this.methodCalled('allowNotificationPermissionForOrigins', origins);
-  }
-
-  undoIgnoreNotificationPermissionForOrigins(origins: string[]): void {
-    this.methodCalled('undoIgnoreNotificationPermissionForOrigins', origins);
-  }
-
   getFpsMembershipLabel(fpsNumMembers: number, fpsOwner: string) {
     this.methodCalled('getFpsMembershipLabel', fpsNumMembers, fpsOwner);
     return Promise.resolve([
@@ -672,5 +637,9 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
 
   revokeFileSystemGrant(origin: string, filePath: string): void {
     this.methodCalled('revokeFileSystemGrant', [origin, filePath]);
+  }
+
+  revokeFileSystemGrants(origin: string): void {
+    this.methodCalled('revokeFileSystemGrants', origin);
   }
 }

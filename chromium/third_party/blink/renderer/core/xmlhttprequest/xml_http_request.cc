@@ -28,7 +28,6 @@
 
 #include "base/auto_reset.h"
 #include "base/feature_list.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "net/base/mime_util.h"
 #include "services/network/public/cpp/header_util.h"
@@ -83,7 +82,6 @@
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
 #include "third_party/blink/renderer/platform/file_metadata.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
-#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/cors/cors.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
@@ -827,10 +825,13 @@ void XMLHttpRequest::send(Document* document, ExceptionState& exception_state) {
   scoped_refptr<EncodedFormData> http_body;
 
   if (AreMethodAndURLValidForSend()) {
-    if (IsA<HTMLDocument>(document))
-      UpdateContentTypeAndCharset("text/html;charset=UTF-8", "UTF-8");
-    else if (IsA<XMLDocument>(document))
-      UpdateContentTypeAndCharset("application/xml;charset=UTF-8", "UTF-8");
+    if (IsA<HTMLDocument>(document)) {
+      UpdateContentTypeAndCharset(AtomicString("text/html;charset=UTF-8"),
+                                  "UTF-8");
+    } else if (IsA<XMLDocument>(document)) {
+      UpdateContentTypeAndCharset(AtomicString("application/xml;charset=UTF-8"),
+                                  "UTF-8");
+    }
 
     String body = CreateMarkup(document);
 
@@ -852,7 +853,8 @@ void XMLHttpRequest::send(const String& body, ExceptionState& exception_state) {
   if (!body.IsNull() && AreMethodAndURLValidForSend()) {
     http_body = EncodedFormData::Create(
         UTF8Encoding().Encode(body, WTF::kNoUnencodables));
-    UpdateContentTypeAndCharset("text/plain;charset=UTF-8", "UTF-8");
+    UpdateContentTypeAndCharset(AtomicString("text/plain;charset=UTF-8"),
+                                "UTF-8");
   }
 
   CreateRequest(std::move(http_body), exception_state);
@@ -927,7 +929,8 @@ void XMLHttpRequest::send(URLSearchParams* body,
   if (AreMethodAndURLValidForSend()) {
     http_body = body->ToEncodedFormData();
     UpdateContentTypeAndCharset(
-        "application/x-www-form-urlencoded;charset=UTF-8", "UTF-8");
+        AtomicString("application/x-www-form-urlencoded;charset=UTF-8"),
+        "UTF-8");
   }
 
   CreateRequest(std::move(http_body), exception_state);
@@ -1171,13 +1174,6 @@ void XMLHttpRequest::CreateRequest(scoped_refptr<EncodedFormData> http_body,
 
   if (!async_) {
     base::TimeDelta blocking_time = base::TimeTicks::Now() - start_time;
-    if (execution_context.IsWindow()) {
-      UMA_HISTOGRAM_MEDIUM_TIMES("XHR.Sync.BlockingTime.MainThread",
-                                 blocking_time);
-    } else {
-      UMA_HISTOGRAM_MEDIUM_TIMES("XHR.Sync.BlockingTime.WorkerThread",
-                                 blocking_time);
-    }
 
     probe::DidFinishSyncXHR(&execution_context, blocking_time);
 
@@ -1378,7 +1374,7 @@ void XMLHttpRequest::overrideMimeType(const AtomicString& mime_type,
     return;
   }
 
-  mime_type_override_ = "application/octet-stream";
+  mime_type_override_ = AtomicString("application/octet-stream");
   if (!ParsedContentType(mime_type).IsValid()) {
     return;
   }

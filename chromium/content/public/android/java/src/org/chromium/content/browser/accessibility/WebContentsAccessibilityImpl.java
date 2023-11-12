@@ -82,13 +82,12 @@ import androidx.core.view.accessibility.AccessibilityNodeProviderCompat;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.base.StrictModeContext;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.UserData;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.base.task.AsyncTask;
-import org.chromium.base.task.TaskTraits;
 import org.chromium.build.BuildConfig;
 import org.chromium.content.browser.WindowEventObserver;
 import org.chromium.content.browser.WindowEventObserverManager;
@@ -100,6 +99,7 @@ import org.chromium.content.browser.input.ImeAdapterImpl;
 import org.chromium.content.browser.webcontents.WebContentsImpl;
 import org.chromium.content.browser.webcontents.WebContentsImpl.UserDataFactory;
 import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsAccessibility;
 import org.chromium.ui.accessibility.AccessibilityState;
@@ -317,28 +317,18 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
             @Override
             public void onDisabled() {
                 assert mNativeObj != 0 : "Native code is not initialized, but disable was called.";
-                assert ContentFeatureList.isEnabled(
-                        ContentFeatureList.AUTO_DISABLE_ACCESSIBILITY_V2)
+                assert ContentFeatureMap.isEnabled(ContentFeatureList.AUTO_DISABLE_ACCESSIBILITY_V2)
                     : "Disable was called, but Auto-disable accessibility is not enabled.";
+                TraceEvent.begin(
+                        "WebContentsAccessibilityImpl.AutoDisableAccessibilityHandler.onDisabled");
                 // If the Auto-disable timer has expired, begin disabling the renderer, and clearing
-                // the Java-side caches.
-                // TODO(mschillaci): This will not re-enable for a Blink event. Fix.
-                AsyncTask<Void> autoDisableTask = new AsyncTask<Void>() {
-                    @Override
-                    protected Void doInBackground() {
-                        WebContentsAccessibilityImplJni.get().disableRendererAccessibility(
-                                mNativeObj);
-                        mEventDispatcher.clearQueue();
-                        mNodeInfoCache.clear();
-                        return null;
-                    }
-
-                    @Override
-                    protected void onPostExecute(Void unused) {
-                        mIsCurrentlyAutoDisabled = true;
-                    }
-                };
-                autoDisableTask.executeWithTaskTraits(TaskTraits.BEST_EFFORT);
+                // the Java-side caches. Changing AXModes must be done on the main thread.
+                WebContentsAccessibilityImplJni.get().disableRendererAccessibility(mNativeObj);
+                mEventDispatcher.clearQueue();
+                mNodeInfoCache.clear();
+                mIsCurrentlyAutoDisabled = true;
+                TraceEvent.end(
+                        "WebContentsAccessibilityImpl.AutoDisableAccessibilityHandler.onDisabled");
             }
         });
 
@@ -454,7 +444,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
         if (mView.isAttachedToWindow()) registerLocaleChangeReceiver();
 
         // Define a set of relevant AccessibilityEvents if the OnDemand feature is enabled.
-        if (ContentFeatureList.isEnabled(ContentFeatureList.ON_DEMAND_ACCESSIBILITY_EVENTS)) {
+        if (ContentFeatureMap.isEnabled(ContentFeatureList.ON_DEMAND_ACCESSIBILITY_EVENTS)) {
             Runnable serviceMaskRunnable = () -> {
                 int serviceEventMask = AccessibilityState.getAccessibilityServiceEventTypeMask();
                 mEventDispatcher.updateRelevantEventTypes(
@@ -462,11 +452,6 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
                 mEventDispatcher.setOnDemandEnabled(true);
             };
             mView.post(serviceMaskRunnable);
-        }
-
-        // Start the timer to auto-disable accessibility after a period of no usage.
-        if (ContentFeatureList.isEnabled(ContentFeatureList.AUTO_DISABLE_ACCESSIBILITY_V2)) {
-            mAutoDisableAccessibilityHandler.startDisableTimer();
         }
 
         // Send state values set by embedders to native-side objects.
@@ -492,14 +477,8 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
 
     public boolean isAccessibilityEnabled() {
         return isNativeInitialized()
-                && (mAccessibilityEnabledOverride || mAccessibilityManager.isEnabled());
-    }
-
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    @Override
-    public void setAccessibilityEnabledForTesting() {
-        mAccessibilityEnabledOverride = true;
-        mIsObscuredByAnotherView = false;
+                && (mAccessibilityEnabledOverride || mAccessibilityManager.isEnabled()
+                        || AccessibilityState.isAnyAccessibilityServiceEnabled());
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
@@ -563,7 +542,13 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
     public void onAttachedToWindow() {
         TraceEvent.begin("WebContentsAccessibilityImpl.onAttachedToWindow");
         refreshNativeState();
-        mCaptioningController.startListening();
+
+        // Some devices (e.g. OnePlus) are enforcing a Strict Mode Violation in code outside Chrome,
+        // which can result a crash when the listener starts.
+        try (StrictModeContext ignored = StrictModeContext.allowDiskWrites()) {
+            mCaptioningController.startListening();
+        }
+
         registerLocaleChangeReceiver();
         TraceEvent.end("WebContentsAccessibilityImpl.onAttachedToWindow");
     }
@@ -655,49 +640,35 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
                     mIsImageDescriptionsCandidate && AccessibilityState.isScreenReaderEnabled());
 
             // Update the list of events we dispatch to enabled services.
-            if (ContentFeatureList.isEnabled(ContentFeatureList.ON_DEMAND_ACCESSIBILITY_EVENTS)) {
+            if (ContentFeatureMap.isEnabled(ContentFeatureList.ON_DEMAND_ACCESSIBILITY_EVENTS)) {
                 int serviceEventMask = AccessibilityState.getAccessibilityServiceEventTypeMask();
                 mEventDispatcher.updateRelevantEventTypes(
                         convertMaskToEventTypes(serviceEventMask));
             }
 
-            // If the auto-disable feature has disabled then re-enabled the renderer multiple times
-            // for this instance, cancel the timer and stop further disables. We do this to prevent
-            // churn and multiple tree constructions when a service has appeared to be disabled
-            // multiple times then re-enabled. This may happen from the user toggling the service,
-            // or an inaccurate heuristic disabling accessibility prematurely.
-            //
-            // If no accessibility services are enabled, cancel the timer and disable the
-            // renderer after a short delay.
-            //
-            // When any accessibility service is detected:
-            //   * If any accessibility tool is present, cancel the timer.
-            //   * If no accessibility tools are present, begin auto-disable the timer.
-            if (ContentFeatureList.isEnabled(ContentFeatureList.AUTO_DISABLE_ACCESSIBILITY_V2)) {
+            // If the auto-disable feature is enabled, then we will disable renderer accessibility
+            // and tear down objects when no accessibility services are running. If we have
+            // disabled then re-enabled the renderer multiple times for this instance, then we
+            // will return early and keep accessibility enabled to prevent further churn.
+            if (ContentFeatureMap.isEnabled(ContentFeatureList.AUTO_DISABLE_ACCESSIBILITY_V2)) {
                 if (mAutoDisableUsageCounter >= AUTO_DISABLE_SINGLE_INSTANCE_TOGGLE_LIMIT) {
                     mAutoDisableAccessibilityHandler.cancelDisableTimer();
                     return;
                 }
 
+                // The C++ and Java instances are not fully connected until the root manager has
+                // been connected, which will happen asynchronously. Accessibility cannot be auto
+                // disabled and re-enabled when there is no root manager. See note in
+                // {@link web_contents_accessibility_android.h}.
+                if (!isRootManagerConnected()) return;
+
                 if (!AccessibilityState.isAnyAccessibilityServiceEnabled()) {
                     mAutoDisableAccessibilityHandler.cancelDisableTimer();
                     mAutoDisableAccessibilityHandler.startDisableTimer(
                             NO_ACCESSIBILITY_SERVICES_ENABLED_DELAY_MS);
-                    return;
-                }
-
-                if (AccessibilityState.isAccessibilityToolPresent()) {
-                    mAutoDisableAccessibilityHandler.cancelDisableTimer();
-                } else {
-                    mAutoDisableAccessibilityHandler.startDisableTimer();
                 }
             }
         }
-    }
-
-    private void resetAutoDisableTimer() {
-        if (!ContentFeatureList.isEnabled(ContentFeatureList.AUTO_DISABLE_ACCESSIBILITY_V2)) return;
-        mAutoDisableAccessibilityHandler.resetPendingTimer();
     }
 
     // AccessibilityNodeProvider
@@ -727,10 +698,12 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
         // This must be done before we try to verify/reconnect the root manager, since doing so
         // requires a reference to the webContents.
         if (mIsCurrentlyAutoDisabled) {
+            TraceEvent.begin("WebContentsAccessibilityImpl.reEnableRendererAccessibility");
             WebContentsAccessibilityImplJni.get().reEnableRendererAccessibility(
                     mNativeObj, mDelegate.getWebContents());
             mIsCurrentlyAutoDisabled = false;
             mAutoDisableUsageCounter++;
+            TraceEvent.end("WebContentsAccessibilityImpl.reEnableRendererAccessibility");
         }
 
         if (!isNativeInitialized()) {
@@ -957,8 +930,6 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
 
     @Override
     public boolean performAction(int virtualViewId, int action, Bundle arguments) {
-        resetAutoDisableTimer();
-
         // We don't support any actions on the host view or nodes
         // that are not (any longer) in the tree.
         if (!isAccessibilityEnabled() || shouldPreventNativeEngineUse()
@@ -1779,7 +1750,6 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
             mHistogramRecorder.incrementDispatchedEvents();
             if (mTracker != null) mTracker.addEvent(event);
             try {
-                resetAutoDisableTimer();
                 mView.getParent().requestSendAccessibilityEvent(mView, event);
             } catch (IllegalStateException ignored) {
                 // During boot-up of some content shell tests, events will erroneously be sent even

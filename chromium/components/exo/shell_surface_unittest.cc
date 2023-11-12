@@ -4,6 +4,7 @@
 
 #include "components/exo/shell_surface.h"
 
+#include <sstream>
 #include <vector>
 
 #include "ash/accessibility/accessibility_delegate.h"
@@ -23,6 +24,7 @@
 #include "base/functional/callback.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
+#include "base/test/mock_callback.h"
 #include "components/app_restore/window_properties.h"
 #include "components/exo/buffer.h"
 #include "components/exo/permission.h"
@@ -35,6 +37,7 @@
 #include "components/exo/test/exo_test_helper.h"
 #include "components/exo/test/mock_security_delegate.h"
 #include "components/exo/test/shell_surface_builder.h"
+#include "components/exo/test/test_security_delegate.h"
 #include "components/exo/window_properties.h"
 #include "components/exo/wm_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -56,6 +59,7 @@
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/shadow_controller.h"
 #include "ui/wm/core/shadow_types.h"
+#include "ui/wm/core/window_properties.h"
 #include "ui/wm/core/window_util.h"
 
 namespace exo {
@@ -108,6 +112,7 @@ struct ConfigureData {
   bool is_resizing = false;
   bool is_active = false;
   float raster_scale = 1.0f;
+  size_t count = 0;
 };
 
 uint32_t Configure(ConfigureData* config_data,
@@ -122,6 +127,7 @@ uint32_t Configure(ConfigureData* config_data,
   config_data->is_resizing = resizing;
   config_data->is_active = activated;
   config_data->raster_scale = raster_scale;
+  config_data->count++;
   return 0;
 }
 
@@ -129,6 +135,14 @@ bool IsCaptureWindow(ShellSurface* shell_surface) {
   aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
   return WMHelper::GetInstance()->GetCaptureClient()->GetCaptureWindow() ==
          window;
+}
+
+cc::Region CreateRegion(ShellSurface::ShapeRects shape_rects) {
+  cc::Region shape_region;
+  for (const gfx::Rect& rect : shape_rects) {
+    shape_region.Union(rect);
+  }
+  return shape_region;
 }
 
 }  // namespace
@@ -710,6 +724,101 @@ TEST_F(ShellSurfaceTest, SetStartupId) {
   EXPECT_EQ(nullptr, GetShellStartupId(window));
 }
 
+TEST_F(ShellSurfaceTest, AckRotateFocus) {
+  std::unique_ptr<ShellSurface> surface1 =
+      test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
+
+  uint32_t serial = 0;
+
+  auto dummy_cb = base::BindLambdaForTesting(
+      [&serial](ash::FocusCycler::Direction, bool) { return serial; });
+
+  views::View* v1 = new views::View();
+  v1->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+  surface1->AddChildView(v1);
+  surface1->set_rotate_focus_callback(dummy_cb);
+
+  std::unique_ptr<ShellSurface> surface2 =
+      test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
+  views::View* v2 = new views::View();
+  v2->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+  surface2->AddChildView(v2);
+  surface2->set_rotate_focus_callback(dummy_cb);
+
+  std::unique_ptr<ShellSurface> surface3 =
+      test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
+  views::View* v3 = new views::View();
+  v3->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+  surface3->AddChildView(v3);
+  surface3->set_rotate_focus_callback(dummy_cb);
+
+  ash::Shell::Get()->focus_cycler()->AddWidget(surface1->GetWidget());
+  ash::Shell::Get()->focus_cycler()->AddWidget(surface2->GetWidget());
+  ash::Shell::Get()->focus_cycler()->AddWidget(surface3->GetWidget());
+
+  // We will do most of our testing with surface2 because it is in the middle.
+  // This will allow us to easily test directional logic.
+  ash::Shell::Get()->focus_cycler()->FocusWidget(surface2->GetWidget());
+  ASSERT_TRUE(surface2->GetWidget()->IsActive());
+
+  // Test handled. This should result in no rotation.
+  surface2->RotatePaneFocusFromView(v2, true, false);
+  surface2->AckRotateFocus(serial++, true);
+  ASSERT_TRUE(surface2->GetWidget()->IsActive());
+
+  surface2->RotatePaneFocusFromView(v2, true, false);
+  surface2->AckRotateFocus(serial++, true);
+  ASSERT_TRUE(surface2->GetWidget()->IsActive());
+
+  // Now test unhandled in the forward direction. The next widget should be
+  // focused.
+  surface2->RotatePaneFocusFromView(v2, true, false);
+  surface2->AckRotateFocus(serial++, false);
+  ASSERT_TRUE(surface3->GetWidget()->IsActive());
+
+  // Reset
+  ash::Shell::Get()->focus_cycler()->FocusWidget(surface2->GetWidget());
+  ASSERT_TRUE(surface2->GetWidget()->IsActive());
+
+  // Now test unhandled in the forward direction. The next widget should be
+  // focused.
+  surface2->RotatePaneFocusFromView(v2, false, false);
+  surface2->AckRotateFocus(serial++, false);
+  ASSERT_TRUE(surface1->GetWidget()->IsActive());
+}
+
+TEST_F(ShellSurfaceTest, RotatePaneFocusFromView) {
+  using ::testing::Return;
+
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
+  base::MockRepeatingCallback<uint32_t(ash::FocusCycler::Direction, bool)> cb;
+  shell_surface->set_rotate_focus_callback(cb.Get());
+
+  auto serial = 0;
+
+  EXPECT_CALL(cb, Run(ash::FocusCycler::FORWARD, true))
+      .WillOnce(Return(serial++));
+  auto rotated = shell_surface->RotatePaneFocusFromView(nullptr, true, true);
+  // Async operations always return successful rotation immediately.
+  EXPECT_TRUE(rotated);
+
+  EXPECT_CALL(cb, Run(ash::FocusCycler::BACKWARD, false))
+      .WillOnce(Return(serial++));
+  rotated = shell_surface->RotatePaneFocusFromView(nullptr, false, false);
+  EXPECT_TRUE(rotated);
+}
+
+TEST_F(ShellSurfaceTest, RotatePaneFocusFromView_NoCallback) {
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
+
+  auto rotated = shell_surface->RotatePaneFocusFromView(nullptr, true, true);
+  // No focusable view for the shell surface. This should result in a
+  // non-rotation using the base rotation logic.
+  EXPECT_FALSE(rotated);
+}
+
 TEST_F(ShellSurfaceTest, StartMove) {
   // TODO: Ractor out the shell surface creation.
   gfx::Size buffer_size(64, 64);
@@ -1261,7 +1370,7 @@ TEST_F(ShellSurfaceTest, CycleSnap) {
   EXPECT_EQ(buffer_size,
             shell_surface->GetWidget()->GetWindowBoundsInScreen().size());
 
-  ash::WMEvent event(ash::WM_EVENT_CYCLE_SNAP_PRIMARY);
+  ash::WindowSnapWMEvent event(ash::WM_EVENT_CYCLE_SNAP_PRIMARY);
   aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
 
   // Enter snapped mode.
@@ -2200,9 +2309,14 @@ TEST_F(ShellSurfaceTest, ServerStartResizeComponent) {
 // Make sure that dragging to another display will update the origin to
 // correct value.
 TEST_F(ShellSurfaceTest, UpdateBoundsWhenDraggedToAnotherDisplay) {
+  exo::test::TestSecurityDelegate securityDelegate;
+  securityDelegate.SetCanSetBounds(
+      SecurityDelegate::SetBoundsPolicy::DCHECK_IF_DECORATED);
   UpdateDisplay("800x600, 800x600");
   std::unique_ptr<ShellSurface> shell_surface =
-      test::ShellSurfaceBuilder({64, 64}).BuildShellSurface();
+      test::ShellSurfaceBuilder({64, 64})
+          .SetSecurityDelegate(&securityDelegate)
+          .BuildShellSurface();
   ui::test::EventGenerator* event_generator = GetEventGenerator();
   shell_surface->SetWindowBounds({0, 0, 64, 64});
 
@@ -2792,7 +2906,12 @@ TEST_F(ShellSurfaceTest, DragWithHTCLIENT) {
 }
 
 TEST_F(ShellSurfaceTest, ScreenCoordinates) {
-  auto shell_surface = test::ShellSurfaceBuilder({20, 20}).BuildShellSurface();
+  exo::test::TestSecurityDelegate securityDelegate;
+  securityDelegate.SetCanSetBounds(
+      SecurityDelegate::SetBoundsPolicy::DCHECK_IF_DECORATED);
+  auto shell_surface = test::ShellSurfaceBuilder({20, 20})
+                           .SetSecurityDelegate(&securityDelegate)
+                           .BuildShellSurface();
   ShellSurfaceCallbacks callbacks;
 
   shell_surface->set_configure_callback(base::BindRepeating(
@@ -2897,6 +3016,18 @@ TEST_F(ShellSurfaceTest, SetRestoreInfo) {
                 app_restore::kRestoreWindowIdKey));
 }
 
+TEST_F(ShellSurfaceTest, SetNotPersistable) {
+  auto shell_surface = test::ShellSurfaceBuilder(gfx::Size(20, 30))
+                           .SetNoCommit()
+                           .BuildShellSurface();
+  shell_surface->SetPersistable(/*persistable=*/false);
+  shell_surface->root_surface()->Commit();
+
+  EXPECT_TRUE(shell_surface->GetWidget()->IsVisible());
+  EXPECT_FALSE(shell_surface->GetWidget()->GetNativeWindow()->GetProperty(
+      wm::kPersistableKey));
+}
+
 // Test that restore id is set correctly.
 TEST_F(ShellSurfaceTest, SetRestoreInfoWithWindowIdSource) {
   int32_t restore_session_id = 200;
@@ -2922,9 +3053,14 @@ TEST_F(ShellSurfaceTest, SetRestoreInfoWithWindowIdSource) {
 
 // Surfaces without non-client view should not crash.
 TEST_F(ShellSurfaceTest, NoNonClientViewWithConfigure) {
+  exo::test::TestSecurityDelegate securityDelegate;
+  securityDelegate.SetCanSetBounds(
+      SecurityDelegate::SetBoundsPolicy::DCHECK_IF_DECORATED);
   // Popup windows don't have a non-client view.
-  auto shell_surface =
-      test::ShellSurfaceBuilder({20, 20}).SetAsPopup().BuildShellSurface();
+  auto shell_surface = test::ShellSurfaceBuilder({20, 20})
+                           .SetAsPopup()
+                           .SetSecurityDelegate(&securityDelegate)
+                           .BuildShellSurface();
   ShellSurfaceCallbacks callbacks;
 
   // Having a configure callback leads to a call to GetClientBoundsInScreen().
@@ -2995,7 +3131,8 @@ TEST_F(ShellSurfaceTest, PostWindowChangeCallback) {
   // Make sure we are in a non-snapped state before testing state change.
   ASSERT_FALSE(state->IsSnapped());
 
-  auto snap_event = std::make_unique<ash::WMEvent>(ash::WM_EVENT_SNAP_PRIMARY);
+  auto snap_event =
+      std::make_unique<ash::WindowSnapWMEvent>(ash::WM_EVENT_SNAP_PRIMARY);
 
   // Trigger a snap event, this should cause a configure event.
   state->OnWMEvent(snap_event.get());
@@ -3096,6 +3233,202 @@ TEST_F(ShellSurfaceTest, MoveParentWithoutWidget) {
   // to another root window before widget is created. Make sure that
   // happened.
   EXPECT_NE(root_before, parent_widget->GetNativeWindow()->GetRootWindow());
+}
+
+// Assert SetShape() applies the shape to the host window's layer on commit.
+TEST_F(ShellSurfaceTest, SetShapeAppliedAfterSurfaceCommit) {
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({64, 64}).BuildShellSurface();
+  shell_surface->OnSetServerStartResize();
+  shell_surface->OnSetFrame(SurfaceFrameType::NORMAL);
+  shell_surface->root_surface()->Commit();
+  ASSERT_TRUE(shell_surface->GetWidget());
+
+  // Windows shadows should be applied.
+  EXPECT_NE(wm::kShadowElevationNone,
+            wm::GetShadowElevationConvertDefault(
+                shell_surface->GetWidget()->GetNativeWindow()));
+
+  // Create a window shape from two unique rects.
+  const cc::Region shape_region =
+      CreateRegion({{10, 10, 32, 32}, {20, 20, 32, 32}});
+
+  // Apply the shape to the surface. This should not yet be reflected on the
+  // host window's layer.
+  shell_surface->SetShape(shape_region);
+  const ShellSurfaceBase::ShapeRects* layer_shape_rects =
+      shell_surface->host_window()->layer()->alpha_shape();
+  EXPECT_FALSE(layer_shape_rects);
+
+  // After surface commit the shape should have been applied to the layer.
+  shell_surface->root_surface()->Commit();
+  layer_shape_rects = shell_surface->host_window()->layer()->alpha_shape();
+  EXPECT_TRUE(layer_shape_rects);
+  EXPECT_EQ(shape_region, CreateRegion(*layer_shape_rects));
+
+  // Window shadows should be disabled when window shapes are set.
+  EXPECT_EQ(wm::kShadowElevationNone,
+            wm::GetShadowElevationConvertDefault(
+                shell_surface->GetWidget()->GetNativeWindow()));
+}
+
+// Assert SetShape() updates the host window's layer with the most recent shape
+// when the surface commits.
+TEST_F(ShellSurfaceTest, SetShapeUpdatesAndUnsetsCorrectlyAfterCommit) {
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({64, 64}).BuildShellSurface();
+  shell_surface->OnSetServerStartResize();
+  shell_surface->OnSetFrame(SurfaceFrameType::NORMAL);
+  shell_surface->root_surface()->Commit();
+  ASSERT_TRUE(shell_surface->GetWidget());
+
+  // Create several unique window shapes.
+  const cc::Region shape_region_1 =
+      CreateRegion({{5, 5, 32, 32}, {10, 10, 32, 32}});
+  const cc::Region shape_region_2 =
+      CreateRegion({{15, 15, 32, 32}, {20, 20, 32, 32}});
+  const cc::Region shape_region_3 =
+      CreateRegion({{25, 25, 32, 32}, {30, 40, 32, 32}});
+
+  // Apply two shapes to the surface without committing. Neither should be
+  // applied to the host window's layer.
+  shell_surface->SetShape(shape_region_1);
+  shell_surface->SetShape(shape_region_2);
+  const ShellSurfaceBase::ShapeRects* layer_shape_rects =
+      shell_surface->host_window()->layer()->alpha_shape();
+  EXPECT_FALSE(layer_shape_rects);
+
+  // After surface commit only the most recent shape should have been applied.
+  shell_surface->root_surface()->Commit();
+  layer_shape_rects = shell_surface->host_window()->layer()->alpha_shape();
+  EXPECT_TRUE(layer_shape_rects);
+  EXPECT_EQ(shape_region_2, CreateRegion(*layer_shape_rects));
+
+  // Apply another shape to the surface. The layer shape should not change.
+  shell_surface->SetShape(shape_region_3);
+  layer_shape_rects = shell_surface->host_window()->layer()->alpha_shape();
+  EXPECT_TRUE(layer_shape_rects);
+  EXPECT_EQ(shape_region_2, CreateRegion(*layer_shape_rects));
+
+  // The new shape should have been applied after the surface is committed.
+  shell_surface->root_surface()->Commit();
+  layer_shape_rects = shell_surface->host_window()->layer()->alpha_shape();
+  EXPECT_TRUE(layer_shape_rects);
+  EXPECT_EQ(shape_region_3, CreateRegion(*layer_shape_rects));
+
+  // Setting a null shape should unset the host window's layer shape.
+  shell_surface->SetShape(absl::nullopt);
+  shell_surface->root_surface()->Commit();
+  layer_shape_rects = shell_surface->host_window()->layer()->alpha_shape();
+  EXPECT_FALSE(layer_shape_rects);
+}
+
+TEST_F(ShellSurfaceTest, MaximizedOrFullscreenInitialState) {
+  UpdateDisplay("800x600, 800x600");
+  constexpr gfx::Size kEmptySize{0, 0};
+  // on secondary display.
+  constexpr gfx::Rect kInitialBounds{800, 0, 100, 100};
+  const auto primary_display = GetPrimaryDisplay();
+  const auto secondary_display = GetSecondaryDisplay();
+  for (auto initial_state : {chromeos::WindowStateType::kMaximized,
+                             chromeos::WindowStateType::kFullscreen}) {
+    std::stringstream ss;
+    ss << initial_state;
+    SCOPED_TRACE(ss.str());
+    gfx::Rect primary_bounds =
+        initial_state == chromeos::WindowStateType::kMaximized
+            ? primary_display.work_area()
+            : primary_display.bounds();
+    gfx::Rect secondary_bounds =
+        initial_state == chromeos::WindowStateType::kMaximized
+            ? secondary_display.work_area()
+            : secondary_display.bounds();
+    // While it is possible to start in fullscreen, SessionRestore restores the
+    // originally fullscreen window to maximized, so the fullscreen window won't
+    // have restore bounds.
+    bool verify_restore_bounds =
+        initial_state == chromeos::WindowStateType::kMaximized;
+    {
+      ConfigureData config_data;
+      std::unique_ptr<ShellSurface> shell_surface =
+          test::ShellSurfaceBuilder(kEmptySize)
+              .SetConfigureCallback(base::BindRepeating(
+                  &Configure, base::Unretained(&config_data)))
+              .SetWindowState(initial_state)
+              .BuildShellSurface();
+      EXPECT_EQ(1u, config_data.count);
+      EXPECT_EQ(initial_state, config_data.state_type);
+      EXPECT_EQ(primary_bounds, config_data.suggested_bounds);
+    }
+    {
+      ConfigureData config_data;
+      std::unique_ptr<ShellSurface> shell_surface =
+          test::ShellSurfaceBuilder(kEmptySize)
+              .SetConfigureCallback(base::BindRepeating(
+                  &Configure, base::Unretained(&config_data)))
+              .SetWindowState(initial_state)
+              .SetDisplayId(secondary_display.id())
+              .BuildShellSurface();
+      EXPECT_EQ(1u, config_data.count);
+      EXPECT_EQ(initial_state, config_data.state_type);
+      EXPECT_EQ(secondary_bounds, config_data.suggested_bounds);
+    }
+    {
+      ConfigureData config_data;
+      std::unique_ptr<ShellSurface> shell_surface =
+          test::ShellSurfaceBuilder(kEmptySize)
+              .SetConfigureCallback(base::BindRepeating(
+                  &Configure, base::Unretained(&config_data)))
+              .SetWindowState(initial_state)
+              .SetBounds(kInitialBounds)
+              .BuildShellSurface();
+      EXPECT_EQ(1u, config_data.count);
+      EXPECT_EQ(initial_state, config_data.state_type);
+      EXPECT_EQ(secondary_bounds, config_data.suggested_bounds);
+      EXPECT_EQ(secondary_bounds,
+                shell_surface->GetWidget()->GetWindowBoundsInScreen());
+      if (verify_restore_bounds) {
+        EXPECT_EQ(kInitialBounds,
+                  shell_surface->GetWidget()->GetRestoredBounds());
+      }
+    }
+    {
+      ConfigureData config_data;
+      std::unique_ptr<ShellSurface> shell_surface =
+          test::ShellSurfaceBuilder(kEmptySize)
+              .SetConfigureCallback(base::BindRepeating(
+                  &Configure, base::Unretained(&config_data)))
+              .SetWindowState(initial_state)
+              .SetBounds(kInitialBounds)
+              .BuildShellSurface();
+      EXPECT_EQ(1u, config_data.count);
+      EXPECT_EQ(initial_state, config_data.state_type);
+      EXPECT_EQ(secondary_bounds, config_data.suggested_bounds);
+      if (verify_restore_bounds) {
+        EXPECT_EQ(kInitialBounds,
+                  shell_surface->GetWidget()->GetRestoredBounds());
+      }
+    }
+    {
+      // The display id has higher priority.
+      ConfigureData config_data;
+      std::unique_ptr<ShellSurface> shell_surface =
+          test::ShellSurfaceBuilder(kEmptySize)
+              .SetConfigureCallback(base::BindRepeating(
+                  &Configure, base::Unretained(&config_data)))
+              .SetWindowState(initial_state)
+              .SetBounds(kInitialBounds)
+              .SetDisplayId(primary_display.id())
+              .BuildShellSurface();
+      EXPECT_EQ(1u, config_data.count);
+      EXPECT_EQ(initial_state, config_data.state_type);
+      EXPECT_EQ(primary_bounds, config_data.suggested_bounds);
+      if (verify_restore_bounds) {
+        EXPECT_EQ(kInitialBounds,
+                  shell_surface->GetWidget()->GetRestoredBounds());
+      }
+    }
+  }
 }
 
 }  // namespace exo

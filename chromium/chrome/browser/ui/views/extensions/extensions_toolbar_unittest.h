@@ -109,6 +109,11 @@ class ExtensionsToolbarUnitTest : public TestWithBrowserView {
   extensions::PermissionsManager::UserSiteSetting GetUserSiteSetting(
       const GURL& url);
 
+  // Returns the user's `extension` site access for `url`.
+  extensions::PermissionsManager::UserSiteAccess GetUserSiteAccess(
+      const extensions::Extension& extension,
+      const GURL& url) const;
+
   // Returns a list of the views of the currently pinned extensions, in order
   // from left to right.
   std::vector<ToolbarActionView*> GetPinnedExtensionViews();
@@ -133,7 +138,10 @@ class ExtensionsToolbarUnitTest : public TestWithBrowserView {
   void SetUp() override;
 
  private:
-  raw_ptr<extensions::ExtensionService> extension_service_ = nullptr;
+  raw_ptr<extensions::ExtensionService, DanglingUntriaged> extension_service_ =
+      nullptr;
+  raw_ptr<extensions::PermissionsManager, DanglingUntriaged>
+      permissions_manager_ = nullptr;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSIONS_TOOLBAR_UNITTEST_H_

@@ -185,6 +185,7 @@ EventResult GetEventResult(download::DownloadDangerType danger_type,
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED:
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
+    case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_FAILED:
     case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
     case download::DOWNLOAD_DANGER_TYPE_MAX:
       NOTREACHED();
@@ -648,6 +649,12 @@ void DeepScanningRequest::OnDownloadDestroyed(
   if (download->IsSavePackageDownload()) {
     enterprise_connectors::RunSavePackageScanningCallback(download, false);
   }
+
+  // We can't safely return a verdict for this download because it's already
+  // been destroyed, so reset the callback here. We still need to run
+  // `FinishRequest` to notify the DownloadProtectionService that this deep scan
+  // has finished.
+  callback_.Reset();
 
   FinishRequest(DownloadCheckResult::UNKNOWN);
 }

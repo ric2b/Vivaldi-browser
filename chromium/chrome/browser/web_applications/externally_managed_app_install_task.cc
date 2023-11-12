@@ -49,13 +49,14 @@ ExternallyManagedAppInstallTask::ExternallyManagedAppInstallTask(
     WebAppUiManager* ui_manager,
     WebAppInstallFinalizer* install_finalizer,
     WebAppCommandScheduler* command_scheduler,
+    DataRetrieverFactory data_retriever_factory,
     ExternalInstallOptions install_options)
     : profile_(profile),
       url_loader_(url_loader),
       ui_manager_(ui_manager),
       install_finalizer_(install_finalizer),
       command_scheduler_(command_scheduler),
-      externally_installed_app_prefs_(profile_->GetPrefs()),
+      data_retriever_factory_(std::move(data_retriever_factory)),
       install_options_(std::move(install_options)) {}
 
 ExternallyManagedAppInstallTask::~ExternallyManagedAppInstallTask() = default;
@@ -225,7 +226,7 @@ void ExternallyManagedAppInstallTask::OnPlaceholderUninstalled(
     content::WebContents* web_contents,
     ResultCallback result_callback,
     webapps::UninstallResultCode code) {
-  if (code != webapps::UninstallResultCode::kSuccess) {
+  if (!UninstallSucceeded(code)) {
     LOG(ERROR) << "Failed to uninstall placeholder for: "
                << install_options_.install_url;
     std::move(result_callback)
@@ -239,11 +240,6 @@ void ExternallyManagedAppInstallTask::OnPlaceholderUninstalled(
 void ExternallyManagedAppInstallTask::ContinueWebAppInstall(
     content::WebContents* web_contents,
     ResultCallback result_callback) {
-  if (!data_retriever_factory_) {
-    data_retriever_factory_ = base::BindRepeating(
-        []() { return std::make_unique<WebAppDataRetriever>(); });
-  }
-
   command_scheduler_->InstallExternallyManagedApp(
       install_options_,
       base::BindOnce(
@@ -292,11 +288,6 @@ void ExternallyManagedAppInstallTask::OnWebAppInstalledAndReplaced(
         .Run(ExternallyManagedAppManager::InstallResult(code));
     return;
   }
-
-  externally_installed_app_prefs_.Insert(install_options_.install_url, app_id,
-                                         install_options_.install_source);
-  externally_installed_app_prefs_.SetIsPlaceholder(install_options_.install_url,
-                                                   is_placeholder);
 
   if (offline_install) {
     code = install_options().only_use_app_info_factory

@@ -11,6 +11,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chrome/browser/cart/cart_service.h"
 #include "chrome/browser/cart/cart_service_factory.h"
@@ -56,7 +57,10 @@ const TemplateURLService::Initializer kTemplateURLData[] = {
 
 class HistoryClustersModuleServiceTest : public testing::Test {
  public:
-  HistoryClustersModuleServiceTest() = default;
+  HistoryClustersModuleServiceTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        ntp_features::kNtpHistoryClustersModuleFetchClustersUntilExhausted);
+  }
 
   void SetUp() override {
     testing::Test::SetUp();
@@ -95,7 +99,7 @@ class HistoryClustersModuleServiceTest : public testing::Test {
     std::vector<history::Cluster> clusters;
 
     base::RunLoop run_loop;
-    auto task = service().GetClusters(base::BindOnce(
+    service().GetClusters(base::BindOnce(
         [](base::RunLoop* run_loop, std::vector<history::Cluster>* out_clusters,
            std::vector<history::Cluster> clusters,
            base::flat_map<int64_t, HistoryClustersModuleRankingSignals>
@@ -119,6 +123,7 @@ class HistoryClustersModuleServiceTest : public testing::Test {
   std::unique_ptr<TemplateURLService> template_url_service_;
   std::unique_ptr<HistoryClustersModuleService>
       history_clusters_module_service_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 history::ClusterVisit SampleVisitForURL(
@@ -151,11 +156,22 @@ history::Cluster SampleCluster(int id,
                                    {"fruits", "red fruits", "healthy fruits"}) {
   history::ClusterVisit sample_srp_visit =
       SampleVisitForURL(GURL(kSampleSearchUrl), false);
+  sample_srp_visit.score = 1.0;
   history::ClusterVisit sample_non_srp_visit =
       SampleVisitForURL(GURL(kSampleNonSearchUrl), true, related_searches);
+  sample_non_srp_visit.score = 0.9;
 
   std::vector<history::ClusterVisit> visits;
-  visits.insert(visits.end(), srp_visits, sample_srp_visit);
+  if (srp_visits > 0) {
+    for (size_t i = 0; i < (srp_visits - 1u); i++) {
+      history::ClusterVisit sample_srp_visit_modified = sample_srp_visit;
+      sample_srp_visit.url_for_display =
+          u"https://default-engine.com/search?q=not+top+search";
+      sample_srp_visit.score = 0.3;
+      visits.push_back(sample_srp_visit_modified);
+    }
+    visits.push_back(sample_srp_visit);
+  }
   visits.insert(visits.end(), non_srp_visits, sample_non_srp_visit);
 
   std::string kSampleLabel = "LabelOne";
@@ -176,6 +192,14 @@ history::Cluster SampleCluster(int srp_visits,
   return SampleCluster(1, srp_visits, non_srp_visits, related_searches);
 }
 
+TEST_F(HistoryClustersModuleServiceTest, GetClustersJourneysNotEnabled) {
+  test_history_clusters_service().SetIsJourneysEnabled(
+      /*is_journeys_enabled=*/false);
+
+  std::vector<history::Cluster> clusters = GetClusters();
+  EXPECT_TRUE(clusters.empty());
+}
+
 TEST_F(HistoryClustersModuleServiceTest, GetClusters) {
   base::HistogramTester histogram_tester;
 
@@ -185,7 +209,8 @@ TEST_F(HistoryClustersModuleServiceTest, GetClusters) {
     sample_clusters.push_back(
         SampleCluster(i, /*srp_visits=*/1, /*non_srp_visits=*/2));
   }
-  test_history_clusters_service().SetClustersToReturn(sample_clusters);
+  test_history_clusters_service().SetClustersToReturn(
+      sample_clusters, /*exhausted_all_visits=*/false);
 
   std::vector<history::Cluster> clusters = GetClusters();
   ASSERT_EQ(3u, clusters.size());
@@ -198,6 +223,9 @@ TEST_F(HistoryClustersModuleServiceTest, GetClusters) {
                 base::UTF16ToASCII(cluster.visits[u].url_for_display));
     }
   }
+
+  histogram_tester.ExpectUniqueSample(
+      "NewTabPage.HistoryClusters.ExhaustedEligibleClusters", false, 1);
 
   histogram_tester.ExpectUniqueSample(
       "NewTabPage.HistoryClusters.IneligibleReason", 0, 1);
@@ -213,13 +241,39 @@ TEST_F(HistoryClustersModuleServiceTest, GetClusters) {
       "NewTabPage.HistoryClusters.NumRelatedSearches", 3, 1);
 }
 
+TEST_F(HistoryClustersModuleServiceTest, GetClustersLowScoreOrHiddenOrDone) {
+  base::HistogramTester histogram_tester;
+
+  history::Cluster kSampleCluster =
+      SampleCluster(/*srp_visits=*/3, /*non_srp_visits=*/3);
+  kSampleCluster.visits[0].score = 0.0;
+  kSampleCluster.visits[1].interaction_state =
+      history::ClusterVisit::InteractionState::kDone;
+  kSampleCluster.visits[2].interaction_state =
+      history::ClusterVisit::InteractionState::kHidden;
+  kSampleCluster.visits[3].score = 0.0;
+
+  test_history_clusters_service().SetClustersToReturn({kSampleCluster});
+
+  std::vector<history::Cluster> clusters = GetClusters();
+  ASSERT_TRUE(clusters.empty());
+
+  histogram_tester.ExpectUniqueSample(
+      "NewTabPage.HistoryClusters.IneligibleReason", 4, 1);
+  histogram_tester.ExpectUniqueSample(
+      "NewTabPage.HistoryClusters.HasClusterToShow", false, 1);
+  histogram_tester.ExpectUniqueSample(
+      "NewTabPage.HistoryClusters.NumClusterCandidates", 0, 1);
+}
+
 TEST_F(HistoryClustersModuleServiceTest, ClusterVisitsCulled) {
   base::HistogramTester histogram_tester;
 
   const history::Cluster kSampleCluster =
       SampleCluster(/*srp_visits=*/3, /*non_srp_visits=*/3);
   const std::vector<history::Cluster> kSampleClusters = {kSampleCluster};
-  test_history_clusters_service().SetClustersToReturn(kSampleClusters);
+  test_history_clusters_service().SetClustersToReturn(
+      kSampleClusters, /*exhausted_all_visits=*/true);
 
   std::vector<history::Cluster> clusters = GetClusters();
   ASSERT_EQ(1u, clusters.size());
@@ -234,6 +288,8 @@ TEST_F(HistoryClustersModuleServiceTest, ClusterVisitsCulled) {
               base::UTF16ToASCII(cluster.visits[i].url_for_display));
   }
 
+  histogram_tester.ExpectUniqueSample(
+      "NewTabPage.HistoryClusters.ExhaustedEligibleClusters", true, 1);
   histogram_tester.ExpectUniqueSample(
       "NewTabPage.HistoryClusters.HasClusterToShow", true, 1);
   histogram_tester.ExpectUniqueSample(
@@ -351,9 +407,33 @@ TEST_F(HistoryClustersModuleServiceTest,
 TEST_F(HistoryClustersModuleServiceTest, NoClusters) {
   base::HistogramTester histogram_tester;
 
+  test_history_clusters_service().SetClustersToReturn(
+      {}, /*exhausted_all_visits=*/true);
   std::vector<history::Cluster> clusters = GetClusters();
   ASSERT_TRUE(clusters.empty());
 
+  histogram_tester.ExpectUniqueSample(
+      "NewTabPage.HistoryClusters.IneligibleReason", 1, 1);
+  histogram_tester.ExpectUniqueSample(
+      "NewTabPage.HistoryClusters.HasClusterToShow", false, 1);
+  histogram_tester.ExpectUniqueSample(
+      "NewTabPage.HistoryClusters.NumClusterCandidates", 0, 1);
+}
+
+TEST_F(HistoryClustersModuleServiceTest, NoClustersDoesRefetch) {
+  base::HistogramTester histogram_tester;
+
+  test_history_clusters_service().SetClustersToReturn(
+      {}, /*exhausted_all_visits=*/false);
+  std::vector<history::Cluster> clusters = GetClusters();
+  ASSERT_TRUE(clusters.empty());
+
+  // The first time should return false but the second query is true.
+  histogram_tester.ExpectBucketCount(
+      "NewTabPage.HistoryClusters.ExhaustedEligibleClusters", false, 1);
+  histogram_tester.ExpectBucketCount(
+      "NewTabPage.HistoryClusters.ExhaustedEligibleClusters", true, 1);
+  // The bottom metrics should only record once when it's exhausted.
   histogram_tester.ExpectUniqueSample(
       "NewTabPage.HistoryClusters.IneligibleReason", 1, 1);
   histogram_tester.ExpectUniqueSample(
@@ -436,6 +516,38 @@ TEST_F(HistoryClustersModuleServiceCartTest, CheckClusterHasCart) {
       "NewTabPage.HistoryClusters.HasCartForTopCluster", false, 1);
   histogram_tester.ExpectTotalCount(
       "NewTabPage.HistoryClusters.HasCartForTopCluster", 2);
+}
+
+class HistoryClustersModuleServiceDoesNotRefetchTest
+    : public HistoryClustersModuleServiceTest {
+ public:
+  HistoryClustersModuleServiceDoesNotRefetchTest() {
+    features_.InitAndDisableFeature(
+        ntp_features::kNtpHistoryClustersModuleFetchClustersUntilExhausted);
+  }
+
+ private:
+  base::test::ScopedFeatureList features_;
+};
+
+TEST_F(HistoryClustersModuleServiceDoesNotRefetchTest, NoClustersDoesRefetch) {
+  base::HistogramTester histogram_tester;
+
+  test_history_clusters_service().SetClustersToReturn(
+      {}, /*exhausted_all_visits=*/false);
+  std::vector<history::Cluster> clusters = GetClusters();
+  ASSERT_TRUE(clusters.empty());
+
+  // There should only be one query to the History Clusters service.
+  histogram_tester.ExpectUniqueSample(
+      "NewTabPage.HistoryClusters.ExhaustedEligibleClusters", false, 1);
+  // The bottom metrics should be recorded when we are done fetching.
+  histogram_tester.ExpectUniqueSample(
+      "NewTabPage.HistoryClusters.IneligibleReason", 1, 1);
+  histogram_tester.ExpectUniqueSample(
+      "NewTabPage.HistoryClusters.HasClusterToShow", false, 1);
+  histogram_tester.ExpectUniqueSample(
+      "NewTabPage.HistoryClusters.NumClusterCandidates", 0, 1);
 }
 
 }  // namespace

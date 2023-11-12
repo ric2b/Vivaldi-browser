@@ -12,7 +12,6 @@
 #include "base/base64.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
-#include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
@@ -22,6 +21,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/platform_util.h"
@@ -89,8 +89,8 @@ $hour - Hour in HH format
 $minute - Minute in MM format
 $second - Second in SS format
 $ms - Millisecond in MMM format
-$longid - GUID in standard format
-$shortid - Short GUID, only the last 12 characters
+$longid - UUID in standard format
+$shortid - Short UUID, only the last 12 characters
 $host - Hostname of the active tab, eg. www.vivaldi.com
 
 */
@@ -154,9 +154,9 @@ std::string ConstructCaptureArgument(CaptureFilePatternType type,
     case CaptureFilePatternType::MILLISECOND:
       return base::StringPrintf("%02d", now.millisecond);
     case CaptureFilePatternType::LONGID:
-      return base::GenerateGUID();
+      return base::Uuid::GenerateRandomV4().AsLowercaseString();
     case CaptureFilePatternType::SHORTID: {
-      std::string short_id = base::GenerateGUID();
+      std::string short_id = base::Uuid::GenerateRandomV4().AsLowercaseString();
       short_id.erase(0, short_id.length() - 12);
       return short_id;
     }
@@ -184,7 +184,8 @@ base::FilePath ConstructCaptureFilename(
     const std::string& title,
     const base::FilePath::StringPieceType& extension) {
   if (pattern.empty()) {
-    base_path = base_path.AppendASCII(base::GenerateGUID());
+    base_path = base_path.AppendASCII(
+        base::Uuid::GenerateRandomV4().AsLowercaseString());
   } else {
     // Function might replace in-place
     std::string new_string = pattern;
@@ -532,8 +533,18 @@ void ThumbnailsCaptureTabFunction::SendResult(
 ThumbnailsCaptureBookmarkFunction::ThumbnailsCaptureBookmarkFunction() =
     default;
 
-ThumbnailsCaptureBookmarkFunction::~ThumbnailsCaptureBookmarkFunction() =
-    default;
+ThumbnailsCaptureBookmarkFunction::~ThumbnailsCaptureBookmarkFunction() {
+}
+
+void ThumbnailsCaptureBookmarkFunction::OnProfileWillBeDestroyed(Profile* profile) {
+  content::BrowserContext* browser_context =
+      tcc_->GetWebContents()->GetBrowserContext();
+
+  if (Profile::FromBrowserContext(browser_context) == profile) {
+    tcc_->RespondAndDelete();
+    profile->RemoveObserver(this);
+  }
+}
 
 ExtensionFunction::ResponseAction ThumbnailsCaptureBookmarkFunction::Run() {
   using vivaldi::thumbnails::CaptureBookmark::Params;
@@ -549,9 +560,14 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureBookmarkFunction::Run() {
   }
   url_ = GURL(params->params.url);
 
-  VivaldiImageStore::CaptureBookmarkThumbnail(
+  tcc_ = VivaldiImageStore::CaptureBookmarkThumbnail(
       browser_context(), bookmark_id, url_,
       base::BindOnce(&ThumbnailsCaptureBookmarkFunction::SendResult, this));
+
+  content::BrowserContext* browser_context =
+      tcc_->GetWebContents()->GetBrowserContext();
+
+  Profile::FromBrowserContext(browser_context)->AddObserver(this);
 
   return RespondLater();
 }

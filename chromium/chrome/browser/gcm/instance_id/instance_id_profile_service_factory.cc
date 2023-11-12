@@ -27,19 +27,24 @@ InstanceIDProfileService* InstanceIDProfileServiceFactory::GetForProfile(
 // static
 InstanceIDProfileServiceFactory*
 InstanceIDProfileServiceFactory::GetInstance() {
-  return base::Singleton<InstanceIDProfileServiceFactory>::get();
+  static base::NoDestructor<InstanceIDProfileServiceFactory> instance;
+  return instance.get();
 }
 
 InstanceIDProfileServiceFactory::InstanceIDProfileServiceFactory()
     : ProfileKeyedServiceFactory(
           "InstanceIDProfileService",
-          ProfileSelections::BuildForRegularAndIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {
   // GCM is needed for device ID.
   DependsOn(gcm::GCMProfileServiceFactory::GetInstance());
 }
 
-InstanceIDProfileServiceFactory::~InstanceIDProfileServiceFactory() {
-}
+InstanceIDProfileServiceFactory::~InstanceIDProfileServiceFactory() = default;
 
 KeyedService* InstanceIDProfileServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {

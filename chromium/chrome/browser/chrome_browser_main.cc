@@ -122,9 +122,11 @@
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/embedder_support/origin_trials/component_updater_utils.h"
+#include "components/embedder_support/origin_trials/origin_trials_settings_storage.h"
 #include "components/embedder_support/switches.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/google/core/common/google_util.h"
+#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/language/content/browser/geo_language_provider.h"
 #include "components/language/core/browser/language_usage_metrics.h"
 #include "components/language/core/browser/pref_names.h"
@@ -133,6 +135,7 @@
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "components/metrics/call_stack_profile_params.h"
 #include "components/metrics/clean_exit_beacon.h"
+#include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/metrics/expired_histogram_util.h"
 #include "components/metrics/metrics_reporting_default_state.h"
 #include "components/metrics/metrics_service.h"
@@ -189,11 +192,12 @@
 #include "printing/buildflags/buildflags.h"
 #include "rlz/buildflags/buildflags.h"
 #include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
+#include "third_party/blink/public/common/origin_trials/origin_trials_settings_provider.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/switches.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/color/color_provider_manager.h"
 
 #if BUILDFLAG(ENABLE_COMPONENT_UPDATER)
 #include "chrome/browser/component_updater/registration.h"
@@ -286,6 +290,12 @@
 #include "chrome/browser/profiles/profile_activity_metrics_recorder.h"
 #include "ui/base/pointer/touch_ui_controller.h"
 #endif
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+#include "chrome/browser/headless/headless_mode_metrics.h"  // nogncheck
+#include "chrome/browser/headless/headless_mode_util.h"     // nogncheck
+#include "components/headless/select_file_dialog/headless_select_file_dialog.h"
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
 #include "chrome/browser/chrome_process_singleton.h"
@@ -514,6 +524,27 @@ bool ShouldInstallSodaDuringPostProfileInit(
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
+void DisallowKeyedServiceFactoryRegistration() {
+  // From this point, do not allow KeyedServiceFactories to be registered, all
+  // factories should be registered in the main registration function
+  // `ChromeBrowserMainExtraPartsProfiles::EnsureBrowserContextKeyedServiceFactoriesBuilt()`.
+  BrowserContextDependencyManager::GetInstance()
+      ->DisallowKeyedServiceFactoryRegistration(
+          "ChromeBrowserMainExtraPartsProfiles::"
+          "EnsureBrowserContextKeyedServiceFactoriesBuilt()");
+}
+
+#if !BUILDFLAG(IS_ANDROID)
+void StartWatchingForProcessShutdownHangs() {
+  // This HangWatcher scope is covering the shutdown phase up to the end of the
+  // process. Intentionally leak this instance so that it is not destroyed
+  // before process termination.
+  auto* watcher = new base::WatchHangsInScope(base::Seconds(30));
+  ANNOTATE_LEAKING_OBJECT_PTR(watcher);
+  std::ignore = watcher;
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
+
 }  // namespace
 
 // ChromeBrowserMainParts::ProfileInitManager ----------------------------------
@@ -539,7 +570,7 @@ class ChromeBrowserMainParts::ProfileInitManager
   base::ScopedObservation<ProfileManager, ProfileManagerObserver>
       profile_manager_observer_{this};
   // Raw pointer. This is safe because `ChromeBrowserMainParts` owns `this`.
-  const base::raw_ptr<ChromeBrowserMainParts> browser_main_;
+  const raw_ptr<ChromeBrowserMainParts> browser_main_;
 };
 
 ChromeBrowserMainParts::ProfileInitManager::ProfileInitManager(
@@ -547,21 +578,20 @@ ChromeBrowserMainParts::ProfileInitManager::ProfileInitManager(
     Profile* initial_profile)
     : browser_main_(browser_main) {
   // `initial_profile` is null when the profile picker is shown.
-  if (initial_profile)
+  if (initial_profile) {
     browser_main_->CallPostProfileInit(initial_profile);
+  }
 
-  if (base::FeatureList::IsEnabled(features::kObserverBasedPostProfileInit)) {
-    // Run `CallPostProfileInit()` on the other existing and future profiles.
-    ProfileManager* profile_manager = g_browser_process->profile_manager();
-    // Register the observer first, in case `OnProfileAdded()` causes a
-    // creation.
-    profile_manager_observer_.Observe(profile_manager);
-    for (auto* profile : profile_manager->GetLoadedProfiles()) {
-      DCHECK(profile);
-      if (profile == initial_profile)
-        continue;
-      OnProfileAdded(profile);
+  // Run `CallPostProfileInit()` on the other existing and future profiles.
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  // Register the observer first, in case `OnProfileAdded()` causes a creation.
+  profile_manager_observer_.Observe(profile_manager);
+  for (auto* profile : profile_manager->GetLoadedProfiles()) {
+    DCHECK(profile);
+    if (profile == initial_profile) {
+      continue;
     }
+    OnProfileAdded(profile);
   }
 }
 
@@ -610,6 +640,7 @@ ChromeBrowserMainParts::~ChromeBrowserMainParts() {
 
 void ChromeBrowserMainParts::SetupMetrics() {
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::SetupMetrics");
+  CHECK(metrics::SubprocessMetricsProvider::CreateInstance());
   metrics::MetricsService* metrics = browser_process_->metrics_service();
   metrics->GetSyntheticTrialRegistry()->AddSyntheticTrialObserver(
       variations::VariationsIdsProvider::GetInstance());
@@ -868,8 +899,13 @@ int ChromeBrowserMainParts::OnLocalStateLoaded(
   if (apply_first_run_result != content::RESULT_CODE_NORMAL_EXIT)
     return apply_first_run_result;
 
-  embedder_support::SetupOriginTrialsCommandLine(
-      browser_process_->local_state());
+  embedder_support::OriginTrialsSettingsStorage*
+      origin_trials_settings_storage =
+          browser_process_->GetOriginTrialsSettingsStorage();
+  embedder_support::SetupOriginTrialsCommandLineAndSettings(
+      browser_process_->local_state(), origin_trials_settings_storage);
+  blink::OriginTrialsSettingsProvider::Get()->SetSettings(
+      origin_trials_settings_storage->GetSettings());
 
   metrics::EnableExpiryChecker(chrome_metrics::kExpiredHistogramsHashes,
                                chrome_metrics::kNumExpiredHistograms);
@@ -1175,6 +1211,8 @@ void ChromeBrowserMainParts::PreProfileInit() {
   for (auto& chrome_extra_part : chrome_extra_parts_)
     chrome_extra_part->PreProfileInit();
 
+  DisallowKeyedServiceFactoryRegistration();
+
 #if !BUILDFLAG(IS_ANDROID)
   // Ephemeral profiles may have been left behind if the browser crashed.
   g_browser_process->profile_manager()
@@ -1283,6 +1321,12 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
   language::LanguageUsageMetrics::RecordPageLanguages(
       *UrlLanguageHistogramFactory::GetForBrowserContext(profile));
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  if (headless::IsHeadlessMode()) {
+    headless::ReportHeadlessActionMetrics();
+  }
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 }
 
 void ChromeBrowserMainParts::PreBrowserStart() {
@@ -1377,10 +1421,21 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
         *base::CommandLine::ForCurrentProcess());
   }
 
-  ui::SelectFileDialog::SetFactory(new ChromeSelectFileDialogFactory());
+  ui::SelectFileDialog::SetFactory(
+      std::make_unique<ChromeSelectFileDialogFactory>());
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  ui::SelectFileDialog::SetFactory(new ui::SelectFileDialogLacros::Factory());
+  ui::SelectFileDialog::SetFactory(
+      std::make_unique<ui::SelectFileDialogLacros::Factory>());
 #endif  // BUILDFLAG(IS_WIN)
+
+  // In headless mode provide alternate SelectFileDialog factory overriding
+  // any platform specific SelectFileDialog implementation that may have been
+  // set.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  if (headless::IsHeadlessMode()) {
+    headless::HeadlessSelectFileDialogFactory::SetUp();
+  }
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kMakeDefaultBrowser)) {
@@ -1734,10 +1789,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 
   variations::VariationsService* variations_service =
       browser_process_->variations_service();
-  // Only call PerformPreMainMessageLoopStartup() on VariationsService outside
-  // of integration (browser) tests.
-  if (!is_integration_test())
-    variations_service->PerformPreMainMessageLoopStartup();
+  variations_service->PerformPreMainMessageLoopStartup();
 
 #if BUILDFLAG(IS_ANDROID)
   // The profile picker is never shown on Android.
@@ -1891,14 +1943,15 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
   // disconnects DBus services in its PostDestroyThreads.
   UpgradeDetector::GetInstance()->Shutdown();
 
+  // Start watching hangs up to the end of the process.
+  StartWatchingForProcessShutdownHangs();
+
   // Two different types of hang detection cannot attempt to upload crashes at
-  // the same time or they would interfere with each other.
-  if (base::HangWatcher::IsCrashReportingEnabled()) {
-    // TODO(crbug.com/1327000): Migrate away from ShutdownWatcher and its old
-    // timing.
-    constexpr base::TimeDelta kShutdownHangDelay{base::Seconds(30)};
-    watch_hangs_scope_.emplace(kShutdownHangDelay);
-  } else {
+  // the same time or they would interfere with each other. Do not start the
+  // ShutdownWatcher if the HangWatcher is already collecting crash.
+  // TODO(crbug.com/1327000): Migrate away from ShutdownWatcher and its old
+  // timing.
+  if (!base::HangWatcher::IsCrashReportingEnabled()) {
     // Start watching for jank during shutdown. It gets disarmed when
     // |shutdown_watcher_| object is destructed.
     constexpr base::TimeDelta kShutdownHangDelay{base::Seconds(300)};

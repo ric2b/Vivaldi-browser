@@ -17,6 +17,7 @@ more levels:
   Chrome, nor could a user be easily convinced to perform by a persuasive web page.
 * Requiring profile destruction or browser shutdown will normally reduce
   severity by one level.
+* [MiraclePtr protection](#TOC-MiraclePtr)
 
 Bugs that require implausible interaction, interactions a user would not
 realistically be convinced to perform, will generally be downgraded to a
@@ -94,7 +95,9 @@ Example bugs:
 bugs fall into this category, as they allow script execution in the context of
 an arbitrary origin ([534923](https://crbug.com/534923)).
 * A bug that allows arbitrary code execution within the confines of the sandbox,
-such as renderer, network, or GPU process memory corruption
+such as renderer or network process memory corruption (the GPU process is
+sandboxed only on some platforms, so if the bug impacts all Chromium platforms,
+it should be considered unsandboxed)
 ([570427](https://crbug.com/570427), [468936](https://crbug.com/468936)).
 * Complete control over the apparent origin in the omnibox
 ([76666](https://crbug.com/76666)).
@@ -190,7 +193,7 @@ be security bugs, such as [denial of service](faq.md#TOC-Are-denial-of-service-i
 and, in particular, null pointer dereferences with consistent fixed offsets.
 
 
-## "MiraclePtr" protection against use-after-free
+## "MiraclePtr" protection against use-after-free {#TOC-MiraclePtr}
 
 ["MiraclePtr"](../../base/memory/raw_ptr.md) is a technology designed to
 deterministically prevent exploitation of use-after-free bugs. Address
@@ -210,7 +213,15 @@ The crash occurred while a raw_ptr<T> object containing a dangling pointer was b
 MiraclePtr should make this crash non-exploitable in regular builds.
 ```
 
-For now, ignore these messages while determining severity, because MiraclePtr
-is not yet active on all Chromium platforms. In the future, we'll use this
-protection to reduce the severity of these bugs or even (once we have a lot of
-practical experience) reclassify them as non-security bugs.
+MiraclePtr is now active on all relevant Chromium platforms since main position
+[1136369](https://chromium-review.googlesource.com/c/chromium/src/+/4478673),
+which will be present in Chrome 115.
+
+If a bug impacts only M115 or later and is marked `MiraclePtr Status:
+PROTECTED`, it should be downgraded by one severity level. (For example, a bug
+that would previously be High severity would now be only Medium severity).
+Once M115 has reached Extended Stable, we will apply this rule to all such
+`MiraclePtr Status: PROTECTED` bugs.
+
+Once we have more practical experience across all platforms, we may reclassify
+them as non-security bugs.

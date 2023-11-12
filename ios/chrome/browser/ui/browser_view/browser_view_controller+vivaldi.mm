@@ -8,15 +8,19 @@
 #import <memory>
 #import <objc/runtime.h>
 
+#import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_view_ios.h"
 #import "ios/chrome/grit/ios_strings.h"
-#import "ios/notes/note_interaction_controller.h"
 #import "ios/notes/notes_factory.h"
-#import "ios/web/public/js_messaging/web_frame_util.h"
+#import "ios/ui/notes/note_interaction_controller.h"
+#import "ios/web/common/uikit_ui_util.h"
 #import "ios/web/public/js_messaging/web_frame.h"
+#import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/web_state_impl.h"
@@ -48,36 +52,50 @@ NoteInteractionController* _noteInteractionController;
    [_noteInteractionController showNotes];
 }
 
-- (void)onCopy:(UIMenuController*)sender {
-    void (^javascript_completion)(const base::Value*) =
-        ^(const base::Value* value) {
-            vivaldi::NotesModel* notesModel =
-                vivaldi::NotesModelFactory::GetForBrowserState(
-                      self.browserState
-                );
-            if (notesModel) {
-                const vivaldi::NoteNode* defaultNoteFolder =
-                    notesModel->main_node();
-                if (defaultNoteFolder) {
-                    notesModel->AddNote(defaultNoteFolder,
-                                defaultNoteFolder->children().size(),
-                                base::UTF8ToUTF16(value->GetString()),
-                                GURL(), base::UTF8ToUTF16(value->GetString()));
-                }
-            }
-        };
+- (void)onCopyToNote:(UIMenuController*)sender {
+  UIResponder* firstResponder = GetFirstResponder();
+  vivaldi::NotesModel* notesModel =
+    vivaldi::NotesModelFactory::GetForBrowserState(
+                              self.browserState);
 
-    web::WebFrame* main_frame = web::GetMainFrame([self getCurrentWebState]);
+  if ([firstResponder isKindOfClass:[OmniboxTextFieldIOS class]]) {
+    OmniboxTextFieldIOS* field =
+      base::mac::ObjCCast<OmniboxTextFieldIOS>(firstResponder);
+    NSString* text = [field textInRange:field.selectedTextRange];
+    if (notesModel) {
+      const vivaldi::NoteNode* defaultNoteFolder =
+      notesModel->main_node();
+      if (defaultNoteFolder) {
+        notesModel->AddNote(defaultNoteFolder,
+                     defaultNoteFolder->children().size(),
+                     base::SysNSStringToUTF16(text),
+                     GURL(), base::SysNSStringToUTF16(text));
+      }
+    }
+  } else {
+    void (^javascript_completion)(const base::Value*) =
+    ^(const base::Value* value) {
+      if (notesModel) {
+        const vivaldi::NoteNode* defaultNoteFolder =
+        notesModel->main_node();
+        if (defaultNoteFolder) {
+          notesModel->AddNote(defaultNoteFolder,
+                       defaultNoteFolder->children().size(),
+                       base::UTF8ToUTF16(value->GetString()),
+                       GURL(), base::UTF8ToUTF16(value->GetString()));
+        }
+      }
+    };
+
+    web::WebFrame* main_frame =
+        [self getCurrentWebState]->GetPageWorldWebFramesManager()
+                                ->GetMainWebFrame();
     if (main_frame) {
       main_frame->ExecuteJavaScript(
-        base::SysNSStringToUTF16(@"window.getSelection().toString()"),
-        base::BindOnce(javascript_completion));
+                   base::SysNSStringToUTF16(@"window.getSelection().toString()"),
+                   base::BindOnce(javascript_completion));
     }
-    NSString* text =
-        l10n_util::GetNSString(IDS_VIVALDI_NOTE_SNACKBAR_MESSAGE);
-    MDCSnackbarMessage* message = [MDCSnackbarMessage messageWithText:text];
-    message.accessibilityLabel = text;
-    message.duration = 2.0;
+  }
 }
 
 - (void)dismissNoteController{

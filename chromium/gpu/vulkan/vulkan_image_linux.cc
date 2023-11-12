@@ -46,9 +46,8 @@ bool VulkanImage::InitializeFromGpuMemoryBufferHandle(
   queue_family_index_ = queue_family_index;
   auto& native_pixmap_handle = gmb_handle.native_pixmap_handle;
 
-  // 2 plane images are ok, they just need ycbcr set up.
-  DCHECK_LT(native_pixmap_handle.planes.size(), 3u);
-
+  // XXX This is the memory plane count, not the format plane count.  It does
+  // not give us the information we need.
   if (native_pixmap_handle.planes.size() == 2) {
     ycbcr_info_ = VulkanYCbCrInfo(
         /*image_format=*/format,
@@ -86,7 +85,7 @@ bool VulkanImage::InitializeFromGpuMemoryBufferHandle(
       native_pixmap_handle.planes.size());
   for (size_t i = 0; i < native_pixmap_handle.planes.size(); ++i) {
     planeLayouts[i].offset = native_pixmap_handle.planes[i].offset;
-    planeLayouts[i].size = native_pixmap_handle.planes[i].size;
+    planeLayouts[i].size = 0;
     planeLayouts[i].rowPitch = native_pixmap_handle.planes[i].stride;
     planeLayouts[i].arrayPitch = 0;
     planeLayouts[i].depthPitch = 0;

@@ -15,8 +15,8 @@ import android.os.Build;
 import android.service.notification.StatusBarNotification;
 
 import androidx.annotation.Nullable;
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -133,8 +133,7 @@ public class WebappActionsNotificationTest {
         });
     }
 
-    @Nullable
-    private Notification getWebappNotification() {
+    private @Nullable Notification getWebappNotification() {
         NotificationManager nm =
                 (NotificationManager) mActivityTestRule.getActivity().getSystemService(
                         Context.NOTIFICATION_SERVICE);

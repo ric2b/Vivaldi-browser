@@ -24,6 +24,10 @@ class Painter;
 class Separator;
 }  // namespace views
 
+namespace ui {
+class ImageModel;
+}  // namespace ui
+
 namespace ash {
 class HoverHighlightView;
 class UnfocusableLabel;
@@ -175,7 +179,17 @@ class ASH_EXPORT TrayPopupUtils {
   static void UpdateCheckMarkVisibility(HoverHighlightView* container,
                                         bool visible);
 
+  // Updates the color of the checkable row |container|.
+  static void UpdateCheckMarkColor(HoverHighlightView* container,
+                                   ui::ColorId color_id);
+
+  // Creates the check mark.
+  static ui::ImageModel CreateCheckMark(ui::ColorId color_id);
+
   // Sets the font list for |label| based on |style|.
+  // DEPRECATED: Use `TypographyProvider` in new code. If you need legacy fonts,
+  // use TypographyToken::kLegacy*. This function DCHECKs if used when QsRevamp
+  // and Jelly are both enabled.
   static void SetLabelFontList(views::Label* label, FontStyle style);
 };
 

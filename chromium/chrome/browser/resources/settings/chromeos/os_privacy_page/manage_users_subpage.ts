@@ -11,8 +11,8 @@
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import 'chrome://resources/cr_elements/action_link.css.js';
 import 'chrome://resources/js/action_link.js';
-import '../../controls/settings_toggle_button.js';
-import '../../settings_shared.css.js';
+import '/shared/settings/controls/settings_toggle_button.js';
+import '../settings_shared.css.js';
 import '../os_people_page/user_list.js';
 import '../os_people_page/add_user_dialog.js';
 
@@ -24,9 +24,8 @@ import {castExists} from '../assert_extras.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import {SettingsUsersAddUserDialogElement} from '../os_people_page/add_user_dialog.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route} from '../router.js';
+import {Route, routes} from '../router.js';
 
 import {getTemplate} from './manage_users_subpage.html.js';
 

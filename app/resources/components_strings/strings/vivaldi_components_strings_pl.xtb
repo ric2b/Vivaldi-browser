@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Naciśnij przycisk odświeżenia strony, by ponownie przesłać dane wymagane do jej wczytania.</translation>
 <translation id="3234666976984236645">Zawsze wykrywaj ważną treść na tej stronie</translation>
 <translation id="3308738399950580893">reklamy</translation>
+<translation id="3384522979010096022">Twoja organizacja nie zezwala na wyświetlanie tej strony</translation>
 <translation id="3422472998109090673">Strona <ph name="HOST_NAME" /> jest obecnie nieosiągalna.</translation>
 <translation id="3427092606871434483">Zezwalaj (domyślnie)</translation>
 <translation id="3447661539832366887">Właściciel tego urządzenia wyłączył grę z dinozaurem.</translation>
@@ -193,7 +194,6 @@
 <translation id="8150722005171944719">Nie można odczytać pliku <ph name="URL" />. Być może został usunięty, przeniesiony lub uprawnienia dostępu uniemożliwiają jego odczyt.</translation>
 <translation id="8184538546369750125">Użyj globalnej wartości domyślnej (Zezwalaj)</translation>
 <translation id="8211406090763984747">Połączenie jest bezpieczne</translation>
-<translation id="8225771182978767009">Administrator tego komputera zablokował tę witrynę.</translation>
 <translation id="8241707690549784388">Strona, na której wyszukiwane są wprowadzone przez Ciebie informacje. Powrót do tej strony może spowodować konieczność powtórzenia wykonanych czynności. Czy chcesz kontynuować?</translation>
 <translation id="8241712895048303527">Blokuj na tej stronie</translation>
 <translation id="8286036467436129157">Zaloguj się</translation>
@@ -214,7 +214,6 @@
 <translation id="9062620674789239642">Mógł zostać przeniesiony, edytowany lub usunięty.</translation>
 <translation id="9069693763241529744">Zablokowane przez rozszerzenie</translation>
 <translation id="9073799351042754113">Ostrzeżenia dotyczące zabezpieczeń tej strony zostały wyłączone.</translation>
-<translation id="910924428752220542">Hasła Vivaldi</translation>
 <translation id="9169664750068251925">Zawsze blokuj na tej stronie</translation>
 <translation id="9180553614777056266">Blokowanie reklam</translation>
 <translation id="9183425211371246419">Serwer <ph name="HOST_NAME" /> używa nieobsługiwanego protokołu.</translation>

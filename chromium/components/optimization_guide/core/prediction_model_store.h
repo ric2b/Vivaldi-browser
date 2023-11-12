@@ -102,6 +102,10 @@ class PredictionModelStore {
       const proto::ModelCacheKey& client_model_cache_key,
       const proto::ModelCacheKey& server_model_cache_key);
 
+  // Allows tests to reset the store for subsequent tests since the store is a
+  // singleton.
+  void ResetForTesting();
+
  private:
   friend base::NoDestructor<PredictionModelStore>;
 
@@ -150,8 +154,8 @@ class PredictionModelStore {
 
   // Local state that stores the prefs across all profiles. Not owned and
   // outlives |this|.
-  raw_ptr<PrefService> local_state_ GUARDED_BY_CONTEXT(sequence_checker_) =
-      nullptr;
+  raw_ptr<PrefService, LeakedDanglingUntriaged> local_state_
+      GUARDED_BY_CONTEXT(sequence_checker_) = nullptr;
 
   // The base dir where the prediction model dirs are saved.
   base::FilePath base_store_dir_ GUARDED_BY_CONTEXT(sequence_checker_);

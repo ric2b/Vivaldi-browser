@@ -12,6 +12,8 @@
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/shell.h"
+#include "ash/system/diagnostics/diagnostics_log_controller.h"
+#include "ash/system/diagnostics/fake_diagnostics_browser_delegate.h"
 #include "ash/system/diagnostics/keyboard_input_log.h"
 #include "ash/system/diagnostics/log_test_helpers.h"
 #include "ash/test/ash_test_base.h"
@@ -55,6 +57,8 @@
 #include "ui/events/ash/keyboard_capability.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/devices/device_data_manager_test_api.h"
+#include "ui/events/devices/input_device.h"
+#include "ui/events/devices/keyboard_device.h"
 #include "ui/events/devices/touch_device_transform.h"
 #include "ui/events/devices/touchscreen_device.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -108,6 +112,21 @@ constexpr mojom::TopRowKey kInternalJinlonTopRowKeys[] = {
     mojom::TopRowKey::kVolumeMute,
     mojom::TopRowKey::kVolumeDown,
     mojom::TopRowKey::kVolumeUp};
+
+constexpr ui::TopRowActionKey kInternalJinlonActionKeys[] = {
+    ui::TopRowActionKey::kBack,
+    ui::TopRowActionKey::kRefresh,
+    ui::TopRowActionKey::kFullscreen,
+    ui::TopRowActionKey::kOverview,
+    ui::TopRowActionKey::kScreenshot,
+    ui::TopRowActionKey::kScreenBrightnessDown,
+    ui::TopRowActionKey::kScreenBrightnessUp,
+    ui::TopRowActionKey::kPrivacyScreenToggle,
+    ui::TopRowActionKey::kKeyboardBacklightDown,
+    ui::TopRowActionKey::kKeyboardBacklightUp,
+    ui::TopRowActionKey::kVolumeMute,
+    ui::TopRowActionKey::kVolumeDown,
+    ui::TopRowActionKey::kVolumeUp};
 
 // One possible variant of a Dell configuration
 constexpr mojom::TopRowKey kInternalDellTopRowKeys[] = {
@@ -437,6 +456,7 @@ class FakeInputDeviceInfoHelper : public InputDeviceInfoHelper {
     ui::DeviceCapabilities device_caps;
     const std::string base_name = path.BaseName().value();
     auto info = std::make_unique<InputDeviceInformation>();
+    std::unique_ptr<ui::KeyboardCapability::KeyboardInfo> keyboard_info;
 
     if (base_name == "event0") {
       device_caps = ui::kLinkKeyboard;
@@ -482,6 +502,16 @@ class FakeInputDeviceInfoHelper : public InputDeviceInfoHelper {
       info->keyboard_top_row_layout =
           ui::KeyboardCapability::KeyboardTopRowLayout::kKbdTopRowLayoutCustom;
       info->keyboard_scan_codes = kInternalJinlonScanCodes;
+
+      keyboard_info = std::make_unique<ui::KeyboardCapability::KeyboardInfo>();
+      keyboard_info->device_type =
+          ui::KeyboardCapability::DeviceType::kDeviceInternalKeyboard;
+      keyboard_info->top_row_action_keys.assign(
+          std::begin(kInternalJinlonActionKeys),
+          std::end(kInternalJinlonActionKeys));
+      keyboard_info->top_row_layout =
+          ui::KeyboardCapability::KeyboardTopRowLayout::kKbdTopRowLayoutCustom;
+      keyboard_info->top_row_scan_codes = kInternalJinlonScanCodes;
       EXPECT_EQ(7, id);
     } else if (base_name == "event8") {
       device_caps = ui::kMicrosoftBluetoothNumberPad;
@@ -511,6 +541,18 @@ class FakeInputDeviceInfoHelper : public InputDeviceInfoHelper {
       info->keyboard_scan_codes = kInternalJinlonScanCodes;
       // Set 0xC4 to be F8.
       info->keyboard_scan_codes[7] = 0xC4;
+
+      keyboard_info = std::make_unique<ui::KeyboardCapability::KeyboardInfo>();
+      keyboard_info->device_type =
+          ui::KeyboardCapability::DeviceType::kDeviceInternalKeyboard;
+      keyboard_info->top_row_action_keys.assign(
+          std::begin(kInternalJinlonActionKeys),
+          std::end(kInternalJinlonActionKeys));
+      keyboard_info->top_row_layout =
+          ui::KeyboardCapability::KeyboardTopRowLayout::kKbdTopRowLayoutCustom;
+      keyboard_info->top_row_scan_codes = kInternalJinlonScanCodes;
+      keyboard_info->top_row_scan_codes[7] = 0xC4;
+      keyboard_info->top_row_action_keys[7] = ui::TopRowActionKey::kUnknown;
       EXPECT_EQ(11, id);
     } else if (base_name == "event12") {
       device_caps = ui::kMorphiusTabletModeSwitch;
@@ -546,6 +588,14 @@ class FakeInputDeviceInfoHelper : public InputDeviceInfoHelper {
     info->connection_type =
         InputDataProvider::ConnectionTypeFromInputDeviceType(
             info->event_device_info.device_type());
+
+    if (keyboard_info) {
+      Shell::Get()
+          ->keyboard_capability()
+          ->DisableKeyboardInfoTrimmingForTesting();
+      Shell::Get()->keyboard_capability()->SetKeyboardInfoForTesting(
+          ui::KeyboardDevice(info->input_device), std::move(*keyboard_info));
+    }
 
     return info;
   }
@@ -584,6 +634,19 @@ class TestEventRewriterAshDelegate : public ui::EventRewriterAsh::Delegate {
   bool NotifyDeprecatedSixPackKeyRewrite(ui::KeyboardCode key_code) override {
     return false;
   }
+  void RecordEventRemappedToRightClick(bool alt_based_right_click) override {}
+  void RecordSixPackEventRewrite(ui::KeyboardCode key_code,
+                                 bool alt_based) override {}
+  absl::optional<ui::mojom::SimulateRightClickModifier>
+  GetRemapRightClickModifier(int device_id) override {
+    return absl::nullopt;
+  }
+
+  absl::optional<ui::mojom::SixPackShortcutModifier>
+  GetShortcutModifierForSixPackKey(int device_id,
+                                   ui::KeyboardCode key_code) override {
+    return absl::nullopt;
+  }
 
  protected:
   bool suppress_modifier_key_rewrites_ = false;
@@ -602,7 +665,6 @@ class TestInputDataProvider : public InputDataProvider {
             widget->GetNativeWindow(),
             std::make_unique<FakeDeviceManager>(),
             std::make_unique<FakeInputDataEventWatcherFactory>(watchers),
-            /*keyboard_input_log_ptr=*/nullptr,
             Shell::Get()->accelerator_controller(),
             event_rewriter_delegate),
         attached_widget_(widget),
@@ -657,6 +719,8 @@ class InputDataProviderTest : public AshTestBase {
     widget_ = CreateTestWidget();
     provider_ = std::make_unique<TestInputDataProvider>(
         widget_.get(), watchers_, event_rewriter_delegate_.get());
+    DiagnosticsLogController::Initialize(
+        std::make_unique<FakeDiagnosticsBrowserDelegate>());
 
     // Apply these early, in SetUp; delaying until
     // FakeInputDeviceInfoHelper::GetDeviceInfo() is not appropriate, as
@@ -825,6 +889,35 @@ TEST_F(InputDataProviderTest, GetConnectedDevices_DeviceInfoMapping) {
   EXPECT_EQ(mojom::ConnectionType::kInternal, touchscreen->connection_type);
   EXPECT_EQ(mojom::TouchDeviceType::kDirect, touchscreen->type);
   EXPECT_EQ("Atmel maXTouch Touchscreen", touchscreen->name);
+}
+
+TEST_F(InputDataProviderTest, GetConnectedDevices_HasInternalKeyboard) {
+  // Initialize one internal keyboard in DeviceDataManager.
+  std::vector<ui::KeyboardDevice> keyboard_devices;
+  keyboard_devices.push_back(
+      ui::KeyboardDevice(kDeviceId1, ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+                         "Internal Keyboard"));
+  ui::DeviceDataManagerTestApi().SetKeyboardDevices(keyboard_devices);
+
+  base::test::TestFuture<std::vector<mojom::KeyboardInfoPtr>,
+                         std::vector<mojom::TouchDeviceInfoPtr>>
+      future;
+  provider_->GetConnectedDevices(future.GetCallback());
+
+  // The return values are supposed to be not ready since GetConnectedDevices()
+  // function will wait for the internal keyboard to be added.
+  ASSERT_FALSE(future.IsReady());
+
+  // Add an internal keyboard.
+  ui::DeviceEvent event(ui::DeviceEvent::DeviceType::INPUT,
+                        ui::DeviceEvent::ActionType::ADD,
+                        base::FilePath("/dev/input/event5"));
+  provider_->OnDeviceEvent(event);
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_TRUE(future.IsReady());
+  const auto& keyboards = future.Get<0>();
+  ASSERT_EQ(1ul, keyboards.size());
 }
 
 TEST_F(InputDataProviderTest, GetConnectedDevices_AddEventAfterFirstCall) {
@@ -2230,9 +2323,9 @@ TEST_F(InputDataProviderTest, KeyboardInputLog) {
   base::FilePath log_path;
   EXPECT_TRUE(temp_dir.CreateUniqueTempDir());
   log_path = temp_dir.GetPath();
-  KeyboardInputLog log(log_path);
   const auto full_log_path = log_path.AppendASCII("keyboard_input.log");
-  provider_->SetLogForTesting(&log);
+  DiagnosticsLogController::Get()->SetKeyboardInputLogForTesting(
+      std::make_unique<KeyboardInputLog>(log_path));
   std::unique_ptr<FakeKeyboardObserver> fake_observer =
       std::make_unique<FakeKeyboardObserver>();
 

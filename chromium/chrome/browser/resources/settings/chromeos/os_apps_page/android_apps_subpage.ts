@@ -10,7 +10,7 @@
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
-import '../../settings_shared.css.js';
+import '../settings_shared.css.js';
 
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
@@ -21,9 +21,8 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 import {castExists} from '../assert_extras.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route, Router} from '../router.js';
+import {Route, Router, routes} from '../router.js';
 
 import {AndroidAppsBrowserProxyImpl, AndroidAppsInfo} from './android_apps_browser_proxy.js';
 import {getTemplate} from './android_apps_subpage.html.js';
@@ -71,7 +70,7 @@ class SettingsAndroidAppsSubpageElement extends
       },
 
       /** Whether Arc VM manage usb subpage should be shown. */
-      showArcvmManageUsb: Boolean,
+      isArcVmManageUsbAvailable: Boolean,
 
       /**
        * Used by DeepLinkingMixin to focus this page's deep links.
@@ -87,7 +86,7 @@ class SettingsAndroidAppsSubpageElement extends
   }
 
   androidAppsInfo: AndroidAppsInfo;
-  showArcvmManageUsb: boolean;
+  isArcVmManageUsbAvailable: boolean;
   private dialogBody_: string;
   private playStoreEnabled_: boolean;
 

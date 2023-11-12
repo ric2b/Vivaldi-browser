@@ -7,6 +7,7 @@
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
+#include "components/permissions/features.h"
 #include "components/permissions/permission_util.h"
 #include "components/permissions/request_type.h"
 #include "components/strings/grit/components_strings.h"
@@ -69,6 +70,8 @@ std::u16string PermissionRequest::GetDialogMessageText() const {
     case RequestType::kMicStream:
       message_id = IDS_MEDIA_CAPTURE_AUDIO_ONLY_INFOBAR_TEXT;
       break;
+    case RequestType::kMidi:
+      // TODO(crbug.com/1420307): Add dialog message text specific to MIDI.
     case RequestType::kMidiSysex:
       message_id = IDS_MIDI_SYSEX_INFOBAR_TEXT;
       break;
@@ -119,41 +122,58 @@ IconId PermissionRequest::GetBlockedIconForChip() {
 absl::optional<std::u16string> PermissionRequest::GetRequestChipText(
     ChipTextType type) const {
   static base::NoDestructor<std::map<RequestType, std::vector<int>>> kMessageIds(
-      {{RequestType::kArSession, {IDS_AR_PERMISSION_CHIP, -1, -1, -1, -1, -1}},
+      {{RequestType::kArSession,
+        {IDS_AR_PERMISSION_CHIP, -1, -1, -1, -1, -1, -1, -1}},
        {RequestType::kCameraStream,
         {IDS_MEDIA_CAPTURE_VIDEO_ONLY_PERMISSION_CHIP, -1,
          IDS_PERMISSIONS_PERMISSION_ALLOWED_CONFIRMATION,
+         IDS_PERMISSIONS_PERMISSION_ALLOWED_ONCE_CONFIRMATION,
          IDS_PERMISSIONS_PERMISSION_NOT_ALLOWED_CONFIRMATION,
          IDS_PERMISSIONS_CAMERA_ALLOWED_CONFIRMATION_SCREENREADER_ANNOUNCEMENT,
+         IDS_PERMISSIONS_CAMERA_ALLOWED_ONCE_CONFIRMATION_SCREENREADER_ANNOUNCEMENT,
          IDS_PERMISSIONS_CAMERA_NOT_ALLOWED_CONFIRMATION_SCREENREADER_ANNOUNCEMENT}},
        {RequestType::kClipboard,
-        {IDS_CLIPBOARD_PERMISSION_CHIP, -1, -1, -1, -1, -1}},
+        {IDS_CLIPBOARD_PERMISSION_CHIP, -1, -1, -1, -1, -1, -1, -1}},
        {RequestType::kGeolocation,
         {IDS_GEOLOCATION_PERMISSION_CHIP,
          IDS_GEOLOCATION_PERMISSION_BLOCKED_CHIP,
          IDS_PERMISSIONS_PERMISSION_ALLOWED_CONFIRMATION,
+         IDS_PERMISSIONS_PERMISSION_ALLOWED_ONCE_CONFIRMATION,
          IDS_PERMISSIONS_PERMISSION_NOT_ALLOWED_CONFIRMATION,
          IDS_PERMISSIONS_GEOLOCATION_ALLOWED_CONFIRMATION_SCREENREADER_ANNOUNCEMENT,
+         IDS_PERMISSIONS_PERMISSION_ALLOWED_ONCE_CONFIRMATION,
          IDS_PERMISSIONS_GEOLOCATION_NOT_ALLOWED_CONFIRMATION_SCREENREADER_ANNOUNCEMENT}},
        {RequestType::kIdleDetection,
-        {IDS_IDLE_DETECTION_PERMISSION_CHIP, -1, -1, -1, -1, -1}},
+        {IDS_IDLE_DETECTION_PERMISSION_CHIP, -1, -1, -1, -1, -1, -1, -1}},
        {RequestType::kMicStream,
         {IDS_MEDIA_CAPTURE_AUDIO_ONLY_PERMISSION_CHIP, -1,
          IDS_PERMISSIONS_PERMISSION_ALLOWED_CONFIRMATION,
+         IDS_PERMISSIONS_PERMISSION_ALLOWED_ONCE_CONFIRMATION,
          IDS_PERMISSIONS_PERMISSION_NOT_ALLOWED_CONFIRMATION,
          IDS_PERMISSIONS_MICROPHONE_ALLOWED_CONFIRMATION_SCREENREADER_ANNOUNCEMENT,
+         IDS_PERMISSIONS_MICROPHONE_ALLOWED_ONCE_CONFIRMATION_SCREENREADER_ANNOUNCEMENT,
          IDS_PERMISSIONS_MICROPHONE_NOT_ALLOWED_CONFIRMATION_SCREENREADER_ANNOUNCEMENT}},
+       {RequestType::kMidi,
+        // TODO(crbug.com/1420307): Add text specific to MIDI.
+        {IDS_MIDI_SYSEX_PERMISSION_CHIP, -1, -1, -1, -1, -1, -1, -1}},
        {RequestType::kMidiSysex,
-        {IDS_MIDI_SYSEX_PERMISSION_CHIP, -1, -1, -1, -1, -1}},
+        {IDS_MIDI_SYSEX_PERMISSION_CHIP, -1, -1, -1, -1, -1, -1, -1}},
        {RequestType::kNotifications,
         {IDS_NOTIFICATION_PERMISSIONS_CHIP,
          IDS_NOTIFICATION_PERMISSIONS_BLOCKED_CHIP,
-         IDS_PERMISSIONS_PERMISSION_ALLOWED_CONFIRMATION,
+         IDS_PERMISSIONS_PERMISSION_ALLOWED_CONFIRMATION, -1,
          IDS_PERMISSIONS_PERMISSION_NOT_ALLOWED_CONFIRMATION,
          IDS_PERMISSIONS_NOTIFICATION_ALLOWED_CONFIRMATION_SCREENREADER_ANNOUNCEMENT,
+         -1,
          IDS_PERMISSIONS_NOTIFICATION_NOT_ALLOWED_CONFIRMATION_SCREENREADER_ANNOUNCEMENT}},
+       {RequestType::kStorageAccess,
+        {IDS_SAA_PERMISSION_CHIP, -1,
+         IDS_PERMISSIONS_PERMISSION_ALLOWED_CONFIRMATION, -1,
+         IDS_PERMISSIONS_PERMISSION_NOT_ALLOWED_CONFIRMATION,
+         IDS_PERMISSIONS_SAA_ALLOWED_CONFIRMATION_SCREENREADER_ANNOUNCEMENT, -1,
+         IDS_PERMISSIONS_SAA_NOT_ALLOWED_CONFIRMATION_SCREENREADER_ANNOUNCEMENT}},
        {RequestType::kVrSession,
-        {IDS_VR_PERMISSION_CHIP, -1, -1, -1, -1, -1}}});
+        {IDS_VR_PERMISSION_CHIP, -1, -1, -1, -1, -1, -1, -1}}});
 
   auto messages = kMessageIds->find(request_type_);
   if (messages != kMessageIds->end() && messages->second[type] != -1)
@@ -195,6 +215,8 @@ std::u16string PermissionRequest::GetMessageTextFragment() const {
     case RequestType::kMicStream:
       message_id = IDS_MEDIA_CAPTURE_AUDIO_ONLY_PERMISSION_FRAGMENT;
       break;
+    case RequestType::kMidi:
+      // TODO(crbug.com/1420307): Add message text fragment specific to MIDI.
     case RequestType::kMidiSysex:
       message_id = IDS_MIDI_SYSEX_PERMISSION_FRAGMENT;
       break;
@@ -236,7 +258,9 @@ std::u16string PermissionRequest::GetMessageTextFragment() const {
 #endif
 
 bool PermissionRequest::ShouldUseTwoOriginPrompt() const {
-  return request_type_ == RequestType::kStorageAccess;
+  return request_type_ == RequestType::kStorageAccess &&
+         base::FeatureList::IsEnabled(
+             permissions::features::kPermissionStorageAccessAPI);
 }
 
 void PermissionRequest::PermissionGranted(bool is_one_time) {

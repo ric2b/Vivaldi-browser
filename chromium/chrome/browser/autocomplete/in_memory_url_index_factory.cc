@@ -4,7 +4,7 @@
 
 #include "chrome/browser/autocomplete/in_memory_url_index_factory.h"
 
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -21,20 +21,25 @@ InMemoryURLIndex* InMemoryURLIndexFactory::GetForProfile(Profile* profile) {
 
 // static
 InMemoryURLIndexFactory* InMemoryURLIndexFactory::GetInstance() {
-  return base::Singleton<InMemoryURLIndexFactory>::get();
+  static base::NoDestructor<InMemoryURLIndexFactory> instance;
+  return instance.get();
 }
 
 InMemoryURLIndexFactory::InMemoryURLIndexFactory()
     : ProfileKeyedServiceFactory(
           "InMemoryURLIndex",
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   DependsOn(BookmarkModelFactory::GetInstance());
   DependsOn(HistoryServiceFactory::GetInstance());
   DependsOn(TemplateURLServiceFactory::GetInstance());
 }
 
-InMemoryURLIndexFactory::~InMemoryURLIndexFactory() {
-}
+InMemoryURLIndexFactory::~InMemoryURLIndexFactory() = default;
 
 KeyedService* InMemoryURLIndexFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {

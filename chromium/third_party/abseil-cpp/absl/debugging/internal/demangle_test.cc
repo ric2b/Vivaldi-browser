@@ -19,8 +19,8 @@
 
 #include "gtest/gtest.h"
 #include "absl/base/config.h"
-#include "absl/base/internal/raw_logging.h"
 #include "absl/debugging/internal/stack_consumption.h"
+#include "absl/log/log.h"
 #include "absl/memory/memory.h"
 
 namespace absl {
@@ -38,7 +38,7 @@ static const char *DemangleIt(const char * const mangled) {
   }
 }
 
-// Test corner cases of bounary conditions.
+// Test corner cases of boundary conditions.
 TEST(Demangle, CornerCases) {
   char tmp[10];
   EXPECT_TRUE(Demangle("_Z6foobarv", tmp, sizeof(tmp)));
@@ -151,7 +151,7 @@ static const char *DemangleStackConsumption(const char *mangled,
                                             int *stack_consumed) {
   g_mangled = mangled;
   *stack_consumed = GetSignalHandlerStackConsumption(DemangleSignalHandler);
-  ABSL_RAW_LOG(INFO, "Stack consumption of Demangle: %d", *stack_consumed);
+  LOG(INFO) << "Stack consumption of Demangle: " << *stack_consumed;
   return g_demangle_result;
 }
 

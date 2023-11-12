@@ -38,7 +38,7 @@
 #include "components/history/core/browser/keyword_id.h"
 #include "components/history/core/browser/url_row.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/sync/driver/sync_service.h"
+#include "components/sync/service/sync_service.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/sync_device_info/device_info_tracker.h"
 #include "components/sync_device_info/local_device_info_provider.h"
@@ -313,6 +313,10 @@ class HistoryService : public KeyedService,
       QueryHistoryCallback callback,
       base::CancelableTaskTracker* tracker);
 
+    using DetailedHistoryCallback =
+                base::OnceCallback<void(const
+                history::DetailedHistory::DetailedHistoryList&)>;
+
   // Called when the results of QueryRedirectsFrom are available.
   // The given vector will contain a list of all redirects, not counting
   // the original page. If A redirects to B which redirects to C, the vector
@@ -399,6 +403,17 @@ class HistoryService : public KeyedService,
                           DomainMetricBitmaskType metric_type_bitmask,
                           DomainDiversityCallback callback,
                           base::CancelableTaskTracker* tracker);
+
+  // Returns, via a callback, unique domains (eLTD+1) visited within the time
+  // range [`begin_time`, `end_time`) for local and synced visits sorted in
+  // reverse-chronological order.
+  using GetUniqueDomainsVisitedCallback =
+      base::OnceCallback<void(DomainsVisitedResult)>;
+
+  void GetUniqueDomainsVisited(const base::Time begin_time,
+                               const base::Time end_time,
+                               GetUniqueDomainsVisitedCallback callback,
+                               base::CancelableTaskTracker* tracker);
 
   using GetLastVisitCallback = base::OnceCallback<void(HistoryLastVisitResult)>;
 
@@ -583,12 +598,13 @@ class HistoryService : public KeyedService,
   // `options`. Uses the same de-duplication and visibility logic as
   // `HistoryService::QueryHistory()`.
   //
-  // If `limited_by_max_count` is non-nullptr, it will be set to true if the
-  // number of results was limited by `options.max_count`.
+  // If `compute_redirect_chain_start_properties` is true, the opener and
+  // referring visit IDs for the start of the redirect chain will be computed.
   using GetAnnotatedVisitsCallback =
       base::OnceCallback<void(std::vector<AnnotatedVisit>)>;
   base::CancelableTaskTracker::TaskId GetAnnotatedVisits(
       const QueryOptions& options,
+      bool compute_redirect_chain_start_properties,
       GetAnnotatedVisitsCallback callback,
       base::CancelableTaskTracker* tracker) const;
 
@@ -771,11 +787,11 @@ class HistoryService : public KeyedService,
   }
 
   // Vivaldi
-  base::CancelableTaskTracker::TaskId QueryHistoryWStatement(
+  base::CancelableTaskTracker::TaskId QueryDetailedHistoryWStatement(
       const char* sql_statement,
       const std::string& search_string,
       int max_hits,
-      QueryHistoryCallback callback,
+      DetailedHistoryCallback callback,
       base::CancelableTaskTracker* tracker);
 
   // Computes the |num_hosts| most-visited hostnames. First version uses all

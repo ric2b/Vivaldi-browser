@@ -30,6 +30,7 @@
 #include "media/capture/video/video_capture_buffer_pool.h"
 #include "media/capture/video/video_capture_buffer_tracker_factory_impl.h"
 #include "media/capture/video/video_capture_device_client.h"
+#include "media/capture/video/video_capture_metrics.h"
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "content/browser/compositor/image_transport_factory.h"
@@ -477,19 +478,11 @@ void VideoCaptureController::ReturnBuffer(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   ControllerClient* client = FindClient(id, event_handler, controller_clients_);
+  CHECK(client);
 
-  // If this buffer is not held by this client, or this client doesn't exist
-  // in controller, do nothing.
-  if (!client) {
-    NOTREACHED();
-    return;
-  }
   auto buffers_in_use_entry_iter =
       base::ranges::find(client->buffers_in_use, buffer_id);
-  if (buffers_in_use_entry_iter == std::end(client->buffers_in_use)) {
-    NOTREACHED();
-    return;
-  }
+  CHECK(buffers_in_use_entry_iter != std::end(client->buffers_in_use));
   client->buffers_in_use.erase(buffers_in_use_entry_iter);
 
   OnClientFinishedConsumingBuffer(client, buffer_id, feedback);
@@ -579,6 +572,16 @@ void VideoCaptureController::OnFrameReadyInBuffer(
   }
 
   if (!has_received_frames_) {
+    // Check the following group of metrics is captured only for cameras.
+    if (stream_type() == blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE) {
+      // This metric combines width and height into a single UMA metric.
+      media::LogCaptureCurrentDeviceResolution(
+          frame_ready_buffer.frame_info->coded_size.width(),
+          frame_ready_buffer.frame_info->coded_size.height());
+
+      media::LogCaptureCurrentDevicePixelFormat(
+          frame_ready_buffer.frame_info->pixel_format);
+    }
     UMA_HISTOGRAM_COUNTS_1M("Media.VideoCapture.Width",
                             frame_ready_buffer.frame_info->coded_size.width());
     UMA_HISTOGRAM_COUNTS_1M("Media.VideoCapture.Height",

@@ -122,6 +122,8 @@ class ConnectStream : public quic::QuicSpdyClientStream {
                 DedicatedWebTransportHttp3Client* client)
       : quic::QuicSpdyClientStream(id, session, type), client_(client) {}
 
+  ~ConnectStream() override { client_->OnConnectStreamDeleted(); }
+
   void OnInitialHeadersComplete(
       bool fin,
       size_t frame_len,
@@ -221,9 +223,7 @@ class WebTransportVisitorProxy : public quic::WebTransportVisitor {
   explicit WebTransportVisitorProxy(quic::WebTransportVisitor* visitor)
       : visitor_(visitor) {}
 
-  void OnSessionReady(const spdy::Http2HeaderBlock& block) override {
-    visitor_->OnSessionReady(block);
-  }
+  void OnSessionReady() override { visitor_->OnSessionReady(); }
   void OnSessionClosed(quic::WebTransportSessionError error_code,
                        const std::string& error_message) override {
     visitor_->OnSessionClosed(error_code, error_message);
@@ -251,6 +251,35 @@ class WebTransportVisitorProxy : public quic::WebTransportVisitor {
 bool IsTerminalState(WebTransportState state) {
   return state == WebTransportState::CLOSED ||
          state == WebTransportState::FAILED;
+}
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class NegotiatedHttpDatagramVersion {
+  kNone = 0,
+  kDraft04 = 1,
+  kRfc = 2,
+  kMaxValue = kRfc,
+};
+
+void RecordNegotiatedHttpDatagramSupport(quic::HttpDatagramSupport support) {
+  NegotiatedHttpDatagramVersion negotiated;
+  switch (support) {
+    case quic::HttpDatagramSupport::kNone:
+      negotiated = NegotiatedHttpDatagramVersion::kNone;
+      break;
+    case quic::HttpDatagramSupport::kDraft04:
+      negotiated = NegotiatedHttpDatagramVersion::kDraft04;
+      break;
+    case quic::HttpDatagramSupport::kRfc:
+      negotiated = NegotiatedHttpDatagramVersion::kRfc;
+      break;
+    case quic::HttpDatagramSupport::kRfcAndDraft04:
+      NOTREACHED();
+      return;
+  }
+  base::UmaHistogramEnumeration(
+      "Net.WebTransport.NegotiatedHttpDatagramVersion", negotiated);
 }
 
 }  // namespace
@@ -281,6 +310,7 @@ DedicatedWebTransportHttp3Client::DedicatedWebTransportHttp3Client(
       crypto_config_(
           CreateProofVerifier(anonymization_key_, context, parameters),
           /* session_cache */ nullptr) {
+  ConfigureQuicCryptoClientConfig(crypto_config_);
   net_log_.BeginEvent(
       NetLogEventType::QUIC_SESSION_WEBTRANSPORT_CLIENT_ALIVE, [&] {
         base::Value::Dict dict;
@@ -314,6 +344,7 @@ void DedicatedWebTransportHttp3Client::Connect() {
 
 void DedicatedWebTransportHttp3Client::Close(
     const absl::optional<WebTransportCloseInfo>& close_info) {
+  CHECK(session());
   base::TimeDelta probe_timeout = base::Microseconds(
       connection_->sent_packet_manager().GetPtoDelay().ToMicroseconds());
   // Wait for at least three PTOs similar to what's used in
@@ -609,6 +640,12 @@ void DedicatedWebTransportHttp3Client::OnConnectStreamAborted() {
   TransitionToState(WebTransportState::FAILED);
 }
 
+void DedicatedWebTransportHttp3Client::OnConnectStreamDeleted() {
+  // `web_transport_session_` is owned by ConnectStream. Clear so that it
+  // doesn't get dangling.
+  web_transport_session_ = nullptr;
+}
+
 void DedicatedWebTransportHttp3Client::OnCloseTimeout() {
   SetErrorIfNecessary(ERR_TIMED_OUT);
   TransitionToState(WebTransportState::FAILED);
@@ -623,7 +660,6 @@ int DedicatedWebTransportHttp3Client::DoSendRequest() {
   if (stream == nullptr) {
     return ERR_QUIC_PROTOCOL_ERROR;
   }
-  connect_stream_ = stream;
 
   spdy::Http2HeaderBlock headers;
   DCHECK_EQ(url_.scheme(), url::kHttpsScheme);
@@ -724,9 +760,9 @@ void DedicatedWebTransportHttp3Client::SetErrorIfNecessary(
   }
 }
 
-void DedicatedWebTransportHttp3Client::OnSessionReady(
-    const spdy::Http2HeaderBlock& /*spdy_headers*/) {
+void DedicatedWebTransportHttp3Client::OnSessionReady() {
   session_ready_ = true;
+  RecordNegotiatedHttpDatagramSupport(session_->http_datagram_support());
 }
 
 void DedicatedWebTransportHttp3Client::OnSessionClosed(

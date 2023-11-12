@@ -25,10 +25,11 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/side_panel/history_clusters/history_clusters_tab_helper.h"
+#include "chrome/browser/ui/tabs/tab_group.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "components/history/core/browser/url_row.h"
 #include "components/history_clusters/core/history_cluster_type_utils.h"
 #include "components/history_clusters/core/history_clusters_service.h"
-#include "components/history_clusters/core/history_clusters_service_task.h"
 #include "components/history_clusters/core/history_clusters_util.h"
 #include "components/history_clusters/public/mojom/history_cluster_types.mojom.h"
 #include "components/keyed_service/core/service_access_type.h"
@@ -168,26 +169,30 @@ void HistoryClustersPageHandler::GetClusters(GetClustersCallback callback) {
   if (!fake_data_param.empty()) {
     const std::vector<std::string> kFakeDataParams = base::SplitString(
         fake_data_param, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-    if (kFakeDataParams.size() != 2) {
+    if (kFakeDataParams.size() != 3) {
       LOG(ERROR) << "Invalid history clusters fake data selection parameter "
                     "format.";
       std::move(callback).Run({});
       return;
     }
 
+    int num_clusters;
     int num_visits;
     int num_images;
-    if (!base::StringToInt(kFakeDataParams.at(0), &num_visits) ||
-        !base::StringToInt(kFakeDataParams.at(1), &num_images) ||
+    if (!base::StringToInt(kFakeDataParams.at(0), &num_clusters) ||
+        !base::StringToInt(kFakeDataParams.at(1), &num_visits) ||
+        !base::StringToInt(kFakeDataParams.at(2), &num_images) ||
         num_visits < num_images) {
       std::move(callback).Run({});
       return;
     }
 
     std::vector<history_clusters::mojom::ClusterPtr> clusters_mojom;
-    clusters_mojom.push_back(history_clusters::ClusterToMojom(
-        TemplateURLServiceFactory::GetForProfile(profile_),
-        GenerateSampleCluster(num_visits, num_images)));
+    for (int i = 0; i < num_clusters; i++) {
+      clusters_mojom.push_back(history_clusters::ClusterToMojom(
+          TemplateURLServiceFactory::GetForProfile(profile_),
+          GenerateSampleCluster(num_visits, num_images)));
+    }
     std::move(callback).Run(std::move(clusters_mojom));
     return;
   }
@@ -198,7 +203,7 @@ void HistoryClustersPageHandler::GetClusters(GetClustersCallback callback) {
     std::move(callback).Run({});
     return;
   }
-  fetch_clusters_task_ = history_clusters_module_service->GetClusters(
+  history_clusters_module_service->GetClusters(
       base::BindOnce(&HistoryClustersPageHandler::CallbackWithClusterData,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -225,7 +230,12 @@ void HistoryClustersPageHandler::ShowJourneysSidePanel(
 }
 
 void HistoryClustersPageHandler::OpenUrlsInTabGroup(
-    const std::vector<GURL>& urls) {
+    const std::vector<GURL>& urls,
+    const absl::optional<std::string>& tab_group_name) {
+  // This method is different from HistoryClustersHandler::OpenUrlsInTabGroup:
+  //  - It takes over the current tab instead of opening new background tabs.
+  //  - It inserts the new tabs into the location of the current tab.
+
   if (urls.empty()) {
     return;
   }
@@ -258,7 +268,17 @@ void HistoryClustersPageHandler::OpenUrlsInTabGroup(
 
   tab_indices.insert(tab_indices.begin(), model->GetIndexOfWebContents(
                                               model->GetActiveWebContents()));
-  model->AddToNewGroup(tab_indices);
+
+  auto new_group_id = model->AddToNewGroup(tab_indices);
+  if (!new_group_id.is_empty() && tab_group_name) {
+    if (auto* group_model = model->group_model()) {
+      auto* tab_group = group_model->GetTabGroup(new_group_id);
+      // Copy and modify the existing visual data with a new title.
+      tab_groups::TabGroupVisualData visual_data = *tab_group->visual_data();
+      visual_data.SetTitle(base::UTF8ToUTF16(*tab_group_name));
+      tab_group->SetVisualData(visual_data);
+    }
+  }
 
   if (tab_indices.size() > 1) {
     model->ActivateTabAt(tab_indices.at(1));
@@ -266,7 +286,8 @@ void HistoryClustersPageHandler::OpenUrlsInTabGroup(
 }
 
 void HistoryClustersPageHandler::DismissCluster(
-    const std::vector<history_clusters::mojom::URLVisitPtr> visits) {
+    const std::vector<history_clusters::mojom::URLVisitPtr> visits,
+    int64_t cluster_id) {
   if (visits.empty()) {
     return;
   }
@@ -280,10 +301,15 @@ void HistoryClustersPageHandler::DismissCluster(
       profile_, ServiceAccessType::EXPLICIT_ACCESS);
   history_service->HideVisits(visit_ids, base::BindOnce([]() {}),
                               &hide_visits_task_tracker_);
+  ranking_metrics_logger_->SetDismissed(cluster_id);
 }
 
 void HistoryClustersPageHandler::RecordClick(int64_t cluster_id) {
   ranking_metrics_logger_->SetClicked(cluster_id);
+}
+
+void HistoryClustersPageHandler::RecordDisabled(int64_t cluster_id) {
+  ranking_metrics_logger_->SetDisabled(cluster_id);
 }
 
 void HistoryClustersPageHandler::RecordLayoutTypeShown(

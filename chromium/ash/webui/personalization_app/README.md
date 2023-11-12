@@ -10,7 +10,7 @@ see: [`//components/user_manager/user_type.h`](../../../components/user_manager/
 
 For a more in depth explanation, see:
 
-[Profiles, Sessions, Users, and more for ChromeOS Personalization](go/chromeos-personalization-user-types)
+[Profiles, Sessions, Users, and more for ChromeOS Personalization](http://go/chromeos-personalization-user-types)
 
 ## Tests
 
@@ -25,7 +25,7 @@ tests, javascript component browser tests, and javascript full-app browsertests.
   * primarily to test behavior of mojom handlers
   * heavily mocked out ash environment
     * fake user manager
-    * fake wallpaper_controller
+    * fake wallpaper\_controller
     * etc
 * component browser tests
   * `personalization_app_component_browsertest.js`
@@ -49,14 +49,41 @@ tests, javascript component browser tests, and javascript full-app browsertests.
   * Uses fixture `personalization_app_browsertest_fixture.h`
     * wallpaper mocked out at network layer by mocking out wallpaper fetchers
     via `TestWallpaperFetcherDelegate`
+    * uses a real theme provider
     * all others mock out mojom layer via fake mojom providers
-    `FakePersonalizationApp{Ambient,KeyboardBacklight,Theme,User}Provider`
+    `FakePersonalizationApp{Ambient,KeyboardBacklight,User}Provider`
 * System Web App integration tests
   * `personalization_app_integration_browsertest.cc`
   * `browser_tests --gtest_filter=*PersonalizationAppIntegration*`
   * Tests that the app install, launches without error
   * Also tests special tricky system UI support for full screen transparency for
   wallpaper preview because they cannot be tested in javascript
+    * includes a pixel test for fullscreen wallpaper preview
+    * see below [Running browser pixel tests](#running-browser-pixel-tests) and
+    `//ash/test/pixel/README.md` for more information
+
+#### Running browser pixel tests
+
+##### Locally
+
+```
+browser_tests
+--gtest_filter=*PersonalizationAppIntegrationPixel*
+--skia-gold-local-png-write-directory=/tmp/skia_gold/
+--enable-pixel-output-in-tests
+--browser-ui-tests-verify-pixels
+```
+
+Inspect the output pngs generated in `/tmp/skia_gold/*` to make sure that the
+test is setting up the correct UI state.
+
+##### CQ
+
+In CQ these tests do not actually verify pixel output as part of the mainline
+`browser_tests` step in `linux-chromeos-rel`. However, they still go through
+the setup to make sure there are no crashes while preparing the UI. Full pixel
+verification will run as part of `pixel_experimental_browser_tests` which passes
+the necessary additional argument `--browser-ui-tests-verify-pixels`.
 
 ### Where should I write my test?
 
@@ -70,10 +97,19 @@ handlers
 * mojom handling logic
   * mojom handler unit tests
 
+### Debugging tests
+* [Debugging BrowserTest failures](https://g3doc.corp.google.com/chrome/chromeos/system_services_team/dev_instructions/g3doc/debugging.md#debugging-browsertest-failures).
+* The [browser test doc](https://www.chromium.org/developers/testing/browser-tests/#debugging)
+has some useful information.
+* Inject `debugger;` as a breakpoint.
+* Run a specific test/test suite: `test("test name", () => ...) => test.only("test name"...)`.
+* Debug flaky tests: Pass flags `--gtest_repeat=1000 --gtest_break_on_failure`.
+
 ## Environment Setup
 ### VSCode
 
 - Follow [vscode setup](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/vscode.md).
+  - (Optional) Set up [code-server](http://go/vscode/remote_development_via_web) for remote development.
 - Create `tsconfig.json` using [helper script](https://chromium.googlesource.com/chromium/src/+/HEAD/ash/webui/personalization_app/tools/gen_tsconfig.py).
   Please follow the help doc in the header of the helper script.
 - Edit `${PATH_TO_CHROMIUM}/src/.git/info/exclude` and add these lines

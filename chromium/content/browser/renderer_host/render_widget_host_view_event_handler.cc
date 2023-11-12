@@ -586,6 +586,7 @@ void RenderWidgetHostViewEventHandler::GestureEventAck(
     const blink::WebGestureEvent& event,
     blink::mojom::InputEventResultState ack_result) {
   mouse_wheel_phase_handler_.GestureEventAck(event, ack_result);
+  HandleSwipeToMoveCursorGestureAck(event);
 }
 
 bool RenderWidgetHostViewEventHandler::CanRendererHandleEvent(
@@ -689,6 +690,12 @@ void RenderWidgetHostViewEventHandler::HandleGestureForTouchSelection(
       delegate_->selection_controller()->HandleLongPressEvent(
           event->time_stamp(), event->location_f());
       break;
+    case ui::ET_GESTURE_TAP_DOWN:
+      if (event->details().tap_down_count() == 2) {
+        delegate_->selection_controller()->HandleDoublePressEvent(
+            event->time_stamp(), event->location_f());
+      }
+      break;
     case ui::ET_GESTURE_TAP:
       delegate_->selection_controller()->HandleTapEvent(
           event->location_f(), event->details().tap_count());
@@ -699,6 +706,34 @@ void RenderWidgetHostViewEventHandler::HandleGestureForTouchSelection(
     case ui::ET_GESTURE_SCROLL_END:
       delegate_->selection_controller_client()->OnScrollCompleted();
       break;
+    default:
+      break;
+  }
+}
+
+void RenderWidgetHostViewEventHandler::HandleSwipeToMoveCursorGestureAck(
+    const blink::WebGestureEvent& event) {
+  if (!delegate_->selection_controller_client()) {
+    return;
+  }
+
+  switch (event.GetType()) {
+    case blink::WebInputEvent::Type::kGestureScrollBegin: {
+      if (!event.data.scroll_begin.cursor_control) {
+        break;
+      }
+      swipe_to_move_cursor_activated_ = true;
+      delegate_->selection_controller_client()->OnSwipeToMoveCursorBegin();
+      break;
+    }
+    case blink::WebInputEvent::Type::kGestureScrollEnd: {
+      if (!swipe_to_move_cursor_activated_) {
+        break;
+      }
+      swipe_to_move_cursor_activated_ = false;
+      delegate_->selection_controller_client()->OnSwipeToMoveCursorEnd();
+      break;
+    }
     default:
       break;
   }

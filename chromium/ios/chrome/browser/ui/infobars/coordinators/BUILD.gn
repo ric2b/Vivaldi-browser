@@ -14,8 +14,9 @@ source_set("coordinators") {
     "//base",
     "//components/infobars/core",
     "//ios/chrome/browser/infobars:public",
-    "//ios/chrome/browser/main:public",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/coordinator/layout_guide",
+    "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/public/commands",
     "//ios/chrome/browser/shared/ui/util",
     "//ios/chrome/browser/ui/fullscreen",
@@ -35,6 +36,7 @@ source_set("translate_public") {
   sources = [
     "infobar_translate_language_selection_consumer.h",
     "infobar_translate_modal_consumer.h",
+    "infobar_translate_modal_consumer.mm",
   ]
   deps = []
 }

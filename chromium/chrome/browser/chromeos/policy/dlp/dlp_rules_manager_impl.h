@@ -22,10 +22,7 @@ class PrefRegistrySimple;
 namespace policy {
 
 class DlpReportingManager;
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 class DlpFilesController;
-#endif
 
 class DlpRulesManagerImpl : public DlpRulesManager,
                             public chromeos::DlpClient::Observer {
@@ -52,7 +49,7 @@ class DlpRulesManagerImpl : public DlpRulesManager,
                                 std::string* out_destination_pattern,
                                 RuleMetadata* out_rule_metadata) const override;
   Level IsRestrictedComponent(const GURL& source,
-                              const Component& destination,
+                              const data_controls::Component& destination,
                               Restriction restriction,
                               std::string* out_source_pattern,
                               RuleMetadata* out_rule_metadata) const override;
@@ -64,10 +61,7 @@ class DlpRulesManagerImpl : public DlpRulesManager,
       Restriction restriction) const override;
   bool IsReportingEnabled() const override;
   DlpReportingManager* GetReportingManager() const override;
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   DlpFilesController* GetDlpFilesController() const override;
-#endif
 
   std::string GetSourceUrlPattern(
       const GURL& source_url,
@@ -92,7 +86,7 @@ class DlpRulesManagerImpl : public DlpRulesManager,
   PrefChangeRegistrar pref_change_registrar_;
 
   // Map from the components to their configured rules IDs.
-  std::map<Component, std::set<RuleId>> components_rules_;
+  std::map<data_controls::Component, std::set<RuleId>> components_rules_;
 
   // Map from the restrictions to their configured rules IDs and levels.
   std::map<Restriction, std::map<RuleId, Level>> restrictions_map_;
@@ -131,13 +125,13 @@ class DlpRulesManagerImpl : public DlpRulesManager,
   // System-wide singleton instantiated when required by rules configuration.
   std::unique_ptr<DlpReportingManager> reporting_manager_;
 
+  // System-wide singleton instantiated when there are rules involving files.
+  std::unique_ptr<DlpFilesController> files_controller_;
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Observe to re-notify DLP daemon in case of restart.
   base::ScopedObservation<chromeos::DlpClient, chromeos::DlpClient::Observer>
       dlp_client_observation_{this};
-
-  // System-wide singleton instantiated when there are rules involving files.
-  std::unique_ptr<DlpFilesController> files_controller_;
 #endif
 };
 

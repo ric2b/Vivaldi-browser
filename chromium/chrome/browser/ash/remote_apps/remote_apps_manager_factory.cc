@@ -26,17 +26,17 @@ RemoteAppsManager* RemoteAppsManagerFactory::GetForProfile(Profile* profile) {
 RemoteAppsManagerFactory* RemoteAppsManagerFactory::GetInstance() {
   // TODO(crbug.com/1269752): Restore use of base::NoDestructor when
   // it no longer causes unit_test failures.
-  return base::Singleton<RemoteAppsManagerFactory>::get();
+  static base::NoDestructor<RemoteAppsManagerFactory> instance;
+  return instance.get();
 }
 
 RemoteAppsManagerFactory::RemoteAppsManagerFactory()
-    : ProfileKeyedServiceFactory(
-          "RemoteAppsManager",
-          ProfileSelections::Builder()
-              .WithGuest(ProfileSelections::kRegularProfileDefault)
-              .WithSystem(ProfileSelection::kNone)
-              .WithAshInternals(ProfileSelection::kNone)
-              .Build()) {
+    : ProfileKeyedServiceFactory("RemoteAppsManager",
+                                 ProfileSelections::Builder()
+                                     .WithGuest(ProfileSelection::kOriginalOnly)
+                                     .WithSystem(ProfileSelection::kNone)
+                                     .WithAshInternals(ProfileSelection::kNone)
+                                     .Build()) {
   DependsOn(app_list::AppListSyncableServiceFactory::GetInstance());
   DependsOn(apps::AppServiceProxyFactory::GetInstance());
   DependsOn(extensions::EventRouterFactory::GetInstance());

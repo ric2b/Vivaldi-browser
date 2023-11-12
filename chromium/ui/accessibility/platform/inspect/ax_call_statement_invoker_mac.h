@@ -9,6 +9,10 @@
 #include "base/memory/raw_ptr.h"
 #include "ui/accessibility/platform/inspect/ax_tree_indexer_mac.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace ui {
 
 class AXElementWrapper;
@@ -107,14 +111,14 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXCallStatementInvoker final {
   gfx::NativeViewAccessible LineIndexToNode(
       const std::u16string line_index) const;
 
-  const id node;
+  id __strong node;
 
   // Map between AXUIElement objects and their DOMIds/accessible tree
   // line numbers. Owned by the caller and outlives this object.
-  const base::raw_ptr<const AXTreeIndexerMac> indexer_;
+  const raw_ptr<const AXTreeIndexerMac> indexer_;
 
   // Variables storage. Owned by the caller and outlives this object.
-  const base::raw_ptr<std::map<std::string, id>> storage_;
+  const raw_ptr<std::map<std::string, id>> storage_;
 };
 
 }  // namespace ui

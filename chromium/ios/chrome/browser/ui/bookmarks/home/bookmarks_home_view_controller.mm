@@ -24,18 +24,19 @@
 #import "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
@@ -49,7 +50,6 @@
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_navigation_controller.h"
@@ -73,7 +73,6 @@
 #import "ios/chrome/browser/ui/sharing/sharing_params.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
@@ -127,7 +126,9 @@ typedef NS_ENUM(NSInteger, BookmarksContextBarState) {
 };
 
 // Estimated TableView row height.
-const CGFloat kEstimatedRowHeight = 65.0;
+constexpr CGFloat kEstimatedRowHeight = 65.0;
+// Separation between non-empty account and profile sections.
+constexpr CGFloat kSpaceBetweenAccountAndProfileSections = 32.0;
 
 // Returns a vector of all URLs in `nodes`.
 std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
@@ -164,11 +165,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   // Vivaldi
   UIView* searchBarContainer;
 }
-
-// The profile bookmark model used.
-@property(nonatomic, assign) bookmarks::BookmarkModel* profileBookmarkModel;
-// The account bookmark model used.
-@property(nonatomic, assign) bookmarks::BookmarkModel* accountBookmarkModel;
 
 // The Browser in which bookmarks are presented
 // TODO(crbug.com/1423926): Need to convert this property into:
@@ -246,6 +242,10 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 @end
 
 @implementation BookmarksHomeViewController {
+  // The profile bookmark model used.
+  base::WeakPtr<bookmarks::BookmarkModel> _profileBookmarkModel;
+  // The account bookmark model used.
+  base::WeakPtr<bookmarks::BookmarkModel> _accountBookmarkModel;
   // Bridge to register for bookmark changes in the profile model.
   std::unique_ptr<BookmarkModelBridge> _profileBookmarkModelBridge;
   // Bridge to register for bookmark changes in the account model.
@@ -273,26 +273,26 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
     _profileBookmarkModel =
         ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
-            _browserState);
-    _profileBookmarkModelBridge =
-        std::make_unique<BookmarkModelBridge>(self, _profileBookmarkModel);
+            _browserState)
+            ->AsWeakPtr();
+    _profileBookmarkModelBridge = std::make_unique<BookmarkModelBridge>(
+        self, _profileBookmarkModel.get());
     if (base::FeatureList::IsEnabled(
             bookmarks::kEnableBookmarksAccountStorage)) {
       _accountBookmarkModel =
-          ios::AccountBookmarkModelFactory::GetForBrowserState(_browserState);
-      _accountBookmarkModelBridge =
-          std::make_unique<BookmarkModelBridge>(self, _accountBookmarkModel);
+          ios::AccountBookmarkModelFactory::GetForBrowserState(_browserState)
+              ->AsWeakPtr();
+      _accountBookmarkModelBridge = std::make_unique<BookmarkModelBridge>(
+          self, _accountBookmarkModel.get());
     }
   }
   return self;
 }
 
-- (void)dealloc {
-  [self shutdown];
-}
-
 - (void)shutdown {
-  [self.bookmarksCoordinator shutdown];
+  [self.editingFolderCell stopEdit];
+  [self stopFolderChooserCoordinator];
+  [self.bookmarksCoordinator stop];
   self.bookmarksCoordinator = nil;
   [self.mediator disconnect];
   self.mediator.consumer = nil;
@@ -323,12 +323,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 - (NSArray<BookmarksHomeViewController*>*)cachedViewControllerStack {
   // This method is only designed to be called for the view controller
   // associated with the root node.
-  DCHECK(_profileBookmarkModel->loaded());
-  if (base::FeatureList::IsEnabled(bookmarks::kEnableBookmarksAccountStorage)) {
-    CHECK(_accountBookmarkModel->loaded());
-  } else {
-    CHECK(!_accountBookmarkModel);
-  }
+  CHECK(bookmark_utils_ios::AreAllAvailableBookmarkModelsLoaded(
+      _profileBookmarkModel.get(), _accountBookmarkModel.get()));
   DCHECK([self isDisplayingBookmarkRoot]);
 
   NSMutableArray<BookmarksHomeViewController*>* stack = [NSMutableArray array];
@@ -346,29 +342,29 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   if (![BookmarkPathCache
           getBookmarkTopMostRowCacheWithPrefService:self.browserState
                                                         ->GetPrefs()
-                                              model:self.profileBookmarkModel
+                                              model:_profileBookmarkModel.get()
                                            folderId:&cachedFolderID
                                          topMostRow:&cachedIndexPathRow] ||
-      cachedFolderID == self.profileBookmarkModel->root_node()->id()) {
+      cachedFolderID == _profileBookmarkModel->root_node()->id()) {
     return stack;
   }
 
   NSArray<NSNumber*>* path = bookmark_utils_ios::CreateBookmarkPath(
-      self.profileBookmarkModel, cachedFolderID);
+      _profileBookmarkModel.get(), cachedFolderID);
   if (!path) {
     return stack;
   }
 
-  DCHECK_EQ(self.profileBookmarkModel->root_node()->id(),
+  DCHECK_EQ(_profileBookmarkModel->root_node()->id(),
             [[path firstObject] longLongValue]);
   for (NSUInteger ii = 1; ii < [path count]; ii++) {
     int64_t nodeID = [[path objectAtIndex:ii] longLongValue];
     const BookmarkNode* node =
-        bookmark_utils_ios::FindFolderById(self.profileBookmarkModel, nodeID);
+        bookmark_utils_ios::FindFolderById(_profileBookmarkModel.get(), nodeID);
     DCHECK(node);
     // if node is an empty permanent node, stop.
     if (node->children().empty() &&
-        IsPrimaryPermanentNode(node, self.profileBookmarkModel)) {
+        IsPrimaryPermanentNode(node, _profileBookmarkModel.get())) {
       break;
     }
 
@@ -445,7 +441,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
   self.searchTerm = @"";
 
-  if (self.profileBookmarkModel->loaded()) {
+  if (bookmark_utils_ios::AreAllAvailableBookmarkModelsLoaded(
+          _profileBookmarkModel.get(), _accountBookmarkModel.get())) {
     [self loadBookmarkViews];
   } else {
     [self showLoadingSpinnerBackground];
@@ -460,7 +457,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   self.navigationController.interactivePopGestureRecognizer.delegate = self;
 
   // Hide the toolbar if we're displaying the root node.
-  if (self.profileBookmarkModel->loaded() &&
+  if (bookmark_utils_ios::AreAllAvailableBookmarkModelsLoaded(
+          _profileBookmarkModel.get(), _accountBookmarkModel.get()) &&
       (![self isDisplayingBookmarkRoot] ||
        self.mediator.currentlyShowingSearchResults)) {
     self.navigationController.toolbarHidden = NO;
@@ -535,10 +533,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   self.tableView.dropDelegate = self.dragDropHandler;
   self.tableView.dragInteractionEnabled = true;
 
-  // Setting a sectionFooterHeight of 0 will be the same as not having a
-  // footerView, which shows a cell separator for the last cell. Removing this
-  // line will also create a default footer of height 30.
-  self.tableView.sectionFooterHeight = 1;
   self.tableView.accessibilityIdentifier = kBookmarksHomeTableViewIdentifier;
   self.tableView.estimatedRowHeight = kEstimatedRowHeight;
   self.tableView.allowsMultipleSelectionDuringEditing = YES;
@@ -547,8 +541,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   self.mediator =
       [[BookmarksHomeMediator alloc] initWithBrowser:_browser
                                   baseViewController:self.navigationController
-                                profileBookmarkModel:_profileBookmarkModel
-                                accountBookmarkModel:_accountBookmarkModel
+                                profileBookmarkModel:_profileBookmarkModel.get()
+                                accountBookmarkModel:_accountBookmarkModel.get()
                                        displayedNode:self.displayedFolderNode];
   self.mediator.currentlyShowingSearchResults = NO;
   // Configure the table view.
@@ -568,7 +562,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
   [self editExternalBookmarkIfSet];
 
-  DCHECK(self.profileBookmarkModel->loaded());
+  DCHECK(bookmark_utils_ios::AreAllAvailableBookmarkModelsLoaded(
+      _profileBookmarkModel.get(), _accountBookmarkModel.get()));
   DCHECK([self isViewLoaded]);
 }
 
@@ -840,12 +835,15 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 }
 
 // Vivaldi
-- (void)moveNodesToTrash:(const std::set<const BookmarkNode*>&)nodes {
+- (void)moveNodesToTrash:(const bookmark_utils_ios::NodeSet&)nodes {
   DCHECK_GE(nodes.size(), 1u);
-  const BookmarkNode* trashFolder = self.profileBookmarkModel->trash_node();
+  const BookmarkNode* trashFolder = _profileBookmarkModel->trash_node();
+  std::vector<const bookmarks::BookmarkNode*> movedNodesVector(
+      nodes.begin(), nodes.end());
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::MoveBookmarksWithUndoToast(
-                              nodes, self.profileBookmarkModel, trashFolder,
+                              movedNodesVector, _profileBookmarkModel.get(),
+                              _accountBookmarkModel.get(), trashFolder,
                               self.browserState)];
   [self setTableViewEditing:NO];
 }
@@ -879,9 +877,9 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
   DCHECK_GE(nodes.size(), 1u);
   base::RecordAction(base::UserMetricsAction(userAction));
-  std::vector<bookmarks::BookmarkModel*> models = {self.profileBookmarkModel};
-  if (self.accountBookmarkModel) {
-    models.push_back(self.accountBookmarkModel);
+  std::vector<bookmarks::BookmarkModel*> models = {_profileBookmarkModel.get()};
+  if (_accountBookmarkModel.get()) {
+    models.push_back(_accountBookmarkModel.get());
   }
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::DeleteBookmarksWithUndoToast(
@@ -982,75 +980,80 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
     [self.navigationController pushViewController:controller animated:YES];
     return;
   }
-    // Clear bookmark path cache.
-    int64_t unusedFolderId;
-    int unusedIndexPathRow;
-    while ([BookmarkPathCache
-        getBookmarkTopMostRowCacheWithPrefService:self.browserState->GetPrefs()
-                                            model:self.profileBookmarkModel
-                                         folderId:&unusedFolderId
-                                       topMostRow:&unusedIndexPathRow]) {
+  // Clear bookmark path cache.
+  int64_t unusedFolderId;
+  int unusedIndexPathRow;
+  while ([BookmarkPathCache
+      getBookmarkTopMostRowCacheWithPrefService:self.browserState->GetPrefs()
+                                          model:_profileBookmarkModel.get()
+                                       folderId:&unusedFolderId
+                                     topMostRow:&unusedIndexPathRow]) {
     [BookmarkPathCache
         clearBookmarkTopMostRowCacheWithPrefService:self.browserState
                                                         ->GetPrefs()];
+  }
+
+  // Rebuild folder controller list, going back up the tree.
+  NSMutableArray<BookmarksHomeViewController*>* stack = [NSMutableArray array];
+  std::vector<const bookmarks::BookmarkNode*> nodes;
+  const bookmarks::BookmarkNode* cursor = folder;
+  while (cursor) {
+    // Build reversed list of nodes to restore bookmark path below.
+    nodes.insert(nodes.begin(), cursor);
+
+    // Build reversed list of controllers.
+    BookmarksHomeViewController* controller =
+        [self createControllerWithDisplayedFolderNode:cursor];
+    [stack insertObject:controller atIndex:0];
+
+    // Setup now, so that the back button labels shows parent folder
+    // title and that we don't show large title everywhere.
+    [self setupNavigationForBookmarksHomeViewController:controller
+                                      usingBookmarkNode:cursor];
+
+    cursor = cursor->parent();
+  }
+
+  // Reconstruct bookmark path cache.
+  for (const bookmarks::BookmarkNode* node : nodes) {
+    [BookmarkPathCache
+        cacheBookmarkTopMostRowWithPrefService:self.browserState->GetPrefs()
+                                      folderId:node->id()
+                                    topMostRow:0];
+  }
+
+  [self navigateAway];
+
+  // At root, since there's a large title, the search bar is lower than on
+  // whatever destination folder it is transitioning to (root is never
+  // reachable through search). To avoid a kink in the animation, the title
+  // is set to regular size, which means the search bar is at same level at
+  // beginning and end of animation. This controller will be replaced in
+  // `stack` so there's no need to care about restoring this.
+  if (IsVivaldiRunning()) {
+    [self.navigationController setViewControllers:stack animated:YES];
+    return;
+  } else {
+  if ([self isDisplayingBookmarkRoot]) {
+    self.navigationItem.largeTitleDisplayMode =
+        UINavigationItemLargeTitleDisplayModeNever;
+  }
+
+  __weak BookmarksHomeViewController* weakSelf = self;
+  auto completion = ^{
+    NSArray<__kindof UIViewController*>* previousStack =
+        weakSelf.navigationController.viewControllers;
+    [weakSelf.navigationController setViewControllers:stack animated:YES];
+    for (UIViewController* controller in previousStack) {
+      BookmarksHomeViewController* bookmarksHomeViewController =
+          base::mac::ObjCCastStrict<BookmarksHomeViewController>(controller);
+      [bookmarksHomeViewController shutdown];
     }
+  };
 
-    // Rebuild folder controller list, going back up the tree.
-    NSMutableArray<BookmarksHomeViewController*>* stack =
-        [NSMutableArray array];
-    std::vector<const bookmarks::BookmarkNode*> nodes;
-    const bookmarks::BookmarkNode* cursor = folder;
-    while (cursor) {
-      // Build reversed list of nodes to restore bookmark path below.
-      nodes.insert(nodes.begin(), cursor);
-
-      // Build reversed list of controllers.
-      BookmarksHomeViewController* controller =
-          [self createControllerWithDisplayedFolderNode:cursor];
-      [stack insertObject:controller atIndex:0];
-
-      // Setup now, so that the back button labels shows parent folder
-      // title and that we don't show large title everywhere.
-      [self setupNavigationForBookmarksHomeViewController:controller
-                                        usingBookmarkNode:cursor];
-
-      cursor = cursor->parent();
-    }
-
-    // Reconstruct bookmark path cache.
-    for (const bookmarks::BookmarkNode* node : nodes) {
-      [BookmarkPathCache
-          cacheBookmarkTopMostRowWithPrefService:self.browserState->GetPrefs()
-                                        folderId:node->id()
-                                      topMostRow:0];
-    }
-
-    [self navigateAway];
-
-    // At root, since there's a large title, the search bar is lower than on
-    // whatever destination folder it is transitioning to (root is never
-    // reachable through search). To avoid a kink in the animation, the title
-    // is set to regular size, which means the search bar is at same level at
-    // beginning and end of animation. This controller will be replaced in
-    // `stack` so there's no need to care about restoring this.
-
-    if (IsVivaldiRunning()) {
-      [self.navigationController setViewControllers:stack animated:YES];
-      return;
-    } else {
-    if ([self isDisplayingBookmarkRoot]) {
-      self.navigationItem.largeTitleDisplayMode =
-          UINavigationItemLargeTitleDisplayModeNever;
-    }
-
-    __weak BookmarksHomeViewController* weakSelf = self;
-    auto completion = ^{
-      [weakSelf.navigationController setViewControllers:stack animated:YES];
-    };
-
-    [self.searchController dismissViewControllerAnimated:YES
-                                              completion:completion];
-    } // End Vivaldi
+  [self.searchController dismissViewControllerAnimated:YES
+                                            completion:completion];
+  } // End Vivaldi
 }
 
 - (void)handleSelectEditNodes:
@@ -1119,7 +1122,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
       showSnackbarMessage:
           bookmark_utils_ios::UpdateBookmarkPositionWithUndoToast(
               node, self.displayedFolderNode, position,
-              self.profileBookmarkModel, self.browserState)];
+              _profileBookmarkModel.get(), _accountBookmarkModel.get(),
+              self.browserState)];
 }
 
 - (void)handleRefreshContextBar {
@@ -1140,7 +1144,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   DCHECK(self.mediator.editingFolderNode);
   self.mediator.addingNewFolder = NO;
   if (newName.length > 0) {
-    self.mediator.profileBookmarkModel->SetTitle(
+    self.mediator.displayedBookmarkModel->SetTitle(
         self.mediator.editingFolderNode, base::SysNSStringToUTF16(newName),
         bookmarks::metrics::BookmarkEditSource::kUser);
   }
@@ -1161,29 +1165,28 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   // Copy the list of edited nodes from BookmarksFolderChooserCoordinator
   // as the reference may become invalid when `_folderChooserCoordinator`
   // is set to nil (if `self` holds the last reference to the object).
-  std::set<const bookmarks::BookmarkNode*> editedNodes =
+  std::set<const bookmarks::BookmarkNode*> editedNodesSet =
       _folderChooserCoordinator.editedNodes;
-
-  [_folderChooserCoordinator stop];
-  _folderChooserCoordinator.delegate = nil;
-  _folderChooserCoordinator = nil;
+  // TODO(crbug.com/1446131): Change the type of `editedNodes` to std::vector.
+  std::vector<const bookmarks::BookmarkNode*> editedNodesVector(
+      editedNodesSet.begin(), editedNodesSet.end());
+  [self stopFolderChooserCoordinator];
 
   DCHECK(!folder->is_url());
-  DCHECK_GE(editedNodes.size(), 1u);
+  DCHECK_GE(editedNodesVector.size(), 1u);
 
   [self setTableViewEditing:NO];
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::MoveBookmarksWithUndoToast(
-                              std::move(editedNodes), self.profileBookmarkModel,
-                              folder, self.browserState)];
+                              editedNodesVector, _profileBookmarkModel.get(),
+                              _accountBookmarkModel.get(), folder,
+                              self.browserState)];
 }
 
 - (void)bookmarksFolderChooserCoordinatorDidCancel:
     (BookmarksFolderChooserCoordinator*)coordinator {
   DCHECK(_folderChooserCoordinator);
-  [_folderChooserCoordinator stop];
-  _folderChooserCoordinator.delegate = nil;
-  _folderChooserCoordinator = nil;
+  [self stopFolderChooserCoordinator];
   [self setTableViewEditing:NO];
 }
 
@@ -1197,8 +1200,12 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 #pragma mark - BookmarkModelBridgeObserver
 
 - (void)bookmarkModelLoaded:(bookmarks::BookmarkModel*)model {
+  if (!bookmark_utils_ios::AreAllAvailableBookmarkModelsLoaded(
+          _profileBookmarkModel.get(), _accountBookmarkModel.get())) {
+    return;
+  }
   DCHECK(!self.displayedFolderNode);
-  self.displayedFolderNode = self.profileBookmarkModel->root_node();
+  self.displayedFolderNode = _profileBookmarkModel->root_node();
 
   // If the view hasn't loaded yet, then return early. The eventual call to
   // viewDidLoad will properly initialize the views.  This early return must
@@ -1215,7 +1222,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   if ([BookmarkPathCache
           getBookmarkTopMostRowCacheWithPrefService:self.browserState
                                                         ->GetPrefs()
-                                              model:self.profileBookmarkModel
+                                              model:_profileBookmarkModel.get()
                                            folderId:&unusedFolderId
                                          topMostRow:&unusedIndexPathRow]) {
     self.isReconstructingFromCache = YES;
@@ -1291,19 +1298,27 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 #pragma mark - private
 
+// Stops the folder chooser coordinator.
+- (void)stopFolderChooserCoordinator {
+  [_folderChooserCoordinator stop];
+  _folderChooserCoordinator.delegate = nil;
+  _folderChooserCoordinator = nil;
+}
+
 // Returns a bookmark node reference for `bookmarkNode`.
 - (BookmarkNodeReference)bookmarkNodeReferenceWithNode:
     (const bookmarks::BookmarkNode*)bookmarkNode {
   bookmarks::BookmarkModel* bookmarkModel =
-      bookmark_utils_ios::GetBookmarkModelForNode(
-          bookmarkNode, self.profileBookmarkModel, self.accountBookmarkModel);
+      bookmark_utils_ios::GetBookmarkModelForNode(bookmarkNode,
+                                                  _profileBookmarkModel.get(),
+                                                  _accountBookmarkModel.get());
   BookmarkNodeReference bookmarkNodeReference(bookmarkNode->uuid(),
                                               bookmarkModel);
   return bookmarkNodeReference;
 }
 
 - (BOOL)isDisplayingBookmarkRoot {
-  return self.displayedFolderNode == self.profileBookmarkModel->root_node();
+  return self.displayedFolderNode == _profileBookmarkModel->root_node();
 }
 
 // Check if any of our controller is presenting. We don't consider when this
@@ -1345,7 +1360,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   viewController.navigationItem.leftBarButtonItem.action = @selector(back);
 
   // Disable large titles on every VC but the root controller.
-  if (node != self.profileBookmarkModel->root_node()) {
+  if (node != _profileBookmarkModel->root_node()) {
     viewController.navigationItem.largeTitleDisplayMode =
         UINavigationItemLargeTitleDisplayModeNever;
   }
@@ -1443,19 +1458,17 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   self.mediator.addingNewFolder = YES;
   std::u16string folderTitle =
       l10n_util::GetStringUTF16(IDS_IOS_BOOKMARK_NEW_GROUP_DEFAULT_NAME);
-  self.mediator.editingFolderNode =
-      self.mediator.profileBookmarkModel->AddFolder(
-          self.mediator.displayedNode,
-          self.mediator.displayedNode->children().size(), folderTitle);
+  bookmarks::BookmarkModel* displayedBookmarkModel =
+      self.mediator.displayedBookmarkModel;
+  self.mediator.editingFolderNode = displayedBookmarkModel->AddFolder(
+      self.mediator.displayedNode,
+      self.mediator.displayedNode->children().size(), folderTitle);
 
   BookmarksHomeNodeItem* nodeItem = [[BookmarksHomeNodeItem alloc]
       initWithType:BookmarksHomeItemTypeBookmark
       bookmarkNode:self.mediator.editingFolderNode];
-  SyncSetupService* syncSetupService =
-      SyncSetupServiceFactory::GetForBrowserState(self.browserState);
-  nodeItem.shouldDisplayCloudSlashIcon =
-      bookmark_utils_ios::ShouldDisplayCloudSlashIconForProfileModel(
-          syncSetupService);
+  nodeItem.shouldDisplayCloudSlashIcon = [self.mediator
+      shouldDisplayCloudSlashIconWithBookmarkModel:displayedBookmarkModel];
   [self.tableViewModel addItem:nodeItem
        toSectionWithIdentifier:BookmarksHomeSectionIdentifierBookmarks];
 
@@ -1536,7 +1549,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 - (int)topMostVisibleIndexPathRow {
   // If on root node screen, return 0.
-  if (self.mediator.profileBookmarkModel && [self isDisplayingBookmarkRoot]) {
+  if (_profileBookmarkModel && [self isDisplayingBookmarkRoot]) {
     return 0;
   }
 
@@ -1546,14 +1559,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
     return 0;
   }
 
-  // If the first row is still visible, return 0.
-  NSIndexPath* topMostIndexPath = [visibleIndexPaths objectAtIndex:0];
-  if (topMostIndexPath.row == 0) {
-    return 0;
-  }
-
   // Return the first visible row.
-  topMostIndexPath = [visibleIndexPaths objectAtIndex:0];
+  NSIndexPath* topMostIndexPath = [visibleIndexPaths objectAtIndex:0];
   return topMostIndexPath.row;
 }
 
@@ -2042,19 +2049,36 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                        [self isNodeEditableByUser:self.mediator.displayedNode];
 
   if (vivaldi::IsVivaldiRunning()) {
+    if (vivaldi_bookmark_kit::IsTrash(self.displayedFolderNode)) {
+      // Set empty trash button.
+      titleString = GetNSString(IDS_IOS_NOTE_CONTEXT_BAR_EMPTY_TRASH);
+       UIBarButtonItem* emptyTrashButton =
+           [[UIBarButtonItem alloc] initWithTitle:titleString
+                                   style:UIBarButtonItemStylePlain
+                                  target:self
+                                  action:@selector(emptyTrashButtonClicked)];
+      emptyTrashButton.accessibilityIdentifier =
+        kBookmarksHomeTrailingButtonIdentifier;
+      emptyTrashButton.enabled = [self hasBookmarksOrFolders];
+
+      [self setToolbarItems:@[ spaceButton, spaceButton,
+                               spaceButton, spaceButton, emptyTrashButton]
+                   animated:NO];
+      return;
+    } else {
       UIImage* image = [UIImage systemImageNamed:@"plus"];
       UIBarButtonItem* plusButton =
-         [[UIBarButtonItem alloc]
-          initWithImage:image
-          style:UIBarButtonItemStyleDone
-          target:self
-          action:@selector(handleAddBarButtonTap)];
-      [self setToolbarItems:@[ newFolderButton, spaceButton,
-                               plusButton, spaceButton, editButton ]
-                               animated:NO];
-      return;
-  } // End Vivaldi
-
+        [[UIBarButtonItem alloc]
+         initWithImage:image
+         style:UIBarButtonItemStyleDone
+         target:self
+         action:@selector(handleAddBarButtonTap)];
+        [self setToolbarItems:@[ newFolderButton, spaceButton,
+                                 plusButton, spaceButton, editButton ]
+                     animated:NO];
+        return;
+    }
+  }// End Vivaldi
   [self setToolbarItems:@[ newFolderButton, spaceButton, editButton ]
                animated:NO];
 }
@@ -2157,8 +2181,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                enabled:[self isIncognitoAvailable]];
 
   bookmark_utils_ios::NodeReferenceSet nodeReferences =
-      FindNodeReferenceByNodes(nodes, self.profileBookmarkModel,
-                               self.accountBookmarkModel);
+      FindNodeReferenceByNodes(nodes, _profileBookmarkModel.get(),
+                               _accountBookmarkModel.get());
   titleString = GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE);
   [coordinator
       addItemWithTitle:titleString
@@ -2301,8 +2325,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
       kBookmarksHomeContextMenuIdentifier;
 
   bookmark_utils_ios::NodeReferenceSet nodeReferences =
-      FindNodeReferenceByNodes(nodes, self.profileBookmarkModel,
-                               self.accountBookmarkModel);
+      FindNodeReferenceByNodes(nodes, _profileBookmarkModel.get(),
+                               _accountBookmarkModel.get());
   NSString* titleString = GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE);
   [coordinator
       addItemWithTitle:titleString
@@ -2669,6 +2693,29 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                                                actionProvider:actionProvider];
 }
 
+- (CGFloat)tableView:(UITableView*)tableView
+    heightForHeaderInSection:(NSInteger)section {
+  return [self.tableViewModel numberOfItemsInSection:section] == 0
+             ? 0
+             : UITableViewAutomaticDimension;
+}
+
+- (CGFloat)tableView:(UITableView*)tableView
+    heightForFooterInSection:(NSInteger)section {
+  // Add space between profile and account sections only if both are not empty,
+  // to avoid useless space at the end of the account section content.
+  if ([self.tableViewModel sectionIdentifierForSectionIndex:section] ==
+          BookmarksHomeSectionIdentifierRootAccount &&
+      [self hasItemsInSectionIdentifier:
+                BookmarksHomeSectionIdentifierRootProfile] &&
+      [self hasItemsInSectionIdentifier:
+                BookmarksHomeSectionIdentifierRootAccount]) {
+    return kSpaceBetweenAccountAndProfileSections;
+  } else {
+    return 0;
+  }
+}
+
 #pragma mark - TableViewURLDragDataSource
 
 - (URLInfo*)tableView:(UITableView*)tableView
@@ -2704,8 +2751,8 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
       showSnackbarMessage:
           bookmark_utils_ios::CreateBookmarkAtPositionWithUndoToast(
               base::SysUTF8ToNSString(URL.spec()), URL,
-              self.displayedFolderNode, index, self.profileBookmarkModel,
-              self.browserState)];
+              self.displayedFolderNode, index, _profileBookmarkModel.get(),
+              _accountBookmarkModel.get(), self.browserState)];
 }
 
 #pragma mark - Vivaldi
@@ -2847,12 +2894,14 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   }
 }
 
+#pragma mark: VIVALDI
+
 // Deletes the `nodes`
 - (void)deleteBookmarkNodesVivaldi:(const bookmark_utils_ios::NodeSet&)nodes {
   DCHECK_GE(nodes.size(), 1u);
-  std::vector<bookmarks::BookmarkModel*> models = {self.profileBookmarkModel};
-  if (self.accountBookmarkModel) {
-    models.push_back(self.accountBookmarkModel);
+  std::vector<bookmarks::BookmarkModel*> models = {_profileBookmarkModel.get()};
+  if (_accountBookmarkModel) {
+    models.push_back(_accountBookmarkModel.get());
   }
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::DeleteBookmarksWithUndoToast(
@@ -2864,6 +2913,20 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 /// enough space to show iPad side panel.
 - (BOOL)showingSidePanel {
   return VivaldiGlobalHelpers.canShowSidePanel;
+}
+
+// Called when the empty trash button is clicked.
+- (void)emptyTrashButtonClicked {
+  // Ignore the button tap if any of our controller is presenting.
+  if ([self isAnyControllerPresenting]) {
+    return;
+  }
+  std::set<const BookmarkNode*> nodes;
+  for (const auto& child : self.displayedFolderNode->children()) {
+      nodes.insert(child.get());
+  }
+  DCHECK(nodes.size() > 0);
+  [self deleteBookmarkNodesVivaldi:nodes];
 }
 
 @end

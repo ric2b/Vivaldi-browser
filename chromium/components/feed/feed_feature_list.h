@@ -24,7 +24,6 @@ BASE_DECLARE_FEATURE(kInterestFeedV2Hearts);
 BASE_DECLARE_FEATURE(kInterestFeedV2Scrolling);
 
 extern const base::FeatureParam<std::string> kDisableTriggerTypes;
-extern const base::FeatureParam<int> kSuppressRefreshDurationMinutes;
 extern const base::FeatureParam<int> kTimeoutDurationSeconds;
 extern const base::FeatureParam<bool> kThrottleBackgroundFetches;
 extern const base::FeatureParam<bool> kOnlySetLastRefreshAttemptOnSuccess;
@@ -126,9 +125,6 @@ extern const base::FeatureParam<bool> kFeedCloseRefreshRequireInteraction;
 // When enabled, no view cache is used.
 BASE_DECLARE_FEATURE(kFeedNoViewCache);
 
-// When enabled, play the feed video via inline playback.
-BASE_DECLARE_FEATURE(kFeedVideoInlinePlayback);
-
 // When enabled, allow tagging experiments with only an experiment ID.
 BASE_DECLARE_FEATURE(kFeedExperimentIDTagging);
 
@@ -148,6 +144,15 @@ BASE_DECLARE_FEATURE(kCormorant);
 
 // Feature that enables reporting feed user interaction reliability.
 BASE_DECLARE_FEATURE(kFeedUserInteractionReliabilityReport);
+
+// Feature that enables signed-out view demotion.
+BASE_DECLARE_FEATURE(kFeedSignedOutViewDemotion);
+
+// Feature that enables dynamic colors in the feed.
+BASE_DECLARE_FEATURE(kFeedDynamicColors);
+
+// Feature that enables UI update for Follow.
+BASE_DECLARE_FEATURE(kFeedFollowUiUpdate);
 
 }  // namespace feed
 

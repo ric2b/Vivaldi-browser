@@ -472,6 +472,22 @@ virtual/virtual_failures/failures/expected/device_failure.html [ Skip ]
 passes/slow.html [ Slow ]
 """)
 
+    if not filesystem.exists(MOCK_WEB_TESTS + 'SingleThreadedTests'):
+        filesystem.write_text_file(
+            MOCK_WEB_TESTS + 'SmokeTests/SingleThreadedTests', """
+fast/borders/border-image-outset-split-inline-vertical-lr.html
+non/virtual
+passes/text.html
+virtual/non-existing/test.html
+virtual/virtual_passes/passes/text.html
+virtual/virtual_passes/passes/any.html
+virtual/virtual_passes
+virtual/virtual_passes/
+virtual/virtual_passes/passes
+virtual/virtual_passes/passes/
+""")
+
+
     # FIXME: This test was only being ignored because of missing a leading '/'.
     # Fixing the typo causes several tests to assert, so disabling the test entirely.
     # Add in a file should be ignored by port.find_test_files().
@@ -693,6 +709,7 @@ class TestPort(Port):
             'test-win-win10': 'win10',
             'test-mac-mac10.10': 'mac10.10',
             'test-mac-mac10.11': 'mac10.11',
+            'test-mac-mac11-arm64': 'mac11-arm64',
             'test-linux-precise': 'precise',
             'test-linux-trusty': 'trusty',
         }
@@ -703,16 +720,22 @@ class TestPort(Port):
         elif self._operating_system == 'mac':
             self._architecture = 'arm64'
 
-        self.all_systems = (('mac10.10', 'x86'), ('mac10.11', 'x86'),
-                            ('win7', 'x86'), ('win10', 'x86'),
-                            ('precise', 'x86_64'), ('trusty', 'x86_64'))
+        self.all_systems = (
+            ('mac10.10', 'x86'),
+            ('mac10.11', 'x86'),
+            ('mac11-arm64', 'arm64'),
+            ('win7', 'x86'),
+            ('win10', 'x86'),
+            ('precise', 'x86_64'),
+            ('trusty', 'x86_64'),
+        )
 
         self.all_build_types = ('debug', 'release')
 
         # To avoid surprises when introducing new macros, these are
         # intentionally fixed in time.
         self.configuration_specifier_macros_dict = {
-            'mac': ['mac10.10', 'mac10.11'],
+            'mac': ['mac10.10', 'mac10.11', 'mac10.12'],
             'win': ['win7', 'win10'],
             'linux': ['precise', 'trusty']
         }

@@ -5,7 +5,7 @@
 
 #import "base/files/file_path.h"
 #import "base/logging.h"
-#import "ios/chrome/browser/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/web/public/web_client.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 

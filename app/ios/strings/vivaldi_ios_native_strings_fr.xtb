@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">Par contenu</translation>
 <translation id="2129408066358825297">Âge</translation>
 <translation id="2148384276939959392">Synchroniser les éléments sélectionnés</translation>
+<translation id="21693288559538605">Résumé du blocage des publicités et des traqueurs</translation>
 <translation id="2195713384412091023">Cela supprimera toutes les données de synchronisation stockées sur notre serveur, réinitialisera votre mot de passe de cryptage et vous déconnectera.</translation>
 <translation id="2243210264130642074">Note enregistrée</translation>
 <translation id="2272338747456392228">Le compte a été verrouillé</translation>
 <translation id="2273327106802955778">Plus</translation>
 <translation id="2324160330092901720">Un code de vérification a été envoyé à <ph name="EMAIL_ID" /></translation>
+<translation id="2336309953058658733">Vider la corbeille</translation>
 <translation id="2359808026110333948">Continuer</translation>
 <translation id="2386793615875593361">1 sélectionnée</translation>
 <translation id="2388224692799337242">Quand vous allez commencer à naviguer, votre historique apparaîtra ici</translation>
@@ -117,6 +119,7 @@ bloquées</translation>
 <translation id="3699026013955941879">Le code a expiré. Veuillez demander un nouveau code d’activation.</translation>
 <translation id="3700829948786686853">Bienvenue dans Vivaldi</translation>
 <translation id="3766350025418769949">Vous pouvez utiliser les mots de passe que vous avez enregistrés dans le gestionnaire de mots de passe de Vivaldi dans d'autres applications sur votre iPad.</translation>
+<translation id="3845564230651302310">Application des nouveaux paramètres de blocage…</translation>
 <translation id="3858860766373142691">Nom</translation>
 <translation id="3866249974567520381">Description</translation>
 <translation id="3872195896030547485">Merci de saisir une adresse mail valide.</translation>
@@ -225,6 +228,7 @@ bloqué</translation>
 <translation id="6406506848690869874">Synchronisation</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> sélectionnée</translation>
 <translation id="6468130661190228905">Désolé, il semble que vous deviez attendre un peu avant de rejoindre notre communauté. Nous exigeons que nos membres aient au moins 16 ans pour adhérer.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importer<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Sauvegarde de la clé de chiffrement</translation>
 <translation id="6527303717912515753">Partager</translation>
 <translation id="6535988230515403205">Polonais (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@ bloqué</translation>
 <translation id="7461899062138731833">SOURCES</translation>
 <translation id="750493650310597496">0 sélectionnée</translation>
 <translation id="7525067979554623046">Créer</translation>
-<translation id="7541020606126512786">Résumé des blocages de pubs et traqueurs</translation>
 <translation id="7573518470897278603">Version pour mobile</translation>
 <translation id="7574321014880720413">Ajouter un nouveau domaine</translation>
 <translation id="7587132259180664054">Mail envoyé avec succès</translation>

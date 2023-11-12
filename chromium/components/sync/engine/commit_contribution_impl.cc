@@ -233,6 +233,7 @@ void CommitContributionImpl::PopulateCommitProto(
   commit_proto->set_version(commit_entity.base_version);
   commit_proto->set_deleted(entity_data.is_deleted());
   commit_proto->set_name(entity_data.name);
+  commit_proto->set_mtime(TimeToProtoTime(entity_data.modification_time));
 
   if (!entity_data.is_deleted()) {
     // Handle bookmarks separately.
@@ -279,7 +280,6 @@ void CommitContributionImpl::PopulateCommitProto(
       }
     }
     commit_proto->set_ctime(TimeToProtoTime(entity_data.creation_time));
-    commit_proto->set_mtime(TimeToProtoTime(entity_data.modification_time));
     commit_proto->mutable_specifics()->CopyFrom(entity_data.specifics);
   }
 }
@@ -300,40 +300,8 @@ void CommitContributionImpl::AdjustCommitProto(
     }
   }
 
-  // Encrypt the specifics and hide the title if necessary.
   if (commit_proto->specifics().has_password()) {
-    DCHECK(cryptographer_);
-    const sync_pb::PasswordSpecifics& password_specifics =
-        commit_proto->specifics().password();
-    const sync_pb::PasswordSpecificsData& password_data =
-        password_specifics.client_only_encrypted_data();
-    sync_pb::EntitySpecifics encrypted_password;
-
-    // Keep the unencrypted metadata for non-custom passphrase users.
-    if (!IsExplicitPassphrase(passphrase_type_)) {
-      *encrypted_password.mutable_password()->mutable_unencrypted_metadata() =
-          commit_proto->specifics().password().unencrypted_metadata();
-    }
-
-    bool result = cryptographer_->Encrypt(
-        password_data,
-        encrypted_password.mutable_password()->mutable_encrypted());
-    DCHECK(result);
-    if (base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup)) {
-      // `encrypted_notes_backup` field needs to be populated regardless of
-      // whether or not there are any notes.
-      result = cryptographer_->Encrypt(password_data.notes(),
-                                       encrypted_password.mutable_password()
-                                           ->mutable_encrypted_notes_backup());
-      DCHECK(result);
-      // When encrypting both blobs succeeds, both encrypted blobs must use the
-      // key name.
-      DCHECK_EQ(
-          encrypted_password.password().encrypted().key_name(),
-          encrypted_password.password().encrypted_notes_backup().key_name());
-    }
-    *commit_proto->mutable_specifics() = std::move(encrypted_password);
-    commit_proto->set_name("encrypted");
+    EncryptPasswordSpecificsData(commit_proto);
   } else if (cryptographer_) {
     if (commit_proto->has_specifics()) {
       sync_pb::EntitySpecifics encrypted_specifics;
@@ -355,6 +323,42 @@ void CommitContributionImpl::AdjustCommitProto(
   // Always include enough specifics to identify the type. Do this even in
   // deletion requests, where the specifics are otherwise invalid.
   AddDefaultFieldValue(type_, commit_proto->mutable_specifics());
+}
+
+void CommitContributionImpl::EncryptPasswordSpecificsData(
+    sync_pb::SyncEntity* commit_proto) {
+  DCHECK(cryptographer_);
+  const sync_pb::PasswordSpecifics& password_specifics =
+      commit_proto->specifics().password();
+  const sync_pb::PasswordSpecificsData& password_data =
+      password_specifics.client_only_encrypted_data();
+  sync_pb::EntitySpecifics encrypted_password;
+
+  // Keep the unencrypted metadata for non-custom passphrase users.
+  if (!IsExplicitPassphrase(passphrase_type_)) {
+    *encrypted_password.mutable_password()->mutable_unencrypted_metadata() =
+        commit_proto->specifics().password().unencrypted_metadata();
+  }
+
+  bool result = cryptographer_->Encrypt(
+      password_data,
+      encrypted_password.mutable_password()->mutable_encrypted());
+  DCHECK(result);
+  if (base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup)) {
+    // `encrypted_notes_backup` field needs to be populated regardless of
+    // whether or not there are any notes.
+    result = cryptographer_->Encrypt(password_data.notes(),
+                                     encrypted_password.mutable_password()
+                                         ->mutable_encrypted_notes_backup());
+    DCHECK(result);
+    // When encrypting both blobs succeeds, both encrypted blobs must use the
+    // key name.
+    DCHECK_EQ(
+        encrypted_password.password().encrypted().key_name(),
+        encrypted_password.password().encrypted_notes_backup().key_name());
+  }
+  *commit_proto->mutable_specifics() = std::move(encrypted_password);
+  commit_proto->set_name("encrypted");
 }
 
 }  // namespace syncer

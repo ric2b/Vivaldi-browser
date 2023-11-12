@@ -91,7 +91,7 @@ void WaylandPointer::Enter(void* data,
 
   if (ShouldSuppressPointerEnterOrLeaveEvents(pointer->connection_)) {
     LOG(ERROR) << "Compositor sent a spurious wl_pointer.enter event during"
-                  "a window drag 'n drop operation. IGNORING.";
+                  " a window drag 'n drop operation. IGNORING.";
     return;
   }
 
@@ -99,6 +99,10 @@ void WaylandPointer::Enter(void* data,
       wl::SerialType::kMouseEnter, serial);
 
   WaylandWindow* window = wl::RootWindowFromWlSurface(surface);
+  if (!window) {
+    return;
+  }
+
   gfx::PointF location{static_cast<float>(wl_fixed_to_double(surface_x)),
                        static_cast<float>(wl_fixed_to_double(surface_y))};
 
@@ -116,7 +120,7 @@ void WaylandPointer::Leave(void* data,
 
   if (ShouldSuppressPointerEnterOrLeaveEvents(pointer->connection_)) {
     LOG(ERROR) << "Compositor sent a spurious wl_pointer.leave event during"
-                  "a window drag 'n drop operation. IGNORING.";
+                  " a window drag 'n drop operation. IGNORING.";
     return;
   }
 

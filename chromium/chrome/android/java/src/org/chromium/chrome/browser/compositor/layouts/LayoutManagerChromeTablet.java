@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.compositor.layouts;
 
+import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.supplier.ObservableSupplier;
@@ -11,9 +12,11 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
+import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager.TabModelStartupInfo;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -77,14 +80,20 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
      * @param lifecycleDispatcher @{@link ActivityLifecycleDispatcher} to be passed to TabStrip
      *         helper.
      * @param delayedStartSurfaceCallable Callable to create StartSurface/GTS views.
+     * @param multiInstanceManager @{link MultiInstanceManager} passed to @{link StripLayoutHelper}
+     *         to support tab drag and drop.
+     * @param toolbarContainerView @{link View} passed to @{link StripLayoutHelper} to support tab
+     *         drag and drop.
      */
     public LayoutManagerChromeTablet(LayoutManagerHost host, ViewGroup contentContainer,
             Supplier<StartSurface> startSurfaceSupplier, Supplier<TabSwitcher> tabSwitcherSupplier,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider,
+            ObservableSupplier<TabModelStartupInfo> tabModelStartupInfoSupplier,
             ViewGroup tabSwitcherViewHolder, ScrimCoordinator scrimCoordinator,
             ActivityLifecycleDispatcher lifecycleDispatcher,
-            Callable<ViewGroup> delayedStartSurfaceCallable) {
+            Callable<ViewGroup> delayedStartSurfaceCallable,
+            MultiInstanceManager multiInstanceManager, View toolbarContainerView) {
         super(host, contentContainer, startSurfaceSupplier, tabSwitcherSupplier,
                 tabContentManagerSupplier, topUiThemeColorProvider, tabSwitcherViewHolder,
                 scrimCoordinator);
@@ -95,13 +104,21 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
         // below.
         if (!ChromeApplicationImpl.isVivaldi())
         mTabStripLayoutHelperManager = new StripLayoutHelperManager(host.getContext(), host, this,
-                mHost.getLayoutRenderHost(), () -> mLayerTitleCache, lifecycleDispatcher);
+                mHost.getLayoutRenderHost(),
+                ()
+                        -> mLayerTitleCache,
+                tabModelStartupInfoSupplier, lifecycleDispatcher, multiInstanceManager,
+                toolbarContainerView);
 
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
         for (int i = 0; i < 2; i++) {
             mTabStrips.add(new StripLayoutHelperManager(host.getContext(), host, this,
-                mHost.getLayoutRenderHost(), () -> mLayerTitleCache, lifecycleDispatcher));
+                    mHost.getLayoutRenderHost(),
+                    ()
+                            -> mLayerTitleCache,
+                    tabModelStartupInfoSupplier, lifecycleDispatcher, multiInstanceManager,
+                    toolbarContainerView));
             mTabStrips.get(i).setIsStackStrip(i != 0);
             addObserver(mTabStrips.get(i).getTabSwitcherObserver());
             addSceneOverlay(mTabStrips.get(i));
@@ -140,9 +157,21 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     }
 
     @Override
+    public void onTabsAllClosing(boolean incognito) {
+        if (getActiveLayout() == mStaticLayout && !incognito) {
+            showLayout(LayoutType.TAB_SWITCHER, /*animate=*/false);
+        }
+        super.onTabsAllClosing(incognito);
+    }
+
+    @Override
     protected void tabModelSwitched(boolean incognito) {
         super.tabModelSwitched(incognito);
         getTabModelSelector().commitAllTabClosures();
+        if (getActiveLayout() == mStaticLayout && !incognito
+                && getTabModelSelector().getModel(false).getCount() == 0) {
+            showLayout(LayoutType.TAB_SWITCHER, /*animate=*/false);
+        }
     }
 
     @Override

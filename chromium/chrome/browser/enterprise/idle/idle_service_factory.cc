@@ -19,7 +19,8 @@ IdleService* IdleServiceFactory::GetForBrowserContext(
 
 // static
 IdleServiceFactory* IdleServiceFactory::GetInstance() {
-  return base::Singleton<IdleServiceFactory>::get();
+  static base::NoDestructor<IdleServiceFactory> instance;
+  return instance.get();
 }
 
 IdleServiceFactory::IdleServiceFactory()
@@ -38,6 +39,7 @@ void IdleServiceFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterTimeDeltaPref(prefs::kIdleTimeout, base::TimeDelta());
   registry->RegisterListPref(prefs::kIdleTimeoutActions);
+  registry->RegisterBooleanPref(prefs::kIdleTimeoutShowBubbleOnStartup, false);
 }
 
 bool IdleServiceFactory::ServiceIsCreatedWithBrowserContext() const {

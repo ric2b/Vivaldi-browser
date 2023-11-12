@@ -22,7 +22,8 @@ MenuManager* MenuManagerFactory::GetForBrowserContext(
 
 // static
 MenuManagerFactory* MenuManagerFactory::GetInstance() {
-  return base::Singleton<MenuManagerFactory>::get();
+  static base::NoDestructor<MenuManagerFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -35,11 +36,16 @@ MenuManagerFactory::BuildServiceInstanceForTesting(
 MenuManagerFactory::MenuManagerFactory()
     : ProfileKeyedServiceFactory(
           "MenuManager",
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   DependsOn(ExtensionsBrowserClient::Get()->GetExtensionSystemFactory());
 }
 
-MenuManagerFactory::~MenuManagerFactory() {}
+MenuManagerFactory::~MenuManagerFactory() = default;
 
 KeyedService* MenuManagerFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {

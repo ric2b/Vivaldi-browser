@@ -11,10 +11,10 @@
 #import "components/safe_browsing/core/browser/tailored_security_service/tailored_security_service_util.h"
 #import "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/infobars/infobar_ios.h"
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/safe_browsing/tailored_security/tailored_security_service_infobar_delegate.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_tab_helper.h"
 #import "ios/web/public/navigation/navigation_context.h"
@@ -168,10 +168,9 @@ void TailoredSecurityTabHelper::UpdateFocusAndURL(bool focused,
     bool old_should_query =
         focused_ && safe_browsing::CanQueryTailoredSecurityForUrl(last_url_);
     if (should_query && !old_should_query) {
-      service_->AddQueryRequest();
-      has_query_request_ = true;
+      has_query_request_ = service_->AddQueryRequest();
     }
-    if (!should_query && old_should_query) {
+    if (!should_query && old_should_query && has_query_request_) {
       service_->RemoveQueryRequest();
       has_query_request_ = false;
     }

@@ -8,12 +8,13 @@
 #include <string>
 
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/window/dialog_delegate.h"
 
 namespace policy {
 
-// The callback to be exectued when the user addresses the dialog. When
+// The callback to be executed when the user addresses the dialog. When
 // `should_proceed` is set to true, the action continues and is aborted
 // otherwise.
 using OnDlpRestrictionCheckedCallback =
@@ -34,12 +35,16 @@ class PolicyDialogBase : public views::DialogDelegateView {
     kFiles
   };
 
-  explicit PolicyDialogBase(OnDlpRestrictionCheckedCallback callback);
+  PolicyDialogBase();
   PolicyDialogBase(const PolicyDialogBase& other) = delete;
   PolicyDialogBase& operator=(const PolicyDialogBase& other) = delete;
   ~PolicyDialogBase() override = default;
 
  protected:
+  // Splits `callback` and assigns to accept and cancel callbacks.
+  void SetOnDlpRestrictionCheckedCallback(
+      OnDlpRestrictionCheckedCallback callback);
+
   // Sets up the dialog's upper panel with |title| and |message|.
   void SetupUpperPanel(const std::u16string& title,
                        const std::u16string& message);
@@ -71,9 +76,9 @@ class PolicyDialogBase : public views::DialogDelegateView {
                           const std::u16string& title);
 
   // The upper section of the dialog.
-  views::View* upper_panel_;
+  raw_ptr<views::View, ExperimentalAsh> upper_panel_;
   // The scrollable container used for listing contents or files.
-  views::View* scroll_view_container_;
+  raw_ptr<views::View, ExperimentalAsh> scroll_view_container_;
 };
 
 }  // namespace policy

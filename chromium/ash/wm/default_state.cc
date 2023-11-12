@@ -15,7 +15,6 @@
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/splitview/split_view_metrics_controller.h"
 #include "ash/wm/window_positioning_utils.h"
-#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_delegate.h"
 #include "ash/wm/window_state_util.h"
 #include "ash/wm/wm_event.h"
@@ -32,7 +31,6 @@
 #include "ui/aura/window_delegate.h"
 #include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/layer.h"
-#include "ui/display/display.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
@@ -263,12 +261,9 @@ void DefaultState::HandleWorkspaceEvents(WindowState* window_state,
       if (in_fullscreen && window_state->IsMaximized())
         return;
 
-      // TODO(b/272091660): Consider having a more graceful algorithm for
-      // floated windows as they may have been purposefully placed semi
-      // offscreen.
       UpdateBoundsForDisplayOrWorkAreaBoundsChange(
           window_state,
-          /*ensure_full_window_visibility=*/window_state->IsFloated());
+          /*ensure_full_window_visibility=*/false);
       return;
     }
     case WM_EVENT_SYSTEM_UI_AREA_CHANGED:
@@ -431,12 +426,17 @@ void DefaultState::HandleTransitionEvents(WindowState* window_state,
   }
 
   if (IsSnappedWindowStateType(next_state_type)) {
-    if (type == WM_EVENT_RESTORE) {
-      window_state->set_snap_action_source(
+    const bool is_restoring =
+        window_state->window()->GetProperty(aura::client::kIsRestoringKey) ||
+        type == WM_EVENT_RESTORE;
+    if (is_restoring) {
+      window_state->RecordWindowSnapActionSource(
           WindowSnapActionSource::kSnapByWindowStateRestore);
+    } else {
+      CHECK(event->IsSnapEvent());
+      window_state->RecordWindowSnapActionSource(
+          static_cast<const WindowSnapWMEvent*>(event)->snap_action_source());
     }
-    window_state->RecordAndResetWindowSnapActionSource(current_state_type,
-                                                       next_state_type);
     EnterToNextState(window_state, next_state_type);
     return;
   }
@@ -444,7 +444,6 @@ void DefaultState::HandleTransitionEvents(WindowState* window_state,
   EnterToNextState(window_state, next_state_type);
 }
 
-// static
 bool DefaultState::SetMaximizedOrFullscreenBounds(WindowState* window_state) {
   DCHECK(!window_state->is_dragged());
   DCHECK(!window_state->allow_set_bounds_direct());
@@ -461,7 +460,6 @@ bool DefaultState::SetMaximizedOrFullscreenBounds(WindowState* window_state) {
   return false;
 }
 
-// static
 void DefaultState::SetBounds(WindowState* window_state,
                              const SetBoundsWMEvent* event) {
   if (window_state->is_dragged() || window_state->allow_set_bounds_direct()) {

@@ -37,7 +37,6 @@
 #include "components/sync/base/command_line_switches.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/driver/sync_service_impl.h"
 #include "components/sync/engine/bookmark_update_preprocessing.h"
 #include "components/sync/engine/cycle/entity_change_metric_recording.h"
 #include "components/sync/engine/loopback_server/loopback_server_entity.h"
@@ -46,6 +45,7 @@
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/sync_entity.pb.h"
+#include "components/sync/service/sync_service_impl.h"
 #include "components/sync/test/bookmark_entity_builder.h"
 #include "components/sync/test/entity_builder_factory.h"
 #include "components/sync/test/fake_server.h"
@@ -59,7 +59,7 @@
 #include "content/public/test/test_launcher.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/layout.h"
+#include "ui/base/resource/resource_scale_factor.h"
 
 namespace {
 
@@ -259,8 +259,7 @@ class SingleClientBookmarksSyncTestWithEnforcedBookmarksCountLimit
 
     bool IsExitConditionSatisfied(std::ostream* os) override {
       *os << "Waiting for Bookmarks data type error.";
-      return service()->HasAnyDatatypeErrorForTest(
-          syncer::ModelTypeSet(syncer::BOOKMARKS));
+      return service()->HasAnyDatatypeErrorForTest({syncer::BOOKMARKS});
     }
   };
 
@@ -1142,6 +1141,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest, E2E_ONLY(SanitySetup)) {
+  ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 }
 
@@ -1748,7 +1748,7 @@ IN_PROC_BROWSER_TEST_F(
   // Run a sync cycle to trigger bookmarks reupload on browser startup. This is
   // required since bookmarks get reuploaded only after the latest changes are
   // downloaded to avoid uploading outdated data.
-  GetSyncService(kSingleProfileIndex)->TriggerRefresh(syncer::BOOKMARKS);
+  GetSyncService(kSingleProfileIndex)->TriggerRefresh({syncer::BOOKMARKS});
 
   // Bookmark favicon will be loaded if there are local changes.
   ASSERT_TRUE(
@@ -2007,8 +2007,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTestWithEnabledThrottling,
   histogram_tester.ExpectTotalCount("Sync.ModelTypeCommitWithDepletedQuota", 0);
 }
 
+// TODO(crbug.com/1447535): Disabled due to flakiness.
 IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTestWithEnabledThrottling,
-                       DepleteQuotaAndRecover) {
+                       DISABLED_DepleteQuotaAndRecover) {
   ASSERT_TRUE(SetupClients());
 
   // Setup custom quota params: to effectively never refill, and custom nudge
@@ -2092,8 +2093,7 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_FALSE(GetClient(kSingleProfileIndex)
                    ->service()
-                   ->HasAnyDatatypeErrorForTest(
-                       syncer::ModelTypeSet(syncer::BOOKMARKS)));
+                   ->HasAnyDatatypeErrorForTest({syncer::BOOKMARKS}));
 
   // Add 2 new bookmarks to exceed the limit.
   const BookmarkNode* bookmark_bar_node =
@@ -2117,8 +2117,7 @@ IN_PROC_BROWSER_TEST_F(
           .Wait());
   // Bookmarks should be in an error state. Thus excluding it from the
   // CheckForDataTypeFailures() check.
-  ExcludeDataTypesFromCheckForDataTypeFailures(
-      syncer::ModelTypeSet(syncer::BOOKMARKS));
+  ExcludeDataTypesFromCheckForDataTypeFailures({syncer::BOOKMARKS});
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -2149,8 +2148,7 @@ IN_PROC_BROWSER_TEST_F(
 
   ASSERT_FALSE(GetClient(kSingleProfileIndex)
                    ->service()
-                   ->HasAnyDatatypeErrorForTest(
-                       syncer::ModelTypeSet(syncer::BOOKMARKS)));
+                   ->HasAnyDatatypeErrorForTest({syncer::BOOKMARKS}));
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   // We now have 5 local bookmarks(3 permanent + 2 added), which exceeds our
@@ -2160,8 +2158,7 @@ IN_PROC_BROWSER_TEST_F(
           .Wait());
   // Bookmarks should be in an error state. Thus excluding it from the
   // CheckForDataTypeFailures() check.
-  ExcludeDataTypesFromCheckForDataTypeFailures(
-      syncer::ModelTypeSet(syncer::BOOKMARKS));
+  ExcludeDataTypesFromCheckForDataTypeFailures({syncer::BOOKMARKS});
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -2196,8 +2193,7 @@ IN_PROC_BROWSER_TEST_F(
 
   ASSERT_FALSE(GetClient(kSingleProfileIndex)
                    ->service()
-                   ->HasAnyDatatypeErrorForTest(
-                       syncer::ModelTypeSet(syncer::BOOKMARKS)));
+                   ->HasAnyDatatypeErrorForTest({syncer::BOOKMARKS}));
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   // We should now have 6 local bookmarks, (3 permanent + 2 locally added + 1
@@ -2212,8 +2208,7 @@ IN_PROC_BROWSER_TEST_F(
                   kTitle1, GURL(kUrl1))));
   // Bookmarks should be in an error state. Thus excluding it from the
   // CheckForDataTypeFailures() check.
-  ExcludeDataTypesFromCheckForDataTypeFailures(
-      syncer::ModelTypeSet(syncer::BOOKMARKS));
+  ExcludeDataTypesFromCheckForDataTypeFailures({syncer::BOOKMARKS});
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -2235,8 +2230,7 @@ IN_PROC_BROWSER_TEST_F(
 
   ASSERT_FALSE(GetClient(kSingleProfileIndex)
                    ->service()
-                   ->HasAnyDatatypeErrorForTest(
-                       syncer::ModelTypeSet(syncer::BOOKMARKS)));
+                   ->HasAnyDatatypeErrorForTest({syncer::BOOKMARKS}));
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   // Create a bookmark on the server under BookmarkBar.
@@ -2257,8 +2251,7 @@ IN_PROC_BROWSER_TEST_F(
                   kTitle2, GURL(kUrl2))));
   // Bookmarks should be in an error state. Thus excluding it from the
   // CheckForDataTypeFailures() check.
-  ExcludeDataTypesFromCheckForDataTypeFailures(
-      syncer::ModelTypeSet(syncer::BOOKMARKS));
+  ExcludeDataTypesFromCheckForDataTypeFailures({syncer::BOOKMARKS});
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -2287,8 +2280,7 @@ IN_PROC_BROWSER_TEST_F(
 
   ASSERT_FALSE(GetClient(kSingleProfileIndex)
                    ->service()
-                   ->HasAnyDatatypeErrorForTest(
-                       syncer::ModelTypeSet(syncer::BOOKMARKS)));
+                   ->HasAnyDatatypeErrorForTest({syncer::BOOKMARKS}));
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   // Update of size 5 exceeds the limit.
@@ -2298,8 +2290,7 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(GetBookmarkBarNode(kSingleProfileIndex)->children().empty());
   // Bookmarks should be in an error state. Thus excluding it from the
   // CheckForDataTypeFailures() check.
-  ExcludeDataTypesFromCheckForDataTypeFailures(
-      syncer::ModelTypeSet(syncer::BOOKMARKS));
+  ExcludeDataTypesFromCheckForDataTypeFailures({syncer::BOOKMARKS});
 }
 
 }  // namespace

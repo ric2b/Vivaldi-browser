@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include <mutex>
+#include <thread>
+#include <unordered_map>
 
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
@@ -72,11 +74,23 @@ const char kSwitchExportRustProject[] = "export-rust-project";
 struct TargetWriteInfo {
   std::mutex lock;
   NinjaWriter::PerToolchainRules rules;
+
+  using ResolvedMap = std::unordered_map<std::thread::id, ResolvedTargetData>;
+  std::unique_ptr<ResolvedMap> resolved_map = std::make_unique<ResolvedMap>();
+
+  void LeakOnPurpose() {
+    (void)resolved_map.release();
+  }
 };
 
 // Called on worker thread to write the ninja file.
 void BackgroundDoWrite(TargetWriteInfo* write_info, const Target* target) {
-  std::string rule = NinjaTargetWriter::RunAndWriteFile(target);
+  ResolvedTargetData* resolved;
+  {
+    std::lock_guard<std::mutex> lock(write_info->lock);
+    resolved = &((*write_info->resolved_map)[std::this_thread::get_id()]);
+  }
+  std::string rule = NinjaTargetWriter::RunAndWriteFile(target, resolved);
   DCHECK(!rule.empty());
 
   {
@@ -710,6 +724,11 @@ int RunGen(const std::vector<std::string>& args) {
   if (!setup->Run())
     return 1;
 
+  if (command_line->HasSwitch(switches::kVerbose))
+    OutputString("Build graph constructed in " +
+                 base::Int64ToString(timer.Elapsed().InMilliseconds()) +
+                 "ms\n");
+
   // Sort the targets in each toolchain according to their label. This makes
   // the ninja files have deterministic content.
   for (auto& cur_toolchain : write_info.rules) {
@@ -781,6 +800,10 @@ int RunGen(const std::vector<std::string>& args) {
         "ms\n";
     OutputString(stats);
   }
+
+  // Just like the build graph, leak the resolved data to avoid expensive
+  // process teardown here too.
+  write_info.LeakOnPurpose();
 
   return 0;
 }

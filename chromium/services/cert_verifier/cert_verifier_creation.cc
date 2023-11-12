@@ -11,7 +11,6 @@
 #include "net/cert/cert_verify_proc.h"
 #include "net/cert/crl_set.h"
 #include "net/cert/multi_threaded_cert_verifier.h"
-#include "net/cert_net/cert_net_fetcher_url_request.h"
 #include "net/net_buildflags.h"
 
 #if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -106,23 +105,21 @@ class CertVerifyProcFactoryImpl : public net::CertVerifyProcFactory {
   scoped_refptr<net::CertVerifyProc> CreateOldCertVerifyProc(
       scoped_refptr<net::CertNetFetcher> cert_net_fetcher,
       scoped_refptr<net::CRLSet> crl_set) {
-    scoped_refptr<net::CertVerifyProc> verify_proc;
 #if BUILDFLAG(IS_CHROMEOS)
-    verify_proc = net::CreateCertVerifyProcBuiltin(
+    return net::CreateCertVerifyProcBuiltin(
         std::move(cert_net_fetcher), std::move(crl_set),
         net::CreateSslSystemTrustStoreNSSWithUserSlotRestriction(
             user_slot_restriction_ ? crypto::ScopedPK11Slot(PK11_ReferenceSlot(
                                          user_slot_restriction_.get()))
                                    : nullptr));
 #elif BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX)
-    verify_proc = net::CreateCertVerifyProcBuiltin(
-        std::move(cert_net_fetcher), std::move(crl_set),
-        net::CreateSslSystemTrustStore());
+    return net::CreateCertVerifyProcBuiltin(std::move(cert_net_fetcher),
+                                            std::move(crl_set),
+                                            net::CreateSslSystemTrustStore());
 #else
-    verify_proc = net::CertVerifyProc::CreateSystemVerifyProc(
+    return net::CertVerifyProc::CreateSystemVerifyProc(
         std::move(cert_net_fetcher), std::move(crl_set));
 #endif
-    return verify_proc;
   }
 #endif  // !BUILDFLAG(CHROME_ROOT_STORE_ONLY)
 
@@ -133,12 +130,11 @@ class CertVerifyProcFactoryImpl : public net::CertVerifyProcFactory {
       scoped_refptr<net::CertNetFetcher> cert_net_fetcher,
       scoped_refptr<net::CRLSet> crl_set,
       const net::ChromeRootStoreData* root_store_data) {
-    std::unique_ptr<net::TrustStoreChrome> chrome_root;
-    if (!root_store_data) {
-      chrome_root = std::make_unique<net::TrustStoreChrome>();
-    } else {
-      chrome_root = std::make_unique<net::TrustStoreChrome>(*root_store_data);
-    }
+    std::unique_ptr<net::TrustStoreChrome> chrome_root =
+        root_store_data
+            ? std::make_unique<net::TrustStoreChrome>(*root_store_data)
+            : std::make_unique<net::TrustStoreChrome>();
+
     std::unique_ptr<net::SystemTrustStore> trust_store;
 #if BUILDFLAG(IS_CHROMEOS)
     trust_store =
@@ -151,6 +147,7 @@ class CertVerifyProcFactoryImpl : public net::CertVerifyProcFactory {
     trust_store =
         net::CreateSslSystemTrustStoreChromeRoot(std::move(chrome_root));
 #endif
+
 #if BUILDFLAG(IS_WIN)
     // Start initialization of TrustStoreWin on a separate thread if it hasn't
     // been done already. We do this here instead of in the TrustStoreWin

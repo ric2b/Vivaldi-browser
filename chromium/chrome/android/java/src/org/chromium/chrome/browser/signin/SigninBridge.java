@@ -12,6 +12,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.device_lock.DeviceLockActivityLauncherImpl;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
@@ -82,20 +83,23 @@ final class SigninBridge {
                 Profile.getLastUsedRegularProfile());
         if (!signinManager.isSyncOptInAllowed()) {
             SigninMetricsUtils.logAccountConsistencyPromoAction(
-                    AccountConsistencyPromoAction.SUPPRESSED_SIGNIN_NOT_ALLOWED);
+                    AccountConsistencyPromoAction.SUPPRESSED_SIGNIN_NOT_ALLOWED,
+                    SigninAccessPoint.WEB_SIGNIN);
             return;
         }
         final List<Account> accounts = AccountUtils.getAccountsIfFulfilledOrEmpty(
                 AccountManagerFacadeProvider.getInstance().getAccounts());
         if (accounts.isEmpty()) {
             SigninMetricsUtils.logAccountConsistencyPromoAction(
-                    AccountConsistencyPromoAction.SUPPRESSED_NO_ACCOUNTS);
+                    AccountConsistencyPromoAction.SUPPRESSED_NO_ACCOUNTS,
+                    SigninAccessPoint.WEB_SIGNIN);
             return;
         }
         if (SigninPreferencesManager.getInstance().getWebSigninAccountPickerActiveDismissalCount()
                 >= ACCOUNT_PICKER_BOTTOM_SHEET_DISMISS_LIMIT) {
             SigninMetricsUtils.logAccountConsistencyPromoAction(
-                    AccountConsistencyPromoAction.SUPPRESSED_CONSECUTIVE_DISMISSALS);
+                    AccountConsistencyPromoAction.SUPPRESSED_CONSECUTIVE_DISMISSALS,
+                    SigninAccessPoint.WEB_SIGNIN);
             return;
         }
         BottomSheetController bottomSheetController =
@@ -116,7 +120,7 @@ final class SigninBridge {
         new AccountPickerBottomSheetCoordinator(windowAndroid, bottomSheetController,
                 new WebSigninAccountPickerDelegate(TabModelUtils.getCurrentTab(regularTabModel),
                         new WebSigninBridge.Factory(), continueUrl),
-                new AccountPickerBottomSheetStrings() {});
+                new AccountPickerBottomSheetStrings() {}, DeviceLockActivityLauncherImpl.get());
     }
 
     private SigninBridge() {}

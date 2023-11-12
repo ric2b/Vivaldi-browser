@@ -28,19 +28,11 @@ void BorealisAppLauncherImpl::Launch(std::string app_id,
 void BorealisAppLauncherImpl::Launch(std::string app_id,
                                      const std::vector<std::string>& args,
                                      OnLaunchedCallback callback) {
-  BorealisFeatures::AllowStatus allow_status =
-      borealis::BorealisService::GetForProfile(profile_)
-          ->Features()
-          .MightBeAllowed();
-  if (allow_status != BorealisFeatures::AllowStatus::kAllowed) {
-    LOG(WARNING) << "Borealis app launch blocked: " << allow_status;
-    std::move(callback).Run(LaunchResult::kError);
-    return;
-  }
   if (!borealis::BorealisService::GetForProfile(profile_)
            ->Features()
            .IsEnabled()) {
     borealis::ShowBorealisInstallerView(profile_);
+    std::move(callback).Run(LaunchResult::kSuccess);
     return;
   }
   if (!borealis::BorealisService::GetForProfile(profile_)
@@ -53,17 +45,17 @@ void BorealisAppLauncherImpl::Launch(std::string app_id,
           [](std::string app_id, const std::vector<std::string>& args,
              BorealisAppLauncherImpl::OnLaunchedCallback callback,
              BorealisContextManager::ContextOrFailure result) {
-            if (!result) {
+            if (!result.has_value()) {
               LOG(ERROR) << "Failed to launch " << app_id << "(code "
-                         << result.Error().error()
-                         << "): " << result.Error().description();
+                         << result.error().error()
+                         << "): " << result.error().description();
               // If splash screen is showing and borealis did not launch
               // properly, close it.
               borealis::CloseBorealisSplashScreenView();
               std::move(callback).Run(LaunchResult::kError);
               return;
             }
-            BorealisAppLauncher::Launch(*result.Value(), std::move(app_id),
+            BorealisAppLauncher::Launch(*result.value(), std::move(app_id),
                                         std::move(args), std::move(callback));
           },
           std::move(app_id), std::move(args), std::move(callback)));

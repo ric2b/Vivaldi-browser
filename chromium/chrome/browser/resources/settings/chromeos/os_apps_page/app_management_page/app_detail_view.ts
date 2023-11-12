@@ -8,7 +8,7 @@ import './arc_detail_view.js';
 import './chrome_app_detail_view.js';
 import './plugin_vm_page/plugin_vm_detail_view.js';
 import './borealis_page/borealis_detail_view.js';
-import '../../../settings_shared.css.js';
+import '../../settings_shared.css.js';
 
 import {App} from 'chrome://resources/cr_components/app_management/app_management.mojom-webui.js';
 import {AppManagementUserAction, AppType} from 'chrome://resources/cr_components/app_management/constants.js';
@@ -17,9 +17,8 @@ import {assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {microTask, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {castExists} from '../../assert_extras.js';
-import {routes} from '../../os_settings_routes.js';
 import {RouteObserverMixin} from '../../route_observer_mixin.js';
-import {Route, Router} from '../../router.js';
+import {Route, Router, routes} from '../../router.js';
 
 import {updateSelectedAppId} from './actions.js';
 import {getTemplate} from './app_detail_view.html.js';
@@ -30,7 +29,7 @@ import {openMainPage} from './util.js';
 const AppManagementAppDetailViewElementBase =
     AppManagementStoreMixin(RouteObserverMixin(PolymerElement));
 
-class AppManagementAppDetailViewElement extends
+export class AppManagementAppDetailViewElement extends
     AppManagementAppDetailViewElementBase {
   static get is() {
     return 'app-management-app-detail-view';

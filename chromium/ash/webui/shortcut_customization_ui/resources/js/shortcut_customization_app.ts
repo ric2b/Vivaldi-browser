@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import './accelerator_edit_dialog.js';
+import './bottom_nav_content.js';
 import './shortcut_input.js';
 import './shortcuts_page.js';
 import '../strings.m.js';
@@ -15,7 +16,7 @@ import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 
 import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {NavigationViewPanelElement} from 'chrome://resources/ash/common/navigation_view_panel.js';
-import {startColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
+import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -31,6 +32,9 @@ import {RouteObserver, Router} from './router.js';
 import {getTemplate} from './shortcut_customization_app.html.js';
 import {AcceleratorConfigResult, AcceleratorInfo, AcceleratorSource, MojoAcceleratorConfig, MojoLayoutInfo, ShortcutProviderInterface} from './shortcut_types.js';
 import {getCategoryNameStringId, isCustomizationDisabled, isSearchEnabled} from './shortcut_utils.js';
+
+const oldKeyboardSettingsLink = 'chrome://os-settings/keyboard-overlay';
+const newKeyboardSettingsLink = 'chrome://os-settings/per-device-keyboard';
 
 export interface ShortcutCustomizationAppElement {
   $: {
@@ -101,6 +105,7 @@ export class ShortcutCustomizationAppElement extends
   protected dialogAction: number;
   protected dialogSource: AcceleratorSource;
   protected showEditDialog: boolean;
+  protected keyboardSettingsLink: string;
   private shortcutProvider: ShortcutProviderInterface = getShortcutProvider();
   private acceleratorlookupManager: AcceleratorLookupManager =
       AcceleratorLookupManager.getInstance();
@@ -112,10 +117,15 @@ export class ShortcutCustomizationAppElement extends
       // Use dynamic color CSS and start listening to `ColorProvider` updates.
       // TODO(b/276493795): After the Jelly experiment is launched, replace
       // `cros_styles.css` with `theme/colors.css` directly in `index.html`.
+      // Also add `theme/typography.css` to `index.html`.
       document.querySelector('link[href*=\'cros_styles.css\']')
           ?.setAttribute('href', 'chrome://theme/colors.css?sets=legacy,sys');
+      const typographyLink = document.createElement('link');
+      typographyLink.href = 'chrome://theme/typography.css';
+      typographyLink.rel = 'stylesheet';
+      document.head.appendChild(typographyLink);
       document.body.classList.add('jelly-enabled');
-      startColorChangeUpdater();
+      ColorChangeUpdater.forDocument().start();
     }
 
     this.fetchAccelerators();
@@ -123,6 +133,11 @@ export class ShortcutCustomizationAppElement extends
     this.addEventListener('edit-dialog-closed', this.onDialogClosed);
     this.addEventListener(
         'request-update-accelerator', this.onRequestUpdateAccelerators);
+
+    this.keyboardSettingsLink =
+        loadTimeData.getBoolean('isInputDeviceSettingsSplitEnabled') ?
+        newKeyboardSettingsLink :
+        oldKeyboardSettingsLink;
 
     Router.getInstance().addObserver(this);
   }

@@ -22,14 +22,13 @@
 #import "components/prefs/pref_registry_simple.h"
 #import "components/prefs/testing_pref_service.h"
 #import "components/sync/base/features.h"
-#import "components/sync/driver/sync_service.h"
+#import "components/sync/service/sync_service.h"
 #import "components/sync/test/mock_sync_service.h"
 #import "components/translate/core/browser/translate_pref_names.h"
 #import "components/translate/core/browser/translate_prefs.h"
 #import "components/translate/core/language_detection/language_detection_model.h"
+#import "ios/chrome/browser/bookmarks/account_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/public/overlay_request.h"
 #import "ios/chrome/browser/overlays/public/overlay_request_queue.h"
@@ -37,8 +36,13 @@
 #import "ios/chrome/browser/overlays/test/fake_overlay_presentation_context.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #import "ios/chrome/browser/policy/enterprise_policy_test_helper.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/promos_manager/mock_promos_manager.h"
+#import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/destination_usage_history/constants.h"
@@ -46,12 +50,9 @@
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_swift.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/toolbar/test/toolbar_test_navigation_manager.h"
-#import "ios/chrome/browser/ui/whats_new/feature_flags.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
+#import "ios/chrome/browser/web/font_size/font_size_java_script_feature.h"
 #import "ios/chrome/browser/web/font_size/font_size_tab_helper.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
-#import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #import "ios/public/provider/chrome/browser/text_zoom/text_zoom_api.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_api.h"
 #import "ios/web/public/navigation/navigation_item.h"
@@ -83,7 +84,8 @@ void SetupSyncServiceEnabledExpectations(
     syncer::MockSyncService* sync_service) {
   ON_CALL(*sync_service, GetTransportState())
       .WillByDefault(Return(syncer::SyncService::TransportState::ACTIVE));
-  ON_CALL(*sync_service->GetMockUserSettings(), IsFirstSetupComplete())
+  ON_CALL(*sync_service->GetMockUserSettings(),
+          IsInitialSyncFeatureSetupComplete())
       .WillByDefault(Return(true));
   ON_CALL(*sync_service->GetMockUserSettings(), GetSelectedTypes())
       .WillByDefault(Return(syncer::UserSelectableTypeSet::All()));
@@ -105,6 +107,8 @@ constexpr syncer::SyncService::UserActionableError
 void CleanupNSUserDefaults() {
   [[NSUserDefaults standardUserDefaults]
       removeObjectForKey:kWhatsNewUsageEntryKey];
+  [[NSUserDefaults standardUserDefaults]
+      removeObjectForKey:kWhatsNewM116UsageEntryKey];
 }
 
 }  // namespace
@@ -222,15 +226,27 @@ class OverflowMenuMediatorTest : public PlatformTest {
         prefs::kOverflowMenuNewDestinations, PrefRegistry::LOSSY_PREF);
     localStatePrefs_->registry()->RegisterDictionaryPref(
         prefs::kOverflowMenuDestinationUsageHistory, PrefRegistry::LOSSY_PREF);
+    localStatePrefs_->registry()->RegisterListPref(
+        prefs::kOverflowMenuDestinationsOrder);
   }
 
   void SetUpBookmarks() {
-    bookmark_model_ =
+    local_or_syncable_bookmark_model_ =
         ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
             browser_state_.get());
-    DCHECK(bookmark_model_);
-    bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model_);
-    mediator_.bookmarkModel = bookmark_model_;
+    DCHECK(local_or_syncable_bookmark_model_);
+    account_bookmark_model_ =
+        ios::AccountBookmarkModelFactory::GetForBrowserState(
+            browser_state_.get());
+
+    // TODO(crbug.com/1448010): Use two-model `WaitForBookmarkModelToLoad`.
+    bookmarks::test::WaitForBookmarkModelToLoad(
+        local_or_syncable_bookmark_model_);
+    if (account_bookmark_model_) {
+      bookmarks::test::WaitForBookmarkModelToLoad(account_bookmark_model_);
+    }
+    mediator_.localOrSyncableBookmarkModel = local_or_syncable_bookmark_model_;
+    mediator_.accountBookmarkModel = account_bookmark_model_;
   }
 
   void InsertNewWebState(int index) {
@@ -328,7 +344,8 @@ class OverflowMenuMediatorTest : public PlatformTest {
 
   FakeOverlayPresentationContext presentation_context_;
   OverflowMenuMediator* mediator_;
-  BookmarkModel* bookmark_model_;
+  BookmarkModel* local_or_syncable_bookmark_model_;
+  BookmarkModel* account_bookmark_model_;
   std::unique_ptr<TestingPrefServiceSimple> browserStatePrefs_;
   std::unique_ptr<TestingPrefServiceSimple> localStatePrefs_;
   web::FakeWebState* web_state_;
@@ -474,6 +491,10 @@ TEST_F(OverflowMenuMediatorTest, TestTextZoomDisabled) {
   SetUpActiveWebState();
   mediator_.webStateList = browser_->GetWebStateList();
 
+  // FontSizeTabHelper requires a web frames manager.
+  web_state_->SetWebFramesManager(
+      FontSizeJavaScriptFeature::GetInstance()->GetSupportedContentWorld(),
+      std::make_unique<web::FakeWebFramesManager>());
   FontSizeTabHelper::CreateForWebState(
       browser_->GetWebStateList()->GetWebStateAt(0));
 
@@ -547,7 +568,9 @@ TEST_F(OverflowMenuMediatorTest, TestBookmarksToolsMenuButtons) {
   CreateMediator(/*is_incognito=*/NO);
   CreateBrowserStatePrefs();
   SetUpBookmarks();
-  bookmarks::AddIfNotBookmarked(bookmark_model_, bookmarkedURL,
+  // TODO(crbug.com/1448014): Revise this test to ensure account model support.
+  bookmarks::AddIfNotBookmarked(local_or_syncable_bookmark_model_,
+                                bookmarkedURL,
                                 base::SysNSStringToUTF16(@"Test bookmark"));
   mediator_.webStateList = browser_->GetWebStateList();
   mediator_.browserStatePrefs = browserStatePrefs_.get();
@@ -565,7 +588,7 @@ TEST_F(OverflowMenuMediatorTest, TestBookmarksToolsMenuButtons) {
   EXPECT_FALSE(HasItem(kToolsMenuAddToBookmarks, /*enabled=*/YES));
   EXPECT_TRUE(HasItem(kToolsMenuEditBookmark, /*enabled=*/YES));
 
-  bookmark_model_->RemoveAllUserBookmarks();
+  local_or_syncable_bookmark_model_->RemoveAllUserBookmarks();
   EXPECT_TRUE(HasItem(kToolsMenuAddToBookmarks, /*enabled=*/YES));
   EXPECT_FALSE(HasItem(kToolsMenuEditBookmark, /*enabled=*/YES));
 }
@@ -595,9 +618,6 @@ TEST_F(OverflowMenuMediatorTest, TestDisableBookmarksButton) {
 // Tests that WhatsNew destination was added to the OverflowMenuModel when
 // What's New is enabled.
 TEST_F(OverflowMenuMediatorTest, TestWhatsNewEnabled) {
-  base::test::ScopedFeatureList feature_on;
-  feature_on.InitAndEnableFeature(kWhatsNewIOS);
-
   const GURL kUrl("https://chromium.test");
   web_state_->SetCurrentURL(kUrl);
   CreateBrowserStatePrefs();
@@ -613,37 +633,12 @@ TEST_F(OverflowMenuMediatorTest, TestWhatsNewEnabled) {
   // Force creation of the model.
   [mediator_ overflowMenuModel];
 
-  EXPECT_TRUE(HasItem(kToolsMenuWhatsNewId, /*enabled=*/NO));
-}
-
-// Tests that WhatsNew destination was not added to the OverflowMenuModel when
-// What's New is disabled.
-TEST_F(OverflowMenuMediatorTest, TestWhatsNewDisabled) {
-  base::test::ScopedFeatureList feature_off;
-  feature_off.InitAndDisableFeature(kWhatsNewIOS);
-
-  const GURL kUrl("https://chromium.test");
-  web_state_->SetCurrentURL(kUrl);
-  CreateBrowserStatePrefs();
-  CreateMediator(/*is_incognito=*/NO);
-  SetUpActiveWebState();
-  mediator_.webStateList = browser_->GetWebStateList();
-  mediator_.webContentAreaOverlayPresenter = OverlayPresenter::FromBrowser(
-      browser_.get(), OverlayModality::kWebContentArea);
-  mediator_.browserStatePrefs = browserStatePrefs_.get();
-
-  // Force creation of the model.
-  [mediator_ overflowMenuModel];
-
-  EXPECT_FALSE(HasItem(kToolsMenuWhatsNewId, /*enabled=*/NO));
+  EXPECT_TRUE(HasItem(kToolsMenuWhatsNewId, /*enabled=*/YES));
 }
 
 // This tests that crbug.com/1404673 does not regress. It isn't perfect, as
 // that bug was never reproduced, but it tests part of the issue.
 TEST_F(OverflowMenuMediatorTest, TestOpenWhatsNewDoesntCrashWithNoTracker) {
-  base::test::ScopedFeatureList feature_on;
-  feature_on.InitAndEnableFeature(kWhatsNewIOS);
-
   // Create Mediator and DO NOT set the Tracker on it.
   CreateMediator(/*is_incognito=*/NO);
 
@@ -790,7 +785,7 @@ TEST_F(OverflowMenuMediatorTest, TestIdentityErrorWithWhatsNewPromo) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       {kIndicateSyncErrorInOverflowMenu,
-       syncer::kIndicateAccountStorageErrorInAccountCell, kWhatsNewIOS},
+       syncer::kIndicateAccountStorageErrorInAccountCell},
       {});
 
   const GURL kUrl("https://chromium.test");
@@ -830,7 +825,7 @@ TEST_F(OverflowMenuMediatorTest,
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       {kIndicateSyncErrorInOverflowMenu,
-       syncer::kIndicateAccountStorageErrorInAccountCell, kWhatsNewIOS},
+       syncer::kIndicateAccountStorageErrorInAccountCell},
       {});
 
   CreateMediator(/*is_incognito=*/NO);

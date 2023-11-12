@@ -9,6 +9,8 @@
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_app_interface.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_accessibility_identifier_constants.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -49,6 +51,13 @@ void TapSwitchToTabButton(const GURL& url) {
   [[EarlGrey selectElementWithMatcher:grey_allOf(SwitchTabElementForUrl(url),
                                                  grey_interactable(), nil)]
       performAction:grey_tap()];
+}
+
+id<GREYMatcher> OmniboxWithLeadingImageElement(
+    NSString* const leadingImageIdentifier) {
+  return grey_allOf(
+      grey_ancestor(grey_kindOfClassName(@"OmniboxContainerView")),
+      grey_accessibilityID(leadingImageIdentifier), grey_interactable(), nil);
 }
 
 void ScrollToSwitchToTabElement(const GURL& url) {
@@ -148,7 +157,8 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 }
 
 // Test inline autocomplete of legacy text field implementation.
-- (void)testLegacyInlineAutocompleteSuggestion {
+// TODO(crbug.com/1445722): Re-enable when fixed.
+- (void)DISABLED_testLegacyInlineAutocompleteSuggestion {
   // Skip if new text field implementation is enabled.
   if (base::FeatureList::IsEnabled(kIOSNewOmniboxImplementation)) {
     return;
@@ -330,7 +340,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [ChromeEarlGrey
       waitForSufficientlyVisibleElementWithMatcher:chrome_test_util::Omnibox()];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
-      performAction:grey_typeText(omniboxInput)];
+      performAction:grey_replaceText(omniboxInput)];
 
   TapSwitchToTabButton(_URL1);
   [ChromeEarlGrey waitForWebStateContainingText:kPage1];
@@ -356,7 +366,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [ChromeEarlGrey
       waitForSufficientlyVisibleElementWithMatcher:chrome_test_util::Omnibox()];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
-      performAction:grey_typeText(base::SysUTF8ToNSString(_URL1.host()))];
+      performAction:grey_replaceText(base::SysUTF8ToNSString(_URL1.host()))];
 
   // Omnibox can reorder itself in multiple animations, so add an extra wait
   // here.
@@ -426,7 +436,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [ChromeEarlGrey
       waitForSufficientlyVisibleElementWithMatcher:chrome_test_util::Omnibox()];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
-      performAction:grey_typeText(omniboxInput)];
+      performAction:grey_replaceText(omniboxInput)];
 
   // Check that both elements are displayed.
   // Omnibox can reorder itself in multiple animations, so add an extra wait
@@ -452,7 +462,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [ChromeEarlGrey
       waitForSufficientlyVisibleElementWithMatcher:chrome_test_util::Omnibox()];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
-      performAction:grey_typeText(@"hello")];
+      performAction:grey_replaceText(@"hello")];
 
   // Matcher for a URL-what-you-typed suggestion.
   id<GREYMatcher> textMatcher = grey_descendant(
@@ -471,7 +481,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   // vertically. This is necessary if the center of the list's accessibility
   // frame is not visible, as it is the default start point.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxPopupList()]
-      performAction:grey_swipeFastInDirectionWithStartPoint(kGREYDirectionUp,
+      performAction:grey_swipeFastInDirectionWithStartPoint(kGREYDirectionDown,
                                                             0.5, 0.1)];
   [[EarlGrey selectElementWithMatcher:row]
       assertWithMatcher:grey_interactable()];
@@ -501,7 +511,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [ChromeEarlGrey
       waitForSufficientlyVisibleElementWithMatcher:chrome_test_util::Omnibox()];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
-      performAction:grey_typeText(@"hello")];
+      performAction:grey_replaceText(@"hello")];
 
   // Matcher for a URL-what-you-typed suggestion.
   id<GREYMatcher> textMatcher = grey_descendant(
@@ -543,6 +553,165 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [ChromeEarlGrey waitForWebStateContainingText:kPage2];
   [ChromeEarlGrey loadURL:_URL3];
   [ChromeEarlGrey waitForWebStateContainingText:kPage3];
+}
+
+@end
+
+@interface OmniboxPopupWithFakeSuggestionTestCase : ChromeTestCase
+@end
+
+@implementation OmniboxPopupWithFakeSuggestionTestCase
+
+- (void)setUp {
+  [super setUp];
+  [ChromeEarlGrey clearBrowsingHistory];
+
+  [OmniboxAppInterface
+      setUpFakeSuggestionsService:@"fake_suggestions_pedal.json"];
+}
+
+- (void)tearDown {
+  [OmniboxAppInterface tearDownFakeSuggestionsService];
+  [super tearDown];
+}
+
+- (void)testTapAppendArrowButton {
+  [ChromeEarlGrey loadURL:GURL("about:blank")];
+
+  // Clears the url and replace it with local url host.
+  [ChromeEarlGreyUI focusOmniboxAndType:base::SysUTF8ToNSString("abc")];
+
+  // Wait for the suggestions to show.
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:
+                      chrome_test_util::OmniboxPopupRowWithString(@"abcdef")];
+
+  id<GREYMatcher> appendArrowButtonMatcher = grey_allOf(
+      grey_ancestor(chrome_test_util::OmniboxPopupRowWithString(@"abcdef")),
+      grey_accessibilityID(kOmniboxPopupRowAppendAccessibilityIdentifier), nil);
+
+  // Wait for the append button to show.
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:appendArrowButtonMatcher];
+
+  // Tap on the append arrow button.
+  [[EarlGrey selectElementWithMatcher:grey_allOf(appendArrowButtonMatcher,
+                                                 grey_interactable(), nil)]
+      performAction:grey_tap()];
+
+  // Omnibox should now contain the suggestion row string 'abcdef '.
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:
+                      chrome_test_util::OmniboxContainingText("abcdef ")];
+
+  // Wait for the new suggestions to show.
+  [ChromeEarlGrey
+      waitForUIElementToAppearWithMatcher:
+          chrome_test_util::OmniboxPopupRowWithString(@"abcdefghi")];
+}
+
+@end
+
+@interface HardwareKeyboardInteractionTestCase : ChromeTestCase
+@end
+
+@implementation HardwareKeyboardInteractionTestCase
+
+- (void)setUp {
+  [super setUp];
+  [ChromeEarlGrey clearBrowsingHistory];
+
+  [OmniboxAppInterface
+      setUpFakeSuggestionsService:@"fake_suggestions_pedal.json"];
+}
+
+- (void)tearDown {
+  [OmniboxAppInterface tearDownFakeSuggestionsService];
+  [super tearDown];
+  // HW keyboard simulation does mess up the SW keyboard simulator state.
+  // Relaunching resets the state.
+  AppLaunchConfiguration config = [super appConfigurationForTestCase];
+  config.relaunch_policy = ForceRelaunchByCleanShutdown;
+  [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
+}
+
+// Tests up down interaction in omnibox popup using a hardware keyboard.
+- (void)testUpDownArrowAutocomplete {
+  // Focus omnibox from Web.
+  [ChromeEarlGrey loadURL:GURL("about:blank")];
+  [ChromeEarlGreyUI focusOmniboxAndType:base::SysUTF8ToNSString("testupdown")];
+
+  // Matcher for the first autocomplete suggestions.
+  id<GREYMatcher> testupDownAutocomplete1 =
+      chrome_test_util::OmniboxPopupRowWithString(@"testupdownautocomplete1");
+
+  // Wait for the suggestions to show.
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:testupDownAutocomplete1];
+
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
+      assertWithMatcher:chrome_test_util::OmniboxContainingText("testupdown")];
+
+  // Go down to testautocomplete1 popup row.
+  [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"downArrow" flags:0];
+  [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"downArrow" flags:0];
+
+  [ChromeEarlGrey
+      waitForUIElementToAppearWithMatcher:
+          chrome_test_util::OmniboxContainingText("testupdownautocomplete1")];
+
+  [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"upArrow" flags:0];
+
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:
+                      chrome_test_util::OmniboxContainingText("testupdown")];
+}
+
+// Tests that leading image in omnibox changes based on the suggestion
+// hilighted.
+- (void)testOmniboxLeadingImage {
+  // TODO(crbug.com/1455347): Test is flaky on iPad simulator. Re-enable the
+  // test.
+#if TARGET_IPHONE_SIMULATOR
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_DISABLED(@"This test is flaky on iPad simulator.");
+  }
+#endif
+  // Start a server to be able to navigate to a web page.
+  self.testServer->RegisterRequestHandler(
+      base::BindRepeating(&StandardResponse));
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  GURL _URL1 = self.testServer->GetURL(kPage1URL);
+
+  [ChromeEarlGrey loadURL:_URL1];
+  [ChromeEarlGrey waitForWebStateContainingText:kPage1];
+
+  // Focus omnibox from Web.
+  [ChromeEarlGreyUI focusOmnibox];
+
+  // Typing the title of page1.
+  [ChromeEarlGrey simulatePhysicalKeyboardEvent:base::SysUTF8ToNSString(
+                                                    std::string(kPage1Title))
+                                          flags:0];
+
+  // Wait for suggestions to show.
+  [ChromeEarlGrey
+      waitForSufficientlyVisibleElementWithMatcher:PopupRowWithUrl(_URL1)];
+
+  [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"downArrow" flags:0];
+
+  // We expect to have the default leading image.
+  [ChromeEarlGrey
+      waitForUIElementToAppearWithMatcher:
+          grey_allOf(OmniboxWithLeadingImageElement(
+                         kOmniboxLeadingImageDefaultAccessibilityIdentifier),
+                     nil)];
+
+  [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"downArrow" flags:0];
+
+  // The popup row is a url suggestion so we expect to have the leading
+  // suggestion image .
+  [ChromeEarlGrey
+      waitForUIElementToAppearWithMatcher:
+          grey_allOf(
+              OmniboxWithLeadingImageElement(
+                  kOmniboxLeadingImageSuggestionImageAccessibilityIdentifier),
+              nil)];
 }
 
 @end

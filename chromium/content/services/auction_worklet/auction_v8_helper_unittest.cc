@@ -75,6 +75,7 @@ class DebugConnector : public auction_worklet::mojom::BidderWorklet {
       const absl::optional<GURL>& direct_from_seller_auction_signals,
       const url::Origin& browser_signal_seller_origin,
       const absl::optional<url::Origin>& browser_signal_top_level_seller_origin,
+      const base::TimeDelta browser_signal_recency,
       auction_worklet::mojom::BiddingBrowserSignalsPtr bidding_browser_signals,
       base::Time auction_start_time,
       uint64_t trace_id,
@@ -86,12 +87,14 @@ class DebugConnector : public auction_worklet::mojom::BidderWorklet {
   }
 
   void ReportWin(
-      const std::string& interest_group_name,
+      mojom::ReportingIdField reporting_id_field,
+      const std::string& reporting_id,
       const absl::optional<std::string>& auction_signals_json,
       const absl::optional<std::string>& per_buyer_signals_json,
       const absl::optional<GURL>& direct_from_seller_per_buyer_signals,
       const absl::optional<GURL>& direct_from_seller_auction_signals,
       const std::string& seller_signals_json,
+      mojom::KAnonymityBidMode kanon_mode,
       const GURL& browser_signal_render_url,
       double browser_signal_bid,
       const absl::optional<blink::AdCurrency>& browser_signal_bid_currency,

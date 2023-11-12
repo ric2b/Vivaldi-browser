@@ -48,7 +48,6 @@ interface VivaldiFrameService {
 
   ScrollPage(ScrollType scroll_type, int32 scroll_amount);
 
-  GetCurrentSpatnavRect() => (SpatnavRect rect);
   MoveSpatnavRect(SpatnavDirection dir) => (SpatnavRect rect);
   GetFocusedElementInfo() => (string tagname,
                               string type,

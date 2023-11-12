@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
-<translation id="1089894737218087497">安裝單一用戶版本</translation>
+<translation id="1089894737218087497">安裝獨立安裝版本</translation>
 <translation id="1682285232070778125">將 Vivaldi 設為預設瀏覽器</translation>
 <translation id="1974060860693918893">進階</translation>
 <translation id="2134216661302048561">Vivaldi 安裝程式尚未完成安裝 Vivaldi 瀏覽器。確定要立即離開嗎？</translation>
 <translation id="2286454467119466181">簡單</translation>
-<translation id="237789874664518125">版權所有 <ph name="YEAR" /> Vivaldi Technologies AS. 保留所有權利。&lt;a&gt;隱私政策&lt;/a&gt;</translation>
+<translation id="237789874664518125">版權所有 <ph name="YEAR" /> Vivaldi Technologies AS. 保留一切權利。&lt;a&gt;隱私權政策&lt;/a&gt;</translation>
 <translation id="3004507951429848293">點一下「接受並更新」按鈕表示您同意接受 Vivaldi 的&lt;a&gt;服務條款&lt;/a&gt;</translation>
 <translation id="335985608243443814">瀏覽...</translation>
 <translation id="3485073444286678268">目的資料夾無效，請重新選取。</translation>
@@ -19,7 +19,7 @@
 <translation id="460304900852424163">停用自動更新（不建議）</translation>
 <translation id="4619978527973181021">接受並安裝</translation>
 <translation id="479976146866774527">正在安裝 Vivaldi</translation>
-<translation id="5051728323101947360">將單一用戶版本的 Vivaldi 設為預設應用程式</translation>
+<translation id="5051728323101947360">將獨立安裝版本的 Vivaldi 設為預設應用程式</translation>
 <translation id="5247376421371319618">接受並更新</translation>
 <translation id="5302048478445481009">語言</translation>
 <translation id="694714344624446243">Vivaldi 安裝程式</translation>

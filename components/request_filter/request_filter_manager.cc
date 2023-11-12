@@ -132,7 +132,8 @@ bool RequestFilterManager::ProxyURLLoaderFactory(
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
-        forwarding_header_client) {
+        forwarding_header_client,
+    scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   auto proxied_receiver = std::move(*factory_receiver);
@@ -159,7 +160,7 @@ bool RequestFilterManager::ProxyURLLoaderFactory(
       &request_handler_, &request_id_generator_, std::move(navigation_id),
       std::move(proxied_receiver), std::move(target_factory_remote),
       std::move(header_client_receiver), std::move(forwarding_header_client),
-      proxies_.get(), type);
+      proxies_.get(), type, std::move(navigation_response_task_runner));
   return true;
 }
 

@@ -137,7 +137,7 @@
           "COMMAND_TAB_THUMBNAIL": {"shortcuts": []},
           "COMMAND_TASK_MANAGER": {"shortcuts": ["shift+esc"]},
           "COMMAND_TOGGLE_FOOTER": {"shortcuts": ["ctrl+shift+s"]},
-          "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": ["ctrl+m"]},
+          "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": []},
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["f4"]},
           "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["ctrl+shift+alt+i"]},
           "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["ctrl+shift+1"]},
@@ -287,7 +287,7 @@
           "COMMAND_TAB_THUMBNAIL": {"shortcuts": []},
           "COMMAND_TASK_MANAGER": {"shortcuts": ["shift+esc"]},
           "COMMAND_TOGGLE_FOOTER": {"shortcuts": ["ctrl+shift+s"]},
-          "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": ["ctrl+m"]},
+          "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": []},
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["f4"]},
           "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["ctrl+shift+alt+i"]},
           "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["ctrl+shift+1"]},
@@ -436,7 +436,7 @@
           "COMMAND_TAB_THUMBNAIL": {"shortcuts": []},
           "COMMAND_TASK_MANAGER": {"shortcuts": ["shift+esc"]},
           "COMMAND_TOGGLE_FOOTER": {"shortcuts": ["meta+/"]},
-          "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": ["ctrl+m"]},
+          "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": []},
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["alt+meta+p", "f4"]},
           "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["shift+meta+i"]},
           "COMMAND_WINDOW_MINIMIZE": {"shortcuts": ["meta+m"]},
@@ -477,11 +477,6 @@
             "default": false,
             "syncable": true
           }
-        },
-        "prefer_bookmarks": {
-          "type": "boolean",
-          "default": true,
-          "syncable": true
         },
         "autocomplete_on_title": {
           "type": "boolean",
@@ -549,6 +544,11 @@
           "default": true,
           "syncable": true
         },
+        "show_nicknames": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
         "show_typed_history": {
           "type": "boolean",
           "default": true,
@@ -588,6 +588,23 @@
           "type": "integer",
           "default": 5,
           "syncable": false
+        },
+        "dropdown_priority": {
+          "description": "Dropdown result highlight priority",
+          "type": "list",
+          "default": [
+            "BEST_RESULT",
+            "INTERNAL_URLS",
+            "DIRECT_TYPE",
+            "SEARCH",
+            "SUGGESTIONS",
+            "NICKNAMES",
+            "BOOKMARKS",
+            "FREQ_VISIT",
+            "TYPED_HISTORY",
+            "HISTORY"
+          ],
+          "syncable": true
         }
       },
       "position": {
@@ -1901,6 +1918,16 @@
         "type": "boolean",
         "default": false,
         "syncable": true
+      },
+      "list_buttons": {
+        "description": "Kind of mail list buttons to show above mail list",
+        "type": "enum",
+        "enum_values": {
+          "text_menu": 0,
+          "icons_only": 1
+        },
+        "default": "text_menu",
+        "syncable": true
       }
     },
     "menu": {
@@ -2747,6 +2774,26 @@
         "syncable": true
       }
     },
+    "proxy": {
+      "bypassList": {
+        "description": "List of urls that shall not pass through the proxy. Format: See https://developer.chrome.com/docs/extensions/reference/proxy/",
+        "type": "list",
+        "default": [],
+        "syncable": false
+      },
+      "connectStrategy": {
+        "description": "How a relay server is selected when a connection is made.",
+        "type": "string",
+        "default": "random",
+        "syncable": true
+      },
+      "token": {
+        "description": "For setting up connection.",
+        "type": "string",
+        "default": "",
+        "syncable": true
+      }
+    },
     "sessions": {
       "open_in_new_window": {
         "description": "Open sessions in a new window (when using the dialog)",
@@ -2771,11 +2818,17 @@
         "default": "prompt",
         "syncable": true
       },
-      "exit_save_list_size": {
-         "description": "Number of entries the exit save list can hold",
-         "type": "integer",
-         "default": 5,
-          "syncable": true
+      "save_days": {
+        "description": "Number of days session backups are kept.",
+        "type": "integer",
+        "default": 3,
+        "syncable": true
+      },
+      "save_version": {
+        "description": "Holds a key telling how sessions backups are saved.",
+        "type": "integer",
+        "default": 0,
+        "syncable": false
       },
       "dialog": {
         "sorting": {
@@ -2788,15 +2841,6 @@
         "sorting": {
           "type": "dictionary",
           "default": {"sortOrder": 1, "sortField": "createDateJS"},
-          "syncable": true
-        },
-        "itemSize": {
-          "type": "enum",
-          "enum_values": {
-            "detailed": 1,
-            "compact": 2
-          },
-          "default": "detailed",
           "syncable": true
         }
       }
@@ -3205,7 +3249,7 @@
             "bottom": 3
           },
           "default": "top",
-          "syncable": true
+          "syncable": false
         }
       },
       "close_pinned": {
@@ -3971,6 +4015,7 @@
           "Reload",
           "AddressField",
           "SearchField",
+          "Proxy",
           "FlexibleSpacer",
           "UpdateButton",
           "Extensions",
@@ -3984,6 +4029,7 @@
           "Reload",
           "AddressField",
           "SearchField",
+          "Proxy",
           "FlexibleSpacer",
           "Extensions",
           "AccountButton"
@@ -4493,20 +4539,54 @@
       }
     },
     "geolocation": {
+      "list": {
+        "description": "A list of user-specified locations",
+        "type": "list",
+        "default": [{
+          "name": "Berlin",
+          "lat": 52.520007,
+          "long": 13.404954,
+          "location_id": "b7d85431-8501-488a-adaa-7431f3fdea0a",
+          "timezone": "Europe/Berlin",
+          "locale": "de"
+        }, {
+          "name": "Tokyo",
+          "lat": 35.689487,
+          "long": 139.691706,
+          "location_id": "f8282ae9-e6f3-45b8-a5d2-7858de890f32",
+          "timezone": "Asia/Tokyo",
+          "locale": "ja"
+        }, {
+          "name": "San Francisco",
+          "lat": 37.774929,
+          "long": -122.419416,
+          "location_id": "a94f1743-e3da-4f7b-96c4-8538a736a83b",
+          "timezone": "America/Los_Angeles",
+          "locale": "en-US"
+        }
+        ],
+        "syncable": false
+      },
+      "default_location_id": {
+        "description": "Current active location id",
+        "type": "string",
+        "default": "b7d85431-8501-488a-adaa-7431f3fdea0a",
+        "syncable": false
+      },
       "use_override": {
         "description": "Enable settings override for location.",
         "type": "boolean",
         "default": false,
         "syncable": false
       },
-      "latitude ": {
-        "description": "latitude, defaults to Berlin",
+      "latitude": {
+        "description": "Latitude, defaults to Berlin",
         "type": "double",
         "syncable": false,
         "default": 52.520007
       },
-      "longitude ": {
-        "description": "longitude, defaults to Berlin",
+      "longitude": {
+        "description": "Longitude, defaults to Berlin",
         "type": "double",
         "syncable": false,
         "default": 13.404954
@@ -4601,6 +4681,12 @@
         "description": "Store encrypted oauth refresh-tokens per account using OAuth authentication for reconnecting on restart",
         "type": "dictionary",
         "default": {},
+        "syncable": false
+      },
+      "device_id": {
+        "description": "An random GUID that uniquely identifies the device to the authentication server. It never changes",
+        "type": "string",
+        "default": "",
         "syncable": false
       }
     }

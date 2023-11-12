@@ -134,6 +134,21 @@ wtf_size_t NGInlinePaintContext::SyncDecoratingBox(
             return 1;
           }
 
+          // There are some edge cases where a style doesn't propagate
+          // decorations from its parent. One known such case is a pseudo
+          // element in a parent with a first-line style, but there can be more.
+          // If this happens, consider it stopped the propagation.
+          const Vector<AppliedTextDecoration, 1>* base_decorations =
+              style->BaseAppliedTextDecorations();
+          if (base_decorations != &parent_decorations) {
+            inline_context_->ClearDecoratingBoxes(saved_decorating_boxes_);
+            const wtf_size_t size =
+                std::min(saved_decorating_boxes_->size(), decorations->size());
+            inline_context_->PushDecoratingBoxes(
+                base::make_span(saved_decorating_boxes_->begin(), size));
+            return size;
+          }
+
 #if DCHECK_IS_ON()
           ShowLayoutTree(layout_object);
 #endif
@@ -241,6 +256,11 @@ void NGInlinePaintContext::PushDecoratingBoxAncestors(
     DCHECK(current.IsInlineBox());
     ancestor_items.push_back(current.Item());
   }
+}
+
+void NGInlinePaintContext::PushDecoratingBoxes(
+    const base::span<NGDecoratingBox>& boxes) {
+  decorating_boxes_.AppendRange(boxes.begin(), boxes.end());
 }
 
 NGInlinePaintContext::ScopedLineBox::ScopedLineBox(

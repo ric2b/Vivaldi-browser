@@ -11,8 +11,8 @@
 #include "ash/shell.h"
 #include "ash/user_education/capture_mode_tour/capture_mode_tour_controller.h"
 #include "ash/user_education/holding_space_tour/holding_space_tour_controller.h"
-#include "ash/user_education/tutorial_controller.h"
 #include "ash/user_education/user_education_delegate.h"
+#include "ash/user_education/user_education_feature_controller.h"
 #include "ash/user_education/user_education_util.h"
 #include "ash/user_education/welcome_tour/welcome_tour_controller.h"
 #include "base/check_op.h"
@@ -36,17 +36,16 @@ UserEducationController::UserEducationController(
   g_instance = this;
 
   if (features::IsCaptureModeTourEnabled()) {
-    tutorial_controllers_.emplace(
-        std::make_unique<CaptureModeTourController>());
+    feature_controllers_.emplace(std::make_unique<CaptureModeTourController>());
   }
 
   if (features::IsHoldingSpaceTourEnabled()) {
-    tutorial_controllers_.emplace(
+    feature_controllers_.emplace(
         std::make_unique<HoldingSpaceTourController>());
   }
 
   if (features::IsWelcomeTourEnabled()) {
-    tutorial_controllers_.emplace(std::make_unique<WelcomeTourController>());
+    feature_controllers_.emplace(std::make_unique<WelcomeTourController>());
   }
 
   auto* session_controller = Shell::Get()->session_controller();
@@ -66,6 +65,12 @@ UserEducationController* UserEducationController::Get() {
   return g_instance;
 }
 
+absl::optional<ui::ElementIdentifier>
+UserEducationController::GetElementIdentifierForAppId(
+    const std::string& app_id) const {
+  return delegate_->GetElementIdentifierForAppId(app_id);
+}
+
 void UserEducationController::StartTutorial(
     UserEducationPrivateApiKey,
     TutorialId tutorial_id,
@@ -79,6 +84,14 @@ void UserEducationController::StartTutorial(
   delegate_->StartTutorial(account_id, tutorial_id, element_context,
                            std::move(completed_callback),
                            std::move(aborted_callback));
+}
+
+void UserEducationController::AbortTutorial(UserEducationPrivateApiKey) {
+  // NOTE: User education in Ash is currently only supported for the primary
+  // user profile. This is a self-imposed restriction.
+  auto account_id = Shell::Get()->session_controller()->GetActiveAccountId();
+  CHECK(user_education_util::IsPrimaryAccountId(account_id));
+  delegate_->AbortTutorial(account_id);
 }
 
 void UserEducationController::OnChromeTerminating() {
@@ -95,9 +108,9 @@ void UserEducationController::OnUserSessionAdded(const AccountId& account_id) {
   session_observation_.Reset();
 
   // Register all tutorials with user education services in the browser.
-  for (auto& tutorial_controller : tutorial_controllers_) {
+  for (auto& feature_controller : feature_controllers_) {
     for (auto& [tutorial_id, tutorial_description] :
-         tutorial_controller->GetTutorialDescriptions()) {
+         feature_controller->GetTutorialDescriptions()) {
       delegate_->RegisterTutorial(account_id, tutorial_id,
                                   std::move(tutorial_description));
     }

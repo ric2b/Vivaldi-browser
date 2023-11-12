@@ -50,6 +50,7 @@ enum class MenuActionType {
   SearchCopiedText = 38,
   PinTab = 39,
   UnpinTab = 40,
+  LensCameraSearch = 41,
 
   // Vivaldi
   NewNote,

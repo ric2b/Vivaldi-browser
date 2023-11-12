@@ -90,6 +90,15 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
   // exist.
   OverviewItem* GetOverviewItemContaining(const aura::Window* window) const;
 
+  // TODO(b/285408040): Handle two finger scroll and make it smooth.
+  void HandleMouseWheelScrollEvent(int scroll_offset);
+
+  // Check if in tablet mode or the new clamshell scroll layout feature is
+  // enabled. If so, the visible windows on the overview screen exceed
+  // `kMinimumItemsForNewLayoutInClamshell` or
+  // `kMinimumItemsForNewLayoutInTablet` thereby cluttering the overview screen.
+  bool ShouldUseScrollingLayout(size_t ignored_items_size) const;
+
   // Adds |window| at the specified |index|. |window| cannot already be on the
   // grid. If |reposition| is true, repositions all items except those in
   // |ignored_items|. If |animate| is true, animates the repositioning.
@@ -343,11 +352,9 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
   // save desk buttons if we are not exiting overview.
   void HideSavedDeskLibrary(bool exit_overview);
 
-  // True if the saved desk library is shown.
+  // True if the saved desk library is shown, or in the process of animating to
+  // be shown.
   bool IsShowingSavedDeskLibrary() const;
-
-  // True if the saved desk library will be shown shortly.
-  bool WillShowSavedDeskLibrary() const;
 
   // Returns true if any saved desk name is being modified in its item view on
   // this grid.
@@ -456,7 +463,12 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
   friend class DesksTemplatesTest;
   friend class OverviewTestBase;
 
-  // Struct which holds data required to perform nudges.
+  // Struct which holds data required to perform nudges. Nudge in the context of
+  // overview view means an overview item is currently being dragged vertically
+  // and may be closed when released, and the remaining windows will move
+  // towards their positions once the item is closed.
+  // TODO(conniekxu|sammiequon): Rename this as nudge has a different name in
+  // cros system UI.
   struct NudgeData {
     size_t index;
     gfx::RectF src;
@@ -470,7 +482,7 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
 
   // Gets the layout of the overview items. Layout is done in 2 stages
   // maintaining fixed MRU ordering.
-  // 1. Optimal height is determined. In this stage |height| is bisected to find
+  // 1. Optimal height is determined. In this stage `height` is bisected to find
   //    maximum height which still allows all the windows to fit.
   // 2. Row widths are balanced. In this stage the available width is reduced
   //    until some windows are no longer fitting or until the difference between
@@ -481,22 +493,31 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
   std::vector<gfx::RectF> GetWindowRects(
       const base::flat_set<OverviewItem*>& ignored_items);
 
-  // Gets the layout of the overview items. Currently only for tablet mode.
-  // Positions up to six windows into two rows of equal height, scaling each
-  // window to fit that height. Additional windows are placed off-screen.
-  // |ignored_items| won't be shown along with the other windows in overview
-  // mode.
-  std::vector<gfx::RectF> GetWindowRectsForTabletModeLayout(
+  // Gets the layout of the overview items. Positions up to six windows into
+  // two rows of equal height, scaling each window to fit that height.
+  // Additional windows are placed off-screen. |ignored_items| won't be shown
+  // along with the other windows in overview mode. If
+  // `IsOverviewScrollLayoutForClamshellEnabled`, then the behavior is
+  // replicated but in the vertical direction for clamshell mode.
+  // TODO(b/286869951): Reduce duplication once clamshell scrolling is
+  // finalized.
+  std::vector<gfx::RectF> GetWindowRectsForScrollingLayout(
       const base::flat_set<OverviewItem*>& ignored_items);
 
-  // Attempts to fit all |out_rects| inside |bounds|. The method ensures that
-  // the |out_rects| vector has appropriate size and populates it with the
+  std::vector<gfx::RectF> GetRectsForClamshellScroll(
+      const base::flat_set<OverviewItem*>& ignored_items);
+
+  std::vector<gfx::RectF> GetRectsForTabletScroll(
+      const base::flat_set<OverviewItem*>& ignored_items);
+
+  // Attempts to fit all `out_rects` inside `bounds`. The method ensures that
+  // the `out_rects` vector has appropriate size and populates it with the
   // values placing rects next to each other left-to-right in rows of equal
-  // |height|. While fitting |out_rects| several metrics are collected that can
-  // be used by the caller. |out_max_bottom| specifies the bottom that the rects
-  // are extending to. |out_min_right| and |out_max_right| report the right
+  // `height`. While fitting `out_rects` several metrics are collected that can
+  // be used by the caller. `out_max_bottom` specifies the bottom that the rects
+  // are extending to. `out_min_right` and `out_max_right` report the right
   // bound of the narrowest and the widest rows respectively. In-values of the
-  // |out_max_bottom|, |out_min_right| and |out_max_right| parameters are
+  // `out_max_bottom`, `out_min_right` and `out_max_right` parameters are
   // ignored and their values are always initialized inside this method. Returns
   // true on success and false otherwise.
   bool FitWindowRectsInBounds(
@@ -598,12 +619,13 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
   // reposition windows in tablet overview mode.
   bool suspend_reposition_ = false;
 
-  // Used by |GetWindowRectsForTabletModeLayout| to shift the x position of the
-  // overview items.
+  // Used by `GetWindowRectsForScrollingLayout` to shift the x position of the
+  // overview items and y position if
+  // `IsOverviewScrollLayoutForClamshellEnabled`.
   float scroll_offset_ = 0;
 
-  // Value to clamp |scroll_offset| so scrolling stays limited to windows that
-  // are visible in tablet overview mode.
+  // Value to clamp `scroll_offset` so scrolling stays limited to windows that
+  // are visible in the new scrolling layout for overview mode.
   float scroll_offset_min_ = 0.f;
 
   // Handles events that are not handled by the OverviewItems.

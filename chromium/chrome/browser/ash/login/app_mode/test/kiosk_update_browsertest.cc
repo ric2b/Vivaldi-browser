@@ -8,6 +8,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/test/gtest_tags.h"
@@ -398,12 +399,13 @@ class KioskUpdateTest : public KioskBaseTest {
   }
 
   void SetupAppDetailInFakeCws(const TestAppInfo& app) {
-    TestKioskExtensionBuilder app_builder(
-        extensions::Manifest::TYPE_PLATFORM_APP, app.id);
-    app_builder.set_version(app.version);
+    scoped_refptr<const extensions::Extension> extension =
+        TestKioskExtensionBuilder(extensions::Manifest::TYPE_PLATFORM_APP,
+                                  app.id)
+            .set_version(app.version)
+            .Build();
     std::string manifest_json;
-    base::JSONWriter::Write(*app_builder.Build()->manifest()->value(),
-                            &manifest_json);
+    base::JSONWriter::Write(*extension->manifest()->value(), &manifest_json);
     // In these tests we need to provide basic app detail, not necessary correct
     // one, just to prevent KioskAppData to remove the app.
     fake_cws()->SetAppDetails(app.id, /*localized_name=*/"Test App",
@@ -471,7 +473,8 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, PRE_LaunchOfflineEnabledAppNoNetwork) {
                        std::string(kTestOfflineEnabledKioskApp) + "_v1.crx");
 }
 
-IN_PROC_BROWSER_TEST_F(KioskUpdateTest, LaunchOfflineEnabledAppNoNetwork) {
+IN_PROC_BROWSER_TEST_F(KioskUpdateTest,
+                       DISABLED_LaunchOfflineEnabledAppNoNetwork) {
   set_test_app_id(kTestOfflineEnabledKioskApp);
   SimulateNetworkOffline();
   EXPECT_TRUE(LaunchApp(test_app_id()));

@@ -12,6 +12,7 @@
 #import "base/time/time.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
+#import "ios/chrome/browser/ui/ntp/metrics/new_tab_page_metrics_constants.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -21,49 +22,49 @@
 
 #pragma mark - Public
 
-- (void)recordTimeSpentInNTP:(base::TimeDelta)timeSpent {
-  UmaHistogramMediumTimes("NewTabPage.TimeSpent", timeSpent);
+- (void)recordTimeSpentInHome:(base::TimeDelta)timeSpent
+               isStartSurface:(BOOL)startSurface {
+  if (startSurface) {
+    UmaHistogramMediumTimes(kStartTimeSpentHistogram, timeSpent);
+  } else {
+    UmaHistogramMediumTimes(kNTPTimeSpentHistogram, timeSpent);
+  }
 }
 
-- (void)recordNTPImpression:(IOSNTPImpressionType)impressionType {
-  UMA_HISTOGRAM_ENUMERATION("IOS.NTP.Impression", impressionType,
-                            IOSNTPImpressionType::kMaxValue);
+- (void)recordHomeImpression:(IOSNTPImpressionType)impressionType
+              isStartSurface:(BOOL)startSurface {
+  if (startSurface) {
+    UMA_HISTOGRAM_ENUMERATION(kStartImpressionHistogram, impressionType,
+                              IOSNTPImpressionType::kMaxValue);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION(kNTPImpressionHistogram, impressionType,
+                              IOSNTPImpressionType::kMaxValue);
+  }
   [self recordImpressionForTileAblation];
 }
 
 - (void)recordOverscrollActionForType:(OverscrollActionType)type {
-  UMA_HISTOGRAM_ENUMERATION("IOS.NTP.OverscrollAction", type);
+  UMA_HISTOGRAM_ENUMERATION(kNTPOverscrollActionHistogram, type);
 }
 
 - (void)recordLensTapped {
-  base::RecordAction(
-      base::UserMetricsAction("Mobile.LensIOS.NewTabPageEntrypointTapped"));
+  base::RecordAction(base::UserMetricsAction(kNTPEntrypointTappedAction));
 }
 
 - (void)recordVoiceSearchTapped {
-  base::RecordAction(
-      base::UserMetricsAction("MobileNTPMostVisitedVoiceSearch"));
+  base::RecordAction(base::UserMetricsAction(kMostVisitedVoiceSearchAction));
 }
 
 - (void)recordFakeTapViewTapped {
-  base::RecordAction(base::UserMetricsAction("MobileFakeViewNTPTapped"));
+  base::RecordAction(base::UserMetricsAction(kFakeViewNTPTappedAction));
 }
 
 - (void)recordFakeOmniboxTapped {
-  base::RecordAction(base::UserMetricsAction("MobileFakeboxNTPTapped"));
+  base::RecordAction(base::UserMetricsAction(kFakeboxNTPTappedAction));
 }
 
 - (void)recordIdentityDiscTapped {
-  base::RecordAction(base::UserMetricsAction("MobileNTPIdentityDiscTapped"));
-}
-
-- (void)recordHomeActionType:(IOSHomeActionType)type
-              onStartSurface:(BOOL)isStartSurface {
-  if (isStartSurface) {
-    UMA_HISTOGRAM_ENUMERATION("IOS.Home.ActionOnStartSurface", type);
-  } else {
-    UMA_HISTOGRAM_ENUMERATION("IOS.Home.ActionOnNTP", type);
-  }
+  base::RecordAction(base::UserMetricsAction(kNTPIdentityDiscTappedAction));
 }
 
 #pragma mark - Private

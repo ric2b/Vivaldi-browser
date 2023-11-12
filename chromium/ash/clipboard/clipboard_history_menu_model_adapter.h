@@ -11,6 +11,7 @@
 #include "ash/public/cpp/clipboard_history_controller.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
+#include "chromeos/crosapi/mojom/clipboard_history.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
@@ -33,7 +34,6 @@ enum class Action;
 class ClipboardHistory;
 class ClipboardHistoryItem;
 class ClipboardHistoryItemView;
-class ClipboardHistoryResourceManager;
 
 // Used to show the clipboard history menu, which holds the last few things
 // copied.
@@ -45,8 +45,7 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter
       ClipboardHistoryController::OnMenuClosingCallback
           on_menu_closing_callback,
       base::RepeatingClosure menu_closed_callback,
-      const ClipboardHistory* clipboard_history,
-      const ClipboardHistoryResourceManager* resource_manager);
+      const ClipboardHistory* clipboard_history);
 
   ClipboardHistoryMenuModelAdapter(const ClipboardHistoryMenuModelAdapter&) =
       delete;
@@ -54,10 +53,11 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter
       const ClipboardHistoryMenuModelAdapter&) = delete;
   ~ClipboardHistoryMenuModelAdapter() override;
 
-  // Shows the menu anchored at `anchor_rect`, `source_type` indicates how the
-  // menu is triggered.
+  // Shows the menu anchored at `anchor_rect`. `source_type` and `show_source`
+  // indicate how the menu was triggered.
   void Run(const gfx::Rect& anchor_rect,
-           ui::MenuSourceType source_type);
+           ui::MenuSourceType source_type,
+           crosapi::mojom::ClipboardHistoryControllerShowSource show_source);
 
   // Returns if the menu is currently running.
   bool IsRunning() const;
@@ -97,6 +97,8 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter
   const views::MenuItemView* GetMenuItemViewAtForTest(size_t index) const;
   views::MenuItemView* GetMenuItemViewAtForTest(size_t index);
 
+  const ui::SimpleMenuModel* GetModelForTest() const;
+
  private:
   class MenuModelWithWillCloseCallback;
   class ScopedA11yIgnore;
@@ -106,8 +108,7 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter
   ClipboardHistoryMenuModelAdapter(
       std::unique_ptr<MenuModelWithWillCloseCallback> model,
       base::RepeatingClosure menu_closed_callback,
-      const ClipboardHistory* clipboard_history,
-      const ClipboardHistoryResourceManager* resource_manager);
+      const ClipboardHistory* clipboard_history);
 
   // Advances the pseduo focus from the selected history item view (backward if
   // `reverse` is true).
@@ -151,11 +152,6 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter
   ItemViewsByCommandId item_views_by_command_id_;
 
   const raw_ptr<const ClipboardHistory, ExperimentalAsh> clipboard_history_;
-
-  // Resource manager used to fetch image models. Owned by
-  // ClipboardHistoryController.
-  const raw_ptr<const ClipboardHistoryResourceManager, ExperimentalAsh>
-      resource_manager_;
 
   // Indicates the number of item deletion operations in progress. Note that
   // a `ClipboardHistoryItemView` instance is deleted asynchronously.

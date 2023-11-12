@@ -103,9 +103,6 @@ ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES absl::base_internal::AtomicHook<void (*)(
 ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES
     absl::base_internal::AtomicHook<void (*)(const char *msg, const void *cv)>
         cond_var_tracer;
-ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES absl::base_internal::AtomicHook<
-    bool (*)(const void *pc, char *out, int out_size)>
-    symbolizer(absl::Symbolize);
 
 }  // namespace
 
@@ -124,10 +121,6 @@ void RegisterMutexTracer(void (*fn)(const char *msg, const void *obj,
 
 void RegisterCondVarTracer(void (*fn)(const char *msg, const void *cv)) {
   cond_var_tracer.Store(fn);
-}
-
-void RegisterSymbolizer(bool (*fn)(const void *pc, char *out, int out_size)) {
-  symbolizer.Store(fn);
 }
 
 namespace {
@@ -646,20 +639,25 @@ void Mutex::InternalAttemptToUseMutexInFatalSignalHandler() {
 //  o kMuWriter / kMuReader == kMuWrWait / kMuWait,
 //    to enable the bit-twiddling trick in CheckForMutexCorruption().
 static const intptr_t kMuReader      = 0x0001L;  // a reader holds the lock
-static const intptr_t kMuDesig       = 0x0002L;  // there's a designated waker
-static const intptr_t kMuWait        = 0x0004L;  // threads are waiting
-static const intptr_t kMuWriter      = 0x0008L;  // a writer holds the lock
-static const intptr_t kMuEvent       = 0x0010L;  // record this mutex's events
+// There's a designated waker.
 // INVARIANT1:  there's a thread that was blocked on the mutex, is
 // no longer, yet has not yet acquired the mutex.  If there's a
 // designated waker, all threads can avoid taking the slow path in
 // unlock because the designated waker will subsequently acquire
 // the lock and wake someone.  To maintain INVARIANT1 the bit is
 // set when a thread is unblocked(INV1a), and threads that were
-// unblocked reset the bit when they either acquire or re-block
-// (INV1b).
-static const intptr_t kMuWrWait      = 0x0020L;  // runnable writer is waiting
-                                                 // for a reader
+// unblocked reset the bit when they either acquire or re-block (INV1b).
+static const intptr_t kMuDesig = 0x0002L;
+static const intptr_t kMuWait = 0x0004L;    // threads are waiting
+static const intptr_t kMuWriter = 0x0008L;  // a writer holds the lock
+static const intptr_t kMuEvent = 0x0010L;   // record this mutex's events
+// Runnable writer is waiting for a reader.
+// If set, new readers will not lock the mutex to avoid writer starvation.
+// Note: if a reader has higher priority than the writer, it will still lock
+// the mutex ahead of the waiting writer, but in a very inefficient manner:
+// the reader will first queue itself and block, but then the last unlocking
+// reader will wake it.
+static const intptr_t kMuWrWait = 0x0020L;
 static const intptr_t kMuSpin        = 0x0040L;  // spinlock protects wait list
 static const intptr_t kMuLow         = 0x00ffL;  // mask all mutex bits
 static const intptr_t kMuHigh        = ~kMuLow;  // mask pointer/reader count
@@ -926,6 +924,25 @@ static PerThreadSynch *Enqueue(PerThreadSynch *head,
   s->may_skip = true;            // always true on entering queue
   s->wake = false;               // not being woken
   s->cond_waiter = ((flags & kMuIsCond) != 0);
+#ifdef ABSL_HAVE_PTHREAD_GETSCHEDPARAM
+  int64_t now_cycles = base_internal::CycleClock::Now();
+  if (s->next_priority_read_cycles < now_cycles) {
+    // Every so often, update our idea of the thread's priority.
+    // pthread_getschedparam() is 5% of the block/wakeup time;
+    // base_internal::CycleClock::Now() is 0.5%.
+    int policy;
+    struct sched_param param;
+    const int err = pthread_getschedparam(pthread_self(), &policy, &param);
+    if (err != 0) {
+      ABSL_RAW_LOG(ERROR, "pthread_getschedparam failed: %d", err);
+    } else {
+      s->priority = param.sched_priority;
+      s->next_priority_read_cycles =
+          now_cycles +
+          static_cast<int64_t>(base_internal::CycleClock::Frequency());
+    }
+  }
+#endif
   if (head == nullptr) {         // s is the only waiter
     s->next = s;                 // it's the only entry in the cycle
     s->readers = mu;             // reader count is from mu word
@@ -934,23 +951,6 @@ static PerThreadSynch *Enqueue(PerThreadSynch *head,
   } else {
     PerThreadSynch *enqueue_after = nullptr;  // we'll put s after this element
 #ifdef ABSL_HAVE_PTHREAD_GETSCHEDPARAM
-    int64_t now_cycles = base_internal::CycleClock::Now();
-    if (s->next_priority_read_cycles < now_cycles) {
-      // Every so often, update our idea of the thread's priority.
-      // pthread_getschedparam() is 5% of the block/wakeup time;
-      // base_internal::CycleClock::Now() is 0.5%.
-      int policy;
-      struct sched_param param;
-      const int err = pthread_getschedparam(pthread_self(), &policy, &param);
-      if (err != 0) {
-        ABSL_RAW_LOG(ERROR, "pthread_getschedparam failed: %d", err);
-      } else {
-        s->priority = param.sched_priority;
-        s->next_priority_read_cycles =
-            now_cycles +
-            static_cast<int64_t>(base_internal::CycleClock::Frequency());
-      }
-    }
     if (s->priority > head->priority) {  // s's priority is above head's
       // try to put s in priority-fifo order, or failing that at the front.
       if (!head->maybe_unlocking) {
@@ -1289,7 +1289,7 @@ static inline void DebugOnlyLockLeave(Mutex *mu) {
 
 static char *StackString(void **pcs, int n, char *buf, int maxlen,
                          bool symbolize) {
-  static const int kSymLen = 200;
+  static constexpr int kSymLen = 200;
   char sym[kSymLen];
   int len = 0;
   for (int i = 0; i != n; i++) {
@@ -1297,7 +1297,7 @@ static char *StackString(void **pcs, int n, char *buf, int maxlen,
       return buf;
     size_t count = static_cast<size_t>(maxlen - len);
     if (symbolize) {
-      if (!symbolizer(pcs[i], sym, kSymLen)) {
+      if (!absl::Symbolize(pcs[i], sym, kSymLen)) {
         sym[0] = '\0';
       }
       snprintf(buf + len, count, "%s\t@ %p %s\n", (i == 0 ? "\n" : ""), pcs[i],

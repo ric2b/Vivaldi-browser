@@ -13,6 +13,10 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_resources.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace AppleScript {
 
 void SetError(Error error_code) {

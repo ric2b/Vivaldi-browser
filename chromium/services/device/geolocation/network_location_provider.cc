@@ -9,7 +9,6 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_runner.h"
@@ -21,7 +20,7 @@
 #include "services/device/public/cpp/geolocation/geoposition.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
 #include "services/device/public/cpp/device_features.h"
 #endif
 
@@ -58,7 +57,7 @@ NetworkLocationProvider::NetworkLocationProvider(
           base::BindRepeating(&NetworkLocationProvider::OnLocationResponse,
                               base::Unretained(this)))) {
   DCHECK(position_cache_);
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   DCHECK(geolocation_manager);
   geolocation_manager_ = geolocation_manager;
   permission_observers_ = geolocation_manager->GetObserverList();
@@ -74,11 +73,16 @@ NetworkLocationProvider::NetworkLocationProvider(
 
 NetworkLocationProvider::~NetworkLocationProvider() {
   DCHECK(thread_checker_.CalledOnValidThread());
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   permission_observers_->RemoveObserver(this);
 #endif
   if (IsStarted())
     StopProvider();
+}
+
+void NetworkLocationProvider::FillDiagnostics(
+    mojom::GeolocationDiagnostics& diagnostics) {
+  diagnostics.provider_state = state_;
 }
 
 void NetworkLocationProvider::SetUpdateCallback(
@@ -94,7 +98,7 @@ void NetworkLocationProvider::OnPermissionGranted() {
     RequestPosition();
 }
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
 void NetworkLocationProvider::OnSystemPermissionUpdated(
     LocationSystemPermissionStatus new_status) {
   is_awaiting_initial_permission_status_ = false;
@@ -118,7 +122,7 @@ void NetworkLocationProvider::OnSystemPermissionUpdated(
 void NetworkLocationProvider::OnWifiDataUpdate() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(IsStarted());
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   if (!is_system_permission_granted_) {
     if (!is_awaiting_initial_permission_status_) {
       location_provider_update_callback_.Run(
@@ -178,6 +182,16 @@ void NetworkLocationProvider::StartProvider(bool high_accuracy) {
   GEOLOCATION_LOG(DEBUG) << "Start provider: high_accuracy=" << high_accuracy;
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  state_ = high_accuracy
+               ? mojom::GeolocationDiagnostics::ProviderState::kHighAccuracy
+               : mojom::GeolocationDiagnostics::ProviderState::kLowAccuracy;
+#if BUILDFLAG(IS_MAC)
+  if (!is_system_permission_granted_) {
+    state_ = mojom::GeolocationDiagnostics::ProviderState::
+        kBlockedBySystemPermission;
+  }
+#endif  // BUILDFLAG(IS_MAC)
+
   if (IsStarted())
     return;
 
@@ -199,6 +213,7 @@ void NetworkLocationProvider::StopProvider() {
   GEOLOCATION_LOG(DEBUG) << "Stop provider";
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(IsStarted());
+  state_ = mojom::GeolocationDiagnostics::ProviderState::kStopped;
   wifi_data_provider_handle_ = nullptr;
   weak_factory_.InvalidateWeakPtrs();
 }
@@ -213,7 +228,7 @@ void NetworkLocationProvider::RequestPosition() {
                          << is_new_data_available_ << " is_wifi_data_complete_="
                          << is_wifi_data_complete_;
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   if (!is_system_permission_granted_) {
     return;
   }
@@ -254,11 +269,6 @@ void NetworkLocationProvider::RequestPosition() {
 
   const mojom::Geoposition* cached_position =
       position_cache_->FindPosition(wifi_data_);
-
-  UMA_HISTOGRAM_BOOLEAN("Geolocation.PositionCache.CacheHit",
-                        cached_position != nullptr);
-  UMA_HISTOGRAM_COUNTS_100("Geolocation.PositionCache.CacheSize",
-                           position_cache_->GetPositionCacheSize());
 
   if (cached_position) {
     auto position = cached_position->Clone();

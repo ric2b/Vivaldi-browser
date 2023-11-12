@@ -9,7 +9,7 @@
 import 'chrome://resources/cr_elements/md_select.css.js';
 import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
-import '../../settings_shared.css.js';
+import '../settings_shared.css.js';
 import './os_japanese_clear_ime_data_dialog.js';
 import './os_japanese_manage_user_dictionary_page.js';
 
@@ -23,9 +23,8 @@ import {assertExhaustive} from '../assert_extras.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import {OsSettingsSubpageElement} from '../os_settings_page/os_settings_subpage.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route, Router} from '../router.js';
+import {Route, Router, routes} from '../router.js';
 
 import {getTemplate} from './input_method_options_page.html.js';
 import {AUTOCORRECT_OPTION_MAP_OVERRIDE, generateOptions, getDefaultValue, getFirstPartyInputMethodEngineId, getOptionLabelName, getOptionMenuItems, getOptionSubtitleName, getOptionUiType, getOptionUrl, getSubmenuButtonType, getUntranslatedOptionLabelName, isOptionLabelTranslated, OPTION_DEFAULT, OptionType, PHYSICAL_KEYBOARD_AUTOCORRECT_ENABLED_BY_DEFAULT, SettingsHeaders, shouldStoreAsNumber, SubmenuButton, UiType} from './input_method_util.js';
@@ -90,7 +89,7 @@ type AutocorrectOptionMapKey = keyof typeof AUTOCORRECT_OPTION_MAP_OVERRIDE;
 const SettingsInputMethodOptionsPageElementBase =
     RouteObserverMixin(PrefsMixin(I18nMixin(DeepLinkingMixin(PolymerElement))));
 
-class SettingsInputMethodOptionsPageElement extends
+export class SettingsInputMethodOptionsPageElement extends
     SettingsInputMethodOptionsPageElementBase {
   static get is() {
     return 'settings-input-method-options-page' as const;
@@ -254,11 +253,16 @@ class SettingsInputMethodOptionsPageElement extends
    * Generate the sections of options according to the engine ID and Prefs.
    */
   private populateOptionSections_(): void {
-    const options = generateOptions(
-        this.engineId_, loadTimeData.getBoolean('allowPredictiveWriting'),
-        loadTimeData.getBoolean('systemJapanesePhysicalTyping'));
     const inputMethodSpecificSettings =
         this.getPref<PrefsObjectType>(PREFS_PATH).value;
+    const options = generateOptions(this.engineId_, {
+      isPhysicalKeyboardAutocorrectAllowed:
+          loadTimeData.getBoolean('isPhysicalKeyboardAutocorrectAllowed'),
+      isPhysicalKeyboardPredictiveWritingAllowed:
+          loadTimeData.getBoolean('isPhysicalKeyboardPredictiveWritingAllowed'),
+      isJapaneseSettingsAllowed:
+          loadTimeData.getBoolean('systemJapanesePhysicalTyping'),
+    });
     // The settings for Japanese for both engine nacl_mozc_us and nacl_mozc_jp
     // types will be stored in nacl_mozc_us. See:
     // https://crsrc.org/c/chrome/browser/ash/input_method/input_method_settings.cc;drc=5b784205e8043fb7d1c11e3d80521e80704947ca;l=25

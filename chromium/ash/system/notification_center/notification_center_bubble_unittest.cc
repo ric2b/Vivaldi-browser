@@ -8,16 +8,22 @@
 #include <string>
 
 #include "ash/constants/ash_features.h"
+#include "ash/public/cpp/shelf_types.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/system/message_center/ash_notification_view.h"
+#include "ash/system/notification_center/notification_center_bubble.h"
 #include "ash/system/notification_center/notification_center_test_api.h"
 #include "ash/system/notification_center/notification_center_view.h"
 #include "ash/system/notification_center/notification_list_view.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_test_helper.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/task_environment.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
@@ -28,7 +34,8 @@ namespace ash {
 
 class NotificationCenterBubbleTest : public AshTestBase {
  public:
-  NotificationCenterBubbleTest() = default;
+  NotificationCenterBubbleTest()
+      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
   NotificationCenterBubbleTest(const NotificationCenterBubbleTest&) = delete;
   NotificationCenterBubbleTest& operator=(const NotificationCenterBubbleTest&) =
       delete;
@@ -52,6 +59,34 @@ class NotificationCenterBubbleTest : public AshTestBase {
 
   std::unique_ptr<NotificationCenterTestApi> test_api_;
 };
+
+// Tests that the notification bubble does not get cut off by the top of the
+// screen on the launcher homescreen in tablet mode; see b/278471988.
+TEST_F(NotificationCenterBubbleTest,
+       TopOfBubbleConstrainedByTopOfDisplayInTabletModeHomescreen) {
+  // Set the display to some known size.
+  UpdateDisplay("1200x800");
+
+  // Switch to tablet mode and verify we're on the launcher homescreen.
+  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
+  ASSERT_EQ(ShelfBackgroundType::kHomeLauncher,
+            GetPrimaryShelf()->GetBackgroundType());
+
+  // Add a large number of notifications to overflow the scroll view in the
+  // notification center.
+  for (int i = 0; i < 100; i++) {
+    test_api()->AddNotification();
+  }
+
+  // Show the notification center bubble.
+  test_api()->ToggleBubble();
+
+  // Verify that the top of the notification center bubble window is not beyond
+  // the top of the display.
+  EXPECT_GE(
+      test_api()->GetBubble()->GetBubbleWidget()->GetWindowBoundsInScreen().y(),
+      0);
+}
 
 TEST_F(NotificationCenterBubbleTest, BubbleHeightConstrainedByDisplay) {
   const int display_height = 800;
@@ -259,6 +294,81 @@ TEST_F(NotificationCenterBubbleTest, LargeNotificationExpand) {
 
   EXPECT_LT(test_api()->GetWidget()->GetWindowBoundsInScreen().height(),
             test_api()->GetNotificationListView()->height());
+}
+
+class NotificationCenterBubbleMultiDisplayTest
+    : public NotificationCenterBubbleTest,
+      public testing::WithParamInterface<
+          std::tuple</* Primary display height */ int,
+                     /* Secondary display height */ int>> {
+ public:
+  NotificationCenterBubbleMultiDisplayTest() = default;
+  NotificationCenterBubbleMultiDisplayTest(
+      const NotificationCenterBubbleMultiDisplayTest&) = delete;
+  NotificationCenterBubbleMultiDisplayTest& operator=(
+      const NotificationCenterBubbleMultiDisplayTest&) = delete;
+  ~NotificationCenterBubbleMultiDisplayTest() override = default;
+
+ protected:
+  int GetPrimaryDisplayHeight() { return std::get<0>(GetParam()); }
+  int GetSecondaryDisplayHeight() { return std::get<1>(GetParam()); }
+};
+
+INSTANTIATE_TEST_SUITE_P(DisplayHeight,
+                         NotificationCenterBubbleMultiDisplayTest,
+                         testing::Values(
+                             // Short primary display, tall secondary display
+                             std::make_tuple(600, 1600),
+                             // Tall primary display, short secondary display
+                             std::make_tuple(1600, 600),
+                             // Same primary and secondary display heights
+                             std::make_tuple(600, 600)));
+
+// Tests that the height of the bubble is constrained according to the
+// parameters of the display it is being shown on.
+TEST_P(NotificationCenterBubbleMultiDisplayTest,
+       BubbleHeightConstrainedByDisplay) {
+  UpdateDisplay("800x" + base::NumberToString(GetPrimaryDisplayHeight()) +
+                ",800x" + base::NumberToString(GetSecondaryDisplayHeight()));
+  const int64_t secondary_display_id = display_manager()->GetDisplayAt(1).id();
+
+  // Add a large number of notifications to overflow the scroll view in the
+  // notification center.
+  for (int i = 0; i < 100; i++) {
+    test_api()->AddNotification();
+  }
+
+  // Show the primary display's notification center.
+  test_api()->ToggleBubble();
+
+  // The height of the primary display's notification center should not exceed
+  // the primary display's height.
+  const int bubble1_height =
+      test_api()->GetNotificationCenterView()->bounds().height();
+  EXPECT_LT(bubble1_height, GetPrimaryDisplayHeight());
+
+  // Show the secondary display's notification center.
+  test_api()->ToggleBubbleOnDisplay(secondary_display_id);
+
+  // The height of the secondary display's notification center should not exceed
+  // the secondary display's height.
+  const int bubble2_height =
+      test_api()
+          ->GetNotificationCenterViewOnDisplay(secondary_display_id)
+          ->bounds()
+          .height();
+  EXPECT_LT(bubble2_height, GetSecondaryDisplayHeight());
+
+  // The height of the notification center on the taller display should be
+  // larger than the height of the notification center on the shorter display,
+  // or the heights should be equal if the displays' heights are equal.
+  if (GetPrimaryDisplayHeight() > GetSecondaryDisplayHeight()) {
+    EXPECT_GT(bubble1_height, bubble2_height);
+  } else if (GetPrimaryDisplayHeight() < GetSecondaryDisplayHeight()) {
+    EXPECT_LT(bubble1_height, bubble2_height);
+  } else {
+    EXPECT_EQ(bubble1_height, bubble2_height);
+  }
 }
 
 }  // namespace ash

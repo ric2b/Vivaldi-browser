@@ -26,6 +26,7 @@
 #include "content/browser/interest_group/interest_group_storage.h"
 #include "content/browser/interest_group/interest_group_update.h"
 #include "content/browser/interest_group/storage_interest_group.h"
+#include "content/services/auction_worklet/public/cpp/auction_downloader.h"
 #include "net/base/isolation_info.h"
 #include "net/base/net_errors.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -265,7 +266,18 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     const base::Value::Dict* ads_dict = ads_value.GetIfDict();
     if (!ads_dict)
       return absl::nullopt;
-    const std::string* maybe_render_url = ads_dict->FindString("renderUrl");
+    const std::string* maybe_render_url = ads_dict->FindString("renderURL");
+    const std::string* maybe_render_url_deprecated =
+        ads_dict->FindString("renderUrl");
+    if (maybe_render_url_deprecated) {
+      if (maybe_render_url) {
+        if (*maybe_render_url != *maybe_render_url_deprecated) {
+          return absl::nullopt;
+        }
+      } else {
+        maybe_render_url = maybe_render_url_deprecated;
+      }
+    }
     if (!maybe_render_url)
       return absl::nullopt;
     blink::InterestGroup::Ad ad;
@@ -273,6 +285,16 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     const std::string* maybe_size_group = ads_dict->FindString("sizeGroup");
     if (maybe_size_group) {
       ad.size_group = *maybe_size_group;
+    }
+    const std::string* maybe_buyer_reporting_id =
+        ads_dict->FindString("buyerReportingId");
+    if (maybe_buyer_reporting_id) {
+      ad.buyer_reporting_id = *maybe_buyer_reporting_id;
+    }
+    const std::string* maybe_buyer_and_seller_reporting_id =
+        ads_dict->FindString("buyerAndSellerReportingId");
+    if (maybe_buyer_and_seller_reporting_id) {
+      ad.buyer_and_seller_reporting_id = *maybe_buyer_and_seller_reporting_id;
     }
     const base::Value* maybe_metadata = ads_dict->Find("metadata");
     if (maybe_metadata) {
@@ -284,6 +306,10 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
         return absl::nullopt;
       }
       ad.metadata = std::move(metadata);
+    }
+    const std::string* maybe_ad_render_id = ads_dict->FindString("adRenderId");
+    if (maybe_ad_render_id) {
+      ad.ad_render_id = *maybe_ad_render_id;
     }
     ads.push_back(std::move(ad));
   }
@@ -417,20 +443,62 @@ absl::optional<InterestGroupUpdate> ParseUpdateJson(
   if (!TryToCopySellerCapabilities(*dict, interest_group_update)) {
     return absl::nullopt;
   }
-  const std::string* maybe_bidding_url = dict->FindString("biddingLogicUrl");
-  if (maybe_bidding_url)
+  const std::string* maybe_bidding_url = dict->FindString("biddingLogicURL");
+  const std::string* maybe_bidding_url_deprecated =
+      dict->FindString("biddingLogicUrl");
+  if (maybe_bidding_url_deprecated) {
+    if (maybe_bidding_url) {
+      if (*maybe_bidding_url_deprecated != *maybe_bidding_url) {
+        return absl::nullopt;
+      }
+    } else {
+      maybe_bidding_url = maybe_bidding_url_deprecated;
+    }
+  }
+  if (maybe_bidding_url) {
     interest_group_update.bidding_url = GURL(*maybe_bidding_url);
+  }
   const std::string* maybe_bidding_wasm_helper_url =
+      dict->FindString("biddingWasmHelperURL");
+  const std::string* maybe_bidding_wasm_helper_url_deprecated =
       dict->FindString("biddingWasmHelperUrl");
+  if (maybe_bidding_wasm_helper_url_deprecated) {
+    if (maybe_bidding_wasm_helper_url) {
+      if (*maybe_bidding_wasm_helper_url !=
+          *maybe_bidding_wasm_helper_url_deprecated) {
+        return absl::nullopt;
+      }
+    } else {
+      maybe_bidding_wasm_helper_url = maybe_bidding_wasm_helper_url_deprecated;
+    }
+  }
   if (maybe_bidding_wasm_helper_url) {
     interest_group_update.bidding_wasm_helper_url =
         GURL(*maybe_bidding_wasm_helper_url);
   }
-  const std::string* maybe_update_trusted_bidding_signals_url =
+  const std::string* maybe_update_url =
+      dict->FindString("updateURL");  // TODO check if we use this or updateURL
+  if (maybe_update_url) {
+    interest_group_update.daily_update_url = GURL(*maybe_update_url);
+  }
+  const std::string* maybe_trusted_bidding_signals_url =
+      dict->FindString("trustedBiddingSignalsURL");
+  const std::string* maybe_trusted_bidding_signals_url_deprecated =
       dict->FindString("trustedBiddingSignalsUrl");
-  if (maybe_update_trusted_bidding_signals_url) {
+  if (maybe_trusted_bidding_signals_url_deprecated) {
+    if (maybe_trusted_bidding_signals_url) {
+      if (*maybe_trusted_bidding_signals_url !=
+          *maybe_trusted_bidding_signals_url_deprecated) {
+        return absl::nullopt;
+      }
+    } else {
+      maybe_trusted_bidding_signals_url =
+          maybe_trusted_bidding_signals_url_deprecated;
+    }
+  }
+  if (maybe_trusted_bidding_signals_url) {
     interest_group_update.trusted_bidding_signals_url =
-        GURL(*maybe_update_trusted_bidding_signals_url);
+        GURL(*maybe_trusted_bidding_signals_url);
   }
   if (!TryToCopyTrustedBiddingSignalsKeys(*dict, interest_group_update)) {
     return absl::nullopt;

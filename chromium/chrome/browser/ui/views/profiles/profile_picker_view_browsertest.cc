@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/run_loop.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_view.h"
 
 #include <set>
@@ -45,9 +46,9 @@
 #include "chrome/browser/signin/signin_features.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/signin/signin_util.h"
-#include "chrome/browser/sync/sync_encryption_keys_tab_helper.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/sync/sync_startup_tracker.h"
+#include "chrome/browser/sync/trusted_vault_encryption_keys_tab_helper.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -90,8 +91,8 @@
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
 #include "components/sync/base/pref_names.h"
-#include "components/sync/driver/sync_service.h"
-#include "components/sync/driver/sync_user_settings.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_user_settings.h"
 #include "components/sync/test/test_sync_service.h"
 #include "components/user_education/test/feature_promo_test_util.h"
 #include "content/public/browser/web_contents.h"
@@ -355,6 +356,46 @@ void WaitForFirstNonEmptyPaint(const GURL& url, content::WebContents* target) {
 
 }  // namespace
 
+class ProfilePickerViewBrowserTest : public ProfilePickerTestBase {};
+
+// Regression test for crbug.com/1442159.
+IN_PROC_BROWSER_TEST_F(ProfilePickerViewBrowserTest,
+                       ShowScreen_DoesNotFinishForErrorOnInternalNavigation) {
+  GURL bad_target_url{"chrome://unregistered-host"};
+  base::test::TestFuture<void> navigation_finished_future;
+
+  ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
+      ProfilePicker::EntryPoint::kProfileMenuManageProfiles));
+  WaitForLoadStop(GURL{"chrome://profile-picker"});
+  view()->ShowScreenInPickerContents(bad_target_url,
+                                     navigation_finished_future.GetCallback());
+
+  WaitForLoadStop(bad_target_url, web_contents());
+  EXPECT_FALSE(navigation_finished_future.IsReady());
+}
+
+// Regression test for crbug.com/1442159.
+IN_PROC_BROWSER_TEST_F(ProfilePickerViewBrowserTest,
+                       ShowScreen_FinishesForErrorOnStandardNavigation) {
+  // URL intended to simulate an https navigation that fails because the host
+  // can't be found. With an internet connection it would redirect to the
+  // DNS_PROBE_FINISHED_NXDOMAIN error page. Simulate that in the picker flow
+  // using the `--gaia-url` command line parameter.
+  // During tests all external navigations fail anyway, but that's good enough
+  // for what we're trying to verify.
+  GURL bad_target_url{"https://url.madeup"};
+  base::test::TestFuture<void> navigation_finished_future;
+
+  ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
+      ProfilePicker::EntryPoint::kProfileMenuManageProfiles));
+  WaitForLoadStop(GURL{"chrome://profile-picker"});
+  view()->ShowScreenInPickerContents(bad_target_url,
+                                     navigation_finished_future.GetCallback());
+
+  WaitForLoadStop(bad_target_url, web_contents());
+  EXPECT_TRUE(navigation_finished_future.IsReady());
+}
+
 class ProfilePickerCreationFlowBrowserTest : public ProfilePickerTestBase {
  public:
   explicit ProfilePickerCreationFlowBrowserTest(
@@ -482,8 +523,8 @@ class ProfilePickerCreationFlowBrowserTest : public ProfilePickerTestBase {
       crosapi::AccountManagerMojoService* mojo_service =
           MaybeGetAshAccountManagerMojoServiceForTests();
       DCHECK(mojo_service);
-      mojo_service->OnAccountAdditionFinishedForTesting(
-          account_manager::AccountAdditionResult::FromAccount(
+      mojo_service->OnAccountUpsertionFinishedForTesting(
+          account_manager::AccountUpsertionResult::FromAccount(
               {kAccountKey, email}));
       fake_ui->CloseDialog();
     }
@@ -789,8 +830,9 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
   // It would be nicer to verify that HasEncryptionKeysApiForTesting()
   // returns true but this isn't possible because the sigin page returns an
   // error, without setting up a fake HTTP server.
-  EXPECT_NE(SyncEncryptionKeysTabHelper::FromWebContents(web_contents()),
-            nullptr);
+  EXPECT_NE(
+      TrustedVaultEncryptionKeysTabHelper::FromWebContents(web_contents()),
+      nullptr);
 }
 
 // Regression test for crbug.com/1196290. Makes no sense for lacros because you
@@ -1027,7 +1069,8 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(profile_being_created);
   EXPECT_TRUE(sync_service->HasSyncConsent());
-  EXPECT_FALSE(sync_service->GetUserSettings()->IsFirstSetupComplete());
+  EXPECT_FALSE(
+      sync_service->GetUserSettings()->IsInitialSyncFeatureSetupComplete());
 
   // The color is not applied if the user enters settings.
   EXPECT_FALSE(ThemeServiceFactory::GetForProfile(profile_being_created)
@@ -1044,14 +1087,14 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
 
   // Simulate clicking on a link that opens in a new window.
   const GURL kURL("https://foo.google.com");
-  EXPECT_TRUE(ExecuteScript(web_contents(),
-                            "var link = document.createElement('a');"
-                            "link.href = '" +
-                                kURL.spec() +
-                                "';"
-                                "link.target = '_blank';"
-                                "document.body.appendChild(link);"
-                                "link.click();"));
+  EXPECT_TRUE(ExecJs(web_contents(),
+                     "var link = document.createElement('a');"
+                     "link.href = '" +
+                         kURL.spec() +
+                         "';"
+                         "link.target = '_blank';"
+                         "document.body.appendChild(link);"
+                         "link.click();"));
   // A new pppup browser is displayed (with the specified URL).
   Browser* new_browser = BrowserAddedWaiter(2u).Wait();
   EXPECT_EQ(new_browser->type(), Browser::TYPE_POPUP);
@@ -1410,11 +1453,17 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
   EXPECT_EQ(new_browser->profile()->GetPath(), other_path);
   WaitForPickerClosed();
 
+// TODO(crbug.com/1447955): This check fails in version skew test. Instead of
+// filtering out tests on version skew bots, just disable the part of test for
+// now. Re-enable this check for Lacros once crrev.com/c/4542121 is in Ash
+// stable.
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
   histogram_tester.ExpectTotalCount(
       "ProfilePicker.FirstProfileTime.FirstWebContentsNonEmptyPaint", 1);
   histogram_tester.ExpectUniqueSample(
       "ProfilePicker.FirstProfileTime.FirstWebContentsFinishReason",
       metrics::StartupProfilingFinishReason::kDone, 1);
+#endif
 }
 
 // TODO(crbug.com/1289326) Test is flaky on Linux CFI, Linux dbg, Mac ASan
@@ -1588,8 +1637,8 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
   Profile* profile_being_created = StartDiceSignIn();
 
   // Set the device as managed in prefs.
-  profile_being_created->GetPrefs()->SetBoolean(syncer::prefs::kSyncManaged,
-                                                true);
+  profile_being_created->GetPrefs()->SetBoolean(
+      syncer::prefs::internal::kSyncManaged, true);
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(profile_being_created);
 
@@ -1686,7 +1735,8 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(profile_being_created);
   EXPECT_TRUE(sync_service->HasSyncConsent());
-  EXPECT_FALSE(sync_service->GetUserSettings()->IsFirstSetupComplete());
+  EXPECT_FALSE(
+      sync_service->GetUserSettings()->IsInitialSyncFeatureSetupComplete());
 
   // The color is not applied if the user enters settings.
   EXPECT_FALSE(ThemeServiceFactory::GetForProfile(profile_being_created)
@@ -2202,8 +2252,13 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerLocalProfileCreationDialogBrowserTest,
   EXPECT_FALSE(new_browser->signin_view_controller()->ShowsModalDialog());
 }
 
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_CancelLocalProfileCreation DISABLED_CancelLocalProfileCreation
+#else
+#define MAYBE_CancelLocalProfileCreation CancelLocalProfileCreation
+#endif  // BUILDFLAG(IS_MAC)
 IN_PROC_BROWSER_TEST_F(ProfilePickerLocalProfileCreationDialogBrowserTest,
-                       CancelLocalProfileCreation) {
+                       MAYBE_CancelLocalProfileCreation) {
   ASSERT_EQ(1u, BrowserList::GetInstance()->size());
   ASSERT_EQ(1u, g_browser_process->profile_manager()
                     ->GetProfileAttributesStorage()
@@ -2689,7 +2744,7 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerLacrosManagedFirstRunBrowserTest,
   // Unblock the sync service and simulate the server-side
   // being disabled.
   sync_service()->SetDisableReasons(
-      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
+      {syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY});
   sync_service()->SetTransportState(
       syncer::SyncService::TransportState::ACTIVE);
   sync_service()->FireStateChanged();

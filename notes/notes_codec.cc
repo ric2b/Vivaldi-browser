@@ -12,7 +12,7 @@
 
 #include "base/base64.h"
 #include "base/containers/contains.h"
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -74,16 +74,16 @@ base::Value NotesCodec::Encode(const NoteNode* notes_node,
 
   base::Value main(EncodeNode(notes_node, &extra_nodes));
   DCHECK(main.is_dict());
-  main.SetIntKey(kVersionKey, kCurrentVersion);
+  main.GetDict().Set(kVersionKey, kCurrentVersion);
   FinalizeChecksum();
   // We are going to store the computed checksum. So set stored checksum to be
   // the same as computed checksum.
   stored_checksum_ = computed_checksum_;
-  main.SetStringKey(kChecksumKey, computed_checksum_);
+  main.GetDict().Set(kChecksumKey, computed_checksum_);
   if (!sync_metadata_str.empty()) {
     std::string sync_metadata_str_base64;
     base::Base64Encode(sync_metadata_str, &sync_metadata_str_base64);
-    main.SetKey(kSyncMetadata,
+    main.GetDict().Set(kSyncMetadata,
                 base::Value(std::move(sync_metadata_str_base64)));
   }
   return main;
@@ -96,10 +96,10 @@ bool NotesCodec::Decode(NoteNode* notes_node,
                         const base::Value& value,
                         std::string* sync_metadata_str) {
   ids_.clear();
-  guids_ = {base::GUID::ParseLowercase(NoteNode::kRootNodeGuid),
-            base::GUID::ParseLowercase(NoteNode::kMainNodeGuid),
-            base::GUID::ParseLowercase(NoteNode::kOtherNotesNodeGuid),
-            base::GUID::ParseLowercase(NoteNode::kTrashNodeGuid)};
+  uuids_ = {base::Uuid::ParseLowercase(NoteNode::kRootNodeUuid),
+            base::Uuid::ParseLowercase(NoteNode::kMainNodeUuid),
+            base::Uuid::ParseLowercase(NoteNode::kOtherNotesNodeUuid),
+            base::Uuid::ParseLowercase(NoteNode::kTrashNodeUuid)};
   ids_reassigned_ = false;
   ids_valid_ = true;
   maximum_id_ = 0;
@@ -122,15 +122,15 @@ base::Value NotesCodec::EncodeNode(
     const std::vector<const NoteNode*>* extra_nodes) {
   base::Value value(base::Value::Type::DICT);
   std::string node_id = base::NumberToString(node->id());
-  value.SetStringKey(kIdKey, node_id);
+  value.GetDict().Set(kIdKey, node_id);
   UpdateChecksum(node_id);
 
   std::u16string subject = node->GetTitle();
-  value.SetStringKey(kSubjectKey, subject);
+  value.GetDict().Set(kSubjectKey, subject);
   UpdateChecksum(subject);
 
-  const std::string& guid = node->guid().AsLowercaseString();
-  value.SetStringKey(kGuidKey, guid);
+  const std::string& uuid = node->uuid().AsLowercaseString();
+  value.GetDict().Set(kGuidKey, uuid);
 
   std::string type;
   bool can_have_children = false;
@@ -162,19 +162,19 @@ base::Value NotesCodec::EncodeNode(
       NOTREACHED();
       break;
   }
-  value.SetStringKey(kTypeKey, type);
+  value.GetDict().Set(kTypeKey, type);
   UpdateChecksum(type);
 
-  value.SetStringKey(
+  value.GetDict().Set(
       kDateAddedKey,
       base::NumberToString(node->GetCreationTime().ToInternalValue()));
 
   if (node->type() == NoteNode::NOTE || node->type() == NoteNode::ATTACHMENT) {
-    value.SetStringKey(kContentKey, node->GetContent());
+    value.GetDict().Set(kContentKey, node->GetContent());
     UpdateChecksum(node->GetContent());
 
     std::string url = node->GetURL().possibly_invalid_spec();
-    value.SetStringKey(kURLKey, url);
+    value.GetDict().Set(kURLKey, url);
     UpdateChecksum(url);
   }
 
@@ -189,7 +189,7 @@ base::Value NotesCodec::EncodeNode(
         child_list.GetList().Append(EncodeNode(child, nullptr));
       }
     }
-    value.SetKey(kChildrenKey, std::move(child_list));
+    value.GetDict().Set(kChildrenKey, std::move(child_list));
   }
 
   return value;
@@ -203,7 +203,7 @@ bool NotesCodec::DecodeHelper(NoteNode* notes_node,
   if (!value.is_dict())
     return false;  // Unexpected type.
 
-  absl::optional<int> version = value.FindIntKey(kVersionKey);
+  absl::optional<int> version = value.GetDict().FindInt(kVersionKey);
   if (!version || *version > kCurrentVersion)
     return false;  // Unknown version.
 
@@ -220,7 +220,7 @@ bool NotesCodec::DecodeHelper(NoteNode* notes_node,
 
   if (sync_metadata_str) {
     const std::string* sync_metadata_str_base64 =
-        value.FindStringKey(kSyncMetadata);
+        value.GetDict().FindString(kSyncMetadata);
     if (sync_metadata_str_base64)
       base::Base64Decode(*sync_metadata_str_base64, sync_metadata_str);
   }
@@ -250,7 +250,7 @@ bool NotesCodec::DecodeNode(const base::Value& value,
   std::string id_string;
   int64_t id = 0;
   if (ids_valid_) {
-    const std::string* string = value.FindStringKey(kIdKey);
+    const std::string* string = value.GetDict().FindString(kIdKey);
     if (!string || !base::StringToInt64(*string, &id) || ids_.count(id) != 0) {
       ids_valid_ = false;
     } else {
@@ -263,47 +263,47 @@ bool NotesCodec::DecodeNode(const base::Value& value,
   maximum_id_ = std::max(maximum_id_, id);
 
   std::u16string title;
-  const std::string* string_value = value.FindStringKey(kSubjectKey);
+  const std::string* string_value = value.GetDict().FindString(kSubjectKey);
   if (string_value) {
     title = base::UTF8ToUTF16(*string_value);
     UpdateChecksum(title);
   }
 
-  base::GUID guid;
+  base::Uuid uuid;
   // |node| is only passed in for notes of type NotePermanentNode, in
-  // which case we do not need to check for GUID validity as their GUIDs are
+  // which case we do not need to check for UUID validity as their UUIDs are
   // hard-coded and not read from the persisted file.
   if (!node) {
-    // GUIDs can be empty for notes that were created before GUIDs were
+    // UUIDs can be empty for notes that were created before UUIDs were
     // required. When encountering one such note we thus assign to it a new
-    // GUID. The same applies if the stored GUID is invalid or a duplicate.
-    const std::string* guid_str = value.FindStringKey(kGuidKey);
-    if (guid_str && !guid_str->empty()) {
-      guid = base::GUID::ParseCaseInsensitive(*guid_str);
+    // UUID. The same applies if the stored UUID is invalid or a duplicate.
+    const std::string* uuid_str = value.GetDict().FindString(kGuidKey);
+    if (uuid_str && !uuid_str->empty()) {
+      uuid = base::Uuid::ParseCaseInsensitive(*uuid_str);
     }
 
-    if (!guid.is_valid()) {
-      guid = base::GUID::GenerateRandomV4();
-      guids_reassigned_ = true;
+    if (!uuid.is_valid()) {
+      uuid = base::Uuid::GenerateRandomV4();
+      uuids_reassigned_ = true;
     }
 
-    if (guid.AsLowercaseString() == NoteNode::kBannedGuidDueToPastSyncBug) {
-      guid = base::GUID::GenerateRandomV4();
-      guids_reassigned_ = true;
+    if (uuid.AsLowercaseString() == NoteNode::kBannedUuidDueToPastSyncBug) {
+      uuid = base::Uuid::GenerateRandomV4();
+      uuids_reassigned_ = true;
     }
 
-    // Guard against GUID collisions, which would violate BookmarkModel's
-    // invariant that each GUID is unique.
-    if (base::Contains(guids_, guid)) {
-      guid = base::GUID::GenerateRandomV4();
-      guids_reassigned_ = true;
+    // Guard against UUID collisions, which would violate BookmarkModel's
+    // invariant that each UUID is unique.
+    if (base::Contains(uuids_, uuid)) {
+      uuid = base::Uuid::GenerateRandomV4();
+      uuids_reassigned_ = true;
     }
 
-    guids_.insert(guid);
+    uuids_.insert(uuid);
   }
 
   base::Time creation_time = base::Time::Now();
-  string_value = value.FindStringKey(kDateAddedKey);
+  string_value = value.GetDict().FindString(kDateAddedKey);
   if (string_value) {
     int64_t internal_time;
     if (base::StringToInt64(*string_value, &internal_time)) {
@@ -311,7 +311,7 @@ bool NotesCodec::DecodeNode(const base::Value& value,
     }
   }
 
-  const std::string* type_string = value.FindStringKey(kTypeKey);
+  const std::string* type_string = value.GetDict().FindString(kTypeKey);
   if (!type_string)
     return false;
 
@@ -329,16 +329,16 @@ bool NotesCodec::DecodeNode(const base::Value& value,
     return false;
   UpdateChecksum(*type_string);
 
-  const base::Value* child_list = value.FindListKey(kChildrenKey);
+  const base::Value::List* child_list = value.GetDict().FindList(kChildrenKey);
 
   if (*type_string == kTypeNote || *type_string == kTypeAttachment) {
-    const std::string* content_string = value.FindStringKey(kContentKey);
+    const std::string* content_string = value.GetDict().FindString(kContentKey);
     if (!content_string)
       return false;
 
     if (!node) {
-      DCHECK(guid.is_valid());
-      node = new NoteNode(id, guid, type);
+      DCHECK(uuid.is_valid());
+      node = new NoteNode(id, uuid, type);
     } else {
       return false;
     }
@@ -346,15 +346,15 @@ bool NotesCodec::DecodeNode(const base::Value& value,
     node->SetContent(base::UTF8ToUTF16(*content_string));
     UpdateChecksum(node->GetContent());
 
-    const std::string* url_string = value.FindStringKey(kURLKey);
+    const std::string* url_string = value.GetDict().FindString(kURLKey);
     if (url_string)
       node->SetURL(GURL(*url_string));
     UpdateChecksum(node->GetURL().possibly_invalid_spec());
 
     if (*type_string == kTypeNote) {
-      const base::Value* attachments = value.FindListKey(kAttachmentsKey);
+      const base::Value::List* attachments = value.GetDict().FindList(kAttachmentsKey);
       if (attachments) {
-        for (const auto& attachment : attachments->GetList()) {
+        for (const auto& attachment : *attachments) {
           if (!attachment.is_dict())
             continue;
           std::unique_ptr<DeprecatedNoteAttachment> item(
@@ -371,8 +371,8 @@ bool NotesCodec::DecodeNode(const base::Value& value,
       return false;
 
     if (!node) {
-      DCHECK(guid.is_valid());
-      node = new NoteNode(id, guid, type);
+      DCHECK(uuid.is_valid());
+      node = new NoteNode(id, uuid, type);
     } else {
       node->set_id(id);
     }
@@ -380,9 +380,9 @@ bool NotesCodec::DecodeNode(const base::Value& value,
     DCHECK(*type_string == kTypeSeparator);
 
     if (!node) {
-      DCHECK(guid.is_valid());
+      DCHECK(uuid.is_valid());
 
-      node = new NoteNode(id, guid, type);
+      node = new NoteNode(id, uuid, type);
     } else {
       return false;
     }
@@ -390,11 +390,11 @@ bool NotesCodec::DecodeNode(const base::Value& value,
 
   if (*type_string != kTypeSeparator && *type_string != kTypeAttachment &&
       child_list) {
-    for (const auto& child_value : child_list->GetList()) {
+    for (const auto& child_value : *child_list) {
       if (!child_value.is_dict())
         return false;
 
-      const std::string* type_string2 = child_value.FindStringKey(kTypeKey);
+      const std::string* type_string2 = child_value.GetDict().FindString(kTypeKey);
       if (!type_string2)
         return false;
       if (*type_string2 == kTypeOther) {

@@ -10,8 +10,10 @@
 
 #if BUILDFLAG(ENABLE_V8_COMPILE_HINTS)
 
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
+#include "v8/include/v8-traced-handle.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -47,23 +49,31 @@ class V8CrowdsourcedCompileHintsProducer
 
   void Trace(Visitor* visitor) const;
 
- private:
+  bool MightGenerateData();
+
+  // Explicit API for clearing the data, to be used before memory leak
+  // detection. During normal operation, the data is cleared when the main frame
+  // of the page becomes interactive, or when the Page object is deleted and
+  // releases the V8CrowdsourcedCompileHintsProvider object.
   void ClearData();
+
+ private:
+  void ScheduleDataDeletionTask(ExecutionContext* execution_context);
   bool SendDataToUkm();
   static void AddNoise(unsigned* data);
 
-  WTF::Vector<v8::Global<v8::Script>> scripts_;
+  HeapVector<v8::TracedReference<v8::Script>> scripts_;
   WTF::Vector<uint32_t> script_name_hashes_;
 
   enum class State {
-    kInitial,
+    kCollectingData,
 
     // We've tried once to send the data to UKM (but we didn't necessarily send
     // it successfully; e.g., because of throttling or because we didn't have
     // enough data).
-    kDataGenerationFinished,
+    kFinishedOrDisabled
   };
-  State state_ = State::kInitial;
+  State state_ = State::kCollectingData;
 
   // Limit the data collection to happen only once per process (because the data
   // is so large). Not the same as the kDataGenerationFinished state, since we
@@ -97,6 +107,10 @@ class V8CrowdsourcedCompileHintsProducer
   void GenerateData() {}
 
   void Trace(Visitor* visitor) const {}
+
+  bool MightGenerateData() const { return false; }
+
+  void ClearData() {}
 };
 
 }  // namespace blink

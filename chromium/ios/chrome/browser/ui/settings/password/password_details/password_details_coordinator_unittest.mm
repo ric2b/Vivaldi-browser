@@ -7,9 +7,9 @@
 #import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
 #import "components/password_manager/core/browser/ui/affiliated_group.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/credential_provider_promo/features.h"
-#import "ios/chrome/browser/main/test_browser.h"
+#import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/credential_provider_promo_commands.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_handler.h"
@@ -36,7 +36,7 @@ class PasswordDetailsCoordinatorTest : public PlatformTest {
                                  browser:browser_.get()
                          affiliatedGroup:affiliateGroup
                             reauthModule:nil
-                                 context:DetailsContext::kGeneral];
+                                 context:DetailsContext::kPasswordSettings];
   }
 
   web::WebTaskEnvironment task_environment_;

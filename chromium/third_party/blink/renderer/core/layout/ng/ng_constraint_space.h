@@ -28,7 +28,6 @@
 
 namespace blink {
 
-class LayoutBlock;
 class NGConstraintSpaceBuilder;
 
 enum NGFragmentationType {
@@ -166,11 +165,6 @@ class CORE_EXPORT NGConstraintSpace final {
       delete rare_data_;
   }
 
-  // Creates NGConstraintSpace representing LayoutObject's containing block.
-  // This should live on NGBlockNode or another layout bridge and probably take
-  // a root NGConstraintSpace.
-  static NGConstraintSpace CreateFromLayoutObject(const LayoutBlock&);
-
   const NGExclusionSpace& ExclusionSpace() const { return exclusion_space_; }
 
   TextDirection Direction() const {
@@ -280,6 +274,12 @@ class CORE_EXPORT NGConstraintSpace final {
   absl::optional<MinMaxSizes> OverrideMinMaxBlockSizes() const {
     return HasRareData() ? rare_data_->OverrideMinMaxBlockSizes()
                          : absl::nullopt;
+  }
+
+  // True if we're using the "fallback" available inline-size. This typically
+  // means that we depend on the size of the initial containing block.
+  bool UsesOrthogonalFallbackInlineSize() const {
+    return HasRareData() && rare_data_->uses_orthogonal_fallback_inline_size;
   }
 
   // Inline/block target stretch size constraints.
@@ -521,6 +521,10 @@ class CORE_EXPORT NGConstraintSpace final {
   // set within |NGBlockLayoutAlgorithm| for the conditions when this applies.
   bool IsRestrictedBlockSizeTableCellChild() const {
     return bitfields_.is_restricted_block_size_table_cell_child;
+  }
+
+  bool IsInFlexIntrinsicSizing() const {
+    return bitfields_.is_in_flex_intrinsic_sizing;
   }
 
   bool IsPaintedAtomically() const { return bitfields_.is_painted_atomically; }
@@ -892,6 +896,7 @@ class CORE_EXPORT NGConstraintSpace final {
           is_past_break(false),
           min_block_size_should_encompass_intrinsic_size(false),
           has_override_min_max_block_sizes(false),
+          uses_orthogonal_fallback_inline_size(false),
           min_break_appeal(kBreakAppealLastResort),
           propagate_child_break_values(false),
           is_at_fragmentainer_start(false),
@@ -927,6 +932,8 @@ class CORE_EXPORT NGConstraintSpace final {
               other.min_block_size_should_encompass_intrinsic_size),
           has_override_min_max_block_sizes(
               other.has_override_min_max_block_sizes),
+          uses_orthogonal_fallback_inline_size(
+              other.uses_orthogonal_fallback_inline_size),
           min_break_appeal(other.min_break_appeal),
           propagate_child_break_values(other.propagate_child_break_values),
           is_at_fragmentainer_start(other.is_at_fragmentainer_start),
@@ -1321,6 +1328,7 @@ class CORE_EXPORT NGConstraintSpace final {
     unsigned is_past_break : 1;
     unsigned min_block_size_should_encompass_intrinsic_size : 1;
     unsigned has_override_min_max_block_sizes : 1;
+    unsigned uses_orthogonal_fallback_inline_size : 1;
     unsigned min_break_appeal : kNGBreakAppealBitsNeeded;
     unsigned propagate_child_break_values : 1;
     unsigned is_at_fragmentainer_start : 1;
@@ -1552,6 +1560,7 @@ class CORE_EXPORT NGConstraintSpace final {
           is_initial_block_size_indefinite(false),
           is_table_cell_child(false),
           is_restricted_block_size_table_cell_child(false),
+          is_in_flex_intrinsic_sizing(false),
           percentage_inline_storage(kSameAsAvailable),
           percentage_block_storage(kSameAsAvailable),
           replaced_percentage_block_storage(kSameAsAvailable) {}
@@ -1610,6 +1619,7 @@ class CORE_EXPORT NGConstraintSpace final {
     unsigned is_initial_block_size_indefinite : 1;
     unsigned is_table_cell_child : 1;
     unsigned is_restricted_block_size_table_cell_child : 1;
+    unsigned is_in_flex_intrinsic_sizing : 1;
 
     unsigned percentage_inline_storage : 2;           // NGPercentageStorage
     unsigned percentage_block_storage : 2;            // NGPercentageStorage

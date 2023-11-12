@@ -73,7 +73,7 @@ class MenuContentGetFunction : public ExtensionFunction,
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void SendResponse(menus::Menu_Model* model, const std::string& named_menu);
+  void SendResponse(menus::Menu_Model* model, const std::string& menu);
 };
 
 class MenuContentMoveFunction : public ExtensionFunction {
@@ -142,10 +142,14 @@ class MenuContentUpdateFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
-class MenuContentResetFunction : public ExtensionFunction {
+class MenuContentResetFunction : public ExtensionFunction,
+                                 public ::menus::MenuModelObserver {
  public:
   DECLARE_EXTENSION_FUNCTION("menuContent.reset", MENUCONTENT_RESET)
   MenuContentResetFunction() = default;
+
+  // ::menus::MenuModelObserver
+  void MenuModelReset(menus::Menu_Model* model) override;
 
  private:
   ~MenuContentResetFunction() override = default;

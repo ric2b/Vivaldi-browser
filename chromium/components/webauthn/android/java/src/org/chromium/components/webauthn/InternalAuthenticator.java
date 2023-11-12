@@ -7,6 +7,7 @@ package org.chromium.components.webauthn;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.blink.mojom.AuthenticatorStatus;
 import org.chromium.blink.mojom.PaymentOptions;
@@ -25,6 +26,7 @@ import java.nio.ByteBuffer;
  * The origin associated with requests on InternalAuthenticator should be set by calling
  * setEffectiveOrigin() first.
  */
+@JNINamespace("webauthn")
 public class InternalAuthenticator {
     private long mNativeInternalAuthenticatorAndroid;
     private final AuthenticatorImpl mAuthenticator;
@@ -32,8 +34,7 @@ public class InternalAuthenticator {
     private InternalAuthenticator(long nativeInternalAuthenticatorAndroid,
             WebAuthenticationDelegate.IntentSender intentSender, RenderFrameHost renderFrameHost) {
         mNativeInternalAuthenticatorAndroid = nativeInternalAuthenticatorAndroid;
-        mAuthenticator = new AuthenticatorImpl(
-                intentSender, renderFrameHost, WebAuthenticationDelegate.Support.BROWSER);
+        mAuthenticator = new AuthenticatorImpl(intentSender, renderFrameHost);
     }
 
     @VisibleForTesting
@@ -154,7 +155,7 @@ public class InternalAuthenticator {
         mAuthenticator.cancel();
     }
 
-    @VisibleForTesting
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     @NativeMethods
     public interface Natives {
         void invokeMakeCredentialResponse(

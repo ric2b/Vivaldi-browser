@@ -99,6 +99,8 @@ public class AboutChromeSettings
             version = version.concat("(MB)");
         } else if (BuildConfig.IS_OEM_VOLVO_BUILD) {
             version = version.concat("(VOLVO)");
+        } else if (BuildConfig.IS_OEM_GAS_BUILD) {
+            version = version.concat("(GAS)");
         }
 
         if (VersionInfo.isOfficialBuild()) {

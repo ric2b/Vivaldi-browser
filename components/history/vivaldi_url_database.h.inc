@@ -20,7 +20,10 @@
                               TypedUrlResults* results);
 
   // History search ------------------------------------------------------------
-  bool GetMatchesWStatement(const char* sql_statement,
-                            const std::string& search_string,
-                            int max_hits,
-                            URLRows* results);
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  bool GetDetailedMatchesWStatement(
+                        const char* sql_statement,
+                        const std::string& search_string,
+                        int max_hits,
+                        history::DetailedHistory::DetailedHistoryList* results);
+#endif

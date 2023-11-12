@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">Volgens inhoud</translation>
 <translation id="2129408066358825297">Ouderdom</translation>
 <translation id="2148384276939959392">Sinchroniseer seleksie</translation>
+<translation id="21693288559538605">Advertensie- en naspoorderblokkeringsopsomming</translation>
 <translation id="2195713384412091023">Dit sal alle sinchroniseerdata op ons bediener verwyder, u enkripsiewagwoord terugstel en u afteken.</translation>
 <translation id="2243210264130642074">Nota is bewaar</translation>
 <translation id="2272338747456392228">Rekening is vergrendel</translation>
 <translation id="2273327106802955778">Nog-kieslys</translation>
 <translation id="2324160330092901720">’n Bevestigingskode is na <ph name="EMAIL_ID" /> gestuur</translation>
+<translation id="2336309953058658733">Ledig asblik</translation>
 <translation id="2359808026110333948">Gaan voort</translation>
 <translation id="2386793615875593361">1 gekies</translation>
 <translation id="2388224692799337242">Sodra u begin blaai, verskyn u geskiedenis hier</translation>
@@ -117,6 +119,7 @@ versper</translation>
 <translation id="3699026013955941879">Die kode het verstryk. Versoek asb. ’n nuwe aktiveringskode.</translation>
 <translation id="3700829948786686853">Welkom by Vivaldi</translation>
 <translation id="3766350025418769949">U kan die bewaarde wagwoorde in Vivaldi Wagwoordbestuurder in ander toeps op u iPad gebruik.</translation>
+<translation id="3845564230651302310">Nuwe versperderinstellings word toegepas…</translation>
 <translation id="3858860766373142691">Naam</translation>
 <translation id="3866249974567520381">Beskrywing</translation>
 <translation id="3872195896030547485">Voer asb. ’n geldige e-posadres in.</translation>
@@ -225,6 +228,7 @@ versper</translation>
 <translation id="6406506848690869874">Sinchroniseer</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> gekies</translation>
 <translation id="6468130661190228905">Jammer, dit lyk of u nog ’n ruk moet wag voor u by ons gemeenskap aansluit. Ons vereis dat lede ten minste 16 jaar oud moet wees om te kan aansluit.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Voer in<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Rugsteunenkripsiesleutel</translation>
 <translation id="6527303717912515753">Deel</translation>
 <translation id="6535988230515403205">Pools (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@ versper</translation>
 <translation id="7461899062138731833">BRONNE</translation>
 <translation id="750493650310597496">0 gekies</translation>
 <translation id="7525067979554623046">Skep</translation>
-<translation id="7541020606126512786">Advertensie- en naspoorderversperder opsomming</translation>
 <translation id="7573518470897278603">Toon mobiele weergawe van werf</translation>
 <translation id="7574321014880720413">Voeg nuwe domein toe</translation>
 <translation id="7587132259180664054">E-pos suksesvol verstuur</translation>

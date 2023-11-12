@@ -23,8 +23,8 @@
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
-#import "components/sync/driver/sync_service.h"
-#import "components/sync/driver/sync_user_settings.h"
+#import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_user_settings.h"
 #import "ios/chrome/browser/credential_provider/archivable_credential+password_form.h"
 #import "ios/chrome/browser/credential_provider/credential_provider_util.h"
 #import "ios/chrome/browser/signin/system_identity.h"
@@ -247,8 +247,7 @@ void CredentialProviderService::AddCredentials(
 
     ArchivableCredential* credential =
         [[ArchivableCredential alloc] initWithPasswordForm:*form
-                                                   favicon:favicon_key
-                                      validationIdentifier:account_id_];
+                                                   favicon:favicon_key];
     DCHECK(credential);
     [store addCredential:credential];
   }
@@ -267,14 +266,13 @@ void CredentialProviderService::RemoveCredentials(
 void CredentialProviderService::UpdateAccountId() {
   CoreAccountInfo account =
       identity_manager_->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
+  NSString* account_id = nil;
   if (!account.IsEmpty() &&
       identity_manager_->FindExtendedAccountInfo(account).IsManaged()) {
-    account_id_ = base::SysUTF8ToNSString(account.gaia);
-  } else {
-    account_id_ = nil;
+    account_id = base::SysUTF8ToNSString(account.gaia);
   }
   [app_group::GetGroupUserDefaults()
-      setObject:account_id_
+      setObject:account_id
          forKey:AppGroupUserDefaultsCredentialProviderUserID()];
 }
 
@@ -310,9 +308,6 @@ void CredentialProviderService::OnPrimaryAccountChanged(
     case signin::PrimaryAccountChangeEvent::Type::kCleared:
       UpdateAccountId();
       UpdateUserEmail();
-      // The account id determines the validationIdentifier field in the
-      // passwords, send them again.
-      RequestSyncAllCredentials();
       break;
     case signin::PrimaryAccountChangeEvent::Type::kNone:
       break;

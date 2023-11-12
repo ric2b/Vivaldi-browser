@@ -142,6 +142,9 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
     // Called when noise cancellation state changed.
     virtual void OnNoiseCancellationStateChanged();
 
+    // Called when force respect ui gains state changed.
+    virtual void OnForceRespectUiGainsStateChanged();
+
     // Called when hotword is detected.
     virtual void OnHotwordTriggered(uint64_t tv_sec, uint64_t tv_nsec);
 
@@ -183,6 +186,9 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
 
     // Called when a speak-on-mute is detected.
     virtual void OnSpeakOnMuteDetected();
+
+    // Called when num-stream-ignore-ui-gains state is changed.
+    virtual void OnNumStreamIgnoreUiGainsChanged(int32_t num);
 
    protected:
     AudioObserver();
@@ -355,6 +361,15 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   // Simulate noise cancellation support in a test.
   void SetNoiseCancellationSupportedForTesting(bool supported);
 
+  // Gets the state of input force respect ui gains state.
+  bool GetForceRespectUiGainsState() const;
+
+  // Refreshes the input device force respect ui gains state.
+  void RefreshForceRespectUiGainsState();
+
+  // Makes a DBus call to set the state of input force respect ui gains.
+  void SetForceRespectUiGainsState(bool state);
+
   // Whether there is alternative input/output audio device.
   bool has_alternative_input() const;
   bool has_alternative_output() const;
@@ -425,6 +440,9 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
 
   // Activates or deactivates keyboard mic if there's one.
   void SetKeyboardMicActive(bool active);
+
+  // Enables or disables the speak-on-mute detection.
+  void SetSpeakOnMuteDetection(bool som_on);
 
   // Changes the active nodes to the nodes specified by |new_active_ids|.
   // The caller can pass in the "complete" active node list of either input
@@ -519,6 +537,9 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   // Returns if system AGC is supported in CRAS or not.
   bool system_agc_supported() const;
 
+  // Returns number of streams ignoring UI gains.
+  int32_t num_stream_ignore_ui_gains() const;
+
   // Asks  CRAS to resend BluetoothBatteryChanged signal, used in cases when
   // Chrome cleans up the stored battery information but still has the device
   // connected afterward. For example: User logout.
@@ -554,6 +575,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
                            survey_specific_data) override;
   void SpeakOnMuteDetected() override;
   void NumberOfNonChromeOutputStreamsChanged() override;
+  void NumStreamIgnoreUiGains(int32_t num) override;
 
   // AudioPrefObserver overrides.
   void OnAudioPolicyPrefChanged() override;
@@ -825,6 +847,13 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   // Handle null Metadata from MediaSession.
   void HandleMediaSessionMetadataReset();
 
+  // Calls CRAS over D-Bus to get the number of streams ignoring Ui Gains.
+  void GetNumStreamIgnoreUiGains();
+
+  // Handle dbus callback for GetNumStreamIgnoreUiGains.
+  void HandleGetNumStreamIgnoreUiGains(
+      absl::optional<int32_t> num_stream_ignore_ui_gains);
+
   mojo::Remote<media_session::mojom::MediaControllerManager>
       media_controller_manager_;
 
@@ -908,6 +937,8 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
 
   cras::DisplayRotation display_rotation_ = cras::DisplayRotation::ROTATE_0;
+
+  int num_stream_ignore_ui_gains_ = 0;
 
   base::WeakPtrFactory<CrasAudioHandler> weak_ptr_factory_{this};
 };

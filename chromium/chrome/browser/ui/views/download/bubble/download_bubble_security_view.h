@@ -5,10 +5,12 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_DOWNLOAD_BUBBLE_DOWNLOAD_BUBBLE_SECURITY_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_DOWNLOAD_BUBBLE_DOWNLOAD_BUBBLE_SECURITY_VIEW_H_
 
+#include "base/gtest_prod_util.h"
 #include "chrome/browser/download/download_ui_model.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/color/color_id.h"
+#include "ui/views/controls/progress_bar.h"
 #include "ui/views/view.h"
 
 namespace views {
@@ -30,8 +32,8 @@ class DownloadBubbleSecurityView : public views::View {
  public:
   METADATA_HEADER(DownloadBubbleSecurityView);
   DownloadBubbleSecurityView(
-      DownloadBubbleUIController* bubble_controller,
-      DownloadBubbleNavigationHandler* navigation_handler,
+      base::WeakPtr<DownloadBubbleUIController> bubble_controller,
+      base::WeakPtr<DownloadBubbleNavigationHandler> navigation_handler,
       views::BubbleDialogDelegate* bubble_delegate);
   DownloadBubbleSecurityView(const DownloadBubbleSecurityView&) = delete;
   DownloadBubbleSecurityView& operator=(const DownloadBubbleSecurityView&) =
@@ -56,14 +58,17 @@ class DownloadBubbleSecurityView : public views::View {
   void CloseBubble();
   void OnCheckboxClicked();
   void UpdateIconAndText();
+  void UpdateSecondaryIconAndText();
   void AddIconAndText();
+  void AddSecondaryIconAndText();
+  void AddProgressBar();
   // Updates the subpage button. Setting initial state and color for enabled
   // state, if it is a secondary button.
   void UpdateButton(DownloadUIModel::BubbleUIInfo::SubpageButton button,
                     bool is_secondary_button,
-                    bool has_checkbox,
-                    ui::ColorId color_id);
+                    bool has_checkbox);
   void UpdateButtons();
+  void UpdateProgressBar();
 
   // |is_secondary_button| checks if the command/action originated from the
   // secondary button.
@@ -71,19 +76,25 @@ class DownloadBubbleSecurityView : public views::View {
                           bool is_secondary_button);
   void RecordWarningActionTime(bool is_secondary_button);
 
+  int GetMinimumLabelWidth() const;
+
   raw_ptr<DownloadBubbleRowView> download_row_view_;
   DownloadUIModel::DownloadUIModelPtr model_;
-  raw_ptr<DownloadBubbleUIController> bubble_controller_ = nullptr;
-  raw_ptr<DownloadBubbleNavigationHandler> navigation_handler_ = nullptr;
+  base::WeakPtr<DownloadBubbleUIController> bubble_controller_ = nullptr;
+  base::WeakPtr<DownloadBubbleNavigationHandler> navigation_handler_ = nullptr;
   raw_ptr<views::BubbleDialogDelegate, DanglingUntriaged> bubble_delegate_ =
       nullptr;
   // The secondary button is the one that may be protected by the checkbox.
-  raw_ptr<views::LabelButton> secondary_button_ = nullptr;
+  raw_ptr<views::LabelButton, DanglingUntriaged> secondary_button_ = nullptr;
   raw_ptr<views::Checkbox> checkbox_ = nullptr;
   raw_ptr<views::Label> title_ = nullptr;
   raw_ptr<views::ImageView> icon_ = nullptr;
   raw_ptr<views::StyledLabel> styled_label_ = nullptr;
+  raw_ptr<views::ImageView> secondary_icon_ = nullptr;
+  raw_ptr<views::StyledLabel> secondary_styled_label_ = nullptr;
   raw_ptr<views::ImageButton> back_button_ = nullptr;
+  raw_ptr<views::StyledLabel> deep_scanning_link_ = nullptr;
+  raw_ptr<views::ProgressBar> progress_bar_ = nullptr;
   absl::optional<base::Time> warning_time_;
   bool did_log_action_ = false;
 };

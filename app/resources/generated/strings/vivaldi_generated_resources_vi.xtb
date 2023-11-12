@@ -48,7 +48,6 @@
 <translation id="1901303067676059328">Chọn &amp;tất cả</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1936931585862840749">Dùng số để chỉ định số lượng bản cần in (1 đến <ph name="MAX_COPIES" />).</translation>
-<translation id="1994173015038366702">URL trang web</translation>
 <translation id="2019718679933488176">&amp;Mở Âm thanh trong Tab Mới</translation>
 <translation id="2050339315714019657">Khổ dọc</translation>
 <translation id="2076269580855484719">Ẩn plugin này</translation>
@@ -62,7 +61,6 @@
 <translation id="219008588003277019">Mô-đun Ứng dụng khách Gốc: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Dán dưới dạng văn bản thuần túy</translation>
 <translation id="2249605167705922988">ví dụ: 1-5, 8, 11-13</translation>
-<translation id="225240747099314620">Cho phép định danh trên nội dung được bảo vệ (có thể cần phải khởi động lại máy tính)</translation>
 <translation id="2280486287150724112">Lề phải</translation>
 <translation id="2282146716419988068">Quá trình GPU</translation>
 <translation id="2301382460326681002">Thư mục gốc của tiện ích không hợp lệ.</translation>
@@ -73,7 +71,6 @@
 <translation id="2348176352564285430">Ứng dụng: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Chọn thư mục tiện ích.</translation>
 <translation id="2379281330731083556">In bằng hộp thoại hệ thống... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="2381756643783702095">Hỏi trước khi gửi (được đề xuất)</translation>
 <translation id="241082044617551207">Plugin không rõ</translation>
 <translation id="2423578206845792524">Lưu &amp;hình ảnh dưới dạng...</translation>
 <translation id="2439110203301358333">Một chương trình khác trên máy tính của bạn đã thêm một tiện ích có thể thay đổi cách Vivaldi hoạt động.</translation>
@@ -95,14 +92,12 @@
 <translation id="2881076733170862447">Khi Bạn Nhấp vào Tiện ích</translation>
 <translation id="2889064240420137087">Mở liên kết bằng...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> không thể giao tiếp với máy in này. Hãy đảm bảo rằng bạn đã cắm máy in rồi thử lại.</translation>
-<translation id="2913331724188855103">Cho phép trang web lưu và đọc dữ liệu cookie (được đề xuất)</translation>
 <translation id="2931157624143513983">Vừa với vùng in được</translation>
 <translation id="2932085390869194046">Đề xuất Mật khẩu...</translation>
 <translation id="2932883381142163287">Báo cáo lạm dụng</translation>
 <translation id="2941112035454246133">Thấp</translation>
 <translation id="2972581237482394796">&amp;Làm lại</translation>
 <translation id="3003623123441819449">Bộ nhớ đệm CSS</translation>
-<translation id="3008272652534848354">Đặt lại quyền</translation>
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3021678814754966447">&amp;Xem Nguồn Khung</translation>
 <translation id="3036546437875325427">Cho phép Flash</translation>
@@ -130,21 +125,17 @@
 <translation id="3378572629723696641">Tiện ích này có thể đã bị hỏng.</translation>
 <translation id="3387614642886316601">Sử dụng tính năng kiểm tra lỗi chính tả nâng cao</translation>
 <translation id="345693547134384690">Mở &amp;hình ảnh trong tab mới</translation>
-<translation id="3494769164076977169">Hỏi khi trang web cố gắng tự động tải tệp xuống sau tệp đầu tiên (được đề xuất)</translation>
-<translation id="3505030558724226696">Thu hồi quyền truy cập thiết bị</translation>
 <translation id="3511307672085573050">S&amp;ao chép Địa chỉ Liên kết</translation>
 <translation id="354068948465830244">Tiện ích này có thể đọc và thay đổi dữ liệu trang web</translation>
 <translation id="3560034655160545939">&amp;Kiểm tra chính tả</translation>
 <translation id="3587482841069643663">Tất cả</translation>
 <translation id="3627588569887975815">Mở liên kết tron&amp;g cửa số ẩn danh</translation>
-<translation id="3627879631695760395">Cài đặt <ph name="APP" />...</translation>
 <translation id="3678156199662914018">Tiện ích: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Yêu cầu Chia sẻ Màn hình <ph name="APP_NAME" /></translation>
 <translation id="3711931198657368127">Dá&amp;n và Truy cập <ph name="URL" /></translation>
 <translation id="3727187387656390258">Kiểm tra của sổ bật lên</translation>
 <translation id="3760460896538743390">Kiểm tra Trang &amp;Nền</translation>
 <translation id="3797900183766075808">&amp;Tìm “<ph name="SEARCH_TERMS" />” trên <ph name="SEARCH_ENGINE" /></translation>
-<translation id="3800806661949714323">Hiển thị tất cả (được đề xuất)</translation>
 <translation id="3810973564298564668">Quản lý</translation>
 <translation id="3838085852053358637">Không tải được tiện ích</translation>
 <translation id="383891835335927981">Không có trang web nào được phóng to hoặc thu nhỏ</translation>
@@ -156,7 +147,6 @@
 <translation id="3936390757709632190">&amp;Mở âm thanh trong tab mới</translation>
 <translation id="3943582379552582368">&amp;Quay lại</translation>
 <translation id="3948116654032448504">&amp;Tìm kiếm hình ảnh trên <ph name="SEARCH_ENGINE" /></translation>
-<translation id="3955193568934677022">Cho phép trang web phát nội dung được bảo vệ (được đề xuất)</translation>
 <translation id="3979395879372752341">Đã thêm tiện ích mới (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Thêm vào Từ điển</translation>
@@ -194,14 +184,12 @@
 <translation id="479536056609751218">Trang web, chỉ HTML</translation>
 <translation id="4839303808932127586">Lưu &amp;video dưới dạng...</translation>
 <translation id="488785315393301722">Hiển thị chi tiết</translation>
-<translation id="4907306957610201395">Danh mục Quyền</translation>
 <translation id="4912643508233590958">Đánh thức khỏi Chế độ rảnh</translation>
 <translation id="4927753642311223124">Không có lỗi.</translation>
 <translation id="4930714375720679147">Bật</translation>
 <translation id="4988526792673242964">Trang</translation>
 <translation id="49896407730300355">Xoay &amp;nghịch kim đồng hồ</translation>
 <translation id="4989966318180235467">Kiểm tra trang &amp;nền</translation>
-<translation id="5000922062037820727">Bị chặn (được đề xuất)</translation>
 <translation id="5027562294707732951">Thêm tiện ích</translation>
 <translation id="5039804452771397117">Cho phép</translation>
 <translation id="5057110919553308744">Khi bạn nhấp vào tiện ích</translation>
@@ -228,7 +216,6 @@
 <translation id="5425042808445046667">Tiếp tục tải xuống</translation>
 <translation id="5427459444770871191">Xoay &amp;Thuận kim đồng hồ</translation>
 <translation id="5431318178759467895">Màu</translation>
-<translation id="5483785310822538350">Thu hồi quyền truy cập vào tệp và thiết bị</translation>
 <translation id="5485102783864353244">Thêm ứng dụng</translation>
 <translation id="5486561344817861625">Mô phỏng Khởi động lại Trình duyệt</translation>
 <translation id="5487521232677179737">Xóa dữ liệu</translation>
@@ -240,7 +227,6 @@
 <translation id="5614553682702429503">Bạn có muốn lưu mật khẩu không?</translation>
 <translation id="5623842676595125836">Nhật ký</translation>
 <translation id="5627086634964711283">Tiện ích cũng điều khiển trang nào sẽ hiển thị khi bạn nhấp vào nút Trang chủ.</translation>
-<translation id="563535393368633106">Hỏi trước khi truy cập (được đề xuất)</translation>
 <translation id="5677928146339483299">Bị chặn</translation>
 <translation id="5707185214361380026">Lỗi nạp phần mở rộng từ:</translation>
 <translation id="5715711091495208045">Trình môi giới plugin: <ph name="PLUGIN_NAME" /></translation>
@@ -281,7 +267,6 @@
 <translation id="6315493146179903667">Đưa Tất cả lên Trước</translation>
 <translation id="6326855256003666642">Số lượng Duy trì kết nối</translation>
 <translation id="6374469231428023295">Thử Lại</translation>
-<translation id="6385543213911723544">Trang web có thể lưu và đọc dữ liệu cookie</translation>
 <translation id="6398765197997659313">Thoát khỏi chế độ toàn màn hình</translation>
 <translation id="6406303162637086258">Mô phỏng khởi động lại trình duyệt</translation>
 <translation id="6445450263907939268">Nếu không thích những thay đổi này, bạn có thể khôi phục cài đặt trước của mình.</translation>
@@ -296,13 +281,11 @@
 <translation id="6691936601825168937">Chuyển &amp;tiếp</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Giữ lại thay đổi</translation>
-<translation id="6817174620439930047">Hỏi tôi khi có trang web muốn sử dụng thông báo dành riêng cho hệ thống để truy cập thiết bị MIDI (được đề xuất)</translation>
 <translation id="6824564591481349393">Sao chép Địa chỉ &amp;Email</translation>
 <translation id="6840155290835956714">Hỏi trước khi gửi</translation>
 <translation id="6886871292305414135">Mở liên kết trong &amp;tab mới</translation>
 <translation id="6892812721183419409">Mở liên kết bằng tài khoản <ph name="USER" /></translation>
 <translation id="6900284862687837908">Ứng dụng nền: <ph name="BACKGROUND_APP_URL" /></translation>
-<translation id="6904344821472985372">Thu hồi quyền truy cập tệp</translation>
 <translation id="6945221475159498467">Chọn</translation>
 <translation id="6955446738988643816">Kiểm tra Cửa sổ bật lên</translation>
 <translation id="6970856801391541997">In Các trang Cụ thể</translation>
@@ -318,7 +301,6 @@
 <translation id="7385854874724088939">Có trục trặc xảy ra khi in. Hãy kiểm tra máy in của bạn và thử lại.</translation>
 <translation id="7412226954991670867">Bộ nhớ GPU</translation>
 <translation id="7421925624202799674">&amp;Xem Nguồn Trang</translation>
-<translation id="7423098979219808738">Hỏi trước</translation>
 <translation id="7427348830195639090">Trang nền: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Bằng cách chọn máy in này, bạn sẽ cấp cho tiện ích sau quyền truy cập vào máy in của mình:</translation>
 <translation id="749028671485790643">Cá nhân <ph name="VALUE" /></translation>
@@ -370,7 +352,6 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="8261378640211443080">Tiện ích này không được liệt kê trong <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> và có thể đã được thêm mà bạn không biết.</translation>
 <translation id="8351419472474436977">Tiện ích này đã chiếm quyền kiểm soát cài đặt proxy của bạn, điều đó có nghĩa là tiện ích này có thể thay đổi, làm gián đoạn hoặc nghe trộm bất kỳ điều gì bạn thực hiện trực tuyến. Nếu bạn không chắc chắn về lý do thay đổi này diễn ra, bạn có thể không cần tiện ích này.</translation>
 <translation id="8382913212082956454">Sao chép địa chỉ &amp;email</translation>
-<translation id="8413385045638830869">Hỏi trước (được đề xuất)</translation>
 <translation id="8434480141477525001">Cổng Gỡ lỗi NaCl</translation>
 <translation id="8449008133205184768">Dán và Khớp Kiểu</translation>
 <translation id="8496717697661868878">Chạy Plugin Này</translation>
@@ -378,7 +359,6 @@ Giữ tệp khóa của bạn ở nơi an toàn. Bạn sẽ cần tệp khóa đ
 <translation id="8523493869875972733">Giữ lại Thay đổi</translation>
 <translation id="8546306075665861288">Bộ nhớ đệm hình ảnh</translation>
 <translation id="8569682776816196752">Không tìm thấy máy in nào</translation>
-<translation id="857943718398505171">Được phép (được đề xuất)</translation>
 <translation id="8584280235376696778">&amp;Mở video trong tab mới</translation>
 <translation id="8605428685123651449">Bộ nhớ SQLite</translation>
 <translation id="8615618338313291042">Ứng dụng Ẩn danh: <ph name="APP_NAME" /></translation>

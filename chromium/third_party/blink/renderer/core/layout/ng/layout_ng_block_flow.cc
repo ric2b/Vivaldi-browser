@@ -18,8 +18,4 @@ bool LayoutNGBlockFlow::IsOfType(LayoutObjectType type) const {
          LayoutNGMixin<LayoutBlockFlow>::IsOfType(type);
 }
 
-void LayoutNGBlockFlow::UpdateBlockLayout(bool relayout_children) {
-  UpdateNGBlockLayout();
-}
-
 }  // namespace blink

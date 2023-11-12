@@ -17,6 +17,10 @@ class ObjectPath;
 namespace ash {
 
 class CellularESimProfile;
+struct NetworkProfile;
+class NetworkProfileHandler;
+
+namespace cellular_utils {
 
 // Generates a list of CellularESimProfile objects for all Hermes esim profile
 // objects available through its dbus clients. Note that this function returns
@@ -45,11 +49,22 @@ std::string GenerateStubCellularServicePath(const std::string& iccid);
 COMPONENT_EXPORT(CHROMEOS_NETWORK)
 bool IsStubCellularServicePath(const std::string& service_path);
 
+// Returns the cellular profile.
+COMPONENT_EXPORT(CHROMEOS_NETWORK)
+const NetworkProfile* GetCellularProfile(
+    const NetworkProfileHandler* network_profile_handler);
+
 // Returns the path to the Euicc that is currently used for all eSIM operations
 // in OS Settings and System UI.
 COMPONENT_EXPORT(CHROMEOS_NETWORK)
 absl::optional<dbus::ObjectPath> GetCurrentEuiccPath();
 
+// Returns the activation codes that should be used to scan for profiles that
+// are available for installation.
+COMPONENT_EXPORT(CHROMEOS_NETWORK)
+std::vector<std::string> GetSmdsActivationCodes();
+
+}  // namespace cellular_utils
 }  // namespace ash
 
 #endif  // CHROMEOS_ASH_COMPONENTS_NETWORK_CELLULAR_UTILS_H_

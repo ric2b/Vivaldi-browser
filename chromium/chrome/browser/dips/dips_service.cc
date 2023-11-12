@@ -67,22 +67,22 @@ std::vector<std::string> GetEngagedSitesInBackground(
   return std::vector(unique_sites.begin(), unique_sites.end());
 }
 
-RedirectCategory ClassifyRedirect(CookieAccessType access,
+RedirectCategory ClassifyRedirect(SiteDataAccessType access,
                                   bool has_interaction) {
   switch (access) {
-    case CookieAccessType::kUnknown:
+    case SiteDataAccessType::kUnknown:
       return has_interaction ? RedirectCategory::kUnknownCookies_HasEngagement
                              : RedirectCategory::kUnknownCookies_NoEngagement;
-    case CookieAccessType::kNone:
+    case SiteDataAccessType::kNone:
       return has_interaction ? RedirectCategory::kNoCookies_HasEngagement
                              : RedirectCategory::kNoCookies_NoEngagement;
-    case CookieAccessType::kRead:
+    case SiteDataAccessType::kRead:
       return has_interaction ? RedirectCategory::kReadCookies_HasEngagement
                              : RedirectCategory::kReadCookies_NoEngagement;
-    case CookieAccessType::kWrite:
+    case SiteDataAccessType::kWrite:
       return has_interaction ? RedirectCategory::kWriteCookies_HasEngagement
                              : RedirectCategory::kWriteCookies_NoEngagement;
-    case CookieAccessType::kReadWrite:
+    case SiteDataAccessType::kReadWrite:
       return has_interaction ? RedirectCategory::kReadWriteCookies_HasEngagement
                              : RedirectCategory::kReadWriteCookies_NoEngagement;
   }
@@ -100,6 +100,19 @@ inline void UmaHistogramBounceCategory(RedirectCategory category,
 inline void UmaHistogramDeletionLatency(base::Time deletion_start) {
   base::UmaHistogramLongTimes100("Privacy.DIPS.DeletionLatency",
                                  base::Time::Now() - deletion_start);
+}
+
+inline void UmaHistogramClearedSitesCount(DIPSCookieMode mode, int size) {
+  base::UmaHistogramCounts1000(base::StrCat({"Privacy.DIPS.ClearedSitesCount",
+                                             GetHistogramSuffix(mode)}),
+                               size);
+}
+
+inline void UmaHistogramDeletion(DIPSCookieMode mode,
+                                 DIPSDeletionAction action) {
+  base::UmaHistogramEnumeration(
+      base::StrCat({"Privacy.DIPS.Deletion", GetHistogramSuffix(mode)}),
+      action);
 }
 
 void OnDeletionFinished(base::OnceClosure finished_callback,
@@ -237,27 +250,20 @@ bool DIPSService::ShouldBlockThirdPartyCookies() const {
   return cookie_settings_->ShouldBlockThirdPartyCookies();
 }
 
-bool DIPSService::HasCookieException(const std::string& site) const {
+bool DIPSService::Has3PCExceptionAs3P(const std::string& site) const {
   DCHECK(!IsShuttingDown());
   GURL url("https://" + site);
 
-  // Checks whether there is an exception allowing all third-parties embedded
-  // under |site| to use cookies.
-  if (cookie_settings_->IsFullCookieAccessAllowed(
-          GURL(), net::SiteForCookies::FromUrl(url), url::Origin::Create(url),
-          net::CookieSettingOverrides())) {
-    return true;
-  }
+  return cookie_settings_->IsFullCookieAccessAllowed(
+      url, net::SiteForCookies(), absl::nullopt, net::CookieSettingOverrides());
+}
 
-  // Checks whether there is an exception allowing |site| to use cookies when
-  // embedded by any other site.
-  if (cookie_settings_->IsFullCookieAccessAllowed(
-          url, net::SiteForCookies(), absl::nullopt,
-          net::CookieSettingOverrides())) {
-    return true;
-  }
+bool DIPSService::Has3PCExceptionAs1P(const GURL& url) const {
+  DCHECK(!IsShuttingDown());
 
-  return false;
+  return cookie_settings_->IsFullCookieAccessAllowed(
+      GURL(), net::SiteForCookies::FromUrl(url), url::Origin::Create(url),
+      net::CookieSettingOverrides());
 }
 
 DIPSCookieMode DIPSService::GetCookieMode() const {
@@ -300,8 +306,10 @@ void DIPSService::InitializeStorage(base::Time time,
 
 void DIPSService::HandleRedirectChain(
     std::vector<DIPSRedirectInfoPtr> redirects,
-    DIPSRedirectChainInfoPtr chain) {
+    DIPSRedirectChainInfoPtr chain,
+    base::RepeatingCallback<void(const GURL&)> content_settings_callback) {
   if (redirects.empty()) {
+    DCHECK(!chain->is_partial_chain);
     for (auto& observer : observers_) {
       observer.OnChainHandled(chain);
     }
@@ -314,13 +322,25 @@ void DIPSService::HandleRedirectChain(
   storage_.AsyncCall(&DIPSStorage::Read)
       .WithArgs(url)
       .Then(base::BindOnce(&DIPSService::GotState, weak_factory_.GetWeakPtr(),
-                           std::move(redirects), std::move(chain), 0));
+                           std::move(redirects), std::move(chain), 0,
+                           content_settings_callback));
 }
 
-void DIPSService::GotState(std::vector<DIPSRedirectInfoPtr> redirects,
-                           DIPSRedirectChainInfoPtr chain,
-                           size_t index,
-                           const DIPSState url_state) {
+void DIPSService::DidSiteHaveInteractionSince(
+    const GURL& url,
+    base::Time bound,
+    CheckInteractionCallback callback) const {
+  storage_.AsyncCall(&DIPSStorage::DidSiteHaveInteractionSince)
+      .WithArgs(url, bound)
+      .Then(std::move(callback));
+}
+
+void DIPSService::GotState(
+    std::vector<DIPSRedirectInfoPtr> redirects,
+    DIPSRedirectChainInfoPtr chain,
+    size_t index,
+    base::RepeatingCallback<void(const GURL&)> content_settings_callback,
+    const DIPSState url_state) {
   DCHECK_LT(index, redirects.size());
 
   DIPSRedirectInfo* redirect = redirects[index].get();
@@ -328,12 +348,15 @@ void DIPSService::GotState(std::vector<DIPSRedirectInfoPtr> redirects,
   redirect->has_interaction = url_state.user_interaction_times().has_value();
   HandleRedirect(
       *redirect, *chain,
-      base::BindRepeating(&DIPSService::RecordBounce, base::Unretained(this)));
+      base::BindRepeating(&DIPSService::RecordBounce, base::Unretained(this)),
+      content_settings_callback);
 
   if (index + 1 >= redirects.size()) {
     // All redirects handled.
-    for (auto& observer : observers_) {
-      observer.OnChainHandled(chain);
+    if (!chain->is_partial_chain) {
+      for (auto& observer : observers_) {
+        observer.OnChainHandled(chain);
+      }
     }
     return;
   }
@@ -343,24 +366,67 @@ void DIPSService::GotState(std::vector<DIPSRedirectInfoPtr> redirects,
   storage_.AsyncCall(&DIPSStorage::Read)
       .WithArgs(url)
       .Then(base::BindOnce(&DIPSService::GotState, weak_factory_.GetWeakPtr(),
-                           std::move(redirects), std::move(chain), index + 1));
+                           std::move(redirects), std::move(chain), index + 1,
+                           content_settings_callback));
 }
 
-void DIPSService::RecordBounce(const GURL& url,
-                               base::Time time,
-                               bool stateful) {
+void DIPSService::RecordBounce(
+    const GURL& url,
+    const GURL& initial_url,
+    const GURL& final_url,
+    base::Time time,
+    bool stateful,
+    base::RepeatingCallback<void(const GURL&)> content_settings_callback) {
+  // If the initial or final URL has a 1P exception for all embedded 3PCs (e.g.
+  // Chrome Guard) then clear the tracking site from the DIPS DB, to avoid
+  // deleting its storage. The exemption overrides any bounces from non-exempted
+  // sites.
+  if (Has3PCExceptionAs1P(initial_url) || Has3PCExceptionAs1P(final_url)) {
+    // These records indicate sites that could've had their state deleted
+    // provided their grace period expired. But are at the moment excepted
+    // following `Has3PCExceptionAs1P()` of either `initial_url` or `final_url`.
+    if ((dips::kTriggeringAction.Get() == DIPSTriggeringAction::kStatefulBounce
+             ? stateful
+             : true)) {
+      // TODO(crbug.com/1447035): Investigate and fix the presence of empty
+      // site(s) in the `site_to_clear` list. Once this is fixed remove this
+      // escape.
+      if (url.is_empty()) {
+        UmaHistogramDeletion(GetCookieMode(), DIPSDeletionAction::kIgnored);
+      } else {
+        UmaHistogramDeletion(GetCookieMode(),
+                             DIPSDeletionAction::kExceptedAs1p);
+      }
+    }
+
+    const std::set<std::string> site_to_clear{GetSiteForDIPS(url)};
+    // Don't clear the row if the tracker has interaction history, since we
+    // should preserve that context for future bounces.
+    storage_.AsyncCall(&DIPSStorage::RemoveRowsWithoutInteraction)
+        .WithArgs(site_to_clear);
+
+    return;
+  }
+
+  // If the bounce is stateful and not exempted by cookie settings, increment
+  // the bounce counter in PageSpecificContentSettings.
+  if (stateful) {
+    content_settings_callback.Run(final_url);
+  }
+
   storage_.AsyncCall(&DIPSStorage::RecordBounce).WithArgs(url, time, stateful);
 }
 
 /*static*/
-void DIPSService::HandleRedirect(const DIPSRedirectInfo& redirect,
-                                 const DIPSRedirectChainInfo& chain,
-                                 RecordBounceCallback record_bounce) {
+void DIPSService::HandleRedirect(
+    const DIPSRedirectInfo& redirect,
+    const DIPSRedirectChainInfo& chain,
+    RecordBounceCallback record_bounce,
+    base::RepeatingCallback<void(const GURL&)> content_settings_callback) {
   const std::string site = GetSiteForDIPS(redirect.url);
   bool initial_site_same = (site == chain.initial_site);
   bool final_site_same = (site == chain.final_site);
-  DCHECK_LE(0, redirect.index);
-  DCHECK_LT(redirect.index, chain.length);
+  DCHECK_LT(redirect.chain_index, chain.length);
 
   if (base::FeatureList::IsEnabled(kDipsUkm)) {
     ukm::builders::DIPS_Redirect(redirect.source_id)
@@ -370,11 +436,14 @@ void DIPSService::HandleRedirect(const DIPSRedirectInfo& redirect,
         .SetRedirectAndInitialSiteSame(initial_site_same)
         .SetRedirectAndFinalSiteSame(final_site_same)
         .SetInitialAndFinalSitesSame(chain.initial_and_final_sites_same)
-        .SetRedirectChainIndex(redirect.index)
+        .SetRedirectChainIndex(redirect.chain_index)
         .SetRedirectChainLength(chain.length)
+        .SetIsPartialRedirectChain(chain.is_partial_chain)
         .SetClientBounceDelay(
             BucketizeBounceDelay(redirect.client_bounce_delay))
         .SetHasStickyActivation(redirect.has_sticky_activation)
+        .SetWebAuthnAssertionRequestSucceeded(
+            redirect.web_authn_assertion_request_succeeded)
         .Record(ukm::UkmRecorder::Get());
   }
 
@@ -384,10 +453,11 @@ void DIPSService::HandleRedirect(const DIPSRedirectInfo& redirect,
   }
 
   // Record this bounce in the DIPS database.
-  if (redirect.access_type != CookieAccessType::kUnknown) {
+  if (redirect.access_type != SiteDataAccessType::kUnknown) {
     record_bounce.Run(
-        redirect.url, redirect.time,
-        /*stateful=*/redirect.access_type > CookieAccessType::kRead);
+        redirect.url, chain.initial_url, chain.final_url, redirect.time,
+        /*stateful=*/redirect.access_type > SiteDataAccessType::kRead,
+        content_settings_callback);
   }
 
   RedirectCategory category =
@@ -421,37 +491,61 @@ void DIPSService::DeleteDIPSEligibleState(
     DeletedSitesCallback callback,
     base::Time deletion_start,
     std::vector<std::string> sites_to_clear) {
-  base::UmaHistogramCounts1000(
-      base::StrCat({"Privacy.DIPS.ClearedSitesCount",
-                    GetHistogramSuffix(GetCookieMode())}),
-      sites_to_clear.size());
+  // Do not clear sites from currently open tabs.
+  for (const std::pair<std::string, int> site_ctr : open_sites_) {
+    CHECK(site_ctr.second > 0);
+    sites_to_clear.erase(std::remove(sites_to_clear.begin(),
+                                     sites_to_clear.end(), site_ctr.first),
+                         sites_to_clear.end());
+  }
 
   if (sites_to_clear.empty()) {
+    UmaHistogramClearedSitesCount(GetCookieMode(), sites_to_clear.size());
     std::move(callback).Run(std::vector<std::string>());
     return;
   }
 
+  if (IsShuttingDown()) {
+    return;
+  }
+
+  UmaHistogramClearedSitesCount(GetCookieMode(), sites_to_clear.size());
+
   for (const auto& site : sites_to_clear) {
+    // TODO(crbug.com/1447035): Investigate and fix the presence of empty
+    // site(s) in the `site_to_clear` list. Once this is fixed remove this loop
+    // escape.
+    if (site.empty()) {
+      continue;
+    }
     const ukm::SourceId source_id = ukm::UkmRecorder::GetSourceIdForDipsSite(
         base::PassKey<DIPSService>(), site);
-    ukm::builders::DIPS_Deletion(source_id).SetDetected(true).Record(
-        ukm::UkmRecorder::Get());
+    ukm::builders::DIPS_Deletion(source_id)
+        .SetShouldBlockThirdPartyCookies(ShouldBlockThirdPartyCookies())
+        .SetHasCookieException(Has3PCExceptionAs3P(site))
+        .SetIsDeletionEnabled(dips::kDeletionEnabled.Get())
+        .Record(ukm::UkmRecorder::Get());
   }
 
   base::OnceClosure finish_callback;
-
   if (ShouldBlockThirdPartyCookies() && dips::kDeletionEnabled.Get()) {
-    if (IsShuttingDown()) {
-      return;
-    }
-
     std::vector<std::string> excepted_sites;
     std::vector<std::string> non_excepted_sites;
 
     for (const auto& site : sites_to_clear) {
-      if (HasCookieException(site)) {
+      // TODO(crbug.com/1447035): Investigate and fix the presence of empty
+      // site(s) in the `site_to_clear` list. Once this is fixed remove this
+      // loop escape.
+      if (site.empty()) {
+        UmaHistogramDeletion(GetCookieMode(), DIPSDeletionAction::kIgnored);
+        continue;
+      }
+      if (Has3PCExceptionAs3P(site)) {
+        UmaHistogramDeletion(GetCookieMode(),
+                             DIPSDeletionAction::kExceptedAs3p);
         excepted_sites.push_back(site);
       } else {
+        UmaHistogramDeletion(GetCookieMode(), DIPSDeletionAction::kEnforced);
         non_excepted_sites.push_back(site);
       }
     }
@@ -472,6 +566,17 @@ void DIPSService::DeleteDIPSEligibleState(
                                std::move(non_excepted_sites)));
     }
   } else {
+    for (auto it = sites_to_clear.begin(); it != sites_to_clear.end(); it++) {
+      // TODO(crbug.com/1447035): Investigate and fix the presence of empty
+      // site(s) in the `site_to_clear` list. Once this is fixed remove this
+      // loop escape.
+      if (it->empty()) {
+        UmaHistogramDeletion(GetCookieMode(), DIPSDeletionAction::kIgnored);
+        continue;
+      }
+      UmaHistogramDeletion(GetCookieMode(), DIPSDeletionAction::kDisallowed);
+    }
+
     finish_callback = base::BindOnce(std::move(callback),
                                      std::vector<std::string>(sites_to_clear));
 

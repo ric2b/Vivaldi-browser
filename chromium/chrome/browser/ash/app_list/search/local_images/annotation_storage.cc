@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ash/app_list/search/local_images/annotation_storage.h"
 
+#include <algorithm>
+#include <iterator>
+#include <map>
 #include <string>
 
 #include "base/logging.h"
@@ -22,10 +25,8 @@
 namespace app_list {
 namespace {
 
-using TableColumnName = ::app_list::AnnotationStorage::TableColumnName;
-
 constexpr double kRelevanceThreshold = 0.6;
-constexpr int kVersionNumber = 2;
+constexpr int kVersionNumber = 3;
 
 // Initializes a new annotation table, returning a schema version number
 // on success. The table can be searched by label and image path.
@@ -39,7 +40,8 @@ int CreateNewSchema(SqlDatabase* db) {
       "CREATE TABLE annotations("
           "label TEXT NOT NULL,"
           "image_path TEXT NOT NULL,"
-          "last_modified_time INTEGER NOT NULL)";
+          "last_modified_time INTEGER NOT NULL,"
+          "is_ignored INTEGER NOT NULL)";
   // clang-format on
   sql::Statement statement = db->GetStatementForQuery(SQL_FROM_HERE, kQuery);
   if (!statement.Run()) {
@@ -66,23 +68,36 @@ int CreateNewSchema(SqlDatabase* db) {
 }
 
 int MigrateSchema(SqlDatabase* db, int current_version_number) {
-  return current_version_number;
+  if (current_version_number == kVersionNumber) {
+    return current_version_number;
+  }
+
+  static constexpr char kQuery[] = "DROP TABLE IF EXISTS annotations";
+  sql::Statement statement = db->GetStatementForQuery(SQL_FROM_HERE, kQuery);
+  if (!statement.Run()) {
+    return 0;
+  }
+
+  return CreateNewSchema(db);
 }
 
 }  // namespace
 
 ImageInfo::ImageInfo(const std::set<std::string>& annotations,
                      const base::FilePath& path,
-                     const base::Time& last_modified)
-    : annotations(annotations), path(path), last_modified(last_modified) {}
+                     const base::Time& last_modified,
+                     bool is_ignored)
+    : annotations(annotations),
+      path(path),
+      last_modified(last_modified),
+      is_ignored(is_ignored) {}
 
 ImageInfo::~ImageInfo() = default;
 ImageInfo::ImageInfo(const ImageInfo&) = default;
 
-FileSearchResult::FileSearchResult(const base::FilePath& path,
-                                   const base::Time& last_modified,
+FileSearchResult::FileSearchResult(const base::Time& last_modified,
                                    double relevance)
-    : path(path), last_modified(last_modified), relevance(relevance) {}
+    : last_modified(last_modified), relevance(relevance) {}
 
 FileSearchResult::~FileSearchResult() = default;
 FileSearchResult::FileSearchResult(const FileSearchResult&) = default;
@@ -101,6 +116,15 @@ AnnotationStorage::AnnotationStorage(
                                         base::BindRepeating(MigrateSchema))) {
   DVLOG(1) << "Construct AnnotationStorage";
 }
+
+AnnotationStorage::AnnotationStorage(
+    const base::FilePath& path_to_db,
+    const std::string& histogram_tag,
+    std::unique_ptr<ImageAnnotationWorker> annotation_worker)
+    : AnnotationStorage(path_to_db,
+                        histogram_tag,
+                        kVersionNumber,
+                        std::move(annotation_worker)) {}
 
 AnnotationStorage::~AnnotationStorage() = default;
 
@@ -122,8 +146,8 @@ void AnnotationStorage::Insert(const ImageInfo& image_info) {
 
   static constexpr char kQuery[] =
       // clang-format off
-      "INSERT INTO annotations(label,image_path,last_modified_time) "
-          "VALUES(?,?,?)";
+      "INSERT INTO annotations(label,image_path,last_modified_time,is_ignored) "
+          "VALUES(?,?,?,?)";
   // clang-format on
 
   for (const auto& annotation : image_info.annotations) {
@@ -133,6 +157,7 @@ void AnnotationStorage::Insert(const ImageInfo& image_info) {
     statement.BindString(0, annotation);
     statement.BindString(1, image_info.path.value());
     statement.BindTime(2, image_info.last_modified);
+    statement.BindInt(3, image_info.is_ignored);
 
     if (!statement.Run()) {
       // TODO(b/260646344): log to UMA instead.
@@ -161,7 +186,7 @@ std::vector<ImageInfo> AnnotationStorage::GetAllAnnotations() {
 
   static constexpr char kQuery[] =
       // clang-format off
-      "SELECT label,image_path,last_modified_time "
+      "SELECT label,image_path,last_modified_time,is_ignored "
           "FROM annotations "
           "ORDER BY label";
   // clang-format on
@@ -173,10 +198,13 @@ std::vector<ImageInfo> AnnotationStorage::GetAllAnnotations() {
   while (statement.Step()) {
     const base::FilePath path = base::FilePath(statement.ColumnString(1));
     const base::Time time = statement.ColumnTime(2);
+    const bool is_ignored = statement.ColumnBool(3);
     DVLOG(1) << "Select find: " << statement.ColumnString(0) << ", " << path
              << ", " << time;
-    matched_paths.push_back(
-        {{statement.ColumnString(0)}, std::move(path), std::move(time)});
+    matched_paths.push_back({{statement.ColumnString(0)},
+                             std::move(path),
+                             std::move(time),
+                             is_ignored});
   }
 
   return matched_paths;
@@ -190,7 +218,7 @@ std::vector<ImageInfo> AnnotationStorage::FindImagePath(
 
   static constexpr char kQuery[] =
       // clang-format off
-      "SELECT label,image_path,last_modified_time "
+      "SELECT label,image_path,last_modified_time,is_ignored "
           "FROM annotations "
           "WHERE image_path=? "
           "ORDER BY label";
@@ -204,24 +232,27 @@ std::vector<ImageInfo> AnnotationStorage::FindImagePath(
   while (statement.Step()) {
     const base::FilePath path = base::FilePath(statement.ColumnString(1));
     const base::Time time = statement.ColumnTime(2);
+    const bool is_ignored = statement.ColumnBool(3);
     DVLOG(1) << "Select find: " << statement.ColumnString(0) << ", " << path
              << ", " << time;
-    matched_paths.push_back(
-        {{statement.ColumnString(0)}, std::move(path), std::move(time)});
+    matched_paths.push_back({{statement.ColumnString(0)},
+                             std::move(path),
+                             std::move(time),
+                             is_ignored});
   }
 
   return matched_paths;
 }
 
-std::vector<FileSearchResult> AnnotationStorage::LinearSearchAnnotations(
-    const std::u16string& query) {
+std::map<base::FilePath, FileSearchResult>
+AnnotationStorage::LinearSearchAnnotations(const std::u16string& query) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOG(1) << "LinearSearchAnnotationsAsync";
   using TokenizedString = ash::string_matching::TokenizedString;
 
   static constexpr char kQuery[] =
       // clang-format off
-      "SELECT label,image_path,last_modified_time "
+      "SELECT label,image_path,last_modified_time,is_ignored "
           "FROM annotations "
           "ORDER BY label";
   // clang-format on
@@ -229,10 +260,14 @@ std::vector<FileSearchResult> AnnotationStorage::LinearSearchAnnotations(
   sql::Statement statement =
       sql_database_->GetStatementForQuery(SQL_FROM_HERE, kQuery);
 
-  std::vector<FileSearchResult> matched_paths;
+  std::map<base::FilePath, FileSearchResult> matched_paths;
   TokenizedString tokenized_query(query);
   ash::string_matching::FuzzyTokenizedStringMatch fuzzy_match;
   while (statement.Step()) {
+    // Skip ignored images.
+    if (statement.ColumnBool(3)) {
+      continue;
+    }
     double relevance = fuzzy_match.Relevance(
         tokenized_query,
         TokenizedString(base::UTF8ToUTF16(statement.ColumnString(0))),
@@ -246,9 +281,13 @@ std::vector<FileSearchResult> AnnotationStorage::LinearSearchAnnotations(
     DVLOG(1) << "Select: " << statement.ColumnString(0) << ", " << path << ", "
              << time << " rl: " << relevance;
 
-    // TODO(b/260646344): keep only top N relevant paths.
-    matched_paths.emplace_back(std::move(path), std::move(time), relevance);
+    if (!matched_paths.contains(path)) {
+      matched_paths.insert({path, {std::move(time), relevance}});
+    } else if (matched_paths.at(path).relevance < relevance) {
+      matched_paths.at(path).relevance = relevance;
+    }
   }
+
   return matched_paths;
 }
 

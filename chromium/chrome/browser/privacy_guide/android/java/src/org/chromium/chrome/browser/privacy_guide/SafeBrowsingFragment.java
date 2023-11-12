@@ -12,6 +12,7 @@ import android.widget.RadioGroup;
 
 import androidx.fragment.app.Fragment;
 
+import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingBridge;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -26,6 +27,7 @@ public class SafeBrowsingFragment extends Fragment
     private RadioButtonWithDescriptionAndAuxButton mStandardProtection;
     private RadioButtonWithDescriptionAndAuxButton mEnhancedProtection;
     private BottomSheetController mBottomSheetController;
+    private PrivacyGuideBottomSheetView mBottomSheetView;
 
     @Override
     public View onCreateView(
@@ -69,12 +71,10 @@ public class SafeBrowsingFragment extends Fragment
         LayoutInflater inflater = LayoutInflater.from(getView().getContext());
         if (clickedButtonId == mEnhancedProtection.getId()) {
             displayBottomSheet(
-                    inflater.inflate(R.layout.privacy_guide_sb_enhanced_explanation, null),
-                    inflater.inflate(R.layout.privacy_guide_sb_bottom_sheet_toolbar, null));
+                    inflater.inflate(R.layout.privacy_guide_sb_enhanced_explanation, null));
         } else if (clickedButtonId == mStandardProtection.getId()) {
             displayBottomSheet(
-                    inflater.inflate(R.layout.privacy_guide_sb_standard_explanation, null),
-                    inflater.inflate(R.layout.privacy_guide_sb_bottom_sheet_toolbar, null));
+                    inflater.inflate(R.layout.privacy_guide_sb_standard_explanation, null));
         } else {
             assert false : "Unknown Aux clickedButtonId " + clickedButtonId;
         }
@@ -95,13 +95,23 @@ public class SafeBrowsingFragment extends Fragment
         }
     }
 
-    private void displayBottomSheet(View sheetContent, View sheetToolbar) {
-        PrivacyGuideBottomSheetView bottomSheet =
-                new PrivacyGuideBottomSheetView(sheetContent, sheetToolbar);
-        mBottomSheetController.requestShowContent(bottomSheet, /* animate= */ true);
+    private void displayBottomSheet(View sheetContent) {
+        mBottomSheetView = new PrivacyGuideBottomSheetView(sheetContent, this::closeBottomSheet);
+        // TODO(crbug.com/1287979): Re-enable animation once bug is fixed
+        if (mBottomSheetController != null) {
+            mBottomSheetController.requestShowContent(mBottomSheetView, false);
+        }
     }
 
-    public void setBottomSheetController(BottomSheetController bottomSheetController) {
-        mBottomSheetController = bottomSheetController;
+    private void closeBottomSheet() {
+        if (mBottomSheetController != null && mBottomSheetView != null) {
+            mBottomSheetController.hideContent(mBottomSheetView, true);
+        }
+    }
+
+    void setBottomSheetControllerSupplier(
+            OneshotSupplier<BottomSheetController> bottomSheetControllerSupplier) {
+        bottomSheetControllerSupplier.onAvailable(
+                (bottomSheetController) -> mBottomSheetController = bottomSheetController);
     }
 }

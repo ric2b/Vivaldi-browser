@@ -4,6 +4,9 @@
 
 #include "ash/system/unified/date_tray.h"
 
+#include "ash/glanceables/glanceables_v2_controller.h"
+#include "ash/glanceables/tasks/fake_glanceables_tasks_client.h"
+#include "ash/glanceables/tasks/glanceables_task_view.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
@@ -11,6 +14,7 @@
 #include "ash/system/time/time_tray_item_view.h"
 #include "ash/system/time/time_view.h"
 #include "ash/system/unified/glanceable_tray_bubble.h"
+#include "ash/system/unified/tasks_bubble_view.h"
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/test/ash_test_base.h"
 #include "base/memory/raw_ptr.h"
@@ -19,8 +23,15 @@
 #include "base/time/time.h"
 #include "base/time/time_override.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
+#include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/combobox/combobox.h"
+#include "ui/views/view_utils.h"
 #include "ui/wm/public/activation_change_observer.h"
 #include "ui/wm/public/activation_client.h"
+
+namespace {
+constexpr char kUserEmail[] = "test_user@gmail.com";
+}
 
 namespace ash {
 
@@ -51,6 +62,9 @@ class DateTrayTest
         /*thread_ticks_override=*/nullptr);
 
     AshTestBase::SetUp();
+
+    SimulateUserLogin(GetAccountId(kUserEmail));
+
     widget_ = CreateFramelessTestWidget();
     widget_->SetContentsView(std::make_unique<views::View>());
     widget_->SetFullscreen(true);
@@ -58,12 +72,25 @@ class DateTrayTest
     unified_system_tray_ = StatusAreaWidgetTestHelper::GetStatusAreaWidget()
                                ->unified_system_tray();
     widget_->GetContentsView()->AddChildView(date_tray_.get());
-    widget_->GetContentsView()->AddChildView(unified_system_tray_);
+    widget_->GetContentsView()->AddChildView(unified_system_tray_.get());
     date_tray_->SetVisiblePreferred(true);
     date_tray_->unified_system_tray_->SetVisiblePreferred(true);
+
+    if (AreGlanceablesV2Enabled()) {
+      fake_glanceables_tasks_client_ =
+          std::make_unique<FakeGlanceablesTasksClient>();
+      Shell::Get()->glanceables_v2_controller()->UpdateClientsRegistration(
+          GetAccountId(kUserEmail),
+          GlanceablesV2Controller::ClientsRegistration{
+              .tasks_client = fake_glanceables_tasks_client_.get()});
+    }
   }
 
   void TearDown() override {
+    if (AreGlanceablesV2Enabled()) {
+      fake_glanceables_tasks_client_.reset();
+    }
+
     widget_.reset();
     date_tray_ = nullptr;
     if (observering_activation_changes_) {
@@ -125,14 +152,23 @@ class DateTrayTest
     GetUnifiedSystemTray()->CloseBubble();
   }
 
+  AccountId GetAccountId(base::StringPiece email) {
+    return AccountId::FromUserEmail(std::string(email));
+  }
+
+  FakeGlanceablesTasksClient* fake_glanceables_tasks_client() {
+    return fake_glanceables_tasks_client_.get();
+  }
+
  private:
   std::unique_ptr<views::Widget> widget_;
+  std::unique_ptr<FakeGlanceablesTasksClient> fake_glanceables_tasks_client_;
   bool observering_activation_changes_ = false;
 
   // Owned by `widget_`.
   raw_ptr<DateTray, ExperimentalAsh> date_tray_ = nullptr;
 
-  UnifiedSystemTray* unified_system_tray_ = nullptr;
+  raw_ptr<UnifiedSystemTray, ExperimentalAsh> unified_system_tray_ = nullptr;
 
   base::test::ScopedFeatureList scoped_feature_list_;
 };
@@ -157,6 +193,84 @@ TEST_P(DateTrayTest, InitialState) {
   // Initial state: not showing the calendar bubble.
   EXPECT_FALSE(IsBubbleShown());
   EXPECT_FALSE(AreContentsViewShown());
+}
+
+TEST_P(DateTrayTest, ShowTasksComboModel) {
+  LeftClickOn(GetDateTray());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(IsBubbleShown());
+  EXPECT_TRUE(AreContentsViewShown());
+
+  if (!AreGlanceablesV2Enabled()) {
+    EXPECT_EQ(GetGlanceableTrayBubble(), nullptr);
+  } else {
+    auto* tasks_view = GetGlanceableTrayBubble()->GetTasksView();
+    EXPECT_TRUE(tasks_view->GetVisible());
+    EXPECT_FALSE(tasks_view->IsMenuRunning());
+    EXPECT_TRUE(tasks_view->task_list_combo_box_view()->GetVisible());
+    tasks_view->GetWidget()->LayoutRootViewIfNecessary();
+
+    EXPECT_EQ(tasks_view->task_items_container_view()->children().size(), 2u);
+
+    // Verify that tapping on combobox opens the selection menu.
+    GestureTapOn(tasks_view->task_list_combo_box_view());
+    base::RunLoop().RunUntilIdle();
+    EXPECT_TRUE(tasks_view->IsMenuRunning());
+
+    // Select the next task list using keyboard navigation.
+    PressAndReleaseKey(ui::KeyboardCode::VKEY_DOWN);
+    PressAndReleaseKey(ui::KeyboardCode::VKEY_DOWN);
+    PressAndReleaseKey(ui::KeyboardCode::VKEY_RETURN);
+
+    // Verify the number of items in task_items_container_view()->children().
+    EXPECT_EQ(GetGlanceableTrayBubble()
+                  ->GetTasksView()
+                  ->task_items_container_view()
+                  ->children()
+                  .size(),
+              3u);
+  }
+}
+
+TEST_P(DateTrayTest, MarkTaskAsComplete) {
+  LeftClickOn(GetDateTray());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(IsBubbleShown());
+  EXPECT_TRUE(AreContentsViewShown());
+
+  if (!AreGlanceablesV2Enabled()) {
+    EXPECT_EQ(GetGlanceableTrayBubble(), nullptr);
+  } else {
+    EXPECT_TRUE(GetGlanceableTrayBubble()->GetTasksView()->GetVisible());
+    EXPECT_FALSE(GetGlanceableTrayBubble()->GetTasksView()->IsMenuRunning());
+    EXPECT_TRUE(GetGlanceableTrayBubble()
+                    ->GetTasksView()
+                    ->task_list_combo_box_view()
+                    ->GetVisible());
+    EXPECT_EQ(GetGlanceableTrayBubble()
+                  ->GetTasksView()
+                  ->task_items_container_view()
+                  ->children()
+                  .size(),
+              2u);
+
+    // Verify that tapping on combobox opens the selection menu.
+    GlanceablesTaskView* task_view = views::AsViewClass<GlanceablesTaskView>(
+        GetGlanceableTrayBubble()
+            ->GetTasksView()
+            ->task_items_container_view()
+            ->children()[0]);
+
+    ASSERT_TRUE(task_view);
+    task_view->GetWidget()->LayoutRootViewIfNecessary();
+    ASSERT_FALSE(task_view->GetCompletedForTest());
+    ASSERT_EQ(0u, fake_glanceables_tasks_client()->completed_tasks().size());
+    GestureTapOn(task_view->GetButtonForTest());
+    ASSERT_TRUE(task_view->GetCompletedForTest());
+    ASSERT_EQ(1u, fake_glanceables_tasks_client()->completed_tasks().size());
+    ASSERT_EQ("TaskListID1:TaskListItem1",
+              fake_glanceables_tasks_client()->completed_tasks().front());
+  }
 }
 
 // Tests clicking/tapping the DateTray shows/closes the calendar bubble.

@@ -72,14 +72,8 @@ scoped_refptr<viz::ContextProviderCommandBuffer> CreateContextProvider(
   constexpr bool kAutomaticFlushes = false;
 
   gpu::ContextCreationAttribs attributes;
-  attributes.alpha_size = -1;
-  attributes.depth_size = 0;
-  attributes.stencil_size = 0;
-  attributes.samples = 0;
-  attributes.sample_buffers = 0;
   attributes.bind_generates_resource = false;
   attributes.lose_context_when_out_of_memory = true;
-  attributes.buffer_preserved = false;
   attributes.enable_gles2_interface = supports_gles2_interface;
   attributes.enable_raster_interface = supports_raster_interface;
   attributes.enable_oop_rasterization = supports_gpu_rasterization;
@@ -202,10 +196,15 @@ void VizProcessTransportFactory::CreateLayerTreeFrameSink(
       compositor->widget());
 #endif
 
-  if (is_gpu_compositing_disabled_ || compositor->force_software_compositor()) {
+  const bool gpu_channel_always_allowed =
+      base::FeatureList::IsEnabled(features::kSharedBitmapToSharedImage);
+  bool software_mode =
+      is_gpu_compositing_disabled_ || compositor->force_software_compositor();
+  if (software_mode && !gpu_channel_always_allowed) {
     OnEstablishedGpuChannel(compositor, nullptr);
     return;
   }
+
   gpu_channel_establish_factory_->EstablishGpuChannel(
       base::BindOnce(&VizProcessTransportFactory::OnEstablishedGpuChannel,
                      weak_ptr_factory_.GetWeakPtr(), compositor));
@@ -357,8 +356,7 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
       !is_gpu_compositing_disabled_ && !compositor->force_software_compositor();
 
   if (gpu_compositing) {
-    auto context_result =
-        TryCreateContextsForGpuCompositing(std::move(gpu_channel_host));
+    auto context_result = TryCreateContextsForGpuCompositing(gpu_channel_host);
     if (context_result == gpu::ContextResult::kTransientFailure) {
       // Get a new GpuChannelHost and retry context creation.
       gpu_channel_establish_factory_->EstablishGpuChannel(
@@ -371,7 +369,7 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
     }
   }
 
-  scoped_refptr<viz::ContextProvider> context_provider;
+  scoped_refptr<viz::RasterContextProvider> context_provider;
   scoped_refptr<cc::RasterContextProviderWrapper>
       worker_context_provider_wrapper;
   if (gpu_compositing) {
@@ -421,6 +419,9 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
   if (command_line->HasSwitch(switches::kDisableFrameRateLimit))
     root_params->disable_frame_rate_limit = true;
 
+  root_params->enable_variable_refresh_rate =
+      ::features::IsVariableRefreshRateEnabled();
+
 #if BUILDFLAG(IS_WIN)
   root_params->set_present_duration_allowed =
       features::ShouldUseSetPresentDuration();
@@ -458,13 +459,22 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
   cc::mojo_embedder::AsyncLayerTreeFrameSink::InitParams params;
   params.compositor_task_runner = compositor->task_runner();
   params.gpu_memory_buffer_manager =
-      compositor->context_factory()->GetGpuMemoryBufferManager();
+      compositor->context_factory()
+          ? compositor->context_factory()->GetGpuMemoryBufferManager()
+          : nullptr;
   params.pipes.compositor_frame_sink_associated_remote = std::move(sink_remote);
   params.pipes.client_receiver = std::move(client_receiver);
+
+  std::unique_ptr<gpu::ClientSharedImageInterface> shared_image_interface;
+  if (gpu_channel_host) {
+    shared_image_interface =
+        gpu_channel_host->CreateClientSharedImageInterface();
+  }
   auto frame_sink =
       std::make_unique<cc::mojo_embedder::AsyncLayerTreeFrameSink>(
           std::move(context_provider),
-          std::move(worker_context_provider_wrapper), &params);
+          std::move(worker_context_provider_wrapper),
+          std::move(shared_image_interface), &params);
   compositor->SetLayerTreeFrameSink(std::move(frame_sink),
                                     std::move(display_private));
   if (compositor->use_external_begin_frame_control()) {

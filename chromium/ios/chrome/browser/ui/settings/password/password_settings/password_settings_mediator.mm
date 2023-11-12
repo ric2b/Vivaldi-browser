@@ -13,10 +13,9 @@
 #import "components/prefs/pref_service.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/sync/base/passphrase_enums.h"
-#import "components/sync/base/pref_names.h"
 #import "components/sync/base/user_selectable_type.h"
-#import "components/sync/driver/sync_service_utils.h"
-#import "components/sync/driver/sync_user_settings.h"
+#import "components/sync/service/sync_service_utils.h"
+#import "components/sync/service/sync_user_settings.h"
 #import "ios/chrome/browser/sync/sync_observer_bridge.h"
 #import "ios/chrome/browser/ui/settings/password/password_exporter.h"
 #import "ios/chrome/browser/ui/settings/password/saved_passwords_presenter_observer.h"
@@ -322,7 +321,8 @@ using password_manager::prefs::kCredentialsEnableService;
   }
 
   if (_prefService->IsManagedPreference(kCredentialsEnableService) ||
-      _prefService->IsManagedPreference(syncer::prefs::kSyncPasswords) ||
+      _syncService->GetUserSettings()->IsTypeManagedByPolicy(
+          syncer::UserSelectableType::kPasswords) ||
       _syncService->HasDisableReason(
           syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY)) {
     return PasswordSettingsAccountStorageStateDisabledByPolicy;

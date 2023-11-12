@@ -26,8 +26,8 @@ void NinjaBundleDataTargetWriter::Run() {
   output_files.insert(output_files.end(), input_deps.begin(), input_deps.end());
 
   std::vector<OutputFile> order_only_deps;
-  for (const auto& pair : target_->data_deps())
-    order_only_deps.push_back(pair.ptr->dependency_output_file());
+  for (const Target* data_dep : resolved().GetDataDeps(target_))
+    order_only_deps.push_back(data_dep->dependency_output_file());
 
   WriteStampForTarget(output_files, order_only_deps);
 }

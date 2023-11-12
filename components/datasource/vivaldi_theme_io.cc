@@ -7,7 +7,6 @@
 #include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ref_counted.h"
@@ -18,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
@@ -62,7 +62,7 @@ constexpr const char kLargeKey[] = "large";
 constexpr const char kVersionKey[] = "version";
 
 // Prefixes of theme ids for system themes. Such id is never exposed to users or
-// the theme server. In particular, on export it is replaced with a random GUID.
+// the theme server. In particular, on export it is replaced with a random UUID.
 constexpr const char* kSystemThemeIdPrefixes[] = {
     kVendorIdPrefix,
     kVivaldiIdPrefix,
@@ -93,7 +93,7 @@ size_t FindThemeIndex(const base::Value::List& list,
     const base::Value& elem = list[i];
     if (!elem.is_dict())
       continue;
-    if (const std::string* id = elem.FindStringKey(kIdKey)) {
+    if (const std::string* id = elem.GetDict().FindString(kIdKey)) {
       if (*id == theme_id) {
         return i;
       }
@@ -160,7 +160,7 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
       return;
     }
 
-    std::string* image_url = theme_object_.FindStringKey(kBackgroundImageKey);
+    std::string* image_url = theme_object_.GetDict().FindString(kBackgroundImageKey);
     bool has_background_image = image_url && !image_url->empty();
     if (has_background_image) {
       ExportImage(theme_object_, kBackgroundImageKey, image_url, "background");
@@ -170,7 +170,7 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
     if (buttons) {
       for (auto iter : buttons->GetDict()) {
         const std::string& button = iter.first;
-        image_url = buttons->FindStringKey(button);
+        image_url = buttons->GetDict().FindString(button);
         if (image_url) {
           ExportImage(*buttons, button, image_url, button);
         } else {
@@ -178,13 +178,13 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
           if (!dict) {
             continue;
           }
-          image_url = dict->FindStringKey(kSmallKey);
+          image_url = dict->GetDict().FindString(kSmallKey);
           if (image_url) {
             const std::string base_name =
                 base::StringPrintf("%s_small", button.c_str());
             ExportImage(*dict, kSmallKey, image_url, base_name);
           }
-          image_url = dict->FindStringKey(kLargeKey);
+          image_url = dict->GetDict().FindString(kLargeKey);
           if (image_url) {
             const std::string base_name =
                 base::StringPrintf("%s_large", button.c_str());
@@ -270,7 +270,7 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
     }
     archive_files_.push_back(path.BaseName());
 
-    object.SetStringKey(image_key, std::move(file_name));
+    object.GetDict().Set(image_key, std::move(file_name));
     processed_images_counter--;
     if (processed_images_counter == 0) {
       SaveJSON();
@@ -473,7 +473,7 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
     if (error_)
       return;
 
-    std::string* image_url = theme_object_.FindStringKey(kBackgroundImageKey);
+    std::string* image_url = theme_object_.GetDict().FindString(kBackgroundImageKey);
     bool has_background_image = image_url && !image_url->empty();
     if (has_background_image) {
       ImportImage(theme_object_, kBackgroundImageKey, image_url);
@@ -483,7 +483,7 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
     if (buttons) {
       for (auto iter : buttons->GetDict()) {
         const std::string& button = iter.first;
-        image_url = buttons->FindStringKey(button);
+        image_url = buttons->GetDict().FindString(button);
         if (image_url) {
           ImportImage(*buttons, button, image_url);
         } else {
@@ -491,11 +491,11 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
           if (!dict) {
             continue;
           }
-          image_url = dict->FindStringKey(kSmallKey);
+          image_url = dict->GetDict().FindString(kSmallKey);
           if (image_url) {
             ImportImage(*dict, kSmallKey, image_url);
           }
-          image_url = dict->FindStringKey(kLargeKey);
+          image_url = dict->GetDict().FindString(kLargeKey);
           if (image_url) {
             ImportImage(*dict, kLargeKey, image_url);
           }
@@ -559,7 +559,7 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
                base::StringPrintf("Failed to store image %s locally", image_key.c_str()));
       return;
     }
-    object->SetStringKey(image_key, image_url);
+    object->GetDict().Set(image_key, image_url);
     processed_images_counter--;
     if (processed_images_counter == 0) {
       StoreTheme(image_url);
@@ -580,7 +580,7 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
     if (!profile_)
       return;
 
-    theme_id_ = *theme_object_.FindStringKey(kIdKey);
+    theme_id_ = *theme_object_.GetDict().FindString(kIdKey);
 
     // Extra scope to ensure that ListPrefUpdate destructor runs before we
     // forget the url.
@@ -760,7 +760,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
     void operator()(const BoolInfo&) {
       base::Value* value = FindValue();
       if (!value) {
-        object_.SetBoolKey(key_, false);
+        object_.GetDict().Set(key_, false);
         return;
       }
       if (!value->is_bool()) {
@@ -777,7 +777,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
               (!info.max_value || 0.0 <= *info.max_value)));
       base::Value* value = FindValue();
       if (!value) {
-        object_.SetIntKey(key_, 0);
+        object_.GetDict().Set(key_, 0);
         return;
       }
       if (!value->is_double() && !value->is_int()) {
@@ -805,7 +805,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
       base::Value* value = FindValue();
       if (!value) {
         if (info.can_be_empty) {
-          object_.SetStringKey(key_, std::string());
+          object_.GetDict().Set(key_, std::string());
         }
         return;
       }
@@ -834,11 +834,11 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
         if (named_id) {
           if (flags_.for_export) {
             value->GetString() =
-                base::GUID::GenerateRandomV4().AsLowercaseString();
+              base::Uuid::GenerateRandomV4().AsLowercaseString();
           }
-        } else if (!base::GUID::ParseLowercase(value->GetString()).is_valid()) {
+        } else if (!base::Uuid::ParseLowercase(value->GetString()).is_valid()) {
           AddError(base::StringPrintf(
-              "The property %s is a not a valid GUID - %s", KeyText().c_str(),
+              "The property %s is a not a valid Uuid - %s", KeyText().c_str(),
               value->GetString().c_str()));
         }
       }
@@ -849,7 +849,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
       base::Value* value = FindValue();
       if (!value) {
         // Set to the first enum case by default.
-        object_.SetStringKey(key_, info.enum_cases[0]);
+        object_.GetDict().Set(key_, info.enum_cases[0]);
         return;
       }
       if (!value->is_string()) {
@@ -929,7 +929,7 @@ void EnumerateUserThemeUrls(
       if (!value.is_dict()) {
         continue;
       }
-      const std::string* image_url = value.FindStringKey(kBackgroundImageKey);
+      const std::string* image_url = value.GetDict().FindString(kBackgroundImageKey);
       if (image_url) {
         callback.Run(*image_url);
       }
@@ -937,7 +937,7 @@ void EnumerateUserThemeUrls(
       if (const base::Value* buttons = value.GetDict().Find(kButtonsKey)) {
         for (auto iter : buttons->GetDict()) {
           const std::string& button = iter.first;
-          image_url = buttons->FindStringKey(button);
+          image_url = buttons->GetDict().FindString(button);
           if (image_url) {
             callback.Run(*image_url);
           } else {
@@ -945,11 +945,11 @@ void EnumerateUserThemeUrls(
             if (!dict) {
               continue;
             }
-            image_url = dict->FindStringKey(kSmallKey);
+            image_url = dict->GetDict().FindString(kSmallKey);
             if (image_url) {
               callback.Run(*image_url);
             }
-            image_url = dict->FindStringKey(kLargeKey);
+            image_url = dict->GetDict().FindString(kLargeKey);
             if (image_url) {
               callback.Run(*image_url);
             }
@@ -972,7 +972,7 @@ bool StoreImageUrl(PrefService* prefs,
     if (index == SIZE_MAX)
       return false;
     ScopedListPrefUpdate update(prefs, theme_list_pref_path);
-    update.Get()[index].SetStringKey(kBackgroundImageKey, url);
+    update.Get()[index].GetDict().Set(kBackgroundImageKey, url);
     return true;
   };
 

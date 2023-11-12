@@ -9,10 +9,10 @@
 #import "base/memory/scoped_refptr.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_check_manager.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_check_manager_factory.h"
 #import "ios/chrome/browser/passwords/password_checkup_utils.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
@@ -48,7 +48,7 @@ DetailsContext ComputeDetailsContextFromWarningType(WarningType warning_type) {
     case WarningType::kDismissedWarningsWarning:
       return DetailsContext::kDismissedWarnings;
     case WarningType::kNoInsecurePasswordsWarning:
-      return DetailsContext::kGeneral;
+      return DetailsContext::kPasswordSettings;
   }
 }
 
@@ -107,6 +107,7 @@ DetailsContext ComputeDetailsContextFromWarningType(WarningType warning_type) {
 
 - (void)start {
   [super start];
+
   ChromeBrowserState* browserState = self.browser->GetBrowserState();
   self.mediator = [[PasswordIssuesMediator alloc]
         initForWarningType:_warningType
@@ -120,7 +121,7 @@ DetailsContext ComputeDetailsContextFromWarningType(WarningType warning_type) {
 
   PasswordIssuesTableViewController* passwordIssuesTableViewController =
       [[PasswordIssuesTableViewController alloc]
-          initWithStyle:ChromeTableViewStyle()];
+          initWithWarningType:_warningType];
   passwordIssuesTableViewController.imageDataSource = self.mediator;
   self.viewController = passwordIssuesTableViewController;
 

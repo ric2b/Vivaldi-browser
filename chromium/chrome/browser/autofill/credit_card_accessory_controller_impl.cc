@@ -15,7 +15,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
-#include "chrome/browser/android/preferences/autofill/autofill_profile_bridge.h"
+#include "chrome/browser/android/preferences/autofill/settings_launcher_helper.h"
 #include "chrome/browser/autofill/manual_filling_controller.h"
 #include "chrome/browser/autofill/manual_filling_utils.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
@@ -25,6 +25,7 @@
 #include "components/autofill/core/browser/autofill_browser_util.h"
 #include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/payments/constants.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/strings/grit/components_strings.h"
@@ -35,11 +36,13 @@ namespace autofill {
 namespace {
 
 // Return the card art url to displayed in the autofill suggestions. The card
-// art is only supported for virtual cards. For other cards, we show the default
-// network icon.
+// art is only supported for Capital One virtual cards. For other cards, we show
+// the default network icon.
 GURL GetCardArtUrl(const CreditCard& card) {
-  return card.record_type() == CreditCard::VIRTUAL_CARD ? card.card_art_url()
-                                                        : GURL();
+  return card.record_type() == CreditCard::VIRTUAL_CARD &&
+                 card.card_art_url().spec() == kCapitalOneCardArtUrl
+             ? card.card_art_url()
+             : GURL();
 }
 
 std::u16string GetTitle(bool has_suggestions) {

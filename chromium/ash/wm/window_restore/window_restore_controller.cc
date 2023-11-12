@@ -14,11 +14,11 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/wm/container_finder.h"
+#include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/desks/templates/saved_desk_util.h"
 #include "ash/wm/float/float_controller.h"
 #include "ash/wm/mru_window_tracker.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_restore/window_restore_util.h"
 #include "ash/wm/window_state.h"
@@ -29,8 +29,6 @@
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/task/single_thread_task_runner.h"
-#include "components/account_id/account_id.h"
-#include "components/app_restore/app_restore_info.h"
 #include "components/app_restore/full_restore_utils.h"
 #include "components/app_restore/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
@@ -346,9 +344,18 @@ void WindowRestoreController::OnParentWindowToValidContainer(
 
   app_restore::WindowInfo* window_info = GetWindowInfo(window);
   if (window_info) {
-    const int desk_id = window_info->desk_id
-                            ? int{*window_info->desk_id}
-                            : aura::client::kWindowWorkspaceUnassignedWorkspace;
+    int desk_id = -1;
+    if (window_info->desk_guid.is_valid()) {
+      desk_id =
+          DesksController::Get()->GetDeskIndexByUuid(window_info->desk_guid);
+    }
+    // Its possible that the uuid is valid but it is not the uuid of any current
+    // desk.
+    if (desk_id == -1) {
+      desk_id = window_info->desk_id
+                    ? static_cast<int>(*window_info->desk_id)
+                    : aura::client::kWindowWorkspaceUnassignedWorkspace;
+    }
     window->SetProperty(aura::client::kWindowWorkspaceKey, desk_id);
   }
 
@@ -539,14 +546,15 @@ void WindowRestoreController::RestoreStateTypeAndClearLaunchedKey(
       if (Shell::Get()->tablet_mode_controller()->InTabletMode())
         Shell::Get()->tablet_mode_controller()->AddWindow(window);
 
-      if (*state_type == chromeos::WindowStateType::kPrimarySnapped ||
-          *state_type == chromeos::WindowStateType::kSecondarySnapped) {
+      if (chromeos::IsSnappedWindowStateType(*state_type)) {
         base::AutoReset<aura::Window*> auto_reset_to_be_snapped(
             &to_be_snapped_window_, window);
-        const WMEvent snap_event(
+        const WindowSnapWMEvent snap_event(
             *state_type == chromeos::WindowStateType::kPrimarySnapped
                 ? WM_EVENT_SNAP_PRIMARY
-                : WM_EVENT_SNAP_SECONDARY);
+                : WM_EVENT_SNAP_SECONDARY,
+            WindowSnapActionSource::
+                kSnapByFullRestoreOrDeskTemplateOrSavedDesk);
         window_state->OnWMEvent(&snap_event);
       }
       if (*state_type == chromeos::WindowStateType::kFloated) {

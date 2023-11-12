@@ -9,7 +9,8 @@
 
 @protocol VivaldiSyncSettingsViewControllerServiceDelegate
 
-- (void)backupEncryptionKeyButtonPressed;
+- (NSString*)createTempBackupEncryptionKeyFile;
+- (void)removeTempBackupEncryptionKeyFile:(NSString*)filePath;
 - (void)clearSyncDataWithNoWarning;
 - (void)logOutButtonPressed;
 - (void)startSyncingAllButtonPressed;

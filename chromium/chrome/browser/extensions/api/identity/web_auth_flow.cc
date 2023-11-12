@@ -22,8 +22,10 @@
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/identity_private.h"
@@ -106,6 +108,7 @@ WebAuthFlow::WebAuthFlow(
     const GURL& provider_url,
     Mode mode,
     Partition partition,
+    bool user_gesture,
     AbortOnLoad abort_on_load_for_non_interactive,
     absl::optional<base::TimeDelta> timeout_for_non_interactive)
     : delegate_(delegate),
@@ -113,6 +116,7 @@ WebAuthFlow::WebAuthFlow(
       provider_url_(provider_url),
       mode_(mode),
       partition_(partition),
+      user_gesture_(user_gesture),
       abort_on_load_for_non_interactive_(abort_on_load_for_non_interactive),
       timeout_for_non_interactive_(timeout_for_non_interactive),
       non_interactive_timeout_timer_(std::make_unique<base::OneShotTimer>()) {
@@ -292,6 +296,27 @@ bool WebAuthFlow::IsDisplayingAuthPageInTab() const {
   return using_auth_with_browser_tab_ && !web_contents_;
 }
 
+bool WebAuthFlow::DisplayAuthPageInPopupWindow() {
+  if (Browser::GetCreationStatusForProfile(profile_) !=
+      Browser::CreationStatus::kOk) {
+    return false;
+  }
+
+  Browser::CreateParams browser_params(Browser::TYPE_POPUP, profile_,
+                                       user_gesture_);
+  browser_params.omit_from_session_restore = true;
+  browser_params.should_trigger_session_restore = false;
+
+  Browser* browser = Browser::Create(browser_params);
+  browser->tab_strip_model()->AddWebContents(
+      std::move(web_contents_), /*index=*/0,
+      ui::PageTransition::PAGE_TRANSITION_AUTO_TOPLEVEL,
+      AddTabTypes::ADD_ACTIVE);
+
+  browser->window()->Show();
+  return true;
+}
+
 void WebAuthFlow::BeforeUrlLoaded(const GURL& url) {
   if (delegate_ && IsObservingProviderWebContents()) {
     delegate_->OnAuthFlowURLChange(url);
@@ -326,12 +351,12 @@ void WebAuthFlow::AfterUrlLoaded() {
         break;
       }
       case features::WebAuthFlowInBrowserTabMode::kPopupWindow: {
-        // Displays the auth page in a browser popup window.
-        NavigateParams params(profile_, GURL(),
-                              ui::PageTransition::PAGE_TRANSITION_FIRST);
-        params.contents_to_insert = std::move(web_contents_);
-        params.disposition = WindowOpenDisposition::NEW_POPUP;
-        Navigate(&params);
+        bool is_auth_page_displayed = DisplayAuthPageInPopupWindow();
+        if (!is_auth_page_displayed) {
+          delegate_->OnAuthFlowFailure(
+              WebAuthFlow::Failure::CANNOT_CREATE_WINDOW);
+          return;
+        }
         break;
       }
     }
@@ -410,7 +435,12 @@ void WebAuthFlow::DidStartNavigation(
   // If the navigation is initiated by the user, the tab will exit the auth
   // flow screen, this should result in a declined authentication and deleting
   // the flow.
+  // These conditions do not apply for the Popup Window, where the url bar is
+  // deactivated and the user cannot navigate away directly, to allow going back
+  // and forth within the same flow.
   if (IsDisplayingAuthPageInTab() &&
+      features::kWebAuthFlowInBrowserTabMode.Get() !=
+          features::WebAuthFlowInBrowserTabMode::kPopupWindow &&
       !navigation_handle->IsRendererInitiated()) {
     // Stop observing the web contents since it is not part of the flow anymore.
     WebContentsObserver::Observe(nullptr);

@@ -84,9 +84,13 @@ class AccessCodeCastIntegrationBrowserTest
   // This function spins the run loop until an error code is surfaced.
   int WaitForAddSinkErrorCode(content::WebContents* dialog_contents);
 
-  // This function spins the run loop until we detect the given sink_id in the
-  // pref service.
+  // This function spins the run loop until the given sink_id is not in the pref
+  // service.
   void WaitForPrefRemoval(const MediaSink::Id& sink_id);
+
+  bool HasSinkInDevicesDict(const MediaSink::Id& sink_id);
+  absl::optional<base::Time> GetDeviceAddedTimeFromDict(
+      const MediaSink::Id& sink_id);
 
   void SetUpOnMainThread() override;
   void TearDownOnMainThread() override;
@@ -128,12 +132,8 @@ class AccessCodeCastIntegrationBrowserTest
       base::TimeDelta timeout = base::Seconds(60),
       media_router::MockMediaRouter* media_router = nullptr);
 
-  // Verifies that all testing expectations have been met on the
-  // CastMediaSinkServiceImpl object.
-  void ValidateCastMediaSinkServiceImpl();
-
-  void ExpectMediaRouterHasNoSinks(bool has_sink);
-  void ExpectMediaRouterHasSink(bool has_sink);
+  void ExpectMediaRouterHasNoSinks(base::OnceClosure callback, bool has_sink);
+  void ExpectMediaRouterHasSink(base::OnceClosure callback, bool has_sink);
 
   void MockOnChannelOpenedCall(const MediaSinkInternal& cast_sink,
                                std::unique_ptr<net::BackoffEntry> backoff_entry,
@@ -158,6 +158,10 @@ class AccessCodeCastIntegrationBrowserTest
       "screenplay-a7ecd49d-f138-40b0-a830-3c1ebb4f4c5a";
   static constexpr char kAccessCodeCastSavedDeviceScreenplayTag[] =
       "screenplay-5aba818e-1cca-4c41-811a-4bf704cbe820";
+
+  base::Time device_added_time() { return device_added_time_; }
+
+  void UpdateDeviceAddedTime(const MediaSinkInternal& cast_sink);
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -201,6 +205,8 @@ class AccessCodeCastIntegrationBrowserTest
 
   mojom::RouteRequestResultCode result_code_ =
       mojom::RouteRequestResultCode::OK;
+
+  base::Time device_added_time_;
 
   base::WeakPtrFactory<AccessCodeCastIntegrationBrowserTest> weak_ptr_factory_{
       this};

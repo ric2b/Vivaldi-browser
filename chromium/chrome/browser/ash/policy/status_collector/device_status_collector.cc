@@ -49,8 +49,11 @@
 #include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/ash/guest_os/guest_os_registry_service.h"
 #include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
+#include "chrome/browser/ash/login/demo_mode/demo_mode_dimensions.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/login/users/chrome_user_manager.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
+#include "chrome/browser/ash/policy/core/reporting_user_tracker.h"
 #include "chrome/browser/ash/policy/status_collector/enterprise_activity_storage.h"
 #include "chrome/browser/ash/policy/status_collector/interval_map.h"
 #include "chrome/browser/ash/policy/status_collector/status_collector_state.h"
@@ -1552,6 +1555,7 @@ SampledData::~SampledData() = default;
 
 DeviceStatusCollector::DeviceStatusCollector(
     PrefService* pref_service,
+    ReportingUserTracker* reporting_user_tracker,
     ash::system::StatisticsProvider* provider,
     ManagedSessionService* managed_session_service,
     const VolumeInfoFetcher& volume_info_fetcher,
@@ -1566,6 +1570,7 @@ DeviceStatusCollector::DeviceStatusCollector(
     base::Clock* clock)
     : StatusCollector(provider, ash::CrosSettings::Get(), clock),
       pref_service_(pref_service),
+      reporting_user_tracker_(reporting_user_tracker),
       firmware_fetch_error_(kFirmwareNotInitialized),
       volume_info_fetcher_(volume_info_fetcher),
       cpu_statistics_fetcher_(cpu_statistics_fetcher),
@@ -1724,10 +1729,12 @@ DeviceStatusCollector::DeviceStatusCollector(
 
 DeviceStatusCollector::DeviceStatusCollector(
     PrefService* pref_service,
+    ReportingUserTracker* reporting_user_tracker,
     ash::system::StatisticsProvider* provider,
     ManagedSessionService* managed_session_service)
     : DeviceStatusCollector(
           pref_service,
+          reporting_user_tracker,
           provider,
           managed_session_service,
           DeviceStatusCollector::VolumeInfoFetcher(),
@@ -2198,7 +2205,7 @@ std::string DeviceStatusCollector::GetUserForActivityReporting() const {
   // constructing the ActiveTimePeriod protos sent as part of the report.
   std::string primary_user_email = primary_user->GetAccountId().GetUserEmail();
   if (primary_user->HasGaiaAccount() &&
-      !ash::ChromeUserManager::Get()->ShouldReportUser(primary_user_email)) {
+      !reporting_user_tracker_->ShouldReportUser(primary_user_email)) {
     return std::string();
   }
   return primary_user_email;
@@ -2261,7 +2268,7 @@ bool DeviceStatusCollector::GetActivityTimes(
 bool DeviceStatusCollector::GetVersionInfo(
     em::DeviceStatusReportRequest* status) {
   status->set_os_version(os_version_);
-  status->set_browser_version(version_info::GetVersionNumber());
+  status->set_browser_version(std::string(version_info::GetVersionNumber()));
   status->set_is_lacros_primary_browser(
       crosapi::browser_util::IsLacrosPrimaryBrowser());
   status->set_channel(ConvertToProtoChannel(chrome::GetChannel()));
@@ -2472,7 +2479,7 @@ bool DeviceStatusCollector::GetUsers(em::DeviceStatusReportRequest* status) {
       continue;
 
     em::DeviceUser* device_user = status->add_users();
-    if (ash::ChromeUserManager::Get()->ShouldReportUser(
+    if (reporting_user_tracker_->ShouldReportUser(
             user->GetAccountId().GetUserEmail())) {
       device_user->set_type(em::DeviceUser::USER_TYPE_MANAGED);
       device_user->set_email(user->GetAccountId().GetUserEmail());
@@ -2654,6 +2661,16 @@ bool DeviceStatusCollector::GetDeviceBootMode(
   return false;
 }
 
+bool DeviceStatusCollector::GetDemoModeDimensions(
+    em::DeviceStatusReportRequest* status) {
+  bool anything_reported = ash::DemoSession::IsDeviceInDemoMode();
+  if (anything_reported) {
+    *status->mutable_demo_mode_dimensions() =
+        ash::demo_mode::GetDemoModeDimensions();
+  }
+  return anything_reported;
+}
+
 void DeviceStatusCollector::GetStorageStatus(
     scoped_refptr<DeviceStatusCollectorState> state) {
   state->FetchStatefulPartitionInfo(stateful_partition_info_fetcher_);
@@ -2778,6 +2795,9 @@ void DeviceStatusCollector::GetDeviceStatus(
   if (report_system_info_) {
     anything_reported |= GetWriteProtectSwitch(status);
   }
+
+  // Demo Mode dimensions are only reported when the device is in Demo Mode.
+  anything_reported |= GetDemoModeDimensions(status);
 
   // Mark if any of the above functions reported data so that the response is
   // sent.

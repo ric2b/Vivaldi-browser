@@ -11,7 +11,6 @@
 
 #include "base/time/time.h"
 #include "base/uuid.h"
-#include "components/aggregation_service/aggregation_service.mojom-shared.h"
 #include "components/attribution_reporting/aggregatable_dedup_key.h"
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
@@ -19,8 +18,10 @@
 #include "components/attribution_reporting/destination_set.h"
 #include "components/attribution_reporting/event_trigger_data.h"
 #include "components/attribution_reporting/filters.h"
+#include "components/attribution_reporting/os_registration.h"
 #include "components/attribution_reporting/registration.mojom-shared.h"
 #include "components/attribution_reporting/source_registration.h"
+#include "components/attribution_reporting/source_registration_error.mojom-shared.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/trigger_registration.h"
 #include "mojo/public/cpp/base/int128_mojom_traits.h"
@@ -264,8 +265,25 @@ bool StructTraits<attribution_reporting::mojom::TriggerRegistrationDataView,
     return false;
   }
 
+  if (!data.ReadAggregationCoordinatorOrigin(
+          &out->aggregation_coordinator_origin)) {
+    return false;
+  }
+
   out->debug_reporting = data.debug_reporting();
-  out->aggregation_coordinator = data.aggregation_coordinator();
+  out->source_registration_time_config = data.source_registration_time_config();
+  return true;
+}
+
+// static
+bool StructTraits<attribution_reporting::mojom::OsRegistrationItemDataView,
+                  attribution_reporting::OsRegistrationItem>::
+    Read(attribution_reporting::mojom::OsRegistrationItemDataView data,
+         attribution_reporting::OsRegistrationItem* out) {
+  if (!data.ReadUrl(&out->url)) {
+    return false;
+  }
+  out->debug_reporting = data.debug_reporting();
   return true;
 }
 

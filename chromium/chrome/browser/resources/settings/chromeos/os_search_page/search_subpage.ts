@@ -11,12 +11,12 @@ import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/cr_elements/policy/cr_policy_pref_indicator.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-import '../../controls/controlled_button.js';
-import '../../controls/settings_toggle_button.js';
+import '/shared/settings/controls/controlled_button.js';
+import '/shared/settings/controls/settings_toggle_button.js';
 import 'chrome://resources/cr_components/settings_prefs/prefs.js';
 import 'chrome://resources/cr_components/settings_prefs/pref_util.js';
-import '../../settings_shared.css.js';
-import '../../settings_vars.css.js';
+import '../settings_shared.css.js';
+import '../settings_vars.css.js';
 import 'chrome://resources/cr_components/localized_link/localized_link.js';
 import './search_engine.js';
 
@@ -28,9 +28,8 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 import {castExists} from '../assert_extras.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route, Router} from '../router.js';
+import {Route, Router, routes} from '../router.js';
 
 import {getTemplate} from './search_subpage.html.js';
 

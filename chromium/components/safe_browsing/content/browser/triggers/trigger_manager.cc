@@ -47,6 +47,10 @@ bool TriggerNeedsOptInForCollection(const TriggerType trigger_type) {
       // APK download collection happens in the background so the user must
       // already be opted in before the trigger is allowed to run.
       return true;
+    case TriggerType::PHISHY_SITE_INTERACTION:
+      // For phishy site interactions reporting, the user must already be
+      // opted in before the trigger is allowed to run.
+      return true;
     case TriggerType::DEPRECATED_AD_POPUP:
     case TriggerType::DEPRECATED_AD_REDIRECT:
       NOTREACHED() << "These triggers have been handled in "
@@ -175,8 +179,14 @@ bool TriggerManager::StartCollectingThreatDetailsWithReason(
   // entry in the map for this |web_contents| if it's not there already.
   DataCollectorsContainer* collectors =
       &data_collectors_map_[GetWebContentsKey(web_contents)];
-  if (collectors->threat_details != nullptr)
+  bool collection_in_progress = collectors->threat_details != nullptr;
+  base::UmaHistogramBoolean(
+      "SafeBrowsing.ClientSafeBrowsingReport.HasThreatDetailsAtStart" +
+          std::string(resource.is_subresource ? ".Subresource" : ".Mainframe"),
+      collection_in_progress);
+  if (collection_in_progress) {
     return false;
+  }
 
   bool should_trim_threat_details = trigger_type == TriggerType::AD_SAMPLE;
   collectors->threat_details = ThreatDetails::NewThreatDetails(
@@ -185,6 +195,12 @@ bool TriggerManager::StartCollectingThreatDetailsWithReason(
       base::BindOnce(&TriggerManager::ThreatDetailsDone,
                      weak_factory_.GetWeakPtr()));
   return true;
+}
+
+void TriggerManager::SetInterstitialInteractions(
+    std::unique_ptr<security_interstitials::InterstitialInteractionMap>
+        interstitial_interactions) {
+  interstitial_interactions_ = std::move(interstitial_interactions);
 }
 
 bool TriggerManager::FinishCollectingThreatDetails(
@@ -221,7 +237,7 @@ bool TriggerManager::FinishCollectingThreatDetails(
         FROM_HERE,
         base::BindOnce(&ThreatDetails::FinishCollection,
                        collectors->threat_details->GetWeakPtr(), did_proceed,
-                       num_visits),
+                       num_visits, std::move(interstitial_interactions_)),
         delay);
 
     // Record that this trigger fired and collected data.

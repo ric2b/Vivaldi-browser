@@ -152,7 +152,7 @@ enum DeviceManagementStatus {
   // Service error: Illegal account for packaged EDU license.
   DM_STATUS_SERVICE_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE = 908,
   // Service error: Packaged license device can't enroll KIOSK.
-  DM_STATUS_SERVICE_INVALID_PACKAGED_DEVICE_FOR_KIOSK = 909,
+  DM_STATUS_SERVICE_INVALID_PACKAGED_DEVICE_FOR_KIOSK = 909
 };
 
 // List of modes that the device can be locked into.

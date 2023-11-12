@@ -49,7 +49,6 @@
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-shared.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkColorType.h"
-#include "ui/base/layout.h"
 #include "ui/base/resource/resource_scale_factor.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/favicon_size.h"
@@ -1211,10 +1210,8 @@ gfx::ImageSkia WebAppIconManager::GetMonochromeFavicon(
 
 void WebAppIconManager::OnWebAppInstalled(const AppId& app_id) {
   ReadFavicon(app_id);
-#if BUILDFLAG(IS_CHROMEOS)
-  // Notifications use a monochrome icon.
+  // Monochrome icons are used in tabbed apps and for ChromeOS notifications.
   ReadMonochromeFavicon(app_id);
-#endif
 }
 
 void WebAppIconManager::OnWebAppInstallManagerDestroyed() {

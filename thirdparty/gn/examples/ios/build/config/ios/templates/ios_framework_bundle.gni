@@ -47,6 +47,7 @@ template("ios_framework_bundle") {
     _bundle_identifier_prefix = invoker.bundle_identifier_prefix
   }
 
+  _product_type = "com.apple.product-type.framework"
   _bundle_identifier = "$_bundle_identifier_prefix.$_output_name"
 
   shared_library(_dylib_target) {
@@ -79,6 +80,7 @@ template("ios_framework_bundle") {
   }
 
   bundle_data(_dylib_bundle) {
+    product_type = _product_type
     public_deps = [ ":$_dylib_target" ]
     sources = [ "$target_out_dir/$_dylib_target/$_output_name" ]
     outputs = [ "{{bundle_executable_dir}}/{{source_file_part}}" ]
@@ -99,6 +101,7 @@ template("ios_framework_bundle") {
     _headers_bundle = target_name + "_headers_bundle"
 
     bundle_data(_headers_bundle) {
+      product_type = _product_type
       sources = invoker.public_headers + [ _umbrella_output ]
       outputs = [ "{{bundle_resources_dir}}/Headers/{{source_file_part}}" ]
       public_deps = [ ":$_umbrella_target" ]
@@ -127,7 +130,8 @@ template("ios_framework_bundle") {
                            ])
 
     output_name = _output_name
-    product_type = "com.apple.product-type.framework"
+    product_type = _product_type
+    transparent = true
 
     bundle_identifier = _bundle_identifier
     bundle_extension = "framework"

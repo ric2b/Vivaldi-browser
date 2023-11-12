@@ -4,6 +4,9 @@
 
 #include "chrome/browser/apps/app_service/publishers/arc_apps.h"
 
+#include <functional>
+#include <memory>
+
 #include "ash/components/arc/mojom/app.mojom.h"
 #include "ash/components/arc/mojom/intent_helper.mojom.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
@@ -14,6 +17,7 @@
 #include "ash/constants/ash_features.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/test/bind.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -22,6 +26,7 @@
 #include "chrome/browser/apps/app_service/launch_result_type.h"
 #include "chrome/browser/apps/app_service/promise_apps/promise_app.h"
 #include "chrome/browser/apps/app_service/promise_apps/promise_app_registry_cache.h"
+#include "chrome/browser/apps/app_service/promise_apps/promise_app_service.h"
 #include "chrome/browser/apps/app_service/publishers/arc_apps_factory.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_test.h"
@@ -37,7 +42,9 @@
 #include "components/arc/intent_helper/intent_filter.h"
 #include "components/arc/test/fake_intent_helper_instance.h"
 #include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
+#include "components/services/app_service/public/cpp/permission.h"
 #include "components/services/app_service/public/cpp/preferred_apps_list_handle.h"
 #include "content/public/test/browser_task_environment.h"
 #include "storage/browser/file_system/external_mount_points.h"
@@ -128,6 +135,8 @@ class ArcAppsPublisherTest : public testing::Test {
   void SetUp() override {
     testing::Test::SetUp();
 
+    profile_ = MakeProfile();
+
     // Do not destroy the ArcServiceManager during TearDown, so that Arc
     // KeyedServices can be correctly destroyed during profile shutdown.
     arc_test_.set_persist_service_manager(true);
@@ -149,7 +158,7 @@ class ArcAppsPublisherTest : public testing::Test {
 
     web_app::test::AwaitStartWebAppProviderAndSubsystems(profile());
 
-    app_service_test_.SetUp(&profile_);
+    app_service_test_.SetUp(profile_.get());
     apps::ArcAppsFactory::GetForProfile(profile());
     // Ensure that the PreferredAppsList is fully initialized before running the
     // test.
@@ -160,6 +169,10 @@ class ArcAppsPublisherTest : public testing::Test {
     arc_test_.StopArcInstance();
     apps::ArcAppsFactory::GetInstance()->ShutDownForTesting(profile());
     arc_test_.TearDown();
+  }
+
+  virtual std::unique_ptr<TestingProfile> MakeProfile() {
+    return std::make_unique<TestingProfile>();
   }
 
   void VerifyIntentFilters(const std::string& app_id,
@@ -187,7 +200,7 @@ class ArcAppsPublisherTest : public testing::Test {
     arc::WaitForInstanceReady(arc_bridge_service->file_system());
   }
 
-  TestingProfile* profile() { return &profile_; }
+  TestingProfile* profile() { return profile_.get(); }
 
   apps::AppServiceProxy* app_service_proxy() {
     return apps::AppServiceProxyFactory::GetForProfile(profile());
@@ -223,7 +236,7 @@ class ArcAppsPublisherTest : public testing::Test {
  private:
   content::BrowserTaskEnvironment task_environment_;
   ArcAppTest arc_test_;
-  TestingProfile profile_;
+  std::unique_ptr<TestingProfile> profile_;
   apps::AppServiceTest app_service_test_;
   raw_ptr<arc::ArcIntentHelperBridge, ExperimentalAsh> intent_helper_;
   std::unique_ptr<arc::FakeFileSystemInstance> file_system_instance_;
@@ -349,6 +362,98 @@ TEST_F(ArcAppsPublisherTest, SetSupportedLinksAllowsPlayStoreDefault) {
 
   ASSERT_EQ(arc::kPlayStoreAppId, preferred_apps().FindPreferredAppForUrl(
                                       GURL("https://play.google.com/foo")));
+}
+
+class ArcAppsPublisherManagedProfileTest : public ArcAppsPublisherTest {
+ public:
+  std::unique_ptr<TestingProfile> MakeProfile() override {
+    TestingProfile::Builder builder;
+    builder.OverridePolicyConnectorIsManagedForTesting(true);
+    return builder.Build();
+  }
+};
+
+// Verifies that a call to set the default supported links preference from the
+// ARC system changes the app service setting, for a managed profile.
+TEST_F(ArcAppsPublisherManagedProfileTest, SetSupportedLinksByDefault) {
+  constexpr char kTestAuthority[] = "www.example.com";
+  const auto& fake_apps = arc_test()->fake_apps();
+  std::string package_name = fake_apps[0]->package_name;
+  std::string app_id = ArcAppListPrefs::GetAppId(fake_apps[0]->package_name,
+                                                 fake_apps[0]->activity);
+  arc_test()->app_instance()->SendRefreshAppList(fake_apps);
+
+  // Update intent filters and supported links for the app, as if it was just
+  // installed.
+  intent_helper()->OnIntentFiltersUpdatedForPackage(
+      package_name, CreateFilterList(package_name, {kTestAuthority}));
+  VerifyIntentFilters(app_id, {kTestAuthority});
+  intent_helper()->OnSupportedLinksChanged(
+      CreateSupportedLinks(package_name), {},
+      arc::mojom::SupportedLinkChangeSource::kArcSystem);
+
+  ASSERT_EQ(app_id, preferred_apps().FindPreferredAppForUrl(
+                        GURL("https://www.example.com/foo")));
+}
+
+// Verifies that ARC permissions are published to App Service correctly.
+TEST_F(ArcAppsPublisherTest, PublishPermission) {
+  constexpr char kPackageName[] = "com.test.package";
+  constexpr char kActivityName[] = "com.test.package.activity";
+
+  const std::string kAppId =
+      ArcAppListPrefs::GetAppId(kPackageName, kActivityName);
+
+  std::vector<arc::mojom::AppInfoPtr> apps;
+  apps.push_back(
+      arc::mojom::AppInfo::New("Fake app", kPackageName, kActivityName));
+  arc_test()->app_instance()->SendRefreshAppList(apps);
+
+  std::vector<arc::mojom::ArcPackageInfoPtr> packages;
+
+  auto package = arc::mojom::ArcPackageInfo::New(
+      kPackageName, /*package_version=*/1, /*last_backup_android_id=*/1,
+      /*last_backup_time=*/1, /*sync=*/true);
+
+  base::flat_map<arc::mojom::AppPermission, arc::mojom::PermissionStatePtr>
+      permissions;
+
+  permissions.emplace(arc::mojom::AppPermission::CAMERA,
+                      arc::mojom::PermissionState::New(
+                          /*granted=*/true, /*managed=*/false,
+                          /*details=*/absl::nullopt, /*one_time=*/true));
+  permissions.emplace(
+      arc::mojom::AppPermission::LOCATION,
+      arc::mojom::PermissionState::New(/*granted=*/true, /*managed=*/true,
+                                       /*details=*/"While in use"));
+
+  package->permission_states = std::move(permissions);
+  packages.push_back(std::move(package));
+
+  arc_test()->app_instance()->SendRefreshPackageList(std::move(packages));
+
+  apps::Permissions result;
+  bool found = app_service_proxy()->AppRegistryCache().ForOneApp(
+      kAppId, [&result](const apps::AppUpdate& update) {
+        result = ClonePermissions(update.Permissions());
+      });
+  ASSERT_TRUE(found);
+
+  EXPECT_EQ(result.size(), 2ul);
+
+  // Sort permissions by permission type.
+  base::ranges::sort(result, std::less<>(), &apps::Permission::permission_type);
+
+  EXPECT_EQ(result[0]->permission_type, apps::PermissionType::kCamera);
+  EXPECT_EQ(absl::get<apps::TriState>(result[0]->value->value),
+            apps::TriState::kAsk);
+  EXPECT_FALSE(result[0]->is_managed);
+  EXPECT_EQ(result[0]->details, absl::nullopt);
+
+  EXPECT_EQ(result[1]->permission_type, apps::PermissionType::kLocation);
+  EXPECT_TRUE(result[1]->value->IsPermissionEnabled());
+  EXPECT_TRUE(result[1]->is_managed);
+  EXPECT_EQ(result[1]->details, "While in use");
 }
 
 TEST_F(ArcAppsPublisherTest,
@@ -531,8 +636,11 @@ TEST_F(ArcAppsPublisherTest, OnInstallationStarted_RegistersPromiseApp) {
   base::test::ScopedFeatureList feature_list_;
   feature_list_.InitAndEnableFeature(ash::features::kPromiseIcons);
   app_service_proxy()->ReinitializeForTesting(profile());
+  apps::PromiseAppService* service = app_service_proxy()->PromiseAppService();
   apps::PromiseAppRegistryCache* cache =
       app_service_proxy()->PromiseAppRegistryCache();
+
+  service->SetSkipAlmanacForTesting(true);
 
   std::string package_name = "com.example.this";
   apps::PackageId package_id =
@@ -549,4 +657,130 @@ TEST_F(ArcAppsPublisherTest, OnInstallationStarted_RegistersPromiseApp) {
   const apps::PromiseApp* promise_app_after =
       cache->GetPromiseAppForTesting(package_id);
   EXPECT_TRUE(promise_app_after);
+}
+
+TEST_F(ArcAppsPublisherTest, OnInstallationProgressChanged_UpdatesPromiseApp) {
+  base::test::ScopedFeatureList feature_list_;
+  feature_list_.InitAndEnableFeature(ash::features::kPromiseIcons);
+  app_service_proxy()->ReinitializeForTesting(profile());
+  apps::PromiseAppRegistryCache* cache =
+      app_service_proxy()->PromiseAppRegistryCache();
+
+  std::string package_name = "com.example.this";
+  float progress_initial = 0.1;
+  float progress_next = 0.9;
+  apps::PackageId package_id =
+      apps::PackageId(apps::AppType::kArc, package_name);
+
+  // Add a promise app for testing.
+  std::unique_ptr<apps::PromiseApp> promise_app =
+      std::make_unique<apps::PromiseApp>(package_id);
+  promise_app->progress = progress_initial;
+  cache->OnPromiseApp(std::move(promise_app));
+
+  // Check that the initial progress value is correct.
+  const apps::PromiseApp* promise_app_result =
+      cache->GetPromiseAppForTesting(package_id);
+  EXPECT_TRUE(promise_app_result);
+  EXPECT_TRUE(promise_app_result->progress.has_value());
+  EXPECT_EQ(promise_app_result->progress.value(), progress_initial);
+
+  // Send an update and check the progress value.
+  arc_test()->app_instance()->SendInstallationProgressChanged(package_name,
+                                                              progress_next);
+  promise_app_result = cache->GetPromiseAppForTesting(package_id);
+  EXPECT_TRUE(promise_app_result);
+  EXPECT_TRUE(promise_app_result->progress.has_value());
+  EXPECT_EQ(promise_app_result->progress.value(), progress_next);
+}
+
+TEST_F(ArcAppsPublisherTest, OnInstallationActiveChanged_UpdatesPromiseApp) {
+  base::test::ScopedFeatureList feature_list_;
+  feature_list_.InitAndEnableFeature(ash::features::kPromiseIcons);
+  app_service_proxy()->ReinitializeForTesting(profile());
+  apps::PromiseAppRegistryCache* cache =
+      app_service_proxy()->PromiseAppRegistryCache();
+
+  std::string package_name = "com.example.this";
+  apps::PackageId package_id =
+      apps::PackageId(apps::AppType::kArc, package_name);
+
+  // Add a promise app for testing.
+  std::unique_ptr<apps::PromiseApp> promise_app =
+      std::make_unique<apps::PromiseApp>(package_id);
+  promise_app->status = apps::PromiseStatus::kPending;
+  cache->OnPromiseApp(std::move(promise_app));
+
+  // Check that the initial status is correct.
+  const apps::PromiseApp* promise_app_result =
+      cache->GetPromiseAppForTesting(package_id);
+  EXPECT_TRUE(promise_app_result);
+  EXPECT_EQ(promise_app_result->status, apps::PromiseStatus::kPending);
+
+  // Send an update and check the status.
+  arc_test()->app_instance()->SendInstallationActiveChanged(package_name, true);
+  promise_app_result = cache->GetPromiseAppForTesting(package_id);
+  EXPECT_TRUE(promise_app_result);
+  EXPECT_EQ(promise_app_result->status, apps::PromiseStatus::kInstalling);
+
+  // Send an update and check the status.
+  arc_test()->app_instance()->SendInstallationActiveChanged(package_name,
+                                                            false);
+  promise_app_result = cache->GetPromiseAppForTesting(package_id);
+  EXPECT_TRUE(promise_app_result);
+  EXPECT_EQ(promise_app_result->status, apps::PromiseStatus::kPending);
+}
+
+// Verifies that only valid intent filters will be published from ARC.
+TEST_F(ArcAppsPublisherTest, OnlyValidFilterIsPublished) {
+  const GURL kTestUrl("https://www.example.com");
+  const auto& fake_apps = arc_test()->fake_apps();
+  std::string package_name = fake_apps[0]->package_name;
+  std::string app_id = ArcAppListPrefs::GetAppId(fake_apps[0]->package_name,
+                                                 fake_apps[0]->activity);
+  arc_test()->app_instance()->SendRefreshAppList(fake_apps);
+
+  std::vector<arc::IntentFilter::AuthorityEntry> filter_authorities1;
+  filter_authorities1.emplace_back(kTestUrl.host(), 0);
+  std::vector<arc::IntentFilter::PatternMatcher> patterns;
+  patterns.emplace_back(kTestUrl.path(),
+                        arc::mojom::PatternType::PATTERN_PREFIX);
+
+  auto filter = arc::IntentFilter(package_name, {arc::kIntentActionView},
+                                  std::move(filter_authorities1),
+                                  std::move(patterns), {kTestUrl.scheme()}, {});
+  std::vector<arc::IntentFilter> filters;
+  filters.push_back(std::move(filter));
+
+  std::vector<arc::IntentFilter::AuthorityEntry> filter_authorities2;
+  filter_authorities2.emplace_back(kTestUrl.host(), 0);
+  int invalid_pattern_type =
+      static_cast<int>(arc::mojom::PatternType::kMaxValue) + 1;
+  std::vector<arc::IntentFilter::PatternMatcher> invalid_pattern;
+  invalid_pattern.emplace_back(
+      kTestUrl.path(),
+      static_cast<arc::mojom::PatternType>(invalid_pattern_type));
+
+  auto invalid_filter = arc::IntentFilter(
+      package_name, {arc::kIntentActionView}, std::move(filter_authorities2),
+      std::move(invalid_pattern), {"https"}, {});
+  filters.push_back(std::move(invalid_filter));
+
+  // Update intent filters and supported links for the app, as if it was just
+  // installed.
+  intent_helper()->OnIntentFiltersUpdatedForPackage(package_name,
+                                                    std::move(filters));
+
+  apps::IntentFilters published_filters;
+  apps::AppServiceProxyFactory::GetForProfile(profile())
+      ->AppRegistryCache()
+      .ForOneApp(app_id, [&published_filters](const apps::AppUpdate& update) {
+        published_filters = update.IntentFilters();
+      });
+  // Only one valid filter should be published.
+  EXPECT_EQ(published_filters.size(), 1u);
+
+  apps::IntentFilterPtr expected_filter =
+      apps_util::MakeIntentFilterForUrlScope(kTestUrl);
+  EXPECT_EQ(*published_filters[0], *expected_filter);
 }

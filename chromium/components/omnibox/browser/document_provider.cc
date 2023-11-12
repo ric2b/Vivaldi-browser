@@ -422,10 +422,12 @@ bool ValidHostPrefix(const std::string& host) {
   return false;
 }
 
-std::string FindStringKeyOrEmpty(const base::Value::Dict& value,
-                                 base::StringPiece key) {
+// If `value[key]`, returns it. Otherwise, returns `fallback`.
+std::string FindStringKeyOrFallback(const base::Value::Dict& value,
+                                    base::StringPiece key,
+                                    std::string fallback = "") {
   auto* ptr = value.FindString(key);
-  return ptr ? *ptr : "";
+  return ptr ? *ptr : fallback;
 }
 
 }  // namespace
@@ -477,23 +479,6 @@ bool DocumentProvider::IsDocumentProviderAllowed(
   auto* template_url_service = client->GetTemplateURLService();
   if (!search::DefaultSearchProviderIsGoogle(template_url_service)) {
     return false;
-  }
-
-  if (OmniboxFieldTrial::IsExperimentalKeywordModeEnabled() &&
-      input.prefer_keyword()) {
-    // If a keyword provider matches, and we're explicitly in keyword mode,
-    // then the keyword provider must match the default, or the document
-    // provider.
-    AutocompleteInput keyword_input = input;
-    const TemplateURL* keyword_provider =
-        KeywordProvider::GetSubstitutingTemplateURLForInput(
-            template_url_service, &keyword_input);
-    if (keyword_provider &&
-        InExplicitKeywordMode(input, keyword_provider->keyword()) &&
-        !base::StartsWith(input.text(), u"drive.google.com",
-                          base::CompareCase::SENSITIVE)) {
-      return false;
-    }
   }
 
   // There should be no document suggestions fetched for on-focus suggestion
@@ -824,8 +809,8 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
     }
 
     const base::Value::Dict& result = result_value.GetDict();
-    const std::string title = FindStringKeyOrEmpty(result, "title");
-    const std::string url = FindStringKeyOrEmpty(result, "url");
+    const std::string title = FindStringKeyOrFallback(result, "title");
+    const std::string url = FindStringKeyOrFallback(result, "url");
     if (title.empty() || url.empty()) {
       continue;
     }
@@ -856,37 +841,34 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
       score = std::max(previous_score - 1, 0);
     previous_score = score;
 
-    // Only allow up to `kDocumentProviderMaxLowQualitySuggestions`  docs that
-    // are neither owned nor a complete title or owner match.
+    // Only allow up to 1 doc that is neither owned nor a complete title or
+    // owner match.
     bool is_owned = IsOwnedByUser(client_->ProfileUserName(), result);
     bool is_completely_matched_in_title_and_owner =
         IsCompletelyMatchedInTitleOrOwner(input_.text(), result);
     if (!is_owned && !is_completely_matched_in_title_and_owner &&
-        ++low_quality_match_count >
-            OmniboxFieldTrial::kDocumentProviderMaxLowQualitySuggestions
-                .Get()) {
+        ++low_quality_match_count > 1) {
       score = 0;
     }
 
     AutocompleteMatch match(this, score, false,
                             AutocompleteMatchType::DOCUMENT_SUGGESTION);
-    // Use full URL for displayed text and navigation. Use "originalUrl" for
-    // deduping if present.
-    match.fill_into_edit = base::UTF8ToUTF16(url);
+    // Use full URL for navigation. If present, use "originalUrl" for display &
+    // deduping, as it's shorter.
+    const std::string short_url =
+        FindStringKeyOrFallback(result, "originalUrl", url);
+    match.fill_into_edit = base::UTF8ToUTF16(short_url);
     match.destination_url = GURL(url);
-    const std::string* original_url = result.FindString("originalUrl");
-    if (original_url) {
-      // |AutocompleteMatch::GURLToStrippedGURL()| will try to use
-      // |GetURLForDeduping()| to extract a doc ID and generate a canonical doc
-      // URL; this is ideal as it handles different URL formats pointing to the
-      // same doc. Otherwise, it'll resort to the typical stripped URL
-      // generation that can still be used for generic deduping and as a key to
-      // |matches_cache_|.
-      match.stripped_destination_url = AutocompleteMatch::GURLToStrippedGURL(
-          GURL(*original_url), input_, client_->GetTemplateURLService(),
-          std::u16string(), /*keep_search_intent_params=*/false,
-          /*normalize_search_terms=*/false);
-    }
+    // `AutocompleteMatch::GURLToStrippedGURL()` will try to use
+    // `GetURLForDeduping()` to extract a doc ID and generate a canonical doc
+    // URL; this is ideal as it handles different URL formats pointing to the
+    // same doc. Otherwise, it'll resort to the typical stripped URL generation
+    // that can still be used for generic deduping and as a key to
+    // `matches_cache_`.
+    match.stripped_destination_url = AutocompleteMatch::GURLToStrippedGURL(
+        GURL(short_url), input_, client_->GetTemplateURLService(),
+        std::u16string(), /*keep_search_intent_params=*/false,
+        /*normalize_search_terms=*/false);
 
     match.contents =
         AutocompleteMatch::SanitizeString(base::UTF8ToUTF16(title));
@@ -894,8 +876,9 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
     const base::Value::Dict* metadata = result.FindDict("metadata");
     if (metadata) {
       const std::string update_time =
-          FindStringKeyOrEmpty(*metadata, "updateTime");
-      const std::string mimetype = FindStringKeyOrEmpty(*metadata, "mimeType");
+          FindStringKeyOrFallback(*metadata, "updateTime");
+      const std::string mimetype =
+          FindStringKeyOrFallback(*metadata, "mimeType");
       if (metadata->FindString("mimeType")) {
         match.document_type = GetIconForMIMEType(mimetype);
         match.RecordAdditionalInfo(

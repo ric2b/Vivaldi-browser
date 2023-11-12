@@ -40,6 +40,7 @@ declare_overrides() {
   }
   proprietary_codecs = true
   dcheck_always_on = is_debug # || is_component_build
+  enable_check_raw_ptr_fields = false
 
   if(!is_ios) {
     enable_widevine = true
@@ -62,6 +63,7 @@ declare_overrides() {
       symbol_level = 1
     }
     enable_gvr_services = false
+    enable_arcore = false
     webview_includes_weblayer = false
     enable_vr = false
     ffmpeg_branding = "Chrome"

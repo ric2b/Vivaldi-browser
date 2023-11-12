@@ -22,18 +22,23 @@ WarningBadgeService* WarningBadgeServiceFactory::GetForBrowserContext(
 
 // static
 WarningBadgeServiceFactory* WarningBadgeServiceFactory::GetInstance() {
-  return base::Singleton<WarningBadgeServiceFactory>::get();
+  static base::NoDestructor<WarningBadgeServiceFactory> instance;
+  return instance.get();
 }
 
 WarningBadgeServiceFactory::WarningBadgeServiceFactory()
     : ProfileKeyedServiceFactory(
           "WarningBadgeService",
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   DependsOn(WarningServiceFactory::GetInstance());
 }
 
-WarningBadgeServiceFactory::~WarningBadgeServiceFactory() {
-}
+WarningBadgeServiceFactory::~WarningBadgeServiceFactory() = default;
 
 KeyedService* WarningBadgeServiceFactory::BuildServiceInstanceFor(
     BrowserContext* context) const {

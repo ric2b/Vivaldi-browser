@@ -59,6 +59,14 @@ void WebViewFindHelper::EndFindSession(int session_request_id, bool canceled) {
        i != find_info->find_next_requests_.end(); ++i) {
     DCHECK(i->get());
 
+    if (!i->get()) {
+      // NOTE(andre@vivaldi.com) : Added patch to fix crash in VB-98394. The
+      // find-request is refcounted, but still deleted even if it is in the map.
+      // Unclear why it is unreferenced.
+      LOG(INFO) << "Find request has been deleted because unrefererence, even "
+                    "though it is referenced here?";
+      break;
+    }
     // Do not call callbacks for subsequent find requests that have not been
     // replied to yet. These requests will get their own final updates in the
     // same order as they appear in |find_next_requests_|, i.e. the order that

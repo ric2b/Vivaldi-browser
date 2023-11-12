@@ -80,7 +80,7 @@ void PrefetchURLLoaderInterceptor::MaybeCreateLoader(
   loader_callback_ = std::move(callback);
 
   if (redirect_prefetch_container_ &&
-      redirect_prefetch_container_->DoesCurrentURLToServeMatch(
+      redirect_prefetch_container_->GetReader().DoesCurrentURLToServeMatch(
           tentative_resource_request.url)) {
     OnGotPrefetchToServe(
         frame_tree_node_id_, tentative_resource_request,
@@ -133,12 +133,13 @@ void PrefetchURLLoaderInterceptor::OnGetPrefetchComplete(
   // prefetch. After this point, the streaming URL loader will manager its own
   // lifetime, and will delete itself once the prefetch response is completed
   // and served.
-  DCHECK(prefetch_container->GetStreamingLoader());
+  DCHECK(prefetch_container->GetFirstStreamingURLLoader());
   scoped_refptr<network::SingleRequestURLLoaderFactory>
       single_request_url_loader_factory;
-  if (prefetch_container->GetStreamingLoader()->IsReadyToServeFinalResponse()) {
+  if (prefetch_container->GetFirstStreamingURLLoader()
+          ->IsReadyToServeLastEvents()) {
     std::unique_ptr<PrefetchStreamingURLLoader> prefetch_streaming_url_loader =
-        prefetch_container->ReleaseStreamingLoader();
+        prefetch_container->ReleaseFirstStreamingURLLoader();
     auto* raw_prefetch_streaming_url_loader =
         prefetch_streaming_url_loader.get();
 
@@ -146,16 +147,24 @@ void PrefetchURLLoaderInterceptor::OnGetPrefetchComplete(
         base::MakeRefCounted<network::SingleRequestURLLoaderFactory>(
             raw_prefetch_streaming_url_loader->ServingFinalResponseHandler(
                 std::move(prefetch_streaming_url_loader)));
+  } else {
+    single_request_url_loader_factory =
+        base::MakeRefCounted<network::SingleRequestURLLoaderFactory>(
+            prefetch_container->GetFirstStreamingURLLoader()
+                ->ServingRedirectHandler());
+  }
+
+  // If |prefetch_container| is done serving the prefetch, clear out
+  // |redirect_prefetch_container_|, but otherwise cache it in
+  // |redirect_prefetch_container_|.
+  if (!prefetch_container->GetFirstStreamingURLLoader()) {
     if (redirect_prefetch_container_) {
       RecordWasFullRedirectChainServedHistogram(true);
     }
     redirect_prefetch_container_ = nullptr;
   } else {
-    single_request_url_loader_factory =
-        base::MakeRefCounted<network::SingleRequestURLLoaderFactory>(
-            prefetch_container->GetStreamingLoader()->ServingRedirectHandler());
+    prefetch_container->GetReader().AdvanceCurrentURLToServe();
     redirect_prefetch_container_ = prefetch_container;
-    prefetch_container->AdvanceCurrentURLToServe();
   }
 
   // Create URL loader factory pipe that can be possibly proxied by Extensions.
@@ -180,7 +189,8 @@ void PrefetchURLLoaderInterceptor::OnGetPrefetchComplete(
       navigation_request->GetNavigationId(),
       ukm::SourceIdObj::FromInt64(navigation_request->GetNextPageUkmSourceId()),
       &pending_receiver, /*header_client=*/nullptr, &bypass_redirect_checks,
-      /*disable_secure_dns=*/nullptr, /*factory_override=*/nullptr);
+      /*disable_secure_dns=*/nullptr, /*factory_override=*/nullptr,
+      /*navigation_response_task_runner=*/nullptr);
 
   // Bind the (possibly proxied) mojo pipe to the URL loader factory that will
   // serve the prefetched data.

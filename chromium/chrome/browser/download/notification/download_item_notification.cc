@@ -201,6 +201,7 @@ void RecordButtonClickAction(DownloadCommands::Command command) {
     case DownloadCommands::ALWAYS_OPEN_TYPE:
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
     case DownloadCommands::BYPASS_DEEP_SCANNING:
+    case DownloadCommands::CANCEL_DEEP_SCAN:
     case DownloadCommands::RETRY:
     case DownloadCommands::MAX:
       NOTREACHED();
@@ -609,10 +610,10 @@ void DownloadItemNotification::UpdateNotificationData(bool display,
   }
   SkColor notification_color = GetNotificationIconColor();
   if (chromeos::features::IsJellyEnabled()) {
-    ui::ColorId color_id = cros_tokens::kCrosSysOnPrimary;
+    ui::ColorId color_id = cros_tokens::kCrosSysPrimary;
     switch (notification_color) {
       case ash::kSystemNotificationColorNormal:
-        color_id = cros_tokens::kCrosSysOnPrimary;
+        color_id = cros_tokens::kCrosSysPrimary;
         break;
       case ash::kSystemNotificationColorWarning:
         color_id = cros_tokens::kCrosSysWarning;
@@ -993,6 +994,7 @@ std::u16string DownloadItemNotification::GetCommandLabel(
     case DownloadCommands::ALWAYS_OPEN_TYPE:
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
     case DownloadCommands::BYPASS_DEEP_SCANNING:
+    case DownloadCommands::CANCEL_DEEP_SCAN:
     case DownloadCommands::RETRY:
     case DownloadCommands::MAX:
       // Only for menu.
@@ -1068,6 +1070,7 @@ std::u16string DownloadItemNotification::GetWarningStatusString() const {
       return l10n_util::GetStringFUTF16(IDS_PROMPT_DEEP_SCANNING,
                                         elided_filename);
     }
+    case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_FAILED:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS:
     case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:

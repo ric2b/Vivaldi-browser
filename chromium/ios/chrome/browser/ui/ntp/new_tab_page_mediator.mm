@@ -11,13 +11,15 @@
 #import "base/metrics/user_metrics_action.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_service.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_service_factory.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/search_engines/search_engine_observer_bridge.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
@@ -38,10 +40,8 @@
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_consumer.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_view_controller.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/voice_search/voice_search_api.h"
@@ -97,6 +97,10 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 @property(nonatomic, strong) id<LogoVendor> logoVendor;
 // This is the object that knows how to update the Identity Disc UI.
 @property(nonatomic, weak) id<UserAccountImageUpdateDelegate> imageUpdater;
+// Yes if the browser is currently in incognito mode.
+@property(nonatomic, assign) BOOL isIncognito;
+// DiscoverFeed Service to display the Feed.
+@property(nonatomic, assign) DiscoverFeedService* discoverFeedService;
 
 @end
 
@@ -110,7 +114,9 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
              identityManager:(signin::IdentityManager*)identityManager
        accountManagerService:(ChromeAccountManagerService*)accountManagerService
                   logoVendor:(id<LogoVendor>)logoVendor
-    identityDiscImageUpdater:(id<UserAccountImageUpdateDelegate>)imageUpdater {
+    identityDiscImageUpdater:(id<UserAccountImageUpdateDelegate>)imageUpdater
+                 isIncognito:(BOOL)isIncognito
+         discoverFeedService:(DiscoverFeedService*)discoverFeedService {
   self = [super init];
   if (self) {
     _webState = webState;
@@ -128,6 +134,8 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
         self, self.templateURLService);
     _logoVendor = logoVendor;
     _imageUpdater = imageUpdater;
+    _isIncognito = isIncognito;
+    _discoverFeedService = discoverFeedService;
   }
   return self;
 }
@@ -137,6 +145,7 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
     _webState->RemoveObserver(_webStateObserver.get());
     _webStateObserver.reset();
     _webState = nullptr;
+    _discoverFeedService = nullptr;
   }
 }
 
@@ -159,6 +168,7 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 }
 
 - (void)shutdown {
+  [self.suggestionsMediator disconnect];
   _searchEngineObserver.reset();
   if (_webState && _webStateObserver) {
     _webState->RemoveObserver(_webStateObserver.get());
@@ -334,11 +344,9 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
     [self.suggestionsMediator refreshMostVisitedTiles];
 
     // Refresh DiscoverFeed unless in off-the-record NTP.
-    if (!self.browser->GetBrowserState()->IsOffTheRecord() &&
-        refreshFeedIfNeeded) {
-      DiscoverFeedServiceFactory::GetForBrowserState(
-          self.browser->GetBrowserState())
-          ->RefreshFeed(FeedRefreshTrigger::kForegroundFeedVisibleOther);
+    if (!self.isIncognito && refreshFeedIfNeeded) {
+      self.discoverFeedService->RefreshFeed(
+          FeedRefreshTrigger::kForegroundFeedVisibleOther);
     }
   }
 }

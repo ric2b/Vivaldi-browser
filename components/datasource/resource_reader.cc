@@ -27,10 +27,6 @@
 #include "chrome/common/chrome_paths.h"
 #endif
 
-#if BUILDFLAG(IS_IOS)
-#include "ios/chrome/browser/paths/paths.h"
-#endif
-
 namespace {}  // namespace
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -58,7 +54,7 @@ base::FilePath GetResourceDirectoryImpl() {
 #endif
   base::FilePath dir;
 #if BUILDFLAG(IS_IOS)
-  base::PathService::Get(base::DIR_MODULE, &dir);
+  base::PathService::Get(base::DIR_ASSETS, &dir);
   return dir.Append(FILE_PATH_LITERAL("res"));
 #else
   base::PathService::Get(chrome::DIR_RESOURCES, &dir);

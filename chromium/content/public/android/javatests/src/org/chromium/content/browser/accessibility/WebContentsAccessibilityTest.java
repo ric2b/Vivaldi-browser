@@ -158,7 +158,7 @@ public class WebContentsAccessibilityTest {
     // ContentFeatureList maps used for various tests.
     private static final Map<String, Boolean> ON_DEMAND_ON_AXMODES_ON =
             Map.of(ContentFeatureList.ON_DEMAND_ACCESSIBILITY_EVENTS, true,
-                    ContentFeatureList.ACCESSIBILITY_AX_MODES, true);
+                    ContentFeatureList.ACCESSIBILITY_PERFORMANCE_FILTERING, true);
 
     // Constant values for unit tests
     private static final int UNSUPPRESSED_EXPECTED_COUNT = 15;
@@ -183,6 +183,26 @@ public class WebContentsAccessibilityTest {
         mActivityTestRule.launchContentShellWithUrl(UrlUtils.encodeHtmlDataUri(html));
         mActivityTestRule.waitForActiveShellToBeDoneLoading();
         mActivityTestRule.setupTestFramework();
+        mActivityTestRule.setAccessibilityDelegate();
+
+        mTestData = AccessibilityContentShellTestData.getInstance();
+        mActivityTestRule.sendReadyForTestSignal();
+    }
+
+    protected void setupTestWithHTMLForFormControlsMode(String html) {
+        mActivityTestRule.launchContentShellWithUrl(UrlUtils.encodeHtmlDataUri(html));
+        mActivityTestRule.waitForActiveShellToBeDoneLoading();
+        mActivityTestRule.setupTestFrameworkForFormControlsMode();
+        mActivityTestRule.setAccessibilityDelegate();
+
+        mTestData = AccessibilityContentShellTestData.getInstance();
+        mActivityTestRule.sendReadyForTestSignal();
+    }
+
+    protected void setupTestWithHTMLForBasicMode(String html) {
+        mActivityTestRule.launchContentShellWithUrl(UrlUtils.encodeHtmlDataUri(html));
+        mActivityTestRule.waitForActiveShellToBeDoneLoading();
+        mActivityTestRule.setupTestFrameworkForBasicMode();
         mActivityTestRule.setAccessibilityDelegate();
 
         mTestData = AccessibilityContentShellTestData.getInstance();
@@ -393,8 +413,8 @@ public class WebContentsAccessibilityTest {
         // Set the relevant features and accessibility state.
         FeatureList.setTestFeatures(ON_DEMAND_ON_AXMODES_ON);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            AccessibilityState.setScreenReaderEnabledForTesting(true);
-            AccessibilityState.setOnlyPasswordManagersEnabledForTesting(false);
+            AccessibilityState.setIsScreenReaderEnabledForTesting(true);
+            AccessibilityState.setIsOnlyPasswordManagersEnabledForTesting(false);
         });
 
         var histogramWatcher =
@@ -421,16 +441,15 @@ public class WebContentsAccessibilityTest {
     @SmallTest
     public void testUMAHistograms_OnDemand_AXModeFormControls() throws Throwable {
         // Build a simple web page with a few nodes to traverse.
-        setupTestWithHTML("<p>This is a test 1</p>\n"
+        setupTestWithHTMLForFormControlsMode("<p>This is a test 1</p>\n"
                 + "<p>This is a test 2</p>\n"
                 + "<p>This is a test 3</p>");
 
         // Set the relevant features and accessibility state.
         FeatureList.setTestFeatures(ON_DEMAND_ON_AXMODES_ON);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            AccessibilityState.setScreenReaderEnabledForTesting(false);
-            AccessibilityState.setOnlyPasswordManagersEnabledForTesting(true);
-
+            AccessibilityState.setIsScreenReaderEnabledForTesting(false);
+            AccessibilityState.setIsOnlyPasswordManagersEnabledForTesting(true);
         });
 
         var histogramWatcher =
@@ -458,15 +477,15 @@ public class WebContentsAccessibilityTest {
     @SmallTest
     public void testUMAHistograms_OnDemand_AXModeBasic() throws Throwable {
         // Build a simple web page with a few nodes to traverse.
-        setupTestWithHTML("<p>This is a test 1</p>\n"
+        setupTestWithHTMLForBasicMode("<p>This is a test 1</p>\n"
                 + "<p>This is a test 2</p>\n"
                 + "<p>This is a test 3</p>");
 
         // Set the relevant features and screen reader state.
         FeatureList.setTestFeatures(ON_DEMAND_ON_AXMODES_ON);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            AccessibilityState.setScreenReaderEnabledForTesting(false);
-            AccessibilityState.setOnlyPasswordManagersEnabledForTesting(false);
+            AccessibilityState.setIsScreenReaderEnabledForTesting(false);
+            AccessibilityState.setIsOnlyPasswordManagersEnabledForTesting(false);
         });
 
         var histogramWatcher =
@@ -503,8 +522,8 @@ public class WebContentsAccessibilityTest {
         FeatureList.setTestFeatures(ON_DEMAND_ON_AXMODES_ON);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             AccessibilityState.setEventTypeMaskForTesting(EVENT_TYPE_MASK_NONE);
-            AccessibilityState.setScreenReaderEnabledForTesting(true);
-            AccessibilityState.setOnlyPasswordManagersEnabledForTesting(false);
+            AccessibilityState.setIsScreenReaderEnabledForTesting(true);
+            AccessibilityState.setIsOnlyPasswordManagersEnabledForTesting(false);
         });
 
         var histogramWatcher =
@@ -533,7 +552,7 @@ public class WebContentsAccessibilityTest {
     @SmallTest
     public void testUMAHistograms_OnDemand_AXModeFormControls_100Percent() throws Throwable {
         // Build a simple web page with a few nodes to traverse.
-        setupTestWithHTML("<p>This is a test 1</p>\n"
+        setupTestWithHTMLForFormControlsMode("<p>This is a test 1</p>\n"
                 + "<p>This is a test 2</p>\n"
                 + "<p>This is a test 3</p>");
 
@@ -541,8 +560,8 @@ public class WebContentsAccessibilityTest {
         FeatureList.setTestFeatures(ON_DEMAND_ON_AXMODES_ON);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             AccessibilityState.setEventTypeMaskForTesting(EVENT_TYPE_MASK_NONE);
-            AccessibilityState.setScreenReaderEnabledForTesting(false);
-            AccessibilityState.setOnlyPasswordManagersEnabledForTesting(true);
+            AccessibilityState.setIsScreenReaderEnabledForTesting(false);
+            AccessibilityState.setIsOnlyPasswordManagersEnabledForTesting(true);
         });
 
         var histogramWatcher =
@@ -571,7 +590,7 @@ public class WebContentsAccessibilityTest {
     @SmallTest
     public void testUMAHistograms_OnDemand_AXModeBasic_100Percent() throws Throwable {
         // Build a simple web page with a few nodes to traverse.
-        setupTestWithHTML("<p>This is a test 1</p>\n"
+        setupTestWithHTMLForBasicMode("<p>This is a test 1</p>\n"
                 + "<p>This is a test 2</p>\n"
                 + "<p>This is a test 3</p>");
 
@@ -579,8 +598,8 @@ public class WebContentsAccessibilityTest {
         FeatureList.setTestFeatures(ON_DEMAND_ON_AXMODES_ON);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             AccessibilityState.setEventTypeMaskForTesting(EVENT_TYPE_MASK_NONE);
-            AccessibilityState.setScreenReaderEnabledForTesting(false);
-            AccessibilityState.setOnlyPasswordManagersEnabledForTesting(false);
+            AccessibilityState.setIsScreenReaderEnabledForTesting(false);
+            AccessibilityState.setIsOnlyPasswordManagersEnabledForTesting(false);
         });
 
         var histogramWatcher =

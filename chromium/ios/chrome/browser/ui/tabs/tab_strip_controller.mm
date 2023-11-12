@@ -8,9 +8,9 @@
 #import <memory>
 #import <vector>
 
+#import "base/apple/bundle_locations.h"
 #import "base/i18n/rtl.h"
 #import "base/ios/ios_util.h"
-#import "base/mac/bundle_locations.h"
 #import "base/mac/foundation_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
@@ -19,15 +19,21 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/favicon/ios/web_favicon_driver.h"
+#import "components/feature_engagement/public/event_constants.h"
+#import "components/feature_engagement/public/tracker.h"
 #import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/url_drag_drop_handler.h"
-#import "ios/chrome/browser/flags/system_flags.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/ntp/new_tab_page_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/web_state_list/all_web_state_observation_forwarder.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -35,10 +41,13 @@
 #import "ios/chrome/browser/shared/public/commands/popup_menu_commands.h"
 #import "ios/chrome/browser/shared/public/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/named_guide.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tabs/features.h"
 #import "ios/chrome/browser/tabs/tab_title_util.h"
@@ -56,11 +65,7 @@
 #import "ios/chrome/browser/ui/tabs/target_frame_cache.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/web_state_list/all_web_state_observation_forwarder.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_favicon_driver_observer.h"
-#import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
-#import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
@@ -74,10 +79,10 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
@@ -135,9 +140,13 @@ const CGFloat kAutoscrollDecrementWidth = 10.0;
 
 // The size of the new tab button.
 const CGFloat kNewTabButtonWidth = 44;
+const CGFloat kNewTabButtonSpotlightViewCornerRadius = 7;
 
-// Default image insets for the new tab button.
+// Default image insets for the new tab button. The negative value for leading
+// inset is shifting the image view to the left from the center.
 const CGFloat kNewTabButtonLeadingImageInset = -10.0;
+// The negative value for bottom inset is shifting the image view to the bottom
+// from the center.
 const CGFloat kNewTabButtonBottomImageInset = -2.0;
 
 // Identifier of the action that displays the UIMenu.
@@ -210,8 +219,14 @@ const CGFloat kSymbolSize = 18;
   TabStripContainerView* _view;
   TabStripView* _tabStripView;
   UIButton* _buttonNewTab;
+  // The spotlight view contained in the new tab button, serving for the
+  // highlighted effect.
+  UIView* _buttonNewTabSpotlightView;
 
   TabStripStyle _style;
+
+  // Layout guide center to reference the New Tab button.
+  LayoutGuideCenter* _layoutGuideCenter;
 
   // Array of TabViews.  There is a one-to-one correspondence between this array
   // and the set of Tabs in the WebStateList.
@@ -460,7 +475,9 @@ const CGFloat kSymbolSize = 18;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)baseViewController
                                    browser:(Browser*)browser
-                                     style:(TabStripStyle)style {
+                                     style:(TabStripStyle)style
+                         layoutGuideCenter:
+                             (LayoutGuideCenter*)layoutGuideCenter {
   if ((self = [super init])) {
     _tabArray = [[NSMutableArray alloc] initWithCapacity:10];
     _closingTabs = [[NSMutableSet alloc] initWithCapacity:5];
@@ -479,6 +496,9 @@ const CGFloat kSymbolSize = 18;
         std::make_unique<AllWebStateObservationForwarder>(
             _webStateList, _webStateObserver.get());
     _style = style;
+
+    CHECK(layoutGuideCenter);
+    _layoutGuideCenter = layoutGuideCenter;
 
     // `self.view` setup.
     _useTabStacking = [self shouldUseTabStacking];
@@ -523,6 +543,9 @@ const CGFloat kSymbolSize = 18;
     CGRect buttonNewTabFrame = tabStripFrame;
     buttonNewTabFrame.size.width = kNewTabButtonWidth;
     _buttonNewTab = [[UIButton alloc] initWithFrame:buttonNewTabFrame];
+    [_layoutGuideCenter referenceView:_buttonNewTab
+                            underName:kNewTabButtonGuide];
+
     _isIncognito = _browser->GetBrowserState()->IsOffTheRecord();
     // TODO(crbug.com/600829): Rewrite layout code and convert these masks to
     // to trailing and leading margins rather than right and bottom.
@@ -566,6 +589,24 @@ const CGFloat kSymbolSize = 18;
       [_buttonNewTab.imageView setTintColor:[UIColor colorNamed:kGrey500Color]];
     }
     } // End Vivaldi
+
+    _buttonNewTabSpotlightView = [[UIView alloc] init];
+    _buttonNewTabSpotlightView.hidden = YES;
+    _buttonNewTabSpotlightView.userInteractionEnabled = NO;
+    _buttonNewTabSpotlightView.layer.cornerRadius =
+        kNewTabButtonSpotlightViewCornerRadius;
+    // Position the spotlight view so that the image view is in its center.
+    // Cannot use the button's `backgroundColor` because the image view is not
+    // centered in the button by kNewTabButtonLeadingImageInset and
+    // kNewTabButtonBottomImageInset.
+    [_buttonNewTabSpotlightView
+        setFrame:CGRectMake(0, -kNewTabButtonBottomImageInset,
+                            kNewTabButtonWidth + kNewTabButtonLeadingImageInset,
+                            kTabStripHeight + kNewTabButtonBottomImageInset)];
+    // Make sure that the spotlightView is below the image to avoid changing the
+    // color of the image.
+    [_buttonNewTab insertSubview:_buttonNewTabSpotlightView
+                    belowSubview:_buttonNewTab.imageView];
 
     SetA11yLabelAndUiAutomationName(
         _buttonNewTab,
@@ -669,6 +710,23 @@ const CGFloat kSymbolSize = 18;
   [self.view addGestureRecognizer:panGestureRecognizer];
 
   self.panGestureRecognizer = panGestureRecognizer;
+}
+
+#pragma mark - TabStripCommands
+
+- (void)setNewTabButtonOnTabStripIPHHighlighted:(BOOL)IPHHighlighted {
+  if (IsUIButtonConfigurationEnabled()) {
+    _buttonNewTab.tintColor = IPHHighlighted
+                                  ? [UIColor colorNamed:kSolidWhiteColor]
+                                  : [UIColor colorNamed:kGrey500Color];
+  } else {
+    _buttonNewTab.imageView.tintColor =
+        IPHHighlighted ? [UIColor colorNamed:kSolidWhiteColor]
+                       : [UIColor colorNamed:kGrey500Color];
+  }
+  _buttonNewTabSpotlightView.backgroundColor =
+      IPHHighlighted ? [UIColor colorNamed:kBlueColor] : nil;
+  _buttonNewTabSpotlightView.hidden = !IPHHighlighted;
 }
 
 #pragma mark - Private
@@ -819,6 +877,12 @@ const CGFloat kSymbolSize = 18;
 }
 
 - (void)sendNewTabCommand {
+  feature_engagement::Tracker* engagementTracker =
+      feature_engagement::TrackerFactory::GetForBrowserState(
+          _browser->GetBrowserState());
+  engagementTracker->NotifyEvent(
+      feature_engagement::events::kNewTabToolbarItemUsed);
+
   CGPoint center = [_buttonNewTab.superview convertPoint:_buttonNewTab.center
                                                   toView:_buttonNewTab.window];
   OpenNewTabCommand* command =
@@ -976,10 +1040,23 @@ const CGFloat kSymbolSize = 18;
 
   // Update the autoscroll distance and timer.
   [self computeAutoscrollDistanceForTabView:_draggedTab];
+
+  // Note: (prio@vivaldi.com) - Set up auto scroll timer only if dragged tab
+  // is moved closer to the edges (left/right).
+  if (IsVivaldiRunning()) {
+    if (_autoscrollDistance != 0 &&
+        (_autoscrollDistance == -kMaxAutoscrollDistance ||
+         _autoscrollDistance == kMaxAutoscrollDistance)) {
+      [self installAutoscrollTimerIfNeeded];
+    }
+    else
+      [self removeAutoscrollTimer];
+  } else {
   if (_autoscrollDistance != 0)
     [self installAutoscrollTimerIfNeeded];
   else
     [self removeAutoscrollTimer];
+  } // End Vivaldi
 
   // Disable fullscreen during drags.
   _fullscreenDisabler = std::make_unique<ScopedFullscreenDisabler>(
@@ -1101,12 +1178,6 @@ const CGFloat kSymbolSize = 18;
 
 - (void)installAutoscrollTimerIfNeeded {
 
-  // Note(prio@vivaldi.com): Disable autoscroll timer for us.
-  // This triggers automatic scrolling of tabs outside of visible area in
-  // dragging mode.
-  if (IsVivaldiRunning())
-    return;
-
   if (_autoscrollTimer)
     return;
 
@@ -1201,8 +1272,8 @@ const CGFloat kSymbolSize = 18;
 #pragma mark - CRWWebStateObserver methods
 
 - (void)webStateDidStartLoading:(web::WebState*)webState {
-  // webState can start loading before  didInsertWebState is called, in that
-  // case early return as there is no view to update yet.
+  // webState can start loading before didChangeWebStateList with kInsert is
+  // called, in that case early return as there is no view to update yet.
   if (static_cast<NSUInteger>(_webStateList->count()) >
       _tabArray.count - _closingTabs.count)
     return;
@@ -1261,6 +1332,62 @@ const CGFloat kSymbolSize = 18;
 
 #pragma mark - WebStateListObserving methods
 
+- (void)didChangeWebStateList:(WebStateList*)webStateList
+                       change:(const WebStateListChange&)change
+                    selection:(const WebStateSelection&)selection {
+  switch (change.type()) {
+    case WebStateListChange::Type::kSelectionOnly:
+      // TODO(crbug.com/1442546): Move the implementation from
+      // webStateList:didChangeActiveWebState:oldWebState:atIndex:reason to
+      // here. Note that here is reachable only when `reason` ==
+      // ActiveWebStateChangeReason::Activated.
+      break;
+    case WebStateListChange::Type::kDetach:
+      // TODO(crbug.com/1442546): Move the implementation from
+      // webStateList:didDetachWebState:atIndex: to here.
+      break;
+    case WebStateListChange::Type::kMove: {
+      DCHECK(!_isReordering);
+
+      // Reorder the objects in _tabArray to keep in sync with the model
+      // ordering.
+      const WebStateListChangeMove& moveChange =
+          change.As<WebStateListChangeMove>();
+      NSUInteger arrayIndex =
+          [self indexForWebStateListIndex:moveChange.moved_from_index()];
+      TabView* view = [_tabArray objectAtIndex:arrayIndex];
+      [_tabArray removeObject:view];
+      [_tabArray insertObject:view atIndex:selection.index];
+      [self setNeedsLayoutWithAnimation];
+      break;
+    }
+    case WebStateListChange::Type::kReplace: {
+      const WebStateListChangeReplace& replaceChange =
+          change.As<WebStateListChangeReplace>();
+      web::WebState* insertedWebState = replaceChange.inserted_web_state();
+      TabView* view = [self tabViewForWebState:insertedWebState];
+      [self updateTabView:view withWebState:insertedWebState];
+      break;
+    }
+    case WebStateListChange::Type::kInsert: {
+      const WebStateListChangeInsert& insertChange =
+          change.As<WebStateListChangeInsert>();
+      TabView* view =
+          [self createTabViewForWebState:insertChange.inserted_web_state()
+                              isSelected:selection.activating];
+      [_tabArray insertObject:view
+                      atIndex:[self indexForWebStateListIndex:selection.index]];
+      [[self tabStripView] addSubview:view];
+
+      [self updateContentSizeAndRepositionViews];
+      [self setNeedsLayoutWithAnimation];
+      [self updateContentOffsetForWebStateIndex:selection.index
+                                  isNewWebState:YES];
+      break;
+    }
+  }
+}
+
 // Observer method, active WebState changed.
 - (void)webStateList:(WebStateList*)webStateList
     didChangeActiveWebState:(web::WebState*)newWebState
@@ -1278,25 +1405,16 @@ const CGFloat kSymbolSize = 18;
   TabView* activeView = [_tabArray objectAtIndex:index];
   [activeView setSelected:YES];
 
+  // Vivaldi
+  // Note: (prio@vivaldi.com) - When active tab is changed we would prefer
+  // to scroll to that tab.
+  [self scrollTabToVisible:index];
+  // End Vivaldi
+
   // No need to animate this change, as selecting a new tab simply changes the
   // z-ordering of the TabViews.  If a new tab was selected as a result of a tab
   // closure, then the animated layout has already been scheduled.
   [_tabStripView setNeedsLayout];
-}
-
-// Observer method. `webState` moved in `webStateList`.
-- (void)webStateList:(WebStateList*)webStateList
-     didMoveWebState:(web::WebState*)webState
-           fromIndex:(int)fromIndex
-             toIndex:(int)toIndex {
-  DCHECK(!_isReordering);
-
-  // Reorder the objects in _tabArray to keep in sync with the model ordering.
-  NSUInteger arrayIndex = [self indexForWebStateListIndex:fromIndex];
-  TabView* view = [_tabArray objectAtIndex:arrayIndex];
-  [_tabArray removeObject:view];
-  [_tabArray insertObject:view atIndex:toIndex];
-  [self setNeedsLayoutWithAnimation];
 }
 
 // Observer method, `webState` removed from `webStateList`.
@@ -1339,30 +1457,6 @@ const CGFloat kSymbolSize = 18;
   [view removeFromSuperview];
   [_tabArray removeObject:view];
   [_closingTabs removeObject:view];
-}
-
-// Observer method. `webState` inserted on `webStateList`.
-- (void)webStateList:(WebStateList*)webStateList
-    didInsertWebState:(web::WebState*)webState
-              atIndex:(int)index
-           activating:(BOOL)activating {
-  TabView* view = [self createTabViewForWebState:webState
-                                      isSelected:activating];
-  [_tabArray insertObject:view atIndex:[self indexForWebStateListIndex:index]];
-  [[self tabStripView] addSubview:view];
-
-  [self updateContentSizeAndRepositionViews];
-  [self setNeedsLayoutWithAnimation];
-  [self updateContentOffsetForWebStateIndex:index isNewWebState:YES];
-}
-
-// Observer method, WebState replaced in `webStateList`.
-- (void)webStateList:(WebStateList*)webStateList
-    didReplaceWebState:(web::WebState*)oldWebState
-          withWebState:(web::WebState*)newWebState
-               atIndex:(int)atIndex {
-  TabView* view = [self tabViewForWebState:newWebState];
-  [self updateTabView:view withWebState:newWebState];
 }
 
 #pragma mark - WebStateFaviconDriverObserver
@@ -1639,9 +1733,7 @@ const CGFloat kSymbolSize = 18;
   CGFloat virtualMaxX = 0;
   CGFloat offset = self.useTabStacking ? [_tabStripView contentOffset].x : 0;
 
-  // Keeps track of which tabs need to be animated.  Using an autoreleased array
-  // instead of scoped_nsobject because scoped_nsobject doesn't seem to work
-  // well with blocks.
+  // Keeps track of which tabs need to be animated.
   NSMutableArray* tabsNeedingAnimation =
       [NSMutableArray arrayWithCapacity:tabCount];
 
@@ -2021,9 +2113,10 @@ const CGFloat kSymbolSize = 18;
 }
 
 /// This is a public method trigerred from BVC.
-- (void)scrollToSelectedTab:(web::WebState*)webState {
+- (void)scrollToSelectedTab:(web::WebState*)webState
+                   animated:(BOOL)animated {
   TabView* view = [self tabViewForWebState:webState];
-  [self tabViewTapped:view];
+  [self tabViewTapped:view animated:animated];
 }
 
 /// This is a private method called if device trait collection is changed.
@@ -2037,7 +2130,7 @@ const CGFloat kSymbolSize = 18;
   NSUInteger index = [self indexForWebStateListIndex:selectedIndex];
   if (_tabArray.count > 0) {
     TabView* activeView = [_tabArray objectAtIndex:index];
-    [self tabViewTapped:activeView];
+    [self tabViewTapped:activeView animated:NO];
   }
 }
 
@@ -2078,6 +2171,64 @@ const CGFloat kSymbolSize = 18;
     [view setFavicon:[UIImage imageNamed:@"toolbar_menu"]];
   } else {
     [view setFavicon:[UIImage imageNamed:vNTPSDFallbackFavicon]];
+  }
+}
+
+/// The next two methods are forked from chrome
+/// just to be able to control the animation.
+- (void)tabViewTapped:(TabView*)tabView
+             animated:(BOOL)animated {
+  // Ignore taps while in reordering mode.
+  if ([self isReorderingTabs])
+    return;
+
+  int index = [self webStateListIndexForTabView:tabView];
+  DCHECK_NE(WebStateList::kInvalidIndex, index);
+  if (index == WebStateList::kInvalidIndex)
+    return;
+
+  base::UmaHistogramBoolean(kUMATabStripTapInteractionHistogram,
+                            index != _webStateList->active_index());
+
+  if ((ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) &&
+      (_webStateList->active_index() != static_cast<int>(index))) {
+    SnapshotTabHelper::FromWebState(_webStateList->GetActiveWebState())
+        ->UpdateSnapshotWithCallback(nil);
+  }
+  _webStateList->ActivateWebStateAt(static_cast<int>(index));
+  [self updateContentOffsetForWebStateIndex:index
+                              isNewWebState:NO
+                                   animated:animated];
+}
+
+
+- (void)updateContentOffsetForWebStateIndex:(int)webStateIndex
+                              isNewWebState:(BOOL)isNewWebState
+                                   animated:(BOOL)animated {
+  DCHECK_NE(WebStateList::kInvalidIndex, webStateIndex);
+
+  if (isNewWebState) {
+    [self scrollTabToVisible:webStateIndex];
+    return;
+  }
+
+  if (!self.useTabStacking) {
+    if (webStateIndex == static_cast<int>([_tabArray count]) - 1) {
+      const CGFloat tabStripAvailableSpace =
+          _tabStripView.frame.size.width - _tabStripView.contentInset.right;
+      if (_tabStripView.contentSize.width > tabStripAvailableSpace) {
+        CGFloat scrollToPoint =
+            _tabStripView.contentSize.width - tabStripAvailableSpace;
+        [_tabStripView setContentOffset:CGPointMake(scrollToPoint, 0)
+                               animated:animated];
+      }
+    } else {
+      TabView* tabView = [_tabArray objectAtIndex:webStateIndex];
+      CGRect scrollRect =
+          CGRectInset(tabView.frame, -_tabStripView.contentInset.right, 0);
+      if (tabView)
+        [_tabStripView scrollRectToVisible:scrollRect animated:animated];
+    }
   }
 }
 

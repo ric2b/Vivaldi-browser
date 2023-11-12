@@ -24,8 +24,8 @@ static_library("android") {
     "origin_security_checker_android.cc",
     "payment_app_service_bridge.cc",
     "payment_app_service_bridge.h",
-    "payment_feature_list.cc",
-    "payment_feature_list.h",
+    "payment_feature_map.cc",
+    "payment_feature_map.h",
     "payment_handler_host.cc",
     "payment_handler_host.h",
     "payment_handler_navigation_throttle_android.cc",
@@ -45,7 +45,10 @@ static_library("android") {
   ]
 
   deps = [
+    ":feature_list_jni",
     ":jni_headers",
+    ":minimal_jni",
+    ":service_jni",
     "//base",
     "//components/keyed_service/core",
     "//components/payments/content",
@@ -74,14 +77,10 @@ generate_jni("jni_headers") {
     "java/src/org/chromium/components/payments/JourneyLogger.java",
     "java/src/org/chromium/components/payments/OriginSecurityChecker.java",
     "java/src/org/chromium/components/payments/PaymentAppServiceBridge.java",
-    "java/src/org/chromium/components/payments/PaymentFeatureList.java",
-    "java/src/org/chromium/components/payments/PaymentHandlerHost.java",
     "java/src/org/chromium/components/payments/PaymentHandlerNavigationThrottle.java",
     "java/src/org/chromium/components/payments/PaymentManifestDownloader.java",
     "java/src/org/chromium/components/payments/PaymentManifestParser.java",
     "java/src/org/chromium/components/payments/PaymentManifestWebDataService.java",
-    "java/src/org/chromium/components/payments/PaymentRequestSpec.java",
-    "java/src/org/chromium/components/payments/PaymentRequestUpdateEventListener.java",
     "java/src/org/chromium/components/payments/PaymentValidator.java",
     "java/src/org/chromium/components/payments/SslValidityChecker.java",
     "java/src/org/chromium/components/payments/UrlUtil.java",
@@ -111,8 +110,11 @@ android_resources("java_resources") {
 
 # Minimal target to depend on PaymentDetailsUpdateService. This should be kept
 # as small as possible, as it will always be included in chrome's base module.
+generate_jni("service_jni") {
+  sources = [ "java/src/org/chromium/components/payments/PaymentRequestUpdateEventListener.java" ]
+}
+
 android_library("service_java") {
-  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   sources = [
     "java/src/org/chromium/components/payments/Address.java",
     "java/src/org/chromium/components/payments/PackageManagerDelegate.java",
@@ -135,13 +137,21 @@ android_library("service_java") {
   srcjar_deps = [
     ":error_strings_generated_srcjar",
     ":payment_details_update_service_aidl",
+    ":service_jni",
   ]
 }
 
-android_library("feature_list_java") {
-  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+generate_jni("feature_list_jni") {
   sources =
-      [ "java/src/org/chromium/components/payments/PaymentFeatureList.java" ]
+      [ "java/src/org/chromium/components/payments/PaymentFeatureMap.java" ]
+}
+
+android_library("feature_list_java") {
+  srcjar_deps = [ ":feature_list_jni" ]
+  sources = [
+    "java/src/org/chromium/components/payments/PaymentFeatureList.java",
+    "java/src/org/chromium/components/payments/PaymentFeatureMap.java",
+  ]
   deps = [
     "//base:base_java",
     "//base:jni_java",
@@ -151,7 +161,6 @@ android_library("feature_list_java") {
 }
 
 android_library("full_java") {
-  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   sources = [
     "java/src/org/chromium/components/payments/AndroidPaymentApp.java",
     "java/src/org/chromium/components/payments/AndroidPaymentAppFactory.java",
@@ -228,6 +237,7 @@ android_library("full_java") {
     "//url/mojom:url_mojom_origin_java",
   ]
   srcjar_deps = [
+    ":jni_headers",
     ":payments_journey_logger_enum_javagen",
     ":prefs_strings_generated_srcjar",
   ]
@@ -240,8 +250,14 @@ android_library("pre_purchase_query_enum_java") {
 }
 
 # Minimal target that only includes what downstream code depends on.
+generate_jni("minimal_jni") {
+  sources = [
+    "java/src/org/chromium/components/payments/PaymentHandlerHost.java",
+    "java/src/org/chromium/components/payments/PaymentRequestSpec.java",
+  ]
+}
+
 android_library("minimal_java") {
-  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   sources = [
     "java/src/org/chromium/components/payments/CSPChecker.java",
     "java/src/org/chromium/components/payments/MojoStructCollection.java",
@@ -272,6 +288,7 @@ android_library("minimal_java") {
   srcjar_deps = [
     ":app_creation_failure_reason_generated_enum",
     ":method_strings_generated_srcjar",
+    ":minimal_jni",
     ":payment_app_type_generated_enum",
   ]
   resources_package = "org.chromium.components.payments"
@@ -329,16 +346,18 @@ java_cpp_enum("pre_purchase_query_enum_javagen") {
 
 robolectric_library("junit_test_support") {
   sources = [
+    "junit/src/org/chromium/components/payments/test_support/DefaultPaymentFeatureConfig.java",
     "junit/src/org/chromium/components/payments/test_support/FakeClock.java",
     "junit/src/org/chromium/components/payments/test_support/PaymentRequestServiceBuilder.java",
-    "junit/src/org/chromium/components/payments/test_support/ShadowPaymentFeatureList.java",
     "junit/src/org/chromium/components/payments/test_support/ShadowWebContentsStatics.java",
   ]
   deps = [
     ":java",
+    "//base:base_java",
     "//components/payments/content/android:service_java",
     "//components/payments/mojom:mojom_java",
     "//content/public/android:content_java",
+    "//third_party/android_deps:guava_android_java",
     "//third_party/androidx:androidx_annotation_annotation_java",
     "//third_party/androidx:androidx_collection_collection_java",
     "//third_party/blink/public/mojom:android_mojo_bindings_java",
@@ -359,6 +378,7 @@ robolectric_library("junit") {
   deps = [
     ":java",
     ":junit_test_support",
+    "//base:base_java",
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
     "//components/browser_ui/bottomsheet/android:java",

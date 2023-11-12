@@ -46,7 +46,9 @@ class RequestFilterProxyingURLLoaderFactory
         const network::ResourceRequest& request,
         const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
         mojo::PendingReceiver<network::mojom::URLLoader>,
-        mojo::PendingRemote<network::mojom::URLLoaderClient> client);
+        mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+        scoped_refptr<base::SequencedTaskRunner>
+            navigation_response_task_runner);
     // For CORS preflights
     InProgressRequest(RequestFilterProxyingURLLoaderFactory* factory,
                       uint64_t request_id,
@@ -221,6 +223,10 @@ class RequestFilterProxyingURLLoaderFactory
     std::unique_ptr<FollowRedirectParams> pending_follow_redirect_params_;
     State state_ = State::kInProgress;
 
+    // A task runner that should be used for the request when non-null. Non-null
+    // when this was created for a navigation request.
+    scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner_;
+
     base::WeakPtrFactory<InProgressRequest> weak_factory_{this};
   };
 
@@ -240,7 +246,8 @@ class RequestFilterProxyingURLLoaderFactory
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
           forwarding_header_client,
       RequestFilterManager::ProxySet* proxies,
-      content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type);
+      content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
+      scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner);
 
   RequestFilterProxyingURLLoaderFactory(
       const RequestFilterProxyingURLLoaderFactory&) = delete;
@@ -265,7 +272,8 @@ class RequestFilterProxyingURLLoaderFactory
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
           forwarding_header_client,
       RequestFilterManager::ProxySet* proxies,
-      content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type);
+      content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
+      scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner);
 
   // network::mojom::URLLoaderFactory:
   void CreateLoaderAndStart(
@@ -293,6 +301,8 @@ class RequestFilterProxyingURLLoaderFactory
       const {
     return loader_factory_type_;
   }
+
+  static void EnsureAssociatedFactoryBuilt();
 
  private:
   void OnTargetFactoryError();
@@ -329,6 +339,10 @@ class RequestFilterProxyingURLLoaderFactory
 
   // Notifies the proxy that the browser context has been shutdown.
   base::CallbackListSubscription shutdown_notifier_subscription_;
+
+  // A task runner that should be used for requests when non-null. Non-null when
+  // this was created for a navigation request.
+  scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner_;
 
   base::WeakPtrFactory<RequestFilterProxyingURLLoaderFactory> weak_factory_{
       this};

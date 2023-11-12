@@ -32,6 +32,7 @@ class ShortcutsBackend;
 class TabMatcher;
 class ZeroSuggestCacheService;
 class AutocompleteScoringModelService;
+class OnDeviceTailModelService;
 
 namespace bookmarks {
 class BookmarkModel;
@@ -80,6 +81,7 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
   virtual history_clusters::HistoryClustersService* GetHistoryClustersService();
   virtual scoped_refptr<history::TopSites> GetTopSites() = 0;
   virtual bookmarks::BookmarkModel* GetLocalOrSyncableBookmarkModel() = 0;
+  virtual bookmarks::BookmarkModel* GetAccountBookmarkModel() = 0;
   virtual history::URLDatabase* GetInMemoryDatabase() = 0;
   virtual InMemoryURLIndex* GetInMemoryURLIndex() = 0;
   virtual TemplateURLService* GetTemplateURLService() = 0;
@@ -100,6 +102,7 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
       const = 0;
   virtual AutocompleteScoringModelService* GetAutocompleteScoringModelService()
       const = 0;
+  virtual OnDeviceTailModelService* GetOnDeviceTailModelService() const = 0;
 
   // The value to use for Accept-Languages HTTP header when making an HTTP
   // request.

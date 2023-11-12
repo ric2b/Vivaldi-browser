@@ -23,6 +23,38 @@
 
 namespace web_app {
 
+namespace {
+
+bool HasShortcutsMenuInfo(const proto::WebAppOsIntegrationState& state) {
+  return state.has_shortcut_menus() &&
+         state.shortcut_menus().shortcut_menu_info_size() > 0;
+}
+
+enum class ShortcutMenuIconDataDiffResult {
+  kSuccess = 0,
+  kIconCountLessThanItemCount = 1,
+  kItemCountLessThanIconCount = 2,
+  kMaxValue = kItemCountLessThanIconCount,
+};
+
+void MeasureShortcutMenuIconHistograms(int icon_count, int item_count) {
+  if (icon_count == item_count) {
+    base::UmaHistogramEnumeration(
+        "WebApp.ShortcutsMenuBitmapAndItemCount.Results",
+        ShortcutMenuIconDataDiffResult::kSuccess);
+  } else if (icon_count < item_count) {
+    base::UmaHistogramEnumeration(
+        "WebApp.ShortcutsMenuBitmapAndItemCount.Results",
+        ShortcutMenuIconDataDiffResult::kIconCountLessThanItemCount);
+  } else {
+    base::UmaHistogramEnumeration(
+        "WebApp.ShortcutsMenuBitmapAndItemCount.Results",
+        ShortcutMenuIconDataDiffResult::kItemCountLessThanIconCount);
+  }
+}
+
+}  // namespace
+
 ShortcutMenuHandlingSubManager::ShortcutMenuHandlingSubManager(
     const base::FilePath& profile_path,
     WebAppIconManager& icon_manager,
@@ -44,11 +76,19 @@ void ShortcutMenuHandlingSubManager::Configure(
     return;
   }
 
+  std::vector<WebAppShortcutsMenuItemInfo> shortcut_menu_item_info =
+      registrar_->GetAppShortcutsMenuItemInfos(app_id);
+  if (shortcut_menu_item_info.empty()) {
+    std::move(configure_done).Run();
+    return;
+  }
+
   proto::ShortcutMenus* shortcut_menus = desired_state.mutable_shortcut_menus();
   icon_manager_->ReadAllShortcutMenuIconsWithTimestamp(
       app_id,
       base::BindOnce(&ShortcutMenuHandlingSubManager::StoreShortcutMenuData,
-                     weak_ptr_factory_.GetWeakPtr(), app_id, shortcut_menus)
+                     weak_ptr_factory_.GetWeakPtr(), app_id,
+                     shortcut_menu_item_info, shortcut_menus)
           .Then(std::move(configure_done)));
 }
 
@@ -65,14 +105,14 @@ void ShortcutMenuHandlingSubManager::Execute(
 
   // If none of the current and desired states have shortcuts, then this should
   // just be a no-op.
-  if (!desired_state.has_shortcut_menus() &&
-      !current_state.has_shortcut_menus()) {
+  if (!HasShortcutsMenuInfo(desired_state) &&
+      !HasShortcutsMenuInfo(current_state)) {
     std::move(execute_complete).Run();
     return;
   }
 
-  if (desired_state.has_shortcut_menus() &&
-      current_state.has_shortcut_menus() &&
+  if (HasShortcutsMenuInfo(desired_state) &&
+      HasShortcutsMenuInfo(current_state) &&
       (desired_state.shortcut_menus().SerializeAsString() ==
        current_state.shortcut_menus().SerializeAsString())) {
     std::move(execute_complete).Run();
@@ -96,16 +136,16 @@ void ShortcutMenuHandlingSubManager::ForceUnregister(
 
 void ShortcutMenuHandlingSubManager::StoreShortcutMenuData(
     const AppId& app_id,
+    std::vector<WebAppShortcutsMenuItemInfo> shortcut_menu_item_info,
     proto::ShortcutMenus* shortcut_menus,
     WebAppIconManager::ShortcutIconDataVector downloaded_shortcut_menu_items) {
-  std::vector<WebAppShortcutsMenuItemInfo> shortcut_menu_item_info =
-      registrar_->GetAppShortcutsMenuItemInfos(app_id);
+  MeasureShortcutMenuIconHistograms(downloaded_shortcut_menu_items.size(),
+                                    shortcut_menu_item_info.size());
+
   // Due to the bitmaps possibly being not populated (see
   // https://crbug.com/1427444), we just have empty bitmap data in that case. We
   // continue to check to make sure that there aren't MORE bitmaps than
   // items.
-  CHECK_LE(downloaded_shortcut_menu_items.size(),
-           shortcut_menu_item_info.size());
   while (downloaded_shortcut_menu_items.size() <
          shortcut_menu_item_info.size()) {
     downloaded_shortcut_menu_items.emplace_back();
@@ -149,7 +189,7 @@ void ShortcutMenuHandlingSubManager::StartShortcutsMenuUnregistration(
     const AppId& app_id,
     const proto::WebAppOsIntegrationState& current_state,
     base::OnceClosure registration_callback) {
-  if (!current_state.has_shortcut_menus()) {
+  if (!HasShortcutsMenuInfo(current_state)) {
     std::move(registration_callback).Run();
     return;
   }
@@ -166,7 +206,7 @@ void ShortcutMenuHandlingSubManager::ReadIconDataForShortcutsMenu(
     const AppId& app_id,
     const proto::WebAppOsIntegrationState& desired_state,
     base::OnceClosure execute_complete) {
-  if (!desired_state.has_shortcut_menus()) {
+  if (!HasShortcutsMenuInfo(desired_state)) {
     std::move(execute_complete).Run();
     return;
   }

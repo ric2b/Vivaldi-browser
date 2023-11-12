@@ -18,13 +18,19 @@ PluginVmInstaller* PluginVmInstallerFactory::GetForProfile(Profile* profile) {
 
 // static
 PluginVmInstallerFactory* PluginVmInstallerFactory::GetInstance() {
-  return base::Singleton<PluginVmInstallerFactory>::get();
+  static base::NoDestructor<PluginVmInstallerFactory> instance;
+  return instance.get();
 }
 
 PluginVmInstallerFactory::PluginVmInstallerFactory()
     : ProfileKeyedServiceFactory(
           "PluginVmInstaller",
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   DependsOn(BackgroundDownloadServiceFactory::GetInstance());
 }
 

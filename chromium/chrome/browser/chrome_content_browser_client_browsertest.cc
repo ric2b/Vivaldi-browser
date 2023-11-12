@@ -54,6 +54,9 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "ui/color/color_provider.h"
+#include "ui/color/color_provider_manager.h"
+#include "ui/color/color_provider_source.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/native_theme/test_native_theme.h"
 #include "url/gurl.h"
@@ -69,15 +72,26 @@
 #include "chrome/test/base/launchservices_utils_mac.h"
 #endif
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+// TODO(b/283093731): Replace this macro with cloud content analysis equivalent
+// buildflag condition.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
 #include "base/files/scoped_temp_dir.h"
 #include "base/test/bind.h"
 #include "base/threading/scoped_blocking_call.h"
-#include "chrome/browser/enterprise/connectors/analysis/fake_content_analysis_delegate.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_test_utils.h"
+#include "chrome/browser/enterprise/connectors/test/deep_scanning_test_utils.h"  // nogncheck
+#include "chrome/browser/enterprise/connectors/test/fake_content_analysis_delegate.h"  // nogncheck
 #include "ui/base/clipboard/clipboard_format_type.h"
+
+// TODO(b/283093731): Replace this macro with local content analysis equivalent
+// buildflag condition.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#include "chrome/browser/enterprise/connectors/analysis/fake_content_analysis_sdk_manager.h"  // nogncheck
 #endif
+
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
 namespace {
 
@@ -307,8 +321,7 @@ IN_PROC_BROWSER_TEST_F(OpenWindowFromNTPBrowserTest,
   GURL generic_url(https_test_server().GetURL("ntp.com", "/title1.html"));
   content::TestNavigationObserver opened_tab_observer(nullptr);
   opened_tab_observer.StartWatchingNewWebContents();
-  EXPECT_TRUE(
-      ExecuteScript(ntp_tab, "window.open('" + generic_url.spec() + "');"));
+  EXPECT_TRUE(ExecJs(ntp_tab, "window.open('" + generic_url.spec() + "');"));
   opened_tab_observer.Wait();
   ASSERT_EQ(2, browser()->tab_strip_model()->count());
 
@@ -325,27 +338,52 @@ IN_PROC_BROWSER_TEST_F(OpenWindowFromNTPBrowserTest,
       opened_tab->GetPrimaryMainFrame()->GetProcess()->GetID()));
 }
 
-class PrefersColorSchemeTest : public testing::WithParamInterface<bool>,
-                               public InProcessBrowserTest {
+// Tests for the preferred color scheme for a given WebContents. The first param
+// controls whether the web NativeTheme is light or dark the second controls
+// whether the color mode on the associated color provider is light or dark.
+class PrefersColorSchemeTest
+    : public testing::WithParamInterface<std::tuple<bool, bool>>,
+      public InProcessBrowserTest {
  protected:
-  PrefersColorSchemeTest() : theme_client_(&test_theme_) {
-    feature_list_.InitWithFeatureState(features::kWebUIDarkMode, GetParam());
+  PrefersColorSchemeTest()
+      : theme_client_(&test_theme_),
+        color_provider_source_(GetIsDarkColorProviderColorMode()) {
+    test_theme_.SetDarkMode(GetIsDarkNativeTheme());
   }
-
   ~PrefersColorSchemeTest() override {
     CHECK_EQ(&theme_client_, SetBrowserClientForTesting(original_client_));
   }
 
   const char* ExpectedColorScheme() const {
-    return GetParam() ? "dark" : "light";
+    // WebUI's preferred color scheme should reflect the color mode of their
+    // associated ColorProvider, and not the preferred color scheme of the web
+    // NativeTheme.
+    const GURL& last_committed_url = browser()
+                                         ->tab_strip_model()
+                                         ->GetActiveWebContents()
+                                         ->GetLastCommittedURL();
+    if (last_committed_url.SchemeIs(content::kChromeUIScheme)) {
+      return GetIsDarkColorProviderColorMode() ? "dark" : "light";
+    }
+    return GetIsDarkNativeTheme() ? "dark" : "light";
   }
 
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
     original_client_ = SetBrowserClientForTesting(&theme_client_);
+    test_theme_.SetDarkMode(GetIsDarkNativeTheme());
+    browser()
+        ->tab_strip_model()
+        ->GetActiveWebContents()
+        ->SetColorProviderSource(&color_provider_source_);
   }
 
  protected:
+  bool GetIsDarkNativeTheme() const { return std::get<0>(GetParam()); }
+  bool GetIsDarkColorProviderColorMode() const {
+    return std::get<1>(GetParam());
+  }
+
   ui::TestNativeTheme test_theme_;
 
  private:
@@ -365,12 +403,36 @@ class PrefersColorSchemeTest : public testing::WithParamInterface<bool>,
     const raw_ptr<const ui::NativeTheme> theme_;
   };
 
+  class MockColorProviderSource : public ui::ColorProviderSource {
+   public:
+    explicit MockColorProviderSource(bool is_dark) {
+      key_.color_mode = is_dark ? ui::ColorProviderManager::ColorMode::kDark
+                                : ui::ColorProviderManager::ColorMode::kLight;
+      provider_.GenerateColorMap();
+    }
+    MockColorProviderSource(const MockColorProviderSource&) = delete;
+    MockColorProviderSource& operator=(const MockColorProviderSource&) = delete;
+    ~MockColorProviderSource() override = default;
+
+    // ui::ColorProviderSource:
+    const ui::ColorProvider* GetColorProvider() const override {
+      return &provider_;
+    }
+    ui::ColorProviderManager::Key GetColorProviderKey() const override {
+      return key_;
+    }
+
+   private:
+    ui::ColorProvider provider_;
+    ui::ColorProviderManager::Key key_;
+  };
+
   base::test::ScopedFeatureList feature_list_;
   ChromeContentBrowserClientWithWebTheme theme_client_;
+  MockColorProviderSource color_provider_source_;
 };
 
 IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, PrefersColorScheme) {
-  test_theme_.SetDarkMode(GetParam());
   browser()
       ->tab_strip_model()
       ->GetActiveWebContents()
@@ -386,7 +448,6 @@ IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, PrefersColorScheme) {
 }
 
 IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, FeatureOverridesChromeSchemes) {
-  test_theme_.SetDarkMode(true);
   browser()
       ->tab_strip_model()
       ->GetActiveWebContents()
@@ -395,19 +456,16 @@ IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, FeatureOverridesChromeSchemes) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), GURL(chrome::kChromeUIDownloadsURL)));
 
-  bool matches;
-  ASSERT_TRUE(ExecuteScriptAndExtractBool(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      base::StringPrintf("window.domAutomationController.send(window."
-                         "matchMedia('(prefers-color-scheme: %s)').matches)",
-                         ExpectedColorScheme()),
-      &matches));
-  EXPECT_TRUE(matches);
+  EXPECT_EQ(
+      true,
+      EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+             base::StringPrintf(
+                 "window.matchMedia('(prefers-color-scheme: %s)').matches",
+                 ExpectedColorScheme())));
 }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, FeatureOverridesPdfUI) {
-  test_theme_.SetDarkMode(true);
   browser()
       ->tab_strip_model()
       ->GetActiveWebContents()
@@ -419,18 +477,18 @@ IN_PROC_BROWSER_TEST_P(PrefersColorSchemeTest, FeatureOverridesPdfUI) {
   GURL pdf_index = GURL(pdf_extension_url).Resolve("/index.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), pdf_index));
 
-  bool matches;
-  ASSERT_TRUE(ExecuteScriptAndExtractBool(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      base::StringPrintf("window.domAutomationController.send(window."
-                         "matchMedia('(prefers-color-scheme: %s)').matches)",
-                         ExpectedColorScheme()),
-      &matches));
-  EXPECT_TRUE(matches);
+  EXPECT_EQ(
+      true,
+      EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+             base::StringPrintf(
+                 "window.matchMedia('(prefers-color-scheme: %s)').matches",
+                 ExpectedColorScheme())));
 }
 #endif
 
-INSTANTIATE_TEST_SUITE_P(All, PrefersColorSchemeTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All,
+                         PrefersColorSchemeTest,
+                         testing::Combine(testing::Bool(), testing::Bool()));
 
 class PrefersContrastTest
     : public testing::WithParamInterface<ui::NativeTheme::PreferredContrast>,
@@ -541,7 +599,13 @@ class ProtocolHandlerTest : public InProcessBrowserTest {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(ProtocolHandlerTest, CustomHandler) {
+// TODO(https://crbug.com/1454691): Enable test when MacOS flake is fixed.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_CustomHandler DISABLED_CustomHandler
+#else
+#define MAYBE_CustomHandler CustomHandler
+#endif
+IN_PROC_BROWSER_TEST_F(ProtocolHandlerTest, MAYBE_CustomHandler) {
 #if BUILDFLAG(IS_MAC)
   ASSERT_TRUE(test::RegisterAppWithLaunchServices());
 #endif
@@ -630,7 +694,8 @@ IN_PROC_BROWSER_TEST_F(KeepaliveDurationOnShutdownTest, DynamicUpdate) {
 
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(FULL_SAFE_BROWSING)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
 
 class IsClipboardPasteContentAllowedTest : public InProcessBrowserTest {
  public:
@@ -642,16 +707,16 @@ class IsClipboardPasteContentAllowedTest : public InProcessBrowserTest {
     InProcessBrowserTest::SetUpOnMainThread();
 
     // Make sure enterprise policies are set to turn on content analysis.
-    safe_browsing::SetAnalysisConnector(browser()->profile()->GetPrefs(),
-                                        enterprise_connectors::BULK_DATA_ENTRY,
-                                        kBulkDataEntryPolicyValue);
-    safe_browsing::SetAnalysisConnector(browser()->profile()->GetPrefs(),
-                                        enterprise_connectors::FILE_ATTACHED,
-                                        kFileAttachedPolicyValue);
+    enterprise_connectors::test::SetAnalysisConnector(
+        browser()->profile()->GetPrefs(),
+        enterprise_connectors::BULK_DATA_ENTRY, kBulkDataEntryPolicyValue);
+    enterprise_connectors::test::SetAnalysisConnector(
+        browser()->profile()->GetPrefs(), enterprise_connectors::FILE_ATTACHED,
+        kFileAttachedPolicyValue);
 
     enterprise_connectors::ContentAnalysisDelegate::SetFactoryForTesting(
         base::BindRepeating(
-            &enterprise_connectors::FakeContentAnalysisDelegate::Create,
+            &enterprise_connectors::test::FakeContentAnalysisDelegate::Create,
             base::DoNothing(),
             base::BindRepeating([](const std::string& contents,
                                    const base::FilePath& path) {
@@ -663,10 +728,11 @@ class IsClipboardPasteContentAllowedTest : public InProcessBrowserTest {
                     path.BaseName().AsUTF8Unsafe().substr(0, 5) == "allow";
               }
               return success
-                         ? enterprise_connectors::FakeContentAnalysisDelegate::
-                               SuccessfulResponse({"dlp"})
-                         : enterprise_connectors::FakeContentAnalysisDelegate::
-                               DlpResponse(
+                         ? enterprise_connectors::test::
+                               FakeContentAnalysisDelegate::SuccessfulResponse(
+                                   {"dlp"})
+                         : enterprise_connectors::test::
+                               FakeContentAnalysisDelegate::DlpResponse(
                                    enterprise_connectors::
                                        ContentAnalysisResponse::Result::SUCCESS,
                                    "rule-name",
@@ -726,24 +792,13 @@ class IsClipboardPasteContentAllowedTest : public InProcessBrowserTest {
 
   base::ScopedTempDir temp_dir_;
   raw_ptr<ChromeContentBrowserClient> client_ = nullptr;
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  // This installs a fake SDK manager that creates fake SDK clients when
+  // its GetClient() method is called. This is needed so that calls to
+  // ContentAnalysisSdkManager::Get()->GetClient() do not fail.
+  enterprise_connectors::FakeContentAnalysisSdkManager sdk_manager_;
+#endif
 };
-
-IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, BitmapAllowed) {
-  content::WebContents* contents =
-      browser()->tab_strip_model()->GetWebContentsAt(0);
-  ChromeContentBrowserClient::ClipboardPasteData clipboard_paste_data =
-      ChromeContentBrowserClient::ClipboardPasteData(std::string(), "bitmap",
-                                                     {});
-
-  client()->IsClipboardPasteContentAllowed(
-      contents, GURL("google.com"), ui::ClipboardFormatType::BitmapType(),
-      clipboard_paste_data,
-      base::BindOnce(
-          [](absl::optional<ChromeContentBrowserClient::ClipboardPasteData>
-                 clipboard_paste_data) {
-            EXPECT_TRUE(clipboard_paste_data.has_value());
-          }));
-}
 
 IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, TextAllowed) {
   content::WebContents* contents =
@@ -842,6 +897,7 @@ IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, SomeFilesBlocked) {
             EXPECT_EQ(clipboard_paste_data->file_paths[0], paths[0]);
           }));
 }
-#endif
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace

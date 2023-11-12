@@ -18,6 +18,7 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/back_forward_cache_disable.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/webauth/authenticator_environment.h"
 #include "content/browser/webauth/client_data_json.h"
 #include "content/browser/webauth/virtual_authenticator_manager_impl.h"
@@ -63,6 +64,7 @@
 #if BUILDFLAG(IS_WIN)
 #include "device/fido/features.h"
 #include "device/fido/win/authenticator.h"
+#include "device/fido/win/webauthn_api.h"
 #endif
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
@@ -136,8 +138,9 @@ device::CtapGetAssertionRequest CreateCtapGetAssertionRequest(
     request_parameter.app_id = std::move(*app_id);
   }
 
-  if (!options->cable_authentication_data.empty()) {
-    request_parameter.cable_extension = options->cable_authentication_data;
+  if (!options->extensions->cable_authentication_data.empty()) {
+    request_parameter.cable_extension =
+        options->extensions->cable_authentication_data;
   }
   return request_parameter;
 }
@@ -296,13 +299,6 @@ std::unique_ptr<device::FidoDiscoveryFactory> MakeDiscoveryFactory(
           render_frame_host->GetBrowserContext()));
 #endif  // BUILDFLAG(IS_MAC)
 
-#if BUILDFLAG(IS_WIN)
-  if (base::FeatureList::IsEnabled(device::kWebAuthUseNativeWinApi)) {
-    discovery_factory->set_win_webauthn_api(
-        AuthenticatorEnvironment::GetInstance()->win_webauthn_api());
-  }
-#endif  // BUILDFLAG(IS_WIN)
-
 #if BUILDFLAG(IS_CHROMEOS)
   // Ignore the ChromeOS u2fd virtual U2F HID device so that it doesn't collide
   // with the ChromeOS platform authenticator, also implemented in u2fd.
@@ -364,8 +360,7 @@ absl::optional<device::CredProtectRequest> ProtectionPolicyToCredProtect(
       if (make_credential_options.resident_key ==
               device::ResidentKeyRequirement::kRequired &&
           make_credential_options.user_verification ==
-              device::UserVerificationRequirement::kPreferred &&
-          base::FeatureList::IsEnabled(device::kWebAuthnCredProtectThree)) {
+              device::UserVerificationRequirement::kPreferred) {
         return device::CredProtectRequest::kUVRequired;
       }
       if (make_credential_options.resident_key !=
@@ -878,7 +873,7 @@ void AuthenticatorCommonImpl::GetAssertion(
 
   status = security_checker_->ValidateDomainAndRelyingPartyID(
       caller_origin, options->relying_party_id, request_type,
-      options->remote_desktop_client_override);
+      options->extensions->remote_desktop_client_override);
   if (status != blink::mojom::AuthenticatorStatus::SUCCESS) {
     CompleteGetAssertionRequest(status);
     return;
@@ -902,12 +897,12 @@ void AuthenticatorCommonImpl::GetAssertion(
   caller_origin_ = caller_origin;
   relying_party_id_ = options->relying_party_id;
 
-  if (options->appid) {
+  if (options->extensions->appid) {
     requested_extensions_.insert(RequestExtension::kAppID);
     std::string app_id;
     auto add_id_status = security_checker_->ValidateAppIdExtension(
-        *options->appid, caller_origin, options->remote_desktop_client_override,
-        &app_id);
+        *options->extensions->appid, caller_origin,
+        options->extensions->remote_desktop_client_override, &app_id);
     if (add_id_status != blink::mojom::AuthenticatorStatus::SUCCESS) {
       CompleteGetAssertionRequest(add_id_status);
       return;
@@ -921,13 +916,14 @@ void AuthenticatorCommonImpl::GetAssertion(
   WebAuthenticationRequestProxy* proxy =
       GetWebAuthnRequestProxyIfActive(caller_origin);
   if (proxy) {
-    if (options->is_conditional || options->remote_desktop_client_override) {
+    if (options->is_conditional ||
+        (options->extensions->remote_desktop_client_override)) {
       // Don't allow proxying of an already proxied or conditional request.
       CompleteGetAssertionRequest(
           blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR);
       return;
     }
-    options->remote_desktop_client_override =
+    options->extensions->remote_desktop_client_override =
         blink::mojom::RemoteDesktopClientOverride::New(
             /*origin=*/caller_origin_,
             /*same_origin_with_ancestors=*/!is_cross_origin_iframe);
@@ -961,11 +957,12 @@ void AuthenticatorCommonImpl::GetAssertion(
                                                      ->GetOutermostMainFrame()
                                                      ->GetLastCommittedOrigin()
                                                      .Serialize();
-  } else if (options->remote_desktop_client_override) {
+  } else if (options->extensions->remote_desktop_client_override) {
     client_data_json_params.origin =
-        options->remote_desktop_client_override->origin;
+        options->extensions->remote_desktop_client_override->origin;
     client_data_json_params.is_cross_origin_iframe =
-        !options->remote_desktop_client_override->same_origin_with_ancestors;
+        !options->extensions->remote_desktop_client_override
+             ->same_origin_with_ancestors;
   }
   client_data_json_ = BuildClientDataJson(std::move(client_data_json_params));
 
@@ -1006,15 +1003,16 @@ void AuthenticatorCommonImpl::GetAssertion(
     discoverable_credential_request_ = true;
   }
 
-  if (options->large_blob_read && options->large_blob_write) {
+  if (options->extensions->large_blob_read &&
+      options->extensions->large_blob_write) {
     CompleteGetAssertionRequest(
         blink::mojom::AuthenticatorStatus::CANNOT_READ_AND_WRITE_LARGE_BLOB);
     return;
   }
 
-  if (options->large_blob_read) {
+  if (options->extensions->large_blob_read) {
     requested_extensions_.insert(RequestExtension::kLargeBlobRead);
-  } else if (options->large_blob_write) {
+  } else if (options->extensions->large_blob_write) {
     if (options->allow_credentials.size() != 1) {
       CompleteGetAssertionRequest(blink::mojom::AuthenticatorStatus::
                                       INVALID_ALLOW_CREDENTIALS_FOR_LARGE_BLOB);
@@ -1029,14 +1027,15 @@ void AuthenticatorCommonImpl::GetAssertion(
   ctap_get_assertion_options_->is_off_the_record_context =
       GetBrowserContext()->IsOffTheRecord();
 
-  if (options->prf) {
+  if (options->extensions->prf) {
     requested_extensions_.insert(RequestExtension::kPRF);
 
     bool is_first = true;
     absl::optional<std::vector<uint8_t>> last_id;
     // TODO(agl): should match the credential IDs from the allow list, which
     // will also limit the size to the size of the allow list.
-    for (const auto& prf_input_from_renderer : options->prf_inputs) {
+    for (const auto& prf_input_from_renderer :
+         options->extensions->prf_inputs) {
       device::PRFInput prf_input;
 
       // This statement enforces invariants that should be established by the
@@ -1079,14 +1078,15 @@ void AuthenticatorCommonImpl::GetAssertion(
     }
   }
 
-  if (options->device_public_key) {
+  if (options->extensions->device_public_key) {
     requested_extensions_.insert(RequestExtension::kDevicePublicKey);
     ctap_get_assertion_request_->device_public_key.emplace();
     device::DevicePublicKeyRequest& device_public_key =
         ctap_get_assertion_request_->device_public_key.value();
-    device_public_key.attestation = options->device_public_key->attestation;
+    device_public_key.attestation =
+        options->extensions->device_public_key->attestation;
     device_public_key.attestation_formats =
-        options->device_public_key->attestation_formats;
+        options->extensions->device_public_key->attestation_formats;
 
     switch (device_public_key.attestation) {
       // DPK attestation is currently an enterprise-only feature. Non-enterprise
@@ -1123,13 +1123,15 @@ void AuthenticatorCommonImpl::GetAssertion(
     }
   }
 
-  if (options->get_cred_blob) {
+  if (options->extensions->get_cred_blob) {
     requested_extensions_.insert(RequestExtension::kGetCredBlob);
     ctap_get_assertion_request_->get_cred_blob = true;
   }
 
-  ctap_get_assertion_options_->large_blob_read = options->large_blob_read;
-  ctap_get_assertion_options_->large_blob_write = options->large_blob_write;
+  ctap_get_assertion_options_->large_blob_read =
+      options->extensions->large_blob_read;
+  ctap_get_assertion_options_->large_blob_write =
+      options->extensions->large_blob_write;
 
   StartGetAssertionRequest(/*allow_skipping_pin_touch=*/true);
 }
@@ -1206,8 +1208,7 @@ void AuthenticatorCommonImpl::IsConditionalMediationAvailable(
   std::move(callback).Run(true);
 #elif BUILDFLAG(IS_WIN)
   device::WinWebAuthnApiAuthenticator::IsConditionalMediationAvailable(
-      AuthenticatorEnvironment::GetInstance()->win_webauthn_api(),
-      std::move(callback));
+      device::WinWebAuthnApi::GetDefault(), std::move(callback));
 #else
   std::move(callback).Run(false);
 #endif
@@ -1261,6 +1262,12 @@ void AuthenticatorCommonImpl::OnRegisterResponse(
       CompleteMakeCredentialRequest(
           blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr,
           nullptr, Focus::kDoCheck);
+      return;
+    case device::MakeCredentialStatus::kHybridTransportError:
+      SignalFailureToRequestDelegate(
+          AuthenticatorRequestClientDelegate::InterestingFailureReason::
+              kHybridTransportError,
+          blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR);
       return;
     case device::MakeCredentialStatus::kUserConsentDenied:
       SignalFailureToRequestDelegate(
@@ -1532,6 +1539,12 @@ void AuthenticatorCommonImpl::OnSignResponse(
               kWinUserCancelled,
           blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR);
       return;
+    case device::GetAssertionStatus::kHybridTransportError:
+      SignalFailureToRequestDelegate(
+          AuthenticatorRequestClientDelegate::InterestingFailureReason::
+              kHybridTransportError,
+          blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR);
+      return;
     case device::GetAssertionStatus::kSuccess:
       break;
   }
@@ -1686,6 +1699,16 @@ AuthenticatorCommonImpl::CreateMakeCredentialResponse(
   if (leaf_cert) {
     transports_authoritative |=
         AddTransportsFromCertificate(*leaf_cert, &transports);
+  }
+
+  if (!transports_authoritative &&
+      response_data.transport_used == device::FidoTransportProtocol::kHybrid) {
+    // Windows doesn't provide transport data, but can provide the transport
+    // used. If the transport was hybrid then we assume that ['hybrid',
+    // 'internal'] is a reasonable set of transports.
+    transports.insert(device::FidoTransportProtocol::kHybrid);
+    transports.insert(device::FidoTransportProtocol::kInternal);
+    transports_authoritative = true;
   }
 
   // The order of transports doesn't matter because Blink will sort the
@@ -1963,6 +1986,12 @@ void AuthenticatorCommonImpl::CompleteGetAssertionRequest(
     blink::mojom::GetAssertionAuthenticatorResponsePtr response,
     blink::mojom::WebAuthnDOMExceptionDetailsPtr dom_exception_details) {
   DCHECK(get_assertion_response_callback_);
+
+  if (status == blink::mojom::AuthenticatorStatus::SUCCESS) {
+    static_cast<RenderFrameHostImpl*>(GetRenderFrameHost())
+        ->WebAuthnAssertionRequestSucceeded();
+  }
+
   std::move(get_assertion_response_callback_)
       .Run(status, std::move(response), std::move(dom_exception_details));
   Cleanup();

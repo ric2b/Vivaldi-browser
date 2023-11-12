@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {TestRunner} from 'test_runner';
+import {ApplicationTestRunner} from 'application_test_runner';
+
 (async function() {
   TestRunner.addResult(`Tests that database names are correctly loaded and saved in IndexedDBModel.\n`);
-  await TestRunner.loadLegacyModule('console'); await TestRunner.loadTestModule('application_test_runner');
+  await TestRunner.loadLegacyModule('console');
     //Note: every test that uses a storage API must manually clean-up state from previous tests.
   await ApplicationTestRunner.resetState();
 
@@ -15,13 +18,17 @@
     TestRunner.addResult('Dumping database names:');
     var storageKeys = TestRunner.storageKeyManager.storageKeys();
     var storageKey = storageKeys[0];
-    var names = indexedDBModel.databaseNamesByStorageKey.get(storageKey);
-    for (let name of names || [])
-      TestRunner.addResult('    ' + name);
+    var buckets =
+        indexedDBModel.databaseNamesByStorageKeyAndBucket.get(storageKey) || [];
+    for (const [_bucketName, dbIds] of buckets) {
+      for (const dbId of dbIds) {
+        TestRunner.addResult('    ' + dbId.name);
+      }
+    }
     TestRunner.addResult('');
-  }
+ }
 
-  TestRunner.addSniffer(Resources.IndexedDBModel.prototype, 'updateStorageKeyDatabaseNames', step2, false);
+  step2();
 
   function step2() {
     dumpDatabaseNames();

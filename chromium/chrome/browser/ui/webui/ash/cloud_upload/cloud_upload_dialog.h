@@ -7,11 +7,15 @@
 
 #include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/timer/elapsed_timer.h"
 #include "chrome/browser/ash/file_manager/file_tasks.h"
 #include "chrome/browser/ash/file_system_provider/mount_path_util.h"
 #include "chrome/browser/ash/file_system_provider/provided_file_system_interface.h"
+#include "chrome/browser/ash/file_system_provider/provider_interface.h"
 #include "chrome/browser/platform_util.h"
+#include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload.mojom.h"
 #include "chrome/browser/ui/webui/ash/system_web_dialog_delegate.h"
 #include "storage/browser/file_system/file_system_url.h"
@@ -35,6 +39,17 @@ FORWARD_DECLARE_TEST(
     OneDriveTest,
     FailToOpenFileFromAndroidOneDriveDirectoryNotAccessibleToODFS);
 }  // namespace file_manager::file_tasks
+
+namespace {
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class OfficeFilesTransferRequired {
+  kNotRequired = 0,
+  kMove = 1,
+  kCopy = 2,
+  kMaxValue = kCopy,
+};
+}  // namespace
 
 namespace ash::cloud_upload {
 
@@ -68,7 +83,8 @@ class CloudUploadDialog;
 // The business logic for running setup, moving files to a cloud provider, and
 // opening files on cloud providers. Spawns instances of `CloudUploadDialog` if
 // necessary to run setup or get confirmation from the user.
-class CloudOpenTask : public base::RefCounted<CloudOpenTask> {
+class CloudOpenTask : public BrowserListObserver,
+                      public base::RefCounted<CloudOpenTask> {
  public:
   CloudOpenTask(const CloudOpenTask&) = delete;
   CloudOpenTask& operator=(const CloudOpenTask&) = delete;
@@ -91,6 +107,12 @@ class CloudOpenTask : public base::RefCounted<CloudOpenTask> {
   // logic.
   void SetTasksForTest(
       const std::vector<::file_manager::file_tasks::TaskDescriptor>& tasks);
+
+  // BrowserListObserver implementation.
+  // This is called when we are waiting for a new Files app window to be
+  // launched, to be used as the modal parent. This is triggered by
+  // ShowDialog().
+  void OnBrowserAdded(Browser* browser) override;
 
   FRIEND_TEST_ALL_PREFIXES(FileHandlerDialogBrowserTest,
                            OnDialogCompleteOpensFileTasks);
@@ -119,13 +141,14 @@ class CloudOpenTask : public base::RefCounted<CloudOpenTask> {
 
  private:
   friend class RefCounted<CloudOpenTask>;  // Allow destruction by RefCounted<>.
+  friend class CloudOpenTaskBrowserTest;
 
   CloudOpenTask(Profile* profile,
                 std::vector<storage::FileSystemURL> file_urls,
                 const CloudProvider cloud_provider,
                 gfx::NativeWindow modal_parent);
 
-  ~CloudOpenTask();
+  ~CloudOpenTask() override;
 
   // See the .cc implementation for comments on private methods.
   bool ExecuteInternal();
@@ -137,12 +160,14 @@ class CloudOpenTask : public base::RefCounted<CloudOpenTask> {
                              const file_system_provider::Actions& actions,
                              base::File::Error result);
 
+  bool ShouldShowConfirmationDialog();
   void ConfirmMoveOrStartUpload();
   void StartUpload();
 
-  void FinishedDriveUpload(const GURL& url);
+  void FinishedDriveUpload(const GURL& url, int64_t size);
   void FinishedOneDriveUpload(base::WeakPtr<Profile> profile_weak_ptr,
-                              const storage::FileSystemURL& url);
+                              const storage::FileSystemURL& url,
+                              int64_t size);
 
   bool InitAndShowDialog(mojom::DialogPage dialog_page);
   mojom::DialogArgsPtr CreateDialogArgs(mojom::DialogPage dialog_page);
@@ -153,8 +178,6 @@ class CloudOpenTask : public base::RefCounted<CloudOpenTask> {
   void SetTaskArgs(mojom::DialogArgsPtr& args,
                    std::unique_ptr<::file_manager::file_tasks::ResultingTasks>
                        resulting_tasks);
-  void FilesAppWindowCreated(CloudUploadDialog* dialog,
-                             platform_util::OpenOperationResult result);
 
   void OnDialogComplete(const std::string& user_response);
   void LaunchLocalFileTask(const std::string& string_task_position);
@@ -174,6 +197,7 @@ class CloudOpenTask : public base::RefCounted<CloudOpenTask> {
       ::file_manager::file_tasks::FindTasksCallback
           find_all_types_of_tasks_callback,
       std::unique_ptr<std::vector<std::string>> mime_types);
+  void RecordUploadLatencyUMA();
 
   raw_ptr<Profile, ExperimentalAsh> profile_;
   std::vector<storage::FileSystemURL> file_urls_;
@@ -181,19 +205,26 @@ class CloudOpenTask : public base::RefCounted<CloudOpenTask> {
   gfx::NativeWindow modal_parent_;
   std::vector<::file_manager::file_tasks::TaskDescriptor> local_tasks_;
   size_t pending_uploads_ = 0;
+  raw_ptr<CloudUploadDialog, ExperimentalAsh> pending_dialog_ = nullptr;
+  base::ElapsedTimer upload_timer_;
+  int64_t upload_total_size_ = 0;
+  OfficeFilesTransferRequired transfer_required_ =
+      OfficeFilesTransferRequired::kNotRequired;
 };
 
 // Return True if feature `kUploadOfficeToCloud` is enabled and is eligible for
-// the user, otherwise return False. A user is eligible if they are not managed
-// or a Google employee.
-bool IsEligibleAndEnabledUploadOfficeToCloud();
+// the user of the |profile|. A user is eligible if they are not managed.
+bool IsEligibleAndEnabledUploadOfficeToCloud(Profile* profile);
 
 // Returns True if OneDrive is the selected `cloud_provider` but either ODFS
 // is not mounted or the Office PWA is not installed. Returns False otherwise.
 bool ShouldFixUpOffice(Profile* profile, const CloudProvider cloud_provider);
 
-// Returns True if the file is on the Android OneDrive DocumentsProvider.
-bool FileIsOnAndroidOneDrive(Profile* profile, const FileSystemURL& url);
+// Returns True if the url is on ODFS.
+bool UrlIsOnODFS(Profile* profile, const FileSystemURL& url);
+
+// Returns True if the url is on the Android OneDrive DocumentsProvider.
+bool UrlIsOnAndroidOneDrive(Profile* profile, const FileSystemURL& url);
 
 // Return the email from the Root Document Id of the Android OneDrive
 // DocumentsProvider.
@@ -219,6 +250,12 @@ absl::optional<ODFSFileSystemAndPath> AndroidOneDriveUrlToODFS(
     Profile* profile,
     const FileSystemURL& android_onedrive_file_url);
 
+// Launches the 'Connect OneDrive' dialog which is triggered from the Services
+// menu in Files app. This is a simplified version of setup where we just
+// connect to OneDrive. There is no 'done' callback because files app doesn't
+// need it.
+bool ShowConnectOneDriveDialog(gfx::NativeWindow modal_parent);
+
 // Defines the web dialog used to help users upload Office files to the cloud.
 class CloudUploadDialog : public SystemWebDialogDelegate {
  public:
@@ -233,13 +270,16 @@ class CloudUploadDialog : public SystemWebDialogDelegate {
                     const mojom::DialogPage dialog_page,
                     bool office_move_confirmation_shown);
 
+  // Request ODFS be mounted. If there is an existing mount, ODFS will unmount
+  // that one after authentication of the new mount.
+  static void RequestODFSMount(
+      Profile* profile,
+      file_system_provider::RequestMountCallback callback);
   static bool IsODFSMounted(Profile* profile);
   static bool IsOfficeWebAppInstalled(Profile* profile);
 
   void OnDialogShown(content::WebUI* webui) override;
   void OnDialogClosed(const std::string& json_retval) override;
-
-  void set_modal_type(ui::ModalType modal_type) { modal_type_ = modal_type; }
 
  protected:
   ~CloudUploadDialog() override;
@@ -260,9 +300,6 @@ class CloudUploadDialog : public SystemWebDialogDelegate {
   mojom::DialogPage dialog_page_;
   size_t num_local_tasks_;
   bool office_move_confirmation_shown_;
-  // Modal by default, although if we don't have a parent window, we will
-  // make it non-modal so that the dialog stays on top.
-  ui::ModalType modal_type_ = ui::MODAL_TYPE_WINDOW;
 };
 
 }  // namespace ash::cloud_upload

@@ -82,8 +82,9 @@ const char kManagedCookiesBlockedForUrls[] =
     "profile.managed_cookies_blocked_for_urls";
 const char kManagedCookiesSessionOnlyForUrls[] =
     "profile.managed_cookies_sessiononly_for_urls";
-const char kManagedGetDisplayMediaSetSelectAllScreensAllowedForUrls[] =
-    "profile.managed_get_display_media_set_select_all_screens_allowed_for_urls";
+const char kManagedAccessToGetAllScreensMediaInSessionAllowedForUrls[] =
+    "profile.managed_access_to_get_all_screens_media_in_session_allowed_for_"
+    "urls";
 const char kManagedImagesAllowedForUrls[] =
     "profile.managed_images_allowed_for_urls";
 const char kManagedImagesBlockedForUrls[] =
@@ -163,6 +164,11 @@ const char kQuietNotificationPermissionUiEnablingMethod[] =
 // for adaptive quiet UI activation.
 const char kQuietNotificationPermissionUiDisabledTime[] =
     "profile.content_settings.disable_quiet_permission_ui_time.notifications";
+
+// Boolean that indicates whether the user has ever opened any of the in-context
+// cookie controls, i.e. the Page Info cookies subpage, or ChromeGuard.
+const char kInContextCookieControlsOpened[] =
+    "profile.content_settings.in_content_cookies_controls_opened";
 
 #if BUILDFLAG(IS_ANDROID)
 // Enable vibration for web notifications.

@@ -48,11 +48,9 @@ import java.util.List;
 @LooperMode(LooperMode.Mode.LEGACY)
 public final class JourneyManagerTest {
     private static final int LAST_ENGAGEMENT_ELAPSED_MS = 5000;
-    private static final int LAST_ENGAGEMENT_ELAPSED_S = 5;
     private static final int TAB_ID = 123;
     private static final long BASE_TIME_MS = 1000000L;
     private static final long NO_TIME_MS = 0L;
-    private static final long DEFER_TIME_MS = 10L;
 
     @Mock
     private TabModel mTabModel;
@@ -194,7 +192,7 @@ public final class JourneyManagerTest {
         // Advance time.
         doReturn(BASE_TIME_MS + LAST_ENGAGEMENT_ELAPSED_MS).when(mEngagementTimeUtil).currentTime();
 
-        mLayoutStateObserver.onStartedShowing(LayoutType.TAB_SWITCHER, true);
+        mLayoutStateObserver.onStartedShowing(LayoutType.TAB_SWITCHER);
         flushAsyncPrefs();
 
         assertEquals(BASE_TIME_MS + LAST_ENGAGEMENT_ELAPSED_MS,

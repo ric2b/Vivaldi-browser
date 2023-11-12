@@ -30,7 +30,6 @@ import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.StrictModeContext;
-import org.chromium.chrome.browser.app.video_tutorials.VideoTutorialShareHelper;
 import org.chromium.chrome.browser.browserservices.SessionDataHolder;
 import org.chromium.chrome.browser.browserservices.ui.splashscreen.trustedwebactivity.TwaSplashController;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
@@ -169,11 +168,6 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
             return Action.FINISH_ACTIVITY;
         }
 
-        // Check if the URL is a video tutorial and needs to be handled in a video player.
-        if (VideoTutorialShareHelper.handleVideoTutorialURL(url)) {
-            return Action.FINISH_ACTIVITY;
-        }
-
         // Check if a LIVE WebappActivity has to be brought back to the foreground.  We can't
         // check for a dead WebappActivity because we don't have that information without a global
         // TabManager.  If that ever lands, code to bring back any Tab could be consolidated
@@ -191,8 +185,7 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
         }
 
         // Check if we should push the user through First Run.
-        if (FirstRunFlowSequencer.launch(mActivity, mIntent, false /* requiresBroadcast */,
-                    false /* preferLightweightFre */)) {
+        if (FirstRunFlowSequencer.launch(mActivity, mIntent, false /* preferLightweightFre */)) {
             return Action.FINISH_ACTIVITY;
         }
 
@@ -390,21 +383,22 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
         // cannot be spoofed by CCT client apps.
         IntentUtils.safeRemoveExtra(mIntent, IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE);
 
-        // Create and fire a launch intent.
-        Intent launchIntent = createCustomTabActivityIntent(mActivity, mIntent);
-        Uri extraReferrer = mActivity.getReferrer();
-        if (extraReferrer != null) {
-            launchIntent.putExtra(IntentHandler.EXTRA_ACTIVITY_REFERRER, extraReferrer.toString());
-        }
+        Intent intent = new Intent(mIntent);
         ComponentName callingActivity = mActivity.getCallingActivity();
         if (callingActivity != null) {
-            launchIntent.putExtra(
+            intent.putExtra(
                     IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE, callingActivity.getPackageName());
         } else {
             String packageName = getClientPackageNameFromIdentitySharing();
             if (packageName != null) {
-                launchIntent.putExtra(IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE, packageName);
+                intent.putExtra(IntentHandler.EXTRA_CALLING_ACTIVITY_PACKAGE, packageName);
             }
+        }
+        // Create and fire a launch intent.
+        Intent launchIntent = createCustomTabActivityIntent(mActivity, intent);
+        Uri extraReferrer = mActivity.getReferrer();
+        if (extraReferrer != null) {
+            launchIntent.putExtra(IntentHandler.EXTRA_ACTIVITY_REFERRER, extraReferrer.toString());
         }
 
         // Allow disk writes during startActivity() to avoid strict mode violations on some

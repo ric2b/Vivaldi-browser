@@ -29,7 +29,8 @@ void CSSAnimationUpdate::Copy(const CSSAnimationUpdate& update) {
   updated_compositor_keyframes_ = update.UpdatedCompositorKeyframes();
   changed_scroll_timelines_ = update.changed_scroll_timelines_;
   changed_view_timelines_ = update.changed_view_timelines_;
-  changed_attaching_timelines_ = update.changed_attaching_timelines_;
+  changed_deferred_timelines_ = update.changed_deferred_timelines_;
+  changed_timeline_attachments_ = update.changed_timeline_attachments_;
 }
 
 void CSSAnimationUpdate::Clear() {
@@ -45,7 +46,8 @@ void CSSAnimationUpdate::Clear() {
   updated_compositor_keyframes_.clear();
   changed_scroll_timelines_.clear();
   changed_view_timelines_.clear();
-  changed_attaching_timelines_.clear();
+  changed_deferred_timelines_.clear();
+  changed_timeline_attachments_.clear();
 }
 
 void CSSAnimationUpdate::StartTransition(

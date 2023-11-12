@@ -21,13 +21,14 @@
 #include "components/autofill/core/browser/ui/payments/card_name_fix_flow_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_options.h"
+#include "components/autofill/core/browser/ui/popup_item_ids.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #import "components/autofill/ios/browser/autofill_client_ios_bridge.h"
 #include "components/infobars/core/infobar_manager.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync/driver/sync_service.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "components/sync/service/sync_service.h"
+#include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 
 @class UIViewController;
 
@@ -138,7 +139,6 @@ class ChromeAutofillClientIOS : public AutofillClient {
   void DidFillOrPreviewField(const std::u16string& autofilled_value,
                              const std::u16string& profile_full_name) override;
   bool IsContextSecure() const override;
-  void ExecuteCommand(int id) override;
   void OpenPromoCodeOfferDetailsURL(const GURL& url) override;
   FormInteractionsFlowId GetCurrentFormInteractionsFlowId() override;
   LogManager* GetLogManager() const override;
@@ -149,8 +149,9 @@ class ChromeAutofillClientIOS : public AutofillClient {
       base::OnceCallback<void(const std::string&)> callback) override;
 
  private:
-  // Returns the account email if the account is syncing.
-  absl::optional<std::u16string> SyncingUserEmail();
+  // Returns the account email of the signed-in user, or nullopt if there is no
+  // signed-in user.
+  absl::optional<std::u16string> GetUserEmail();
 
   PrefService* pref_service_;
   syncer::SyncService* sync_service_;

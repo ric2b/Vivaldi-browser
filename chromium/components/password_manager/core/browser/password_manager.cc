@@ -327,7 +327,12 @@ void PasswordManager::RegisterProfilePrefs(
                                 0);
   registry->RegisterIntegerPref(
       prefs::kTimesAttemptedToReenrollToGoogleMobileServices, 0);
-  registry->RegisterIntegerPref(prefs::kTimesUPMAuthErrorShown, 0);
+  registry->RegisterBooleanPref(
+      prefs::kUserAcknowledgedLocalPasswordsMigrationWarning, false);
+  registry->RegisterTimePref(
+      prefs::kLocalPasswordsMigrationWarningShownTimestamp, base::Time());
+  registry->RegisterBooleanPref(
+      prefs::kLocalPasswordMigrationWarningShownAtStartup, false);
 #endif
   // Preferences for |PasswordChangeSuccessTracker|.
   registry->RegisterIntegerPref(prefs::kPasswordChangeSuccessTrackerVersion, 0);
@@ -505,14 +510,10 @@ void PasswordManager::DidNavigateMainFrame(bool form_may_be_submitted) {
 }
 
 void PasswordManager::UpdateFormManagers() {
-  std::vector<PasswordFormManager*> form_managers;
-  for (const auto& form_manager : form_managers_)
-    form_managers.push_back(form_manager.get());
-
   // Get the fetchers and all the drivers.
   std::vector<FormFetcher*> fetchers;
   std::vector<PasswordManagerDriver*> drivers;
-  for (PasswordFormManager* form_manager : form_managers) {
+  for (const auto& form_manager : form_managers_) {
     fetchers.push_back(form_manager->GetFormFetcher());
     if (form_manager->GetDriver())
       drivers.push_back(form_manager->GetDriver().get());
@@ -553,8 +554,6 @@ bool PasswordManager::IsPasswordFieldDetectedOnPage() const {
 
 void PasswordManager::OnPasswordFormSubmitted(PasswordManagerDriver* driver,
                                               const FormData& form_data) {
-  base::UmaHistogramEnumeration("PasswordManager.FormSubmission.PerProfileType",
-                                client_->GetProfileType());
   ProvisionallySaveForm(form_data, driver, false);
 }
 
@@ -594,7 +593,7 @@ void PasswordManager::OnPasswordFormCleared(
     const autofill::FormData& form_data) {
   PasswordFormManager* manager =
       GetMatchedManager(driver, form_data.unique_renderer_id);
-  if (!manager || !manager->is_submitted() ||
+  if (!manager || !IsAutomaticSavePromptAvailable(manager) ||
       !manager->GetSubmittedForm()->IsLikelyChangePasswordForm()) {
     return;
   }
@@ -942,7 +941,8 @@ void PasswordManager::PropagateFieldDataManagerInfo(
 }
 #endif
 
-bool PasswordManager::IsAutomaticSavePromptAvailable() {
+bool PasswordManager::IsAutomaticSavePromptAvailable(
+    PasswordFormManager* form_manager) {
   std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
   if (password_manager_util::IsLoggingActive(client_)) {
     logger = std::make_unique<BrowserSavePasswordProgressLogger>(
@@ -955,6 +955,15 @@ bool PasswordManager::IsAutomaticSavePromptAvailable() {
   if (!submitted_manager) {
     if (logger) {
       logger->LogMessage(Logger::STRING_NO_PROVISIONAL_SAVE_MANAGER);
+    }
+    return false;
+  }
+
+  // As OnLoginSuccessful always works with the result of GetSubmittedManager(),
+  // consider only that form manager when a specific |form_manager| is provided.
+  if (form_manager && (form_manager != submitted_manager)) {
+    if (logger) {
+      logger->LogMessage(Logger::STRING_ANOTHER_MANAGER_WAS_SUBMITTED);
     }
     return false;
   }
@@ -1078,9 +1087,9 @@ void PasswordManager::OnLoginSuccessful() {
   }
 
   PasswordFormManager* submitted_manager = GetSubmittedManager();
-  DCHECK(submitted_manager);
+  CHECK(submitted_manager);
   const PasswordForm* submitted_form = submitted_manager->GetSubmittedForm();
-  DCHECK(submitted_form);
+  CHECK(submitted_form);
   client_->MaybeReportEnterpriseLoginEvent(
       submitted_form->url, submitted_form->IsFederatedCredential(),
       submitted_form->federation_origin,
@@ -1139,7 +1148,7 @@ void PasswordManager::OnLoginSuccessful() {
       submitted_manager->GetSubmittedForm()->url.SchemeIsCryptographic());
 
   // If the form is eligible only for saving fallback, it shouldn't go here.
-  DCHECK(!submitted_manager->GetPendingCredentials().only_for_fallback);
+  CHECK(!submitted_manager->GetPendingCredentials().only_for_fallback);
 
   if (ShouldPromptUserToSavePassword(*submitted_manager)) {
     if (logger)
@@ -1458,7 +1467,7 @@ bool PasswordManager::DetectPotentialSubmission(
   }
   // If the manager was set to be submitted, either prior to this function call
   // or on provisional save above, consider submission successful.
-  if (form_manager->is_submitted()) {
+  if (IsAutomaticSavePromptAvailable(form_manager)) {
     OnLoginSuccessful();
     return true;
   }

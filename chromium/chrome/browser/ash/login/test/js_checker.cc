@@ -20,10 +20,6 @@ namespace ash {
 namespace test {
 namespace {
 
-std::string WrapSend(const std::string& expression) {
-  return "window.domAutomationController.send(" + expression + ")";
-}
-
 bool CheckOobeCondition(content::WebContents* web_contents,
                         const std::string& js_condition) {
   return JSChecker(web_contents).GetBool(js_condition);
@@ -90,7 +86,7 @@ JSChecker::JSChecker(content::RenderFrameHost* frame_host) {
 
 void JSChecker::Evaluate(const std::string& expression) {
   CHECK(web_contents_);
-  ASSERT_TRUE(content::ExecuteScript(web_contents_.get(), expression));
+  ASSERT_TRUE(content::ExecJs(web_contents_.get(), expression));
 }
 
 void JSChecker::ExecuteAsync(const std::string& expression) {
@@ -332,8 +328,8 @@ std::unique_ptr<TestConditionWaiter> JSChecker::CreateHasClassWaiter(
 
 void JSChecker::GetBoolImpl(const std::string& expression, bool* result) {
   CHECK(web_contents_);
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      web_contents_.get(), WrapSend("!!(" + expression + ")"), result));
+  *result = content::EvalJs(web_contents_.get(), "!!(" + expression + ")")
+                .ExtractBool();
 }
 
 void JSChecker::GetIntImpl(const std::string& expression, int* result) {
@@ -548,7 +544,7 @@ JSChecker OobeJS() {
 }
 
 void ExecuteOobeJS(const std::string& script) {
-  ASSERT_TRUE(content::ExecuteScript(
+  ASSERT_TRUE(content::ExecJs(
       LoginDisplayHost::default_host()->GetOobeWebContents(), script));
 }
 

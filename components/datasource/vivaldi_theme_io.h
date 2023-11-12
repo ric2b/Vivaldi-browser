@@ -43,9 +43,9 @@ struct VerifyAndNormalizeFlags {
   // Do export-specific theme value normalization.
   bool for_export : 1;
 
-  // Allow named theme id that are not GUID. Such names are never exposed to the
+  // Allow named theme id that are not UUID. Such names are never exposed to the
   // user or the theme server. Inparticular, on export they replaced with a
-  // random GUID.
+  // random UUID.
   bool allow_named_id : 1;
 };
 
@@ -107,7 +107,7 @@ bool StoreImageUrl(PrefService* prefs,
                    std::string url);
 
 // Returns version or empty string for the given theme id.
-double FindVersionByThemeId(PrefService* prefs, const std::string& guid);
+double FindVersionByThemeId(PrefService* prefs, const std::string& theme_id);
 
 }  // namespace vivaldi_theme_io
 

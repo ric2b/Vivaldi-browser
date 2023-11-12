@@ -310,8 +310,6 @@ void Platform::CreateServiceWorkerSubresourceLoaderFactory(
     CrossVariantMojoRemote<mojom::ServiceWorkerContainerHostInterfaceBase>
         service_worker_container_host,
     const WebString& client_id,
-    mojom::blink::ServiceWorkerFetchHandlerBypassOption
-        fetch_handler_bypass_option,
     std::unique_ptr<network::PendingSharedURLLoaderFactory> fallback_factory,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
     scoped_refptr<base::SequencedTaskRunner> task_runner) {}
@@ -335,7 +333,7 @@ Platform::CompositorThreadTaskRunner() {
 std::unique_ptr<WebGraphicsContext3DProvider>
 Platform::CreateOffscreenGraphicsContext3DProvider(
     const Platform::ContextAttributes&,
-    const WebURL& top_document_url,
+    const WebURL& document_url,
     Platform::GraphicsInfo*) {
   return nullptr;
 }
@@ -346,8 +344,7 @@ Platform::CreateSharedOffscreenGraphicsContext3DProvider() {
 }
 
 std::unique_ptr<WebGraphicsContext3DProvider>
-Platform::CreateWebGPUGraphicsContext3DProvider(
-    const WebURL& top_document_url) {
+Platform::CreateWebGPUGraphicsContext3DProvider(const WebURL& document_url) {
   return nullptr;
 }
 

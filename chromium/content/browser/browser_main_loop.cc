@@ -738,11 +738,6 @@ void BrowserMainLoop::PostCreateMainMessageLoop() {
     InitSkiaEventTracer();
     base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
         skia::SkiaMemoryDumpProvider::GetInstance(), "Skia", nullptr);
-
-    // For in-browser tests, we still need to call this to respect the
-    // force-skia-analytic-aa switch
-    // https://crbug.com/1421297
-    InitializeSkiaAnalyticAntialiasing();
   }
 
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
@@ -791,7 +786,7 @@ int BrowserMainLoop::PreCreateThreads() {
   }
 #endif
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS) || BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   // Prior to any processing happening on the IO thread, we create the
   // CDM service as it is predominantly used from the IO thread. This must
   // be called on the main thread since it involves file path checks.
@@ -874,11 +869,11 @@ void BrowserMainLoop::CreateStartupTasks() {
       &BrowserMainLoop::PreMainMessageLoopRun, base::Unretained(this));
   startup_task_runner_->AddTask(std::move(pre_main_message_loop_run));
 
-// On Android, the native message loop is already running when the app is
-// entered and startup tasks are run asynchrously from it.
+// On Android and iOS, the native message loop is already running when the app
+// is entered and startup tasks are run asynchrously from it.
 // InterceptMainMessageLoopRun() thus needs to be forced instead of happening
 // from MainMessageLoopRun().
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   StartupTask intercept_main_message_loop_run = base::BindOnce(
       [](BrowserMainLoop* self) {
         // Lambda to ignore the return value and always keep a clean exit code
@@ -1437,6 +1432,11 @@ void BrowserMainLoop::PostCreateThreadsImpl() {
 
 #if BUILDFLAG(IS_ANDROID)
   media::SetMediaDrmBridgeClient(GetContentClient()->GetMediaDrmBridgeClient());
+
+  // On Android this must be done after SetMediaDrmBridgeClient(). For Android
+  // all CDMs are part of the OS, so no file checks are involved.
+  CdmRegistry::GetInstance()->Init();
+
   if (base::FeatureList::IsEnabled(features::kFontSrcLocalMatching)) {
     FontUniqueNameLookup::GetInstance();
   }

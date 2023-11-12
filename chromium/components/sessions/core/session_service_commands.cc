@@ -366,9 +366,9 @@ void SortTabsBasedOnVisualOrderAndClear(
 void AddTabsToWindows(IdToSessionTab* tabs,
                       GroupIdToSessionTabGroup* tab_groups,
                       IdToSessionWindow* windows) {
-  VLOG(1) << "AddTabsToWindows";
-  VLOG(1) << "Tabs " << tabs->size() << ", groups " << tab_groups->size()
-          << ", windows " << windows->size();
+  DVLOG(1) << "AddTabsToWindows";
+  DVLOG(1) << "Tabs " << tabs->size() << ", groups " << tab_groups->size()
+           << ", windows " << windows->size();
 
   for (auto& tab_pair : *tabs) {
     std::unique_ptr<SessionTab> tab = std::move(tab_pair.second);
@@ -468,18 +468,18 @@ void CreateTabsAndWindows(
     SessionID* active_window_id) {
   // If the file is corrupt (command with wrong size, or unknown command), we
   // still return true and attempt to restore what we we can.
-  VLOG(1) << "CreateTabsAndWindows";
+  DVLOG(1) << "CreateTabsAndWindows";
 
   for (const auto& command_ptr : data) {
     const SessionCommand::id_type kCommandSetWindowBounds2 = 10;
     const SessionCommand* command = command_ptr.get();
 
-    VLOG(1) << "Read command " << (int)command->id();
+    DVLOG(1) << "Read command " << (int)command->id();
     switch (command->id()) {
       case kCommandSetTabWindow: {
         SessionID::id_type payload[2];
         if (!command->GetPayload(payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         SessionID window_id = SessionID::FromSerializedValue(payload[0]);
@@ -493,7 +493,7 @@ void CreateTabsAndWindows(
       case kCommandSetWindowBounds2: {
         WindowBoundsPayload2 payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         SessionID window_id = SessionID::FromSerializedValue(payload.window_id);
@@ -508,7 +508,7 @@ void CreateTabsAndWindows(
       case kCommandSetWindowBounds3: {
         WindowBoundsPayload3 payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         SessionID window_id = SessionID::FromSerializedValue(payload.window_id);
@@ -522,7 +522,7 @@ void CreateTabsAndWindows(
       case kCommandSetTabIndexInWindow: {
         TabIndexInWindowPayload payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         SessionID tab_id = SessionID::FromSerializedValue(payload.id);
@@ -534,7 +534,7 @@ void CreateTabsAndWindows(
       case kCommandWindowClosed: {
         ClosedPayload payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         if (command->id() == kCommandTabClosed)
@@ -548,7 +548,7 @@ void CreateTabsAndWindows(
       case kCommandTabNavigationPathPrunedFromBack: {
         TabNavigationPathPrunedFromBackPayload payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         SessionTab* tab =
@@ -565,7 +565,7 @@ void CreateTabsAndWindows(
         if (!command->GetPayload(&prune_front_payload,
                                  sizeof(prune_front_payload)) ||
             prune_front_payload.index <= 0) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         SessionTab* tab = GetTab(
@@ -582,7 +582,7 @@ void CreateTabsAndWindows(
         TabNavigationPathPrunedPayload payload;
         if (!command->GetPayload(&payload, sizeof(payload)) ||
             payload.index < 0 || payload.count <= 0) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         SessionTab* tab =
@@ -598,7 +598,7 @@ void CreateTabsAndWindows(
         if (!RestoreUpdateTabNavigationCommand(*command,
                                                &navigation,
                                                &tab_id)) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         SessionTab* tab = GetTab(tab_id, tabs);
@@ -614,7 +614,7 @@ void CreateTabsAndWindows(
       case kCommandSetSelectedNavigationIndex: {
         SelectedNavigationIndexPayload payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         GetTab(SessionID::FromSerializedValue(payload.id), tabs)
@@ -625,7 +625,7 @@ void CreateTabsAndWindows(
       case kCommandSetSelectedTabInIndex: {
         SelectedTabInIndexPayload payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         GetWindow(SessionID::FromSerializedValue(payload.id), windows)
@@ -636,7 +636,7 @@ void CreateTabsAndWindows(
       case kCommandSetWindowType: {
         WindowTypePayload payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         SessionID window_id = SessionID::FromSerializedValue(payload.id);
@@ -649,7 +649,7 @@ void CreateTabsAndWindows(
       case kCommandSetTabGroup: {
         TabGroupPayload payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         SessionTab* session_tab =
@@ -712,7 +712,7 @@ void CreateTabsAndWindows(
       case kCommandSetPinnedState: {
         PinnedStatePayload payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         GetTab(SessionID::FromSerializedValue(payload.tab_id), tabs)->pinned =
@@ -736,7 +736,7 @@ void CreateTabsAndWindows(
         if (!RestoreSetTabExtensionAppIDCommand(*command,
                                                 &tab_id,
                                                 &extension_app_id)) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
 
@@ -795,7 +795,7 @@ void CreateTabsAndWindows(
       case kCommandSetActiveWindow: {
         ActiveWindowPayload payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         *active_window_id = SessionID::FromSerializedValue(payload);
@@ -805,7 +805,7 @@ void CreateTabsAndWindows(
       case kCommandLastActiveTime: {
         LastActiveTimePayload payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         SessionTab* tab =
@@ -821,7 +821,7 @@ void CreateTabsAndWindows(
         SessionID::id_type window_id = -1;
         std::string workspace;
          if (!it.ReadInt(&window_id) || !it.ReadString(&workspace)) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         GetWindow(SessionID::FromSerializedValue(window_id), windows)
@@ -832,7 +832,7 @@ void CreateTabsAndWindows(
       case kCommandSetWindowVisibleOnAllWorkspaces: {
         VisibleOnAllWorkspacesPayload payload;
         if (!command->GetPayload(&payload, sizeof(payload))) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         GetWindow(SessionID::FromSerializedValue(payload.window_id), windows)
@@ -847,7 +847,7 @@ void CreateTabsAndWindows(
         std::string guid;
         if (!it.ReadInt(&tab_id) || !it.ReadString(&guid) ||
             !base::Uuid::ParseCaseInsensitive(guid).is_valid()) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         GetTab(SessionID::FromSerializedValue(tab_id), tabs)->guid = guid;
@@ -860,7 +860,7 @@ void CreateTabsAndWindows(
         SessionID::id_type tab_id = -1;
         int size = 0;
         if (!it.ReadInt(&tab_id) || !it.ReadInt(&size)) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
         std::map<std::string, std::string> tab_data;
@@ -868,7 +868,7 @@ void CreateTabsAndWindows(
           std::string key;
           std::string value;
           if (!it.ReadString(&key) || !it.ReadString(&value)) {
-            VLOG(1) << "Failed reading command " << command->id();
+            DVLOG(1) << "Failed reading command " << command->id();
             return;
           }
           tab_data.insert({key, value});
@@ -884,7 +884,7 @@ void CreateTabsAndWindows(
         std::string key;
         std::string extra_data;
         if (!RestoreAddExtraDataCommand(*command, &tab_id, &key, &extra_data)) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
 
@@ -898,7 +898,7 @@ void CreateTabsAndWindows(
         std::string extra_data;
         if (!RestoreAddExtraDataCommand(*command, &window_id, &key,
                                         &extra_data)) {
-          VLOG(1) << "Failed reading command " << command->id();
+          DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
 
@@ -919,7 +919,7 @@ void CreateTabsAndWindows(
       VIVALDI_SESSION_SERVICE_CASES
 
       default:
-        VLOG(1) << "Failed reading an unknown command " << command->id();
+        DVLOG(1) << "Failed reading an unknown command " << command->id();
         return;
     }
   }
@@ -1258,7 +1258,7 @@ void RestoreSessionFromCommands(
   GroupIdToSessionTabGroup tab_groups;
   IdToSessionWindow windows;
 
-  VLOG(1) << "RestoreSessionFromCommands " << commands.size();
+  DVLOG(1) << "RestoreSessionFromCommands " << commands.size();
   CreateTabsAndWindows(commands, &tabs, &tab_groups, &windows,
                        active_window_id);
   AddTabsToWindows(&tabs, &tab_groups, &windows);

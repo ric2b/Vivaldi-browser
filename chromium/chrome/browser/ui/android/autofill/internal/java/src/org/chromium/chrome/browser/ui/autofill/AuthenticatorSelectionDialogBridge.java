@@ -25,8 +25,6 @@ import java.util.List;
  */
 @JNINamespace("autofill")
 public class AuthenticatorSelectionDialogBridge implements AuthenticatorSelectionDialog.Listener {
-    private static final String TAG = "AuthSelectionDialog";
-
     private final long mNativeCardUnmaskAuthenticationSelectionDialogView;
     private final Context mContext;
     private AuthenticatorSelectionDialog mAuthenticatorSelectionDialog;
@@ -86,9 +84,11 @@ public class AuthenticatorSelectionDialogBridge implements AuthenticatorSelectio
             case CardUnmaskChallengeOptionType.SMS_OTP:
                 iconResId = R.drawable.ic_outline_sms_24dp;
                 break;
+            case CardUnmaskChallengeOptionType.EMAIL_OTP:
+                iconResId = R.drawable.ic_outline_email_24dp;
+                break;
             case CardUnmaskChallengeOptionType.CVC:
                 break;
-            case CardUnmaskChallengeOptionType.EMAIL_OTP:
             case CardUnmaskChallengeOptionType.UNKNOWN_TYPE:
                 // This will never happen
                 assert false : "Attempted to offer CardUnmaskChallengeOption with Unknown type";

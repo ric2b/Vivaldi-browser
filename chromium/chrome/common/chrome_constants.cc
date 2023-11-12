@@ -74,6 +74,14 @@ const base::FilePath::CharType kHelperProcessExecutablePath[] =
 #elif BUILDFLAG(IS_MAC)
 const base::FilePath::CharType kBrowserProcessExecutablePath[] =
     FPL(PRODUCT_STRING ".app/Contents/MacOS/" PRODUCT_STRING);
+const base::FilePath::CharType
+    kGoogleChromeForTestingBrowserProcessExecutablePath[] =
+        FPL("Google Chrome for Testing.app/Contents/MacOS/Google Chrome for "
+            "Testing");
+const base::FilePath::CharType kGoogleChromeBrowserProcessExecutablePath[] =
+    FPL("Google Chrome.app/Contents/MacOS/Google Chrome");
+const base::FilePath::CharType kChromiumBrowserProcessExecutablePath[] =
+    FPL("Chromium.app/Contents/MacOS/Chromium");
 const base::FilePath::CharType kHelperProcessExecutablePath[] =
     FPL(PRODUCT_STRING " Helper.app/Contents/MacOS/" PRODUCT_STRING " Helper");
 #elif BUILDFLAG(IS_ANDROID)
@@ -108,6 +116,8 @@ const char kWebAppProfilePrefix[] = "web-app-profile-";
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 // filenames
+const base::FilePath::CharType kAccountPreferencesFilename[] =
+    FPL("AccountPreferences");
 const base::FilePath::CharType kCacheDirname[] = FPL("Cache");
 const base::FilePath::CharType kCookieFilename[] = FPL("Cookies");
 const base::FilePath::CharType kCRLSetFilename[] =

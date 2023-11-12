@@ -46,6 +46,21 @@ AutofillDriverIOS::AutofillDriverIOS(web::WebState* web_state,
 
 AutofillDriverIOS::~AutofillDriverIOS() = default;
 
+LocalFrameToken AutofillDriverIOS::GetFrameToken() const {
+  NOTIMPLEMENTED();  // TODO(crbug.com/1441921) implement.
+  return LocalFrameToken();
+}
+
+AutofillDriverIOS* AutofillDriverIOS::GetParent() {
+  NOTIMPLEMENTED();  // TODO(crbug.com/1441921) implement.
+  return nullptr;
+}
+
+absl::optional<LocalFrameToken> AutofillDriverIOS::Resolve(FrameToken query) {
+  NOTIMPLEMENTED();  // TODO(crbug.com/1441921) implement.
+  return absl::nullopt;
+}
+
 // Return true as iOS has no MPArch.
 bool AutofillDriverIOS::IsInActiveFrame() const {
   return true;
@@ -57,6 +72,10 @@ bool AutofillDriverIOS::IsInAnyMainFrame() const {
 }
 
 bool AutofillDriverIOS::IsPrerendering() const {
+  return false;
+}
+
+bool AutofillDriverIOS::HasSharedAutofillPermission() const {
   return false;
 }
 
@@ -127,14 +146,33 @@ void AutofillDriverIOS::SetShouldSuppressKeyboard(bool suppress) {
   NOTIMPLEMENTED();
 }
 
-void AutofillDriverIOS::TriggerReparseInAllFrames(
-    base::OnceCallback<void(bool)> trigger_reparse_finished_callback) {
+void AutofillDriverIOS::TriggerFormExtraction() {
+  NOTIMPLEMENTED();  // TODO(crbug.com/1441921) implement.
+}
+
+void AutofillDriverIOS::TriggerFormExtractionInAllFrames(
+    base::OnceCallback<void(bool)> form_extraction_finished_callback) {
+  NOTIMPLEMENTED();
+}
+
+void AutofillDriverIOS::GetFourDigitCombinationsFromDOM(
+    base::OnceCallback<void(const std::vector<std::string>&)>
+        potential_matches) {
+  // TODO(crbug.com/1423605): Implement GetFourDigitCombinationsFromDOM in iOS.
   NOTIMPLEMENTED();
 }
 
 void AutofillDriverIOS::RendererShouldClearFilledSection() {}
 
 void AutofillDriverIOS::RendererShouldClearPreviewedForm() {
+}
+
+void AutofillDriverIOS::RendererShouldTriggerSuggestions(
+    const FieldGlobalId& field_id,
+    AutofillSuggestionTriggerSource trigger_source) {
+  // Triggering suggestions from the browser process is currently only used for
+  // manual fallbacks on Desktop. It is not implemented on iOS.
+  NOTIMPLEMENTED();
 }
 
 void AutofillDriverIOS::RendererShouldFillFieldWithValue(

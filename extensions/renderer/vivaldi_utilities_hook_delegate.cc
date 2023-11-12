@@ -2,7 +2,6 @@
 
 #include "extensions/renderer/vivaldi_utilities_hook_delegate.h"
 
-#include "base/guid.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
 #include "components/url_formatter/elide_url.h"
 #include "components/version_info/version_info.h"
@@ -45,12 +44,12 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleRequest(
     Handler handler;
     base::StringPiece method;
   } kHandlers[] = {
-      {&VivaldiUtilitiesHookDelegate::HandleGenerateGUID,
-       "utilities.generateGUID"},
       {&VivaldiUtilitiesHookDelegate::HandleGetUrlFragments,
        "utilities.getUrlFragments"},
       {&VivaldiUtilitiesHookDelegate::HandleGetVersion, "utilities.getVersion"},
       {&VivaldiUtilitiesHookDelegate::HandleIsUrlValid, "utilities.isUrlValid"},
+      {&VivaldiUtilitiesHookDelegate::HandleSupportsProxy,
+       "utilities.supportsProxy"},
   };
 
   Handler handler = nullptr;
@@ -73,17 +72,6 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleRequest(
   }
 
   return (this->*handler)(std::move(context), *parse_result.arguments);
-}
-
-RequestResult VivaldiUtilitiesHookDelegate::HandleGenerateGUID(
-    v8::Local<v8::Context> context,
-    const std::vector<v8::Local<v8::Value>>& arguments) {
-  base::GUID guid = base::GUID::GenerateRandomV4();
-
-  v8::Isolate* isolate = context->GetIsolate();
-  RequestResult result(RequestResult::HANDLED);
-  result.return_value = gin::StringToV8(isolate, guid.AsLowercaseString());
-  return result;
 }
 
 RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
@@ -289,6 +277,29 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleIsUrlValid(
       .ToChecked();
   RequestResult result(RequestResult::HANDLED);
   result.return_value = std::move(result_object);
+  return result;
+}
+
+RequestResult VivaldiUtilitiesHookDelegate::HandleSupportsProxy(
+    v8::Local<v8::Context> context,
+    const std::vector<v8::Local<v8::Value>>& arguments) {
+  bool support =
+#if defined(ARCH_CPU_ARM_FAMILY) && (BUILDFLAG(IS_LINUX))
+    false;
+#elif BUILDFLAG(IS_WIN) && defined(ARCH_CPU_32_BITS)
+    false;
+#else
+    true;
+#endif
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::Local<v8::Object> object = v8::Object::New(isolate);
+  object
+      ->Set(context, gin::StringToV8(isolate, "support"),
+            v8::Boolean::New(isolate, support))
+      .ToChecked();
+
+  RequestResult result(RequestResult::HANDLED);
+  result.return_value =  std::move(object);
   return result;
 }
 

@@ -8,6 +8,10 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -19,7 +23,11 @@
   if (self) {
     self.layer.cornerRadius = kGridCellCornerRadius;
     self.layer.masksToBounds = YES;
+
+    if (!vivaldi::IsVivaldiRunning()) {
     self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    } // End Vivaldi
+
     self.backgroundView = [[UIView alloc] init];
     self.backgroundView.backgroundColor =
         [UIColor colorNamed:kGridBackgroundColor];

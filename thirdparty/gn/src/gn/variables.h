@@ -130,6 +130,10 @@ extern const char kXcassetCompilerFlags[];
 extern const char kXcassetCompilerFlags_HelpShort[];
 extern const char kXcassetCompilerFlags_Help[];
 
+extern const char kTransparent[];
+extern const char kTransparent_HelpShort[];
+extern const char kTransparent_Help[];
+
 extern const char kCflags[];
 extern const char kCflags_HelpShort[];
 extern const char* kCflags_Help;
@@ -357,6 +361,10 @@ extern const char kXcodeExtraAttributes_Help[];
 extern const char kGenDeps[];
 extern const char kGenDeps_HelpShort[];
 extern const char kGenDeps_Help[];
+
+extern const char kMnemonic[];
+extern const char kMnemonic_HelpShort[];
+extern const char kMnemonic_Help[];
 
 // -----------------------------------------------------------------------------
 

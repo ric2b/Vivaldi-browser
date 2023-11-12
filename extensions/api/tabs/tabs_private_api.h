@@ -174,9 +174,6 @@ class VivaldiPrivateTabObserver
 
   void AccessKeyAction(std::string);
 
-  void GetCurrentSpatnavRect(JSSpatnavRectCallback callback);
-
-  // Same type of callback as GetCurrentSpatnavRect
   void MoveSpatnavRect(::vivaldi::mojom::SpatnavDirection direction,
                        JSSpatnavRectCallback callback);
 
@@ -314,22 +311,6 @@ class TabsPrivateScrollPageFunction : public ExtensionFunction {
   ~TabsPrivateScrollPageFunction() override = default;
 
  private:
-  ResponseAction Run() override;
-};
-
-class TabsPrivateGetCurrentSpatnavRectFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("tabsPrivate.getCurrentSpatnavRect",
-                             TABSPRIVATE_GETCURRENTSPATNAVRECT)
-
-  TabsPrivateGetCurrentSpatnavRectFunction() = default;
-
- protected:
-  ~TabsPrivateGetCurrentSpatnavRectFunction() override = default;
-
- private:
-  void SpatnavRectReceived(::vivaldi::mojom::SpatnavRectPtr rect);
-
   ResponseAction Run() override;
 };
 

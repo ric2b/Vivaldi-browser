@@ -106,19 +106,19 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
     }
 
     const std::string* default_action =
-        item.second.FindStringKey(kDefaultActionKey);
+        item.second.GetDict().FindString(kDefaultActionKey);
     if (!default_action || (default_action->compare(kActionBlock) != 0 &&
                             default_action->compare(kActionIgnore) != 0)) {
       parse_result_->rules_info.invalid_rules++;
       continue;
     }
 
-    const base::Value* excluded_origins = nullptr;
-    const std::string* owner = item.second.FindStringPath(kOwnerNamePath);
+    const base::Value::List* excluded_origins = nullptr;
+    const std::string* owner = item.second.GetDict().FindStringByDottedPath(kOwnerNamePath);
     if (owner) {
       const base::Value* entity = entities->GetDict().Find(*owner);
       if (entity)
-        excluded_origins = entity->FindListKey(kDomainsKey);
+        excluded_origins = entity->GetDict().FindList(kDomainsKey);
     }
 
     base::Value::Dict tracker_info;
@@ -139,11 +139,11 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
       AddBlockingRuleForDomain(domain, excluded_origins);
     }
 
-    const base::Value* rules = item.second.FindListKey(kRulesKey);
+    const base::Value::List* rules = item.second.GetDict().FindList(kRulesKey);
     if (!rules)
       continue;
 
-    for (const auto& rule : rules->GetList()) {
+    for (const auto& rule : *rules) {
       ParseRule(rule, domain, default_ignore, excluded_origins);
     }
   }
@@ -159,7 +159,7 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
 
 void DuckDuckGoRulesParser::AddBlockingRuleForDomain(
     const std::string& domain,
-    const base::Value* excluded_origins) {
+    const base::Value::List* excluded_origins) {
   RequestFilterRule rule;
   rule.resource_types.set();
   rule.party.set();
@@ -168,8 +168,7 @@ void DuckDuckGoRulesParser::AddBlockingRuleForDomain(
   rule.pattern = domain;
 
   if (excluded_origins) {
-    DCHECK(excluded_origins->is_list());
-    for (const auto& origin : excluded_origins->GetList()) {
+    for (const auto& origin : *excluded_origins) {
       if (origin.is_string())
         rule.excluded_domains.push_back(origin.GetString());
     }
@@ -182,18 +181,18 @@ void DuckDuckGoRulesParser::AddBlockingRuleForDomain(
 void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
                                       const std::string& domain,
                                       bool default_ignore,
-                                      const base::Value* excluded_origins) {
+                                      const base::Value::List* excluded_origins) {
   if (!rule.is_dict())
     return;
 
-  const std::string* pattern = rule.FindStringKey(kRuleKey);
+  const std::string* pattern = rule.GetDict().FindString(kRuleKey);
   if (!pattern) {
     parse_result_->rules_info.invalid_rules++;
     return;
   }
 
   bool ignore = false;
-  const std::string* action = rule.FindStringKey(kActionKey);
+  const std::string* action = rule.GetDict().FindString(kActionKey);
   if (action) {
     if (action->compare(kActionIgnore) == 0) {
       ignore = true;
@@ -210,7 +209,7 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
     return;
   }
 
-  const std::string* surrogate = rule.FindStringKey(kSurrogateKey);
+  const std::string* surrogate = rule.GetDict().FindString(kSurrogateKey);
   const base::Value* exceptions = rule.GetDict().Find(kExceptionsKey);
   const base::Value* options = rule.GetDict().Find(kOptionssKey);
 
@@ -368,8 +367,7 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
     filter_rule.host = domain;
 
     if (excluded_origins) {
-      DCHECK(excluded_origins->is_list());
-      for (const auto& origin : excluded_origins->GetList()) {
+      for (const auto& origin : *excluded_origins) {
         if (origin.is_string())
           filter_rule.excluded_domains.push_back(origin.GetString());
       }
@@ -408,8 +406,7 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
     redirect_rule.host = domain;
 
     if (excluded_origins) {
-      DCHECK(excluded_origins->is_list());
-      for (const auto& origin : excluded_origins->GetList()) {
+      for (const auto& origin : *excluded_origins) {
         if (origin.is_string())
           redirect_rule.excluded_domains.push_back(origin.GetString());
       }
@@ -425,11 +422,11 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
 absl::optional<std::bitset<RequestFilterRule::kTypeCount>>
 DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
   std::bitset<RequestFilterRule::kTypeCount> types;
-  const base::Value* types_value = rule_properties->FindListKey(kTypesKey);
+  const base::Value::List* types_value = rule_properties->GetDict().FindList(kTypesKey);
   if (!types_value)
     return absl::nullopt;
 
-  for (const auto& type_name : types_value->GetList()) {
+  for (const auto& type_name : *types_value) {
     if (!type_name.is_string())
       continue;
 
@@ -446,11 +443,11 @@ DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
 absl::optional<std::vector<std::string>> DuckDuckGoRulesParser::GetDomains(
     const base::Value* rule_properties) {
   std::vector<std::string> domains;
-  const base::Value* domains_value = rule_properties->FindListKey(kDomainsKey);
+  const base::Value::List* domains_value = rule_properties->GetDict().FindList(kDomainsKey);
   if (!domains_value)
     return absl::nullopt;
 
-  for (const auto& domain : domains_value->GetList()) {
+  for (const auto& domain : *domains_value) {
     if (!domain.is_string())
       continue;
 

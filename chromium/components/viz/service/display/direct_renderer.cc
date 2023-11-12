@@ -29,7 +29,7 @@
 #include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/resources/platform_color.h"
-#include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "components/viz/common/viz_utils.h"
 #include "components/viz/service/display/bsp_tree.h"
 #include "components/viz/service/display/bsp_walk_action.h"
@@ -42,6 +42,10 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/geometry/transform_util.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "components/viz/common/quads/texture_draw_quad.h"
+#endif  // BUILDFLAG(IS_WIN)
 
 namespace {
 
@@ -161,6 +165,10 @@ gfx::Rect DirectRenderer::MoveFromDrawToWindowSpace(
 const DrawQuad* DirectRenderer::CanPassBeDrawnDirectly(
     const AggregatedRenderPass* pass) {
   return nullptr;
+}
+
+void DirectRenderer::SetOutputSurfaceClipRect(const gfx::Rect& clip_rect) {
+  output_surface_clip_rect_ = clip_rect;
 }
 
 void DirectRenderer::SetVisible(bool visible) {
@@ -339,6 +347,25 @@ void DirectRenderer::DrawFrame(
         &(current_frame()->output_surface_plane));
   }
 
+#if BUILDFLAG(IS_WIN)
+  // On Windows stream video texture quads are currently only supported in
+  // overlays. There are scenarios where promotion may fail today, (e.g.
+  // if the quad is in a non-root render pass or video capture is enabled)
+  // so we do an extra pass to ensure these quads aren't processed by setting
+  // their visible rect to empty.
+  for (const auto& pass : *render_passes_in_draw_order) {
+    QuadList* ql = &pass->quad_list;
+    for (auto it = ql->begin(); it != ql->end(); ++it) {
+      if (it->material == DrawQuad::Material::kTextureContent) {
+        const TextureDrawQuad* tex_quad = TextureDrawQuad::MaterialCast(*it);
+        if (tex_quad->is_stream_video) {
+          it->visible_rect = gfx::Rect();
+        }
+      }
+    }
+  }
+#endif  // BUILDFLAG(IS_WIN)
+
   // Only reshape when we know we are going to draw. Otherwise, the reshape
   // can leave the window at the wrong size if we never draw and the proper
   // viewport size is never set.
@@ -479,10 +506,24 @@ bool DirectRenderer::ShouldSkipQuad(const DrawQuad& quad,
   if (render_pass_scissor.IsEmpty())
     return true;
 
-  gfx::Rect target_rect = cc::MathUtil::MapEnclosingClippedRect(
-      quad.shared_quad_state->quad_to_target_transform, quad.visible_rect);
-  if (quad.shared_quad_state->clip_rect)
+  gfx::Rect target_rect = quad.visible_rect;
+
+  auto* rpdq = quad.DynamicCast<AggregatedRenderPassDrawQuad>();
+  if (rpdq) {
+    // Render pass draw quads can have pixel-moving filters that expand their
+    // visible bounds.
+    auto filter_it = render_pass_filters_.find(rpdq->render_pass_id);
+    if (filter_it != render_pass_filters_.end()) {
+      target_rect = filter_it->second->ExpandRectForPixelMovement(target_rect);
+    }
+  }
+
+  target_rect = cc::MathUtil::MapEnclosingClippedRect(
+      quad.shared_quad_state->quad_to_target_transform, target_rect);
+
+  if (quad.shared_quad_state->clip_rect) {
     target_rect.Intersect(*quad.shared_quad_state->clip_rect);
+  }
 
   target_rect.Intersect(render_pass_scissor);
   return target_rect.IsEmpty();
@@ -550,6 +591,11 @@ const absl::optional<gfx::RRectF> DirectRenderer::BackdropFilterBoundsForPass(
   return it == render_pass_backdrop_filter_bounds_.end()
              ? absl::optional<gfx::RRectF>()
              : it->second;
+}
+
+bool DirectRenderer::SupportsBGRA() const {
+  // TODO(penghuang): check supported format correctly.
+  return true;
 }
 
 void DirectRenderer::FlushPolygons(
@@ -658,6 +704,10 @@ void DirectRenderer::DrawRenderPass(const AggregatedRenderPass* render_pass) {
   if (use_partial_swap_) {
     render_pass_scissor_in_draw_space.Intersect(
         ComputeScissorRectForRenderPass(current_frame()->current_render_pass));
+  }
+
+  if (is_root_render_pass && output_surface_clip_rect_) {
+    render_pass_scissor_in_draw_space.Intersect(*output_surface_clip_rect_);
   }
 
   const bool render_pass_is_clipped =
@@ -776,8 +826,7 @@ DirectRenderer::CalculateRenderPassRequirements(
     requirements.size = surface_size_for_swap_buffers();
     requirements.generate_mipmap = false;
     requirements.color_space = reshape_color_space();
-    requirements.format = SharedImageFormat::SinglePlane(
-        GetResourceFormat(reshape_buffer_format()));
+    requirements.format = GetSharedImageFormat(reshape_buffer_format());
 
     // All root render pass backings allocated by the renderer needs to
     // eventually go into some composition tree. Other things that own/allocate
@@ -1122,9 +1171,8 @@ gfx::ColorSpace DirectRenderer::CurrentRenderPassColorSpace() const {
 
 SharedImageFormat DirectRenderer::GetColorSpaceSharedImageFormat(
     gfx::ColorSpace color_space) const {
-  // TODO(penghuang): check supported format correctly.
   gpu::Capabilities caps;
-  caps.texture_format_bgra8888 = true;
+  caps.texture_format_bgra8888 = SupportsBGRA();
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // TODO(crbug.com/1317015): add support RGBA_F16 in LaCrOS.

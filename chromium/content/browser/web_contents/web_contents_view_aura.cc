@@ -94,13 +94,14 @@
 
 #include "app/vivaldi_apptools.h"
 #include "ui/content/vivaldi_event_hooks.h"
+#include "ui/content/vivaldi_tab_check.h"
 
 namespace content {
 
 std::unique_ptr<WebContentsView> CreateWebContentsView(
     WebContentsImpl* web_contents,
     std::unique_ptr<WebContentsViewDelegate> delegate,
-    RenderViewHostDelegateView** render_view_host_delegate_view) {
+    raw_ptr<RenderViewHostDelegateView>* render_view_host_delegate_view) {
   auto rv =
       std::make_unique<WebContentsViewAura>(web_contents, std::move(delegate));
   *render_view_host_delegate_view = rv.get();
@@ -1206,6 +1207,15 @@ void WebContentsViewAura::StartDragging(
   // during the nested run loop. See https://crbug.com/1312144.
   base::WeakPtr<WebContentsViewAura> weak_this = weak_ptr_factory_.GetWeakPtr();
 
+  // We need to use the webcontents for tabs when dragging from that.
+  // |web_contents_| is here the ui-document in Vivaldi. VB-97745.
+  dragowner_webcontents_ = web_contents_;
+  if (auto* contents = WebContentsImpl::FromRenderWidgetHostImpl(source_rwh)) {
+    if (VivaldiTabCheck::IsOwnedByTabStripOrDevTools(contents)) {
+      dragowner_webcontents_ = contents;
+    }
+  }
+
   drag_start_ =
       DragStart(source_rwh->GetSiteInstanceGroup()->GetId(),
                 GetRenderViewHostID(web_contents_->GetRenderViewHost()),
@@ -1216,15 +1226,15 @@ void WebContentsViewAura::StartDragging(
     selection_controller->HideAndDisallowShowingAutomatically();
   std::unique_ptr<ui::OSExchangeDataProvider> provider =
       ui::OSExchangeDataProviderFactory::CreateProvider();
-  PrepareDragData(drop_data, provider.get(), web_contents_);
+  PrepareDragData(drop_data, provider.get(), dragowner_webcontents_);
 
   auto data = std::make_unique<ui::OSExchangeData>(std::move(provider));
-  data->SetSource(
-      web_contents_->GetBrowserContext()->IsOffTheRecord()
-          ? nullptr
-          : std::make_unique<ui::DataTransferEndpoint>(
-                web_contents_->GetPrimaryMainFrame()->GetLastCommittedURL()));
-  WebContentsDelegate* delegate = web_contents_->GetDelegate();
+  data->SetSource(dragowner_webcontents_->GetBrowserContext()->IsOffTheRecord()
+                      ? nullptr
+                      : std::make_unique<ui::DataTransferEndpoint>(
+                            dragowner_webcontents_->GetPrimaryMainFrame()
+                                ->GetLastCommittedURL()));
+  WebContentsDelegate* delegate = dragowner_webcontents_->GetDelegate();
   if (delegate && delegate->IsPrivileged())
     data->MarkAsFromPrivileged();
 
@@ -1330,7 +1340,7 @@ void WebContentsViewAura::OnBoundsChanged(const gfx::Rect& old_bounds,
 }
 
 gfx::NativeCursor WebContentsViewAura::GetCursor(const gfx::Point& point) {
-  return gfx::kNullCursor;
+  return gfx::NativeCursor{};
 }
 
 int WebContentsViewAura::GetNonClientComponent(const gfx::Point& point) const {
@@ -1374,7 +1384,8 @@ void WebContentsViewAura::OnWindowTargetVisibilityChanged(bool visible) {
 }
 
 void WebContentsViewAura::OnWindowOcclusionChanged(
-    aura::Window::OcclusionState occlusion_state) {
+    aura::Window::OcclusionState old_occlusion_state,
+    aura::Window::OcclusionState new_occlusion_state) {
   UpdateWebContentsVisibility();
 }
 

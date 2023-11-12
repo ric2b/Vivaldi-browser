@@ -196,8 +196,9 @@ void CellularESimInstaller::OnProfileInstallResult(
     bool is_initial_install,
     bool is_install_via_qr_code,
     HermesResponseStatus status,
+    dbus::DBusResult dbusResult,
     const dbus::ObjectPath* profile_path) {
-  hermes_metrics::LogInstallViaQrCodeResult(status);
+  hermes_metrics::LogInstallViaQrCodeResult(status, dbusResult);
 
   bool is_managed = IsManagedNetwork(new_shill_properties);
   if (status != HermesResponseStatus::kSuccess) {
@@ -226,8 +227,8 @@ void CellularESimInstaller::ConfigureESimService(
     const dbus::ObjectPath& profile_path,
     ConfigureESimServiceCallback callback) {
   const NetworkProfile* profile =
-      network_profile_handler_->GetProfileForUserhash(
-          /*userhash=*/std::string());
+      cellular_utils::GetCellularProfile(network_profile_handler_);
+
   if (!profile) {
     NET_LOG(ERROR)
         << "Error configuring eSIM profile. Default profile not initialized.";

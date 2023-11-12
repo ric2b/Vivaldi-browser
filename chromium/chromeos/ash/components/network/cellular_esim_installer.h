@@ -14,6 +14,7 @@
 #include "chromeos/ash/components/dbus/hermes/hermes_response_status.h"
 #include "chromeos/ash/components/network/cellular_esim_profile_handler.h"
 #include "chromeos/ash/components/network/cellular_inhibitor.h"
+#include "dbus/dbus_result.h"
 
 namespace dbus {
 class ObjectPath;
@@ -102,9 +103,6 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) CellularESimInstaller {
                            InstallProfileViaQrCodeSuccess);
   FRIEND_TEST_ALL_PREFIXES(CellularESimInstallerTest,
                            InstallProfileAlreadyConnected);
-  FRIEND_TEST_ALL_PREFIXES(CellularPolicyHandlerTest, InstallProfileSuccess);
-  FRIEND_TEST_ALL_PREFIXES(CellularPolicyHandlerTest, InstallProfileFailure);
-  FRIEND_TEST_ALL_PREFIXES(CellularPolicyHandlerTest, RetryInstallProfile);
 
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
@@ -142,6 +140,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) CellularESimInstaller {
       bool is_initial_install,
       bool is_install_via_qr_code,
       HermesResponseStatus status,
+      dbus::DBusResult dbus_result,
       const dbus::ObjectPath* object_path);
   void OnShillConfigurationCreationSuccess(
       ConfigureESimServiceCallback callback,

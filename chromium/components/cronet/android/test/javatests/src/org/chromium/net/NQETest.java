@@ -4,11 +4,10 @@
 
 package org.chromium.net;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static com.google.common.truth.Truth.assertThat;
 
-import static org.chromium.net.CronetTestRule.getContext;
+import static org.junit.Assert.assertThrows;
+
 import static org.chromium.net.CronetTestRule.getTestStorage;
 
 import android.os.StrictMode;
@@ -25,7 +24,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.Log;
 import org.chromium.base.metrics.UmaRecorderHolder;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.net.CronetTestRule.OnlyRunNativeCronet;
 import org.chromium.net.MetricsTestUtil.TestExecutor;
@@ -47,7 +45,7 @@ public class NQETest {
     private static final String TAG = NQETest.class.getSimpleName();
 
     @Rule
-    public final CronetTestRule mTestRule = new CronetTestRule();
+    public final CronetTestRule mTestRule = CronetTestRule.withManualEngineStartup();
 
     private EmbeddedTestServer mTestServer;
     private String mUrl;
@@ -57,7 +55,8 @@ public class NQETest {
 
     @Before
     public void setUp() throws Exception {
-        mTestServer = EmbeddedTestServer.createAndStartServer(getContext());
+        mTestServer =
+                EmbeddedTestServer.createAndStartServer(mTestRule.getTestFramework().getContext());
         mUrl = mTestServer.getURL("/echo?status=200");
     }
 
@@ -93,24 +92,15 @@ public class NQETest {
     @SmallTest
     @OnlyRunNativeCronet
     public void testNotEnabled() throws Exception {
-        ExperimentalCronetEngine.Builder cronetEngineBuilder =
-                new ExperimentalCronetEngine.Builder(getContext());
-        final ExperimentalCronetEngine cronetEngine = cronetEngineBuilder.build();
+        ExperimentalCronetEngine cronetEngine = mTestRule.getTestFramework().startEngine();
         Executor networkQualityExecutor = Executors.newSingleThreadExecutor();
         TestNetworkQualityRttListener rttListener =
                 new TestNetworkQualityRttListener(networkQualityExecutor);
         TestNetworkQualityThroughputListener throughputListener =
                 new TestNetworkQualityThroughputListener(networkQualityExecutor);
-        try {
-            cronetEngine.addRttListener(rttListener);
-            fail("Should throw an exception.");
-        } catch (IllegalStateException e) {
-        }
-        try {
-            cronetEngine.addThroughputListener(throughputListener);
-            fail("Should throw an exception.");
-        } catch (IllegalStateException e) {
-        }
+        assertThrows(IllegalStateException.class, () -> cronetEngine.addRttListener(rttListener));
+        assertThrows(IllegalStateException.class,
+                () -> cronetEngine.addThroughputListener(throughputListener));
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
         UrlRequest.Builder builder =
                 cronetEngine.newUrlRequestBuilder(mUrl, callback, callback.getExecutor());
@@ -118,22 +108,22 @@ public class NQETest {
 
         urlRequest.start();
         callback.blockForDone();
-        assertEquals(0, rttListener.rttObservationCount());
-        assertEquals(0, throughputListener.throughputObservationCount());
-        cronetEngine.shutdown();
+        assertThat(rttListener.rttObservationCount()).isEqualTo(0);
+        assertThat(throughputListener.throughputObservationCount()).isEqualTo(0);
     }
 
     @Test
     @SmallTest
     @OnlyRunNativeCronet
     public void testListenerRemoved() throws Exception {
-        ExperimentalCronetEngine.Builder cronetEngineBuilder =
-                new ExperimentalCronetEngine.Builder(getContext());
+        mTestRule.getTestFramework().applyEngineBuilderPatch(
+                (builder) -> builder.enableNetworkQualityEstimator(true));
+        ExperimentalCronetEngine cronetEngine = mTestRule.getTestFramework().startEngine();
+
         TestExecutor networkQualityExecutor = new TestExecutor();
         TestNetworkQualityRttListener rttListener =
                 new TestNetworkQualityRttListener(networkQualityExecutor);
-        cronetEngineBuilder.enableNetworkQualityEstimator(true);
-        final ExperimentalCronetEngine cronetEngine = cronetEngineBuilder.build();
+
         cronetEngine.configureNetworkQualityEstimatorForTesting(true, true, false);
 
         cronetEngine.addRttListener(rttListener);
@@ -145,13 +135,13 @@ public class NQETest {
         urlRequest.start();
         callback.blockForDone();
         networkQualityExecutor.runAllTasks();
-        assertEquals(0, rttListener.rttObservationCount());
-        cronetEngine.shutdown();
+        assertThat(rttListener.rttObservationCount()).isEqualTo(0);
     }
 
     // Returns whether a file contains a particular string.
     private boolean prefsFileContainsString(String content) throws IOException {
-        File file = new File(getTestStorage(getContext()) + "/prefs/local_prefs.json");
+        File file = new File(getTestStorage(mTestRule.getTestFramework().getContext())
+                + "/prefs/local_prefs.json");
         FileInputStream fileInputStream = new FileInputStream(file);
         byte[] data = new byte[(int) file.length()];
         fileInputStream.read(data);
@@ -162,36 +152,11 @@ public class NQETest {
     @Test
     @SmallTest
     @OnlyRunNativeCronet
-    @DisabledTest(message = "crbug.com/796260")
     public void testQuicDisabled() throws Exception {
-        ExperimentalCronetEngine.Builder cronetEngineBuilder =
-                new ExperimentalCronetEngine.Builder(getContext());
-        assertTrue(RttThroughputValues.INVALID_RTT_THROUGHPUT < 0);
-        Executor listenersExecutor = Executors.newSingleThreadExecutor(new ExecutorThreadFactory());
-        TestNetworkQualityRttListener rttListener =
-                new TestNetworkQualityRttListener(listenersExecutor);
-        TestNetworkQualityThroughputListener throughputListener =
-                new TestNetworkQualityThroughputListener(listenersExecutor);
-        cronetEngineBuilder.enableNetworkQualityEstimator(true).enableHttp2(true).enableQuic(false);
-
-        // The pref may not be written if the computed Effective Connection Type (ECT) matches the
-        // default ECT for the current connection type. Force the ECT to "Slow-2G". Since "Slow-2G"
-        // is not the default ECT for any connection type, this ensures that the pref is written to.
-        JSONObject nqeOptions = new JSONObject().put("force_effective_connection_type", "Slow-2G");
-        JSONObject experimentalOptions =
-                new JSONObject().put("NetworkQualityEstimator", nqeOptions);
-
-        cronetEngineBuilder.setExperimentalOptions(experimentalOptions.toString());
-
-        cronetEngineBuilder.setStoragePath(getTestStorage(getContext()));
-        final ExperimentalCronetEngine cronetEngine = cronetEngineBuilder.build();
-        cronetEngine.configureNetworkQualityEstimatorForTesting(true, true, true);
-
-        cronetEngine.addRttListener(rttListener);
-        cronetEngine.addThroughputListener(throughputListener);
-
-        // Hackish workaround to crbug.com/1338919
-        UmaRecorderHolder.onLibraryLoaded();
+        // Set up HistogramWatcher before starting CronetEngine. This is because the
+        // HistogramWatcher takes a snapshot of the starting sample count and uses the delta of this
+        // and the count at assertExpected() call time to confirm that new samples are logged.
+        UmaRecorderHolder.onLibraryLoaded(); // Hackish workaround to crbug.com/1338919
         var writeCountHistogram = HistogramWatcher.newBuilder()
                                           .expectIntRecord("NQE.Prefs.WriteCount", 1)
                                           .allowExtraRecordsForHistogramsAbove()
@@ -200,6 +165,33 @@ public class NQETest {
                                          .expectIntRecord("NQE.Prefs.ReadCount", 1)
                                          .allowExtraRecordsForHistogramsAbove()
                                          .build();
+        assertThat(RttThroughputValues.INVALID_RTT_THROUGHPUT).isLessThan(0);
+        Executor listenersExecutor = Executors.newSingleThreadExecutor(new ExecutorThreadFactory());
+        TestNetworkQualityRttListener rttListener =
+                new TestNetworkQualityRttListener(listenersExecutor);
+        TestNetworkQualityThroughputListener throughputListener =
+                new TestNetworkQualityThroughputListener(listenersExecutor);
+        mTestRule.getTestFramework().applyEngineBuilderPatch((builder) -> {
+            builder.enableNetworkQualityEstimator(true).enableHttp2(true).enableQuic(false);
+
+            // The pref may not be written if the computed Effective Connection Type (ECT) matches
+            // the default ECT for the current connection type. Force the ECT to "Slow-2G". Since
+            // "Slow-2G" is not the default ECT for any connection type, this ensures that the pref
+            // is written to.
+            JSONObject nqeOptions =
+                    new JSONObject().put("force_effective_connection_type", "Slow-2G");
+            JSONObject experimentalOptions =
+                    new JSONObject().put("NetworkQualityEstimator", nqeOptions);
+
+            builder.setExperimentalOptions(experimentalOptions.toString());
+            builder.setStoragePath(getTestStorage(mTestRule.getTestFramework().getContext()));
+        });
+
+        ExperimentalCronetEngine cronetEngine = mTestRule.getTestFramework().startEngine();
+        cronetEngine.configureNetworkQualityEstimatorForTesting(true, true, true);
+
+        cronetEngine.addRttListener(rttListener);
+        cronetEngine.addThroughputListener(throughputListener);
 
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
         UrlRequest.Builder builder =
@@ -216,38 +208,38 @@ public class NQETest {
         // Wait for RTT observation (at the URL request layer) to be posted.
         rttListener.waitUntilFirstUrlRequestRTTReceived();
 
-        assertTrue(throughputListener.throughputObservationCount() > 0);
+        assertThat(throughputListener.throughputObservationCount()).isGreaterThan(0);
 
         // Prefs must be read at startup.
         readCountHistogram.assertExpected();
 
         // Check RTT observation count after throughput observation has been received. This ensures
         // that executor has finished posting the RTT observation to the RTT listeners.
-        assertTrue(rttListener.rttObservationCount() > 0);
+        assertThat(rttListener.rttObservationCount()).isGreaterThan(0);
 
         // NETWORK_QUALITY_OBSERVATION_SOURCE_URL_REQUEST
-        assertTrue(rttListener.rttObservationCount(0) > 0);
+        assertThat(rttListener.rttObservationCount(0)).isGreaterThan(0);
 
         // NETWORK_QUALITY_OBSERVATION_SOURCE_TCP
-        assertTrue(rttListener.rttObservationCount(1) > 0);
+        assertThat(rttListener.rttObservationCount(1)).isGreaterThan(0);
 
         // NETWORK_QUALITY_OBSERVATION_SOURCE_QUIC
-        assertEquals(0, rttListener.rttObservationCount(2));
+        assertThat(rttListener.rttObservationCount(2)).isEqualTo(0);
 
         // Verify that the listeners were notified on the expected thread.
-        assertEquals(mNetworkQualityThread, rttListener.getThread());
-        assertEquals(mNetworkQualityThread, throughputListener.getThread());
+        assertThat(rttListener.getThread()).isEqualTo(mNetworkQualityThread);
+        assertThat(throughputListener.getThread()).isEqualTo(mNetworkQualityThread);
 
         // Verify that effective connection type callback is received and
         // effective connection type is correctly set.
-        assertTrue(
-                cronetEngine.getEffectiveConnectionType() != EffectiveConnectionType.TYPE_UNKNOWN);
+        assertThat(cronetEngine.getEffectiveConnectionType())
+                .isNotEqualTo(EffectiveConnectionType.TYPE_UNKNOWN);
 
         // Verify that the HTTP RTT, transport RTT and downstream throughput
         // estimates are available.
-        assertTrue(cronetEngine.getHttpRttMs() >= 0);
-        assertTrue(cronetEngine.getTransportRttMs() >= 0);
-        assertTrue(cronetEngine.getDownstreamThroughputKbps() >= 0);
+        assertThat(cronetEngine.getHttpRttMs()).isAtLeast(0);
+        assertThat(cronetEngine.getTransportRttMs()).isAtLeast(0);
+        assertThat(cronetEngine.getDownstreamThroughputKbps()).isAtLeast(0);
 
         // Verify that the cached estimates were written to the prefs.
         while (true) {
@@ -262,7 +254,7 @@ public class NQETest {
                 // flushed to the disk.
             }
         }
-        assertTrue(prefsFileContainsString("network_qualities"));
+        assertThat(prefsFileContainsString("network_qualities")).isTrue();
 
         cronetEngine.shutdown();
         writeCountHistogram.assertExpected();
@@ -274,37 +266,13 @@ public class NQETest {
     public void testPrefsWriteRead() throws Exception {
         // When the loop is run for the first time, network quality is written to the disk. The
         // test verifies that in the next loop, the network quality is read back.
+
+        UmaRecorderHolder.onLibraryLoaded(); // Hackish workaround to crbug.com/1338919
         for (int i = 0; i <= 1; ++i) {
-            ExperimentalCronetEngine.Builder cronetEngineBuilder =
-                    new ExperimentalCronetEngine.Builder(getContext());
-            assertTrue(RttThroughputValues.INVALID_RTT_THROUGHPUT < 0);
-            Executor listenersExecutor =
-                    Executors.newSingleThreadExecutor(new ExecutorThreadFactory());
-            TestNetworkQualityRttListener rttListener =
-                    new TestNetworkQualityRttListener(listenersExecutor);
-            cronetEngineBuilder.enableNetworkQualityEstimator(true).enableHttp2(true).enableQuic(
-                    false);
-
-            // The pref may not be written if the computed Effective Connection Type (ECT) matches
-            // the default ECT for the current connection type. Force the ECT to "Slow-2G". Since
-            // "Slow-2G" is not the default ECT for any connection type, this ensures that the pref
-            // is written to.
-            JSONObject nqeOptions =
-                    new JSONObject().put("force_effective_connection_type", "Slow-2G");
-            JSONObject experimentalOptions =
-                    new JSONObject().put("NetworkQualityEstimator", nqeOptions);
-
-            cronetEngineBuilder.setExperimentalOptions(experimentalOptions.toString());
-
-            cronetEngineBuilder.setStoragePath(getTestStorage(getContext()));
-
-            final ExperimentalCronetEngine cronetEngine = cronetEngineBuilder.build();
-            cronetEngine.configureNetworkQualityEstimatorForTesting(true, true, true);
-            cronetEngine.addRttListener(rttListener);
-
-            // Hackish workaround to crbug.com/1338919
-            if (i == 0) UmaRecorderHolder.onLibraryLoaded();
-
+            // Set up HistogramWatcher before starting CronetEngine. This is because the
+            // HistogramWatcher takes a snapshot of the starting sample count and uses the delta of
+            // this and the count at assertExpected() call time to confirm that new samples are
+            // logged.
             HistogramWatcher readCountHistogram = HistogramWatcher.newBuilder()
                                                           .expectIntRecord("NQE.Prefs.ReadCount", 1)
                                                           .allowExtraRecordsForHistogramsAbove()
@@ -330,6 +298,34 @@ public class NQETest {
                             .allowExtraRecordsForHistogramsAbove()
                             .build();
 
+            ExperimentalCronetEngine.Builder cronetEngineBuilder =
+                    new ExperimentalCronetEngine.Builder(mTestRule.getTestFramework().getContext());
+            assertThat(RttThroughputValues.INVALID_RTT_THROUGHPUT).isLessThan(0);
+            Executor listenersExecutor =
+                    Executors.newSingleThreadExecutor(new ExecutorThreadFactory());
+            TestNetworkQualityRttListener rttListener =
+                    new TestNetworkQualityRttListener(listenersExecutor);
+            cronetEngineBuilder.enableNetworkQualityEstimator(true).enableHttp2(true).enableQuic(
+                    false);
+
+            // The pref may not be written if the computed Effective Connection Type (ECT) matches
+            // the default ECT for the current connection type. Force the ECT to "Slow-2G". Since
+            // "Slow-2G" is not the default ECT for any connection type, this ensures that the pref
+            // is written to.
+            JSONObject nqeOptions =
+                    new JSONObject().put("force_effective_connection_type", "Slow-2G");
+            JSONObject experimentalOptions =
+                    new JSONObject().put("NetworkQualityEstimator", nqeOptions);
+
+            cronetEngineBuilder.setExperimentalOptions(experimentalOptions.toString());
+
+            cronetEngineBuilder.setStoragePath(
+                    getTestStorage(mTestRule.getTestFramework().getContext()));
+
+            final ExperimentalCronetEngine cronetEngine = cronetEngineBuilder.build();
+            cronetEngine.configureNetworkQualityEstimatorForTesting(true, true, true);
+            cronetEngine.addRttListener(rttListener);
+
             TestUrlRequestCallback callback = new TestUrlRequestCallback();
             UrlRequest.Builder builder =
                     cronetEngine.newUrlRequestBuilder(mUrl, callback, callback.getExecutor());
@@ -346,18 +342,18 @@ public class NQETest {
             // Check RTT observation count after throughput observation has been received. This
             // ensures
             // that executor has finished posting the RTT observation to the RTT listeners.
-            assertTrue(rttListener.rttObservationCount() > 0);
+            assertThat(rttListener.rttObservationCount()).isGreaterThan(0);
 
             // Verify that effective connection type callback is received and
             // effective connection type is correctly set.
-            assertTrue(cronetEngine.getEffectiveConnectionType()
-                    != EffectiveConnectionType.TYPE_UNKNOWN);
+            assertThat(cronetEngine.getEffectiveConnectionType())
+                    .isNotEqualTo(EffectiveConnectionType.TYPE_UNKNOWN);
 
             cronetEngine.shutdown();
 
             if (i == 0) {
                 // Verify that the cached estimates were written to the prefs.
-                assertTrue(prefsFileContainsString("network_qualities"));
+                assertThat(prefsFileContainsString("network_qualities")).isTrue();
             }
 
             readPrefsSizeHistogram.assertExpected();
@@ -370,28 +366,30 @@ public class NQETest {
     @Test
     @SmallTest
     @OnlyRunNativeCronet
-    @DisabledTest(message = "crbug.com/796260")
     public void testQuicDisabledWithParams() throws Exception {
-        ExperimentalCronetEngine.Builder cronetEngineBuilder =
-                new ExperimentalCronetEngine.Builder(getContext());
         Executor listenersExecutor = Executors.newSingleThreadExecutor(new ExecutorThreadFactory());
         TestNetworkQualityRttListener rttListener =
                 new TestNetworkQualityRttListener(listenersExecutor);
         TestNetworkQualityThroughputListener throughputListener =
                 new TestNetworkQualityThroughputListener(listenersExecutor);
 
-        // Force the effective connection type to "2G".
-        JSONObject nqeOptions = new JSONObject().put("force_effective_connection_type", "Slow-2G");
-        // Add one more extra param two times to ensure robustness.
-        nqeOptions.put("some_other_param_1", "value1");
-        nqeOptions.put("some_other_param_2", "value2");
-        JSONObject experimentalOptions =
-                new JSONObject().put("NetworkQualityEstimator", nqeOptions);
-        experimentalOptions.put("SomeOtherFieldTrialName", new JSONObject());
+        mTestRule.getTestFramework().applyEngineBuilderPatch((builder) -> {
+            // Force the effective connection type to "2G".
+            JSONObject nqeOptions =
+                    new JSONObject().put("force_effective_connection_type", "Slow-2G");
+            // Add one more extra param two times to ensure robustness.
+            nqeOptions.put("some_other_param_1", "value1");
+            nqeOptions.put("some_other_param_2", "value2");
+            JSONObject experimentalOptions =
+                    new JSONObject().put("NetworkQualityEstimator", nqeOptions);
+            experimentalOptions.put("SomeOtherFieldTrialName", new JSONObject());
 
-        cronetEngineBuilder.enableNetworkQualityEstimator(true).enableHttp2(true).enableQuic(false);
-        cronetEngineBuilder.setExperimentalOptions(experimentalOptions.toString());
-        final ExperimentalCronetEngine cronetEngine = cronetEngineBuilder.build();
+            builder.enableNetworkQualityEstimator(true).enableHttp2(true).enableQuic(false);
+            builder.setExperimentalOptions(experimentalOptions.toString());
+        });
+
+        ExperimentalCronetEngine cronetEngine = mTestRule.getTestFramework().startEngine();
+
         cronetEngine.configureNetworkQualityEstimatorForTesting(true, true, false);
 
         cronetEngine.addRttListener(rttListener);
@@ -412,31 +410,29 @@ public class NQETest {
         // Wait for RTT observation (at the URL request layer) to be posted.
         rttListener.waitUntilFirstUrlRequestRTTReceived();
 
-        assertTrue(throughputListener.throughputObservationCount() > 0);
+        assertThat(throughputListener.throughputObservationCount()).isGreaterThan(0);
 
         // Check RTT observation count after throughput observation has been received. This ensures
         // that executor has finished posting the RTT observation to the RTT listeners.
-        assertTrue(rttListener.rttObservationCount() > 0);
+        assertThat(rttListener.rttObservationCount()).isGreaterThan(0);
 
         // NETWORK_QUALITY_OBSERVATION_SOURCE_URL_REQUEST
-        assertTrue(rttListener.rttObservationCount(0) > 0);
+        assertThat(rttListener.rttObservationCount(0)).isGreaterThan(0);
 
         // NETWORK_QUALITY_OBSERVATION_SOURCE_TCP
-        assertTrue(rttListener.rttObservationCount(1) > 0);
+        assertThat(rttListener.rttObservationCount(1)).isGreaterThan(0);
 
         // NETWORK_QUALITY_OBSERVATION_SOURCE_QUIC
-        assertEquals(0, rttListener.rttObservationCount(2));
+        assertThat(rttListener.rttObservationCount(2)).isEqualTo(0);
 
         // Verify that the listeners were notified on the expected thread.
-        assertEquals(mNetworkQualityThread, rttListener.getThread());
-        assertEquals(mNetworkQualityThread, throughputListener.getThread());
+        assertThat(rttListener.getThread()).isEqualTo(mNetworkQualityThread);
+        assertThat(throughputListener.getThread()).isEqualTo(mNetworkQualityThread);
 
         // Verify that effective connection type callback is received and effective connection type
         // is correctly set to the forced value. This also verifies that the configuration params
         // from Cronet embedders were correctly read by NetworkQualityEstimator.
-        assertEquals(
-                EffectiveConnectionType.TYPE_SLOW_2G, cronetEngine.getEffectiveConnectionType());
-
-        cronetEngine.shutdown();
+        assertThat(cronetEngine.getEffectiveConnectionType())
+                .isEqualTo(EffectiveConnectionType.TYPE_SLOW_2G);
     }
 }

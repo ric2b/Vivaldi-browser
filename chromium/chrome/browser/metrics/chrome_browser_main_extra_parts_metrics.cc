@@ -5,6 +5,7 @@
 #include "chrome/browser/metrics/chrome_browser_main_extra_parts_metrics.h"
 
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -18,11 +19,14 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/power_monitor/power_monitor_buildflags.h"
 #include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_log.h"
+#include "base/version.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "build/config/compiler/compiler_buildflags.h"
@@ -38,10 +42,14 @@
 #include "chrome/browser/shell_integration.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
+#include "components/metrics/android_metrics_helper.h"
 #include "components/policy/core/common/management/management_service.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/variations/synthetic_trials.h"
+#include "components/variations/variations_ids_provider.h"
 #include "components/variations/variations_switches.h"
+#include "components/version_info/version_info_values.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
@@ -60,9 +68,12 @@
 #include "chrome/browser/metrics/tab_stats/tab_stats_tracker.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_ANDROID) && defined(__arm__)
+#if BUILDFLAG(IS_ANDROID)
+#if defined(__arm__)
 #include <cpu-features.h>
-#endif  // BUILDFLAG(IS_ANDROID) && defined(__arm__)
+#endif
+#include "chrome/browser/flags/android/chrome_session_state.h"
+#endif  // BUILDFLAG(IS_ANDROID)
 
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
 // of lacros-chrome is complete.
@@ -72,7 +83,6 @@
 #include "base/linux_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/version.h"
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(IS_OZONE)
@@ -97,10 +107,6 @@
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/startup/startup_switches.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 #if BUILDFLAG(IS_LINUX)
 #include "chrome/browser/metrics/pressure/pressure_metrics_reporter.h"
 #endif  // BUILDFLAG(IS_LINUX)
@@ -109,6 +115,10 @@
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "components/user_manager/user_manager.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#include "components/power_metrics/system_power_monitor.h"
+#endif
 
 namespace {
 
@@ -548,6 +558,23 @@ ChromeBrowserMainExtraPartsMetrics::ChromeBrowserMainExtraPartsMetrics()
 ChromeBrowserMainExtraPartsMetrics::~ChromeBrowserMainExtraPartsMetrics() =
     default;
 
+void ChromeBrowserMainExtraPartsMetrics::PreCreateThreads() {
+#if !BUILDFLAG(IS_ANDROID)
+  // Initialize the TabStatsTracker singleton instance. Must be initialized
+  // before `responsiveness::Watcher`, which happens in
+  // BrowserMainLoop::PreMainMessageLoopRun(), thus the decision to use
+  // `PreCreateThreads`.
+  // Only instantiate the tab stats tracker if a local state exists. This is
+  // always the case for Chrome but not for the unittests.
+  if (g_browser_process != nullptr &&
+      g_browser_process->local_state() != nullptr) {
+    metrics::TabStatsTracker::SetInstance(
+        std::make_unique<metrics::TabStatsTracker>(
+            g_browser_process->local_state()));
+  }
+#endif
+}
+
 void ChromeBrowserMainExtraPartsMetrics::PostCreateMainMessageLoop() {
 #if !BUILDFLAG(IS_ANDROID)
   // Must be initialized before any child processes are spawned.
@@ -613,15 +640,80 @@ void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
                                                               group_name);
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Register a synthetic finch trial for whether the zygote hugepage remap
-  // feature is enabled.
-  bool hugepage_remap = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kZygoteHugepageRemap);
-  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
-      "ZygoteHugepageRemap", hugepage_remap ? "Enabled" : "Disabled",
-      variations::SyntheticTrialAnnotationMode::kCurrentLog);
-#endif
+#if BUILDFLAG(IS_ANDROID)
+  // Set up experiment for 64-bit Clank (incl. GWS visible IDs, so that the
+  // groups are visible to Google servers).
+  //
+  // We are specifically interested in devices that meet all of these criteria:
+  // 1) Devices with 4&6GB RAM, as we're launching the feature only for those
+  //    (using (3.2;6.5) range to match RAM targeting in Play).
+  // 2) Devices with only one Android profile (work versus personal), as having
+  //    multiple profiles is a source of a population bias (so is having
+  //    multiple users, but that bias is known to be small, and they're hard to
+  //    filter out).
+  // 3) Mixed 32-/64-bit devices, as non-mixed devices are forced to use
+  //    a particular bitness, thus don't participate in the experiment.
+  size_t ram_mb = base::SysInfo::AmountOfPhysicalMemoryMB();
+  auto cpu_abi_bitness_support =
+      metrics::AndroidMetricsHelper::GetInstance()->cpu_abi_bitness_support();
+  bool is_device_of_interest =
+      (3.2 * 1024 < ram_mb && ram_mb < 6.5 * 1024) &&
+      (chrome::android::GetMultipleUserProfilesState() ==
+       chrome::android::MultipleUserProfilesState::kSingleProfile) &&
+      (cpu_abi_bitness_support == metrics::CpuAbiBitnessSupport::k32And64bit);
+  if (is_device_of_interest) {
+    uint32_t gws_experiment_id = 0;
+    std::string trial_group;
+    base::Version product_version(PRODUCT_VERSION);
+#if defined(ARCH_CPU_64_BITS)
+    trial_group = "64bit";
+    if (product_version.IsValid()) {
+      // For now, we only plan to run the experiment in Chrome 116 and 117, so
+      // only send GWS IDs for those versions.
+      switch (product_version.components()[0]) {
+        case 116:
+          gws_experiment_id = 3367343;
+          break;
+        case 117:
+          gws_experiment_id = 3367345;
+          break;
+        default:
+            // Leave 0-initialized.
+            ;
+      }
+    }
+#else   // defined(ARCH_CPU_64_BITS)
+    trial_group = "32bit";
+    if (product_version.IsValid()) {
+      // For now, we only plan to run the experiment in Chrome 116 and 117, so
+      // only send GWS IDs for those versions.
+      switch (product_version.components()[0]) {
+        case 116:
+          gws_experiment_id = 3367342;
+          break;
+        case 117:
+          gws_experiment_id = 3367344;
+          break;
+        default:
+            // Leave 0-initialized.
+            ;
+      }
+    }
+#endif  // defined(ARCH_CPU_64_BITS)
+    ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+        "BitnessForMidRangeRAM", trial_group,
+        variations::SyntheticTrialAnnotationMode::kCurrentLog);
+    ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+        "BitnessForMidRangeRAM_wVersion",
+        std::string(PRODUCT_VERSION) + "_" + trial_group,
+        variations::SyntheticTrialAnnotationMode::kCurrentLog);
+    if (gws_experiment_id) {
+      std::vector<std::string> ids = {base::NumberToString(gws_experiment_id)};
+      variations::VariationsIdsProvider::GetInstance()->ForceVariationIds(ids,
+                                                                          "");
+    }
+  }
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
@@ -696,14 +788,6 @@ void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
 
 #if !BUILDFLAG(IS_ANDROID)
   metrics::BeginFirstWebContentsProfiling();
-  // Only instantiate the tab stats tracker if a local state exists. This is
-  // always the case for Chrome but not for the unittests.
-  if (g_browser_process != nullptr &&
-      g_browser_process->local_state() != nullptr) {
-    metrics::TabStatsTracker::SetInstance(
-        std::make_unique<metrics::TabStatsTracker>(
-            g_browser_process->local_state()));
-  }
 
   // Instantiate the power-related metrics reporters.
 
@@ -731,6 +815,11 @@ void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
 #if BUILDFLAG(IS_LINUX)
   pressure_metrics_reporter_ = std::make_unique<PressureMetricsReporter>();
 #endif  // BUILDFLAG(IS_LINUX)
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+  base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(
+      power_metrics::SystemPowerMonitor::GetInstance());
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
   HandleEnableBenchmarkingCountdownAsync();
 }

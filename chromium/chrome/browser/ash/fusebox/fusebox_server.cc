@@ -194,7 +194,9 @@ void FillInDirEntryProto(DirEntryProto* dir_entry_proto,
                          bool read_only) {
   dir_entry_proto->set_mode_bits(
       Server::MakeModeBits(info.is_directory, read_only));
-  dir_entry_proto->set_size(info.size);
+  // The base::File::Info comment says that info.size is "undefined when
+  // info.is_directory is true".
+  dir_entry_proto->set_size(info.is_directory ? 0 : info.size);
   dir_entry_proto->set_mtime(
       info.last_modified.ToDeltaSinceWindowsEpoch().InMicroseconds());
 }
@@ -1170,11 +1172,10 @@ void Server::Rename(const RenameRequestProto& request_proto,
       base::BindOnce(&RunRenameCallbackBaseFileError, std::move(callback),
                      src_parsed->fs_context));
 
-  constexpr storage::FileSystemOperation::CopyOrMoveOptionSet options =
-      storage::FileSystemOperation::CopyOrMoveOptionSet(
-          storage::FileSystemOperation::CopyOrMoveOption::kPreserveLastModified,
-          storage::FileSystemOperation::CopyOrMoveOption::
-              kRemovePartiallyCopiedFilesOnError);
+  constexpr storage::FileSystemOperation::CopyOrMoveOptionSet options = {
+      storage::FileSystemOperation::CopyOrMoveOption::kPreserveLastModified,
+      storage::FileSystemOperation::CopyOrMoveOption::
+          kRemovePartiallyCopiedFilesOnError};
 
   content::GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE,

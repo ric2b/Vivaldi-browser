@@ -17,7 +17,8 @@
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/time/time.h"
-#import "components/breadcrumbs/core/features.h"
+#import "components/autofill/core/browser/data_model/credit_card.h"
+#import "components/breadcrumbs/core/breadcrumbs_status.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/tracker.h"
 #import "components/infobars/core/infobar_manager.h"
@@ -39,8 +40,6 @@
 #import "ios/chrome/app/chrome_overlay_window.h"
 #import "ios/chrome/app/deferred_initialization_runner.h"
 #import "ios/chrome/app/tests_hook.h"
-#import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/browsing_data/browsing_data_remove_mask.h"
 #import "ios/chrome/browser/browsing_data/browsing_data_remover.h"
 #import "ios/chrome/browser/browsing_data/browsing_data_remover_factory.h"
@@ -56,10 +55,6 @@
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/mailto_handler/mailto_handler_service.h"
 #import "ios/chrome/browser/mailto_handler/mailto_handler_service_factory.h"
-#import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/main/browser_list.h"
-#import "ios/chrome/browser/main/browser_list_factory.h"
-#import "ios/chrome/browser/main/browser_provider_interface.h"
 #import "ios/chrome/browser/main/browser_util.h"
 #import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
@@ -67,14 +62,26 @@
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/policy/policy_watcher_browser_agent.h"
 #import "ios/chrome/browser/policy/policy_watcher_browser_agent_observer_bridge.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/promos_manager/features.h"
 #import "ios/chrome/browser/promos_manager/promos_manager_factory.h"
 #import "ios/chrome/browser/screenshot/screenshot_delegate.h"
 #import "ios/chrome/browser/sessions/session_saving_scene_agent.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
+#import "ios/chrome/browser/shared/coordinator/default_browser_promo/non_modal_default_browser_promo_scheduler_scene_agent.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_scene_agent.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_ui_provider.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/url/url_util.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
@@ -108,7 +115,6 @@
 #import "ios/chrome/browser/ui/authentication/signin_notification_infobar_delegate.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller.h"
 #import "ios/chrome/browser/ui/credential_provider_promo/credential_provider_promo_scene_agent.h"
-#import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
 #import "ios/chrome/browser/ui/first_run/orientation_limiting_navigation_controller.h"
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_coordinator_delegate.h"
@@ -117,7 +123,7 @@
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/main/browser_view_wrangler.h"
-#import "ios/chrome/browser/ui/main/default_browser_scene_agent.h"
+#import "ios/chrome/browser/ui/main/default_browser_promo_scene_agent.h"
 #import "ios/chrome/browser/ui/main/incognito_blocker_scene_agent.h"
 #import "ios/chrome/browser/ui/main/ui_blocker_scene_agent.h"
 #import "ios/chrome/browser/ui/main/wrangled_browser.h"
@@ -134,24 +140,21 @@
 #import "ios/chrome/browser/ui/start_surface/start_surface_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator_delegate.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_utils.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #import "ios/chrome/browser/ui/whats_new/promo/whats_new_scene_agent.h"
-#import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
-#import "ios/chrome/browser/url/url_util.h"
 #import "ios/chrome/browser/url_loading/scene_url_loading_service.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/web/page_placeholder_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/session_metrics.h"
 #import "ios/chrome/browser/web_state_list/tab_insertion_browser_agent.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
-#import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_module.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/public/provider/chrome/browser/signin/choice_api.h"
 #import "ios/public/provider/chrome/browser/ui_utils/ui_utils_api.h"
+#import "ios/public/provider/chrome/browser/user_feedback/user_feedback_api.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_data.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
@@ -162,8 +165,8 @@
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
-#include "ios/panel/panel_interaction_controller.h"
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
+#import "ios/panel/panel_interaction_controller.h"
 // End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -253,6 +256,9 @@ void InjectNTP(Browser* browser) {
   std::unique_ptr<WebStateListObserverBridge> _webStateListForwardingObserver;
   std::unique_ptr<PolicyWatcherBrowserAgentObserverBridge>
       _policyWatcherObserverBridge;
+  // View controller presents the signed in accounts when they have changed
+  // while the application was in background.
+  __weak SignedInAccountsViewController* _accountsViewController;
 }
 
 // Navigation View controller for the settings.
@@ -330,6 +336,9 @@ void InjectNTP(Browser* browser) {
 // `closePresentedViews`.
 @property(nonatomic, strong)
     IncognitoInterstitialCoordinator* incognitoInterstitialCoordinator;
+
+// YES if the Settings view is being dismissed.
+@property(nonatomic, assign) BOOL dismissingSettings;
 
 @end
 
@@ -420,9 +429,8 @@ void InjectNTP(Browser* browser) {
   self.sceneState.appState.shouldShowDefaultBrowserPromo = shouldShowPromo;
 
   if (parameters.openedViaFirstPartyScheme) {
-    DefaultBrowserSceneAgent* sceneAgent =
-        [DefaultBrowserSceneAgent agentFromScene:self.sceneState];
-    [sceneAgent.nonModalScheduler logUserEnteredAppViaFirstPartyScheme];
+    [[NonModalDefaultBrowserPromoSchedulerSceneAgent
+        agentFromScene:self.sceneState] logUserEnteredAppViaFirstPartyScheme];
     [self notifyFETAppOpenedViaFirstParty];
   }
 }
@@ -484,7 +492,19 @@ void InjectNTP(Browser* browser) {
                withUrlLoadParams:params
              tabOpenedCompletion:nil];
     } else if (ActivityIsTabMove(activity)) {
-      [self handleTabMoveActivity:activity];
+      if ([self isTabActivityValid:activity]) {
+        [self handleTabMoveActivity:activity];
+      } else {
+        // If the tab does not exist, open a new tab.
+        UrlLoadParams params =
+            UrlLoadParams::InNewTab(GURL(kChromeUINewTabURL));
+        ApplicationMode mode = self.currentInterface.incognito
+                                   ? ApplicationMode::INCOGNITO
+                                   : ApplicationMode::NORMAL;
+        [self openOrReuseTabInMode:mode
+                 withUrlLoadParams:params
+               tabOpenedCompletion:nil];
+      }
     } else if (!activityWithCompletion) {
       // Completion involves user interaction.
       // Only one can be triggered.
@@ -576,17 +596,6 @@ void InjectNTP(Browser* browser) {
 
   base::UmaHistogramEnumeration(kMultiWindowOpenInNewWindowHistogram,
                                 sceneState.currentOrigin);
-}
-
-- (BOOL)presentSignInAccountsViewControllerIfNecessary {
-  ChromeBrowserState* browserState = self.currentInterface.browserState;
-  DCHECK(browserState);
-  if ([SignedInAccountsViewController
-          shouldBePresentedForBrowserState:browserState]) {
-    [self presentSignedInAccountsViewControllerForBrowserState:browserState];
-    return YES;
-  }
-  return NO;
 }
 
 - (void)sceneState:(SceneState*)sceneState
@@ -817,6 +826,19 @@ void InjectNTP(Browser* browser) {
       }));
 }
 
+// Present the sign-in accounts view if the accounts have changed while in
+// background.
+- (BOOL)presentSignInAccountsViewControllerIfNecessary {
+  ChromeBrowserState* browserState = self.currentInterface.browserState;
+  DCHECK(browserState);
+  if ([SignedInAccountsViewController
+          shouldBePresentedForBrowserState:browserState]) {
+    [self presentSignedInAccountsViewControllerForBrowserState:browserState];
+    return YES;
+  }
+  return NO;
+}
+
 - (void)initializeUI {
   if (self.sceneState.UIEnabled) {
     return;
@@ -848,17 +870,13 @@ void InjectNTP(Browser* browser) {
       PromosManagerFactory::GetForBrowserState(browserState);
 
   // Add scene agents that require CommandDispatcher.
-  DefaultBrowserSceneAgent* defaultBrowserAgent =
-      [[DefaultBrowserSceneAgent alloc]
+  DefaultBrowserPromoSceneAgent* defaultBrowserAgent =
+      [[DefaultBrowserPromoSceneAgent alloc]
           initWithCommandDispatcher:mainCommandDispatcher];
-  defaultBrowserAgent.nonModalScheduler.browser = mainBrowser;
-  if (IsDefaultBrowserInPromoManagerEnabled()) {
-    defaultBrowserAgent.promosManager = promosManager;
-  }
+  defaultBrowserAgent.promosManager = promosManager;
   [self.sceneState addAgent:defaultBrowserAgent];
-  if (defaultBrowserAgent.nonModalScheduler) {
-    [self.sceneState addObserver:defaultBrowserAgent.nonModalScheduler];
-  }
+  [self.sceneState
+      addAgent:[[NonModalDefaultBrowserPromoSchedulerSceneAgent alloc] init]];
 
   // Create and start the BVC.
   [self.browserViewWrangler createMainCoordinatorAndInterface];
@@ -928,9 +946,12 @@ void InjectNTP(Browser* browser) {
                                   initWithPromosManager:promosManager]];
   }
 
-  if (IsWhatsNewEnabled()) {
-    [self.sceneState addAgent:[[WhatsNewSceneAgent alloc]
-                                  initWithPromosManager:promosManager]];
+  [self.sceneState addAgent:[[WhatsNewSceneAgent alloc]
+                                initWithPromosManager:promosManager]];
+
+  if (ios::provider::IsChoiceEnabled()) {
+    [self.sceneState
+        addAgent:ios::provider::CreateChoiceSceneAgent(promosManager)];
   }
 
   // Do not gate by feature flag so it can run for enabled -> disabled
@@ -1063,8 +1084,12 @@ void InjectNTP(Browser* browser) {
   }
 
   if (HasRecentFirstPartyIntentLaunchesAndRecordsCurrentLaunch()) {
-    feature_engagement::TrackerFactory::GetForBrowserState(browserState)
-        ->NotifyEvent(feature_engagement::events::kBlueDotPromoCriterionMet);
+    feature_engagement::Tracker* tracker =
+        feature_engagement::TrackerFactory::GetForBrowserState(browserState);
+
+    tracker->NotifyEvent(feature_engagement::events::kBlueDotPromoCriterionMet);
+    tracker->NotifyEvent(
+        feature_engagement::events::kDefaultBrowserVideoPromoConditionsMet);
   }
 }
 
@@ -1080,8 +1105,7 @@ void InjectNTP(Browser* browser) {
   }
   return postOpeningAction == NO_ACTION &&
          GetApplicationContext()->WasLastShutdownClean() &&
-         !IsChromeLikelyDefaultBrowser() &&
-         !HasUserOpenedSettingsFromFirstRunPromo();
+         !IsChromeLikelyDefaultBrowser();
 }
 
 - (void)maybeShowDefaultBrowserPromo:(Browser*)browser {
@@ -1143,13 +1167,10 @@ void InjectNTP(Browser* browser) {
     return;
   }
 
-  BOOL isGeneralPromoEligibleUser =
-      !HasUserInteractedWithFullscreenPromoBefore() &&
+  if (!HasUserInteractedWithFullscreenPromoBefore() &&
       (IsLikelyInterestedDefaultBrowserUser(DefaultPromoTypeGeneral) ||
        isSignedIn) &&
-      !UserInPromoCooldown();
-  if (isGeneralPromoEligibleUser ||
-      ShouldShowRemindMeLaterDefaultBrowserFullscreenPromo()) {
+      !UserInPromoCooldown()) {
     self.sceneState.appState.shouldShowDefaultBrowserPromo = YES;
     self.sceneState.appState.defaultBrowserPromoTypeToShow =
         DefaultPromoTypeGeneral;
@@ -1162,6 +1183,9 @@ void InjectNTP(Browser* browser) {
   if (!self.sceneState.UIEnabled) {
     return;  // Nothing to do.
   }
+
+  [_accountsViewController teardownUI];
+  _accountsViewController = nil;
 
   // The UI should be stopped before the models they observe are stopped.
   // SigninCoordinator teardown is performed by the `signinCompletion` on
@@ -1284,6 +1308,22 @@ void InjectNTP(Browser* browser) {
 - (BOOL)isIncognitoForced {
   return IsIncognitoModeForced(
       self.incognitoInterface.browser->GetBrowserState()->GetPrefs());
+}
+
+// Returns 'YES' if the tabID from the given `activity` is valid.
+- (BOOL)isTabActivityValid:(NSUserActivity*)activity {
+  NSString* tabID = GetTabIDFromActivity(activity);
+
+  ChromeBrowserState* browserState = self.currentInterface.browserState;
+  BrowserList* browserList =
+      BrowserListFactory::GetForBrowserState(browserState);
+  const std::set<Browser*>& browsers = self.currentInterface.incognito
+                                           ? browserList->AllIncognitoBrowsers()
+                                           : browserList->AllRegularBrowsers();
+
+  BrowserAndIndex tabInfo = FindBrowserAndIndex(tabID, browsers);
+
+  return tabInfo.tab_index != WebStateList::kInvalidIndex;
 }
 
 // Sets a LocalState pref marking the TOS EULA as accepted.
@@ -1410,10 +1450,6 @@ void InjectNTP(Browser* browser) {
   [self dismissModalDialogsWithCompletion:completion dismissOmnibox:YES];
 }
 
-- (void)dismissModalDialogs {
-  [self dismissModalDialogsWithCompletion:nil dismissOmnibox:YES];
-}
-
 - (void)showHistory {
 
   // Vivaldi
@@ -1512,6 +1548,21 @@ void InjectNTP(Browser* browser) {
                                  completion:nil];
 }
 
+- (void)showPrivacySettingsFromViewController:
+    (UIViewController*)baseViewController {
+  if (self.settingsNavigationController) {
+    return;
+  }
+
+  Browser* browser = self.mainInterface.browser;
+  self.settingsNavigationController =
+      [SettingsNavigationController privacyControllerForBrowser:browser
+                                                       delegate:self];
+  [baseViewController presentViewController:self.settingsNavigationController
+                                   animated:YES
+                                 completion:nil];
+}
+
 - (void)showReportAnIssueFromViewController:
             (UIViewController*)baseViewController
                                      sender:(UserFeedbackSender)sender {
@@ -1554,14 +1605,30 @@ void InjectNTP(Browser* browser) {
   Browser* browser = self.mainInterface.browser;
   id<ApplicationCommands> handler =
       HandlerForProtocol(browser->GetCommandDispatcher(), ApplicationCommands);
-  self.settingsNavigationController =
-      [SettingsNavigationController userFeedbackControllerForBrowser:browser
-                                                            delegate:self
-                                                    userFeedbackData:data
-                                                             handler:handler];
-  [baseViewController presentViewController:self.settingsNavigationController
-                                   animated:YES
-                                 completion:nil];
+
+  if (ios::provider::CanUseStartUserFeedbackFlow()) {
+    UserFeedbackConfiguration* configuration =
+        [[UserFeedbackConfiguration alloc] init];
+    configuration.data = data;
+    configuration.handler = handler;
+    configuration.singleSignOnService =
+        GetApplicationContext()->GetSSOService();
+
+    NSError* error;
+    ios::provider::StartUserFeedbackFlow(configuration, baseViewController,
+                                         &error);
+    UMA_HISTOGRAM_BOOLEAN("IOS.FeedbackKit.UserFlowStartedSuccess",
+                          error == nil);
+  } else {
+    self.settingsNavigationController =
+        [SettingsNavigationController userFeedbackControllerForBrowser:browser
+                                                              delegate:self
+                                                      userFeedbackData:data
+                                                               handler:handler];
+    [baseViewController presentViewController:self.settingsNavigationController
+                                     animated:YES
+                                   completion:nil];
+  }
 }
 
 - (UserFeedbackData*)createUserFeedbackDataForSender:(UserFeedbackSender)sender
@@ -1651,13 +1718,25 @@ void InjectNTP(Browser* browser) {
   Browser* mainBrowser = self.mainInterface.browser;
 
   switch (command.operation) {
-    case AuthenticationOperationReauthenticate:
+    case AuthenticationOperationPrimaryAccountReauth:
       self.signinCoordinator = [SigninCoordinator
-          reAuthenticationCoordinatorWithBaseViewController:baseViewController
-                                                    browser:mainBrowser
-                                                accessPoint:command.accessPoint
-                                                promoAction:command
-                                                                .promoAction];
+          primaryAccountReauthCoordinatorWithBaseViewController:
+              baseViewController
+                                                        browser:mainBrowser
+                                                    accessPoint:command
+                                                                    .accessPoint
+                                                    promoAction:
+                                                        command.promoAction];
+      break;
+    case AuthenticationOperationSigninAndSyncReauth:
+      self.signinCoordinator = [SigninCoordinator
+          signinAndSyncReauthCoordinatorWithBaseViewController:
+              baseViewController
+                                                       browser:mainBrowser
+                                                   accessPoint:command
+                                                                   .accessPoint
+                                                   promoAction:
+                                                       command.promoAction];
       break;
     case AuthenticationOperationSigninAndSync:
       self.signinCoordinator = [SigninCoordinator
@@ -1685,6 +1764,14 @@ void InjectNTP(Browser* browser) {
       self.signinCoordinator = [SigninCoordinator
           forcedSigninCoordinatorWithBaseViewController:baseViewController
                                                 browser:mainBrowser];
+      break;
+    case AuthenticationOperationSigninAndSyncWithTwoScreens:
+      self.signinCoordinator = [SigninCoordinator
+          twoScreensSigninCoordinatorWithBaseViewController:baseViewController
+                                                    browser:mainBrowser
+                                                accessPoint:command.accessPoint
+                                                promoAction:command
+                                                                .promoAction];
       break;
   }
   [self startSigninCoordinatorWithCompletion:command.callback];
@@ -1746,9 +1833,10 @@ void InjectNTP(Browser* browser) {
   // Copy the URL so it can be safely captured in the block.
   GURL copiedURL = url;
 
-  [self startSigninCoordinatorWithCompletion:^(BOOL success) {
+  [self startSigninCoordinatorWithCompletion:^(SigninCoordinatorResult result) {
     // If the sign-in is not successful or the scene controller is shut down do
     // not load the continuation URL.
+    BOOL success = result == SigninCoordinatorResultSuccess;
     if (!success || !weakSelf) {
       return;
     }
@@ -1794,9 +1882,15 @@ void InjectNTP(Browser* browser) {
   DCHECK(!self.signinCoordinator)
       << "self.signinCoordinator: "
       << base::SysNSStringToUTF8([self.signinCoordinator description]);
+
+  // Vivaldi: This can be skipped since settingsNavigationController is always
+  // initialised below.
+  if (!vivaldi::IsVivaldiRunning()) {
   if (self.settingsNavigationController) {
     return;
   }
+  } // End Vivaldi
+
   [[DeferredInitializationRunner sharedInstance]
       runBlockIfNecessary:kPrefObserverInit];
 
@@ -1953,7 +2047,7 @@ void InjectNTP(Browser* browser) {
   DCHECK(!self.signinCoordinator)
       << "self.signinCoordinator: "
       << base::SysNSStringToUTF8([self.signinCoordinator description]);
-  [self dismissModalDialogs];
+  [self dismissModalDialogsWithCompletion:nil];
   if (self.settingsNavigationController) {
     [self.settingsNavigationController
         showSavedPasswordsSettingsFromViewController:baseViewController
@@ -2033,6 +2127,22 @@ void InjectNTP(Browser* browser) {
                  completion:nil];
 }
 
+- (void)showCreditCardDetails:(const autofill::CreditCard*)creditCard {
+  UIViewController* baseViewController = self.currentInterface.viewController;
+  if (self.settingsNavigationController) {
+    [self.settingsNavigationController showCreditCardDetails:creditCard];
+    return;
+  }
+  Browser* browser = self.mainInterface.browser;
+  self.settingsNavigationController = [SettingsNavigationController
+      autofillCreditCardEditControllerForBrowser:browser
+                                        delegate:self
+                                      creditCard:creditCard];
+  [baseViewController presentViewController:self.settingsNavigationController
+                                   animated:YES
+                                 completion:nil];
+}
+
 - (void)showDefaultBrowserSettingsFromViewController:
             (UIViewController*)baseViewController
                                         sourceForUMA:
@@ -2050,7 +2160,8 @@ void InjectNTP(Browser* browser) {
 
   self.settingsNavigationController =
       [SettingsNavigationController defaultBrowserControllerForBrowser:browser
-                                                              delegate:self];
+                                                              delegate:self
+                                                          sourceForUMA:source];
   [baseViewController presentViewController:self.settingsNavigationController
                                    animated:YES
                                  completion:nil];
@@ -2246,9 +2357,17 @@ void InjectNTP(Browser* browser) {
       return ^{
         [weakSelf startQRCodeScanner];
       };
-    case START_LENS:
+    case START_LENS_FROM_HOME_SCREEN_WIDGET:
       return ^{
-        [weakSelf startLens];
+        [weakSelf startLensWithEntryPoint:LensEntrypoint::HomeScreenWidget];
+      };
+    case START_LENS_FROM_APP_ICON_LONG_PRESS:
+      return ^{
+        [weakSelf startLensWithEntryPoint:LensEntrypoint::AppIconLongPress];
+      };
+    case START_LENS_FROM_SPOTLIGHT:
+      return ^{
+        [weakSelf startLensWithEntryPoint:LensEntrypoint::Spotlight];
       };
     case FOCUS_OMNIBOX:
       return ^{
@@ -2286,7 +2405,7 @@ void InjectNTP(Browser* browser) {
   [QRHandler showQRScanner];
 }
 
-- (void)startLens {
+- (void)startLensWithEntryPoint:(LensEntrypoint)entryPoint {
   if (!self.currentInterface.browser) {
     return;
   }
@@ -2294,7 +2413,7 @@ void InjectNTP(Browser* browser) {
       self.currentInterface.browser->GetCommandDispatcher(), LensCommands);
   OpenLensInputSelectionCommand* command = [[OpenLensInputSelectionCommand
       alloc]
-          initWithEntryPoint:LensEntrypoint::HomeScreenWidget
+          initWithEntryPoint:entryPoint
            presentationStyle:LensInputSelectionPresentationStyle::SlideFromRight
       presentationCompletion:nil];
   [lensHandler openLensInputSelection:command];
@@ -2890,7 +3009,7 @@ void InjectNTP(Browser* browser) {
   id<ApplicationSettingsCommands> settingsHandler =
       HandlerForProtocol(self.mainInterface.browser->GetCommandDispatcher(),
                          ApplicationSettingsCommands);
-  UIViewController* accountsViewController =
+  SignedInAccountsViewController* accountsViewController =
       [[SignedInAccountsViewController alloc]
           initWithBrowserState:browserState
                     dispatcher:settingsHandler];
@@ -2898,11 +3017,16 @@ void InjectNTP(Browser* browser) {
       presentViewController:accountsViewController
                    animated:YES
                  completion:nil];
+  _accountsViewController = accountsViewController;
 }
 
 // Close Settings, or Signin or the 3rd-party intents Incognito interstitial.
 - (void)closePresentedViews:(BOOL)animated
                  completion:(ProceduralBlock)completion {
+  // If the Incognito interstitial is active, stop it.
+  [self.incognitoInterstitialCoordinator stop];
+  self.incognitoInterstitialCoordinator = nil;
+
   __weak __typeof(self) weakSelf = self;
   BOOL resetSigninState = self.signinCoordinator != nil;
   completion = ^{
@@ -2916,35 +3040,45 @@ void InjectNTP(Browser* browser) {
     strongSelf.dismissingSigninPromptFromExternalTrigger = NO;
   };
 
-  if (self.settingsNavigationController) {
+  if (self.settingsNavigationController && !self.dismissingSettings) {
+    self.dismissingSettings = YES;
+    // Store a reference to the presentingViewController in case the user
+    // is dismissing the Signin screen and then dismisses Settings before
+    // the Signin screen is done animating, which will delay the execution of
+    // the `dismissSettings` block stopping the code from accessing
+    // the `presentingViewController` property.
+    __weak UIViewController* weakPresentingViewController =
+        [self.settingsNavigationController presentingViewController];
     ProceduralBlock dismissSettings = ^() {
-      [self.settingsNavigationController cleanUpSettings];
-      UIViewController* presentingViewController =
-          [self.settingsNavigationController presentingViewController];
-      // If presentingViewController is nil it means the VC was already
-      // dismissed by some other action like swiping down.
-      DCHECK(presentingViewController);
-      [presentingViewController dismissViewControllerAnimated:animated
-                                                   completion:completion];
-      self.settingsNavigationController = nil;
+      [weakSelf.settingsNavigationController cleanUpSettings];
+      UIViewController* strongPresentingViewController =
+          weakPresentingViewController;
+      if (strongPresentingViewController) {
+        [strongPresentingViewController
+            dismissViewControllerAnimated:animated
+                               completion:completion];
+      } else {
+        // The view is already dismissed. Completion should still be called.
+        completion();
+      }
+      weakSelf.settingsNavigationController = nil;
+      weakSelf.dismissingSettings = NO;
     };
     // `self.signinCoordinator` can be presented on top of the settings, to
     // present the Trusted Vault reauthentication `self.signinCoordinator` has
     // to be closed first.
     if (self.signinCoordinator) {
+      // If signinCoordinator is already dismissing, completion execution will
+      // happen when it is done animating.
       [self interruptSigninCoordinatorAnimated:animated
                                     completion:dismissSettings];
-    } else if (dismissSettings) {
+    } else {
       dismissSettings();
     }
   } else if (self.signinCoordinator) {
     // `self.signinCoordinator` can be presented without settings, from the
     // bookmarks or the recent tabs view.
     [self interruptSigninCoordinatorAnimated:animated completion:completion];
-  } else if (self.incognitoInterstitialCoordinator) {
-    [self.incognitoInterstitialCoordinator stop];
-    self.incognitoInterstitialCoordinator = nil;
-    completion();
   } else {
     completion();
   }
@@ -2972,7 +3106,7 @@ void InjectNTP(Browser* browser) {
 
 // Starts the sign-in coordinator with a default cleanup completion.
 - (void)startSigninCoordinatorWithCompletion:
-    (signin_ui::CompletionCallback)completion {
+    (ShowSigninCommandCompletionCallback)completion {
   DCHECK(self.signinCoordinator);
   AuthenticationService* authenticationService =
       AuthenticationServiceFactory::GetForBrowserState(
@@ -2982,7 +3116,7 @@ void InjectNTP(Browser* browser) {
   switch (statusService) {
     case AuthenticationService::ServiceStatus::SigninDisabledByPolicy: {
       if (completion) {
-        completion(/*success=*/NO);
+        completion(SigninCoordinatorResultDisabled);
       }
       [self.signinCoordinator stop];
       id<PolicyChangeCommands> handler = HandlerForProtocol(
@@ -3020,7 +3154,7 @@ void InjectNTP(Browser* browser) {
         uiBlocker.reset();
 
         if (completion) {
-          completion(result == SigninCoordinatorResultSuccess);
+          completion(result);
         }
 
         if (!weakSelf.dismissingSigninPromptFromExternalTrigger) {
@@ -3354,7 +3488,7 @@ void InjectNTP(Browser* browser) {
   // will be destroyed.
   self.mainCoordinator.incognitoBrowser = nil;
 
-  if (base::FeatureList::IsEnabled(breadcrumbs::kLogBreadcrumbs)) {
+  if (breadcrumbs::IsEnabled()) {
     BreadcrumbManagerBrowserAgent::FromBrowser(self.incognitoInterface.browser)
         ->SetLoggingEnabled(false);
   }

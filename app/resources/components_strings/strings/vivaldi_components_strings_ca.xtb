@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Prem el botó de tornar a carregar per tornar a enviar les dades necessàries per carregar la pàgina.</translation>
 <translation id="3234666976984236645">Detecta sempre el contingut important en aquest lloc</translation>
 <translation id="3308738399950580893">anuncis</translation>
+<translation id="3384522979010096022">La teva organització no et permet veure aquest lloc</translation>
 <translation id="3422472998109090673">Actualment no es pot accedir a <ph name="HOST_NAME" />.</translation>
 <translation id="3427092606871434483">Permet (predeterminat)</translation>
 <translation id="3447661539832366887">El propietari d'aquest dispositiu ha desactivat el joc de dinosaures.</translation>
@@ -193,7 +194,6 @@
 <translation id="8150722005171944719">El fitxer de <ph name="URL" /> no es pot llegir. Pot ser que s'hagi suprimit, que s'hagi traslladat o que els permisos del fitxer n'impedeixin l'accés.</translation>
 <translation id="8184538546369750125">Utilitza l'opció predeterminada global (permet)</translation>
 <translation id="8211406090763984747">La connexió és segura</translation>
-<translation id="8225771182978767009">La persona que ha configurat l'ordinador ha bloquejat aquest lloc.</translation>
 <translation id="8241707690549784388">La pàgina que busques ha utilitzat informació que has introduït. Tornar a aquesta pàgina podria provocar que es repetís qualsevol acció realitzada. Vols continuar?</translation>
 <translation id="8241712895048303527">Bloqueja en aquest lloc web</translation>
 <translation id="8286036467436129157">Inicia la sessió</translation>
@@ -214,7 +214,6 @@
 <translation id="9062620674789239642">És possible que s'hagi mogut, editat o suprimit.</translation>
 <translation id="9069693763241529744">Bloquejat per un complement</translation>
 <translation id="9073799351042754113">Has decidit desactivar els advertiments de seguretat per a aquest lloc web.</translation>
-<translation id="910924428752220542">Contrasenyes de Vivaldi</translation>
 <translation id="9169664750068251925">Bloqueja sempre en aquest lloc</translation>
 <translation id="9180553614777056266">Bloquejador d'anuncis</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> fa servir un protocol no admès.</translation>

@@ -19,8 +19,8 @@
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/application_delegate/startup_information.h"
 #import "ios/chrome/app/launch_screen_view_controller.h"
-#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/chrome/browser/variations/ios_chrome_variations_seed_fetcher.h"
 #import "ios/chrome/common/channel_info.h"
@@ -131,26 +131,26 @@ void ActivateFieldTrialForGroup(IOSChromeVariationsGroup group) {
   // would be fetched but not used by variations service, and so the field trial
   // group would be assigned to the previous one.
   PrefService* local_state = GetApplicationContext()->GetLocalState();
-  std::string group_name =
-      local_state->GetString(kFirstRunSeedFetchExperimentGroupPref);
-  if (group_name.empty()) {
-    switch (group) {
-      case IOSChromeVariationsGroup::kNotAssigned:
-        NOTREACHED();
-        break;
-      case IOSChromeVariationsGroup::kNotFirstRun:
-        // First run completed before the experiment is setup.
-        break;
-      case IOSChromeVariationsGroup::kEnabled:
-        group_name = kIOSChromeVariationsTrialEnabledGroup;
-        break;
-      case IOSChromeVariationsGroup::kControl:
-        group_name = kIOSChromeVariationsTrialControlGroup;
-        break;
-      case IOSChromeVariationsGroup::kDefault:
-        group_name = kIOSChromeVariationsTrialDefaultGroup;
-        break;
-    }
+  std::string group_name;
+  switch (group) {
+    case IOSChromeVariationsGroup::kNotAssigned:
+      NOTREACHED();
+      break;
+    case IOSChromeVariationsGroup::kNotFirstRun:
+      // First run completed before the experiment is setup. Use group
+      // name from previous launches if exists, or leave empty if not.
+      group_name =
+          local_state->GetString(kFirstRunSeedFetchExperimentGroupPref);
+      break;
+    case IOSChromeVariationsGroup::kEnabled:
+      group_name = kIOSChromeVariationsTrialEnabledGroup;
+      break;
+    case IOSChromeVariationsGroup::kControl:
+      group_name = kIOSChromeVariationsTrialControlGroup;
+      break;
+    case IOSChromeVariationsGroup::kDefault:
+      group_name = kIOSChromeVariationsTrialDefaultGroup;
+      break;
   }
   local_state->SetString(kFirstRunSeedFetchExperimentGroupPref, group_name);
   if (!group_name.empty()) {

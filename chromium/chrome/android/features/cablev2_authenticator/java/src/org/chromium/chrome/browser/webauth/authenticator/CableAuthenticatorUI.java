@@ -27,6 +27,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.RequiresApi;
+import androidx.core.app.NotificationManagerCompat;
 import androidx.fragment.app.Fragment;
 import androidx.vectordrawable.graphics.drawable.Animatable2Compat;
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat;
@@ -36,6 +37,8 @@ import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.device.DeviceFeatureList;
+import org.chromium.device.DeviceFeatureMap;
 import org.chromium.ui.permissions.ActivityAndroidPermissionDelegate;
 import org.chromium.ui.permissions.AndroidPermissionDelegate;
 import org.chromium.ui.widget.Toast;
@@ -88,9 +91,6 @@ public class CableAuthenticatorUI extends Fragment implements OnClickListener {
     // These entries duplicate some of the enum values from
     // `CableV2MobileEvent`. The C++ enum is the source of truth for these
     // values.
-    private static final int EVENT_BLUETOOTH_ADVERTISE_PERMISSION_REQUESTED = 23;
-    private static final int EVENT_BLUETOOTH_ADVERTISE_PERMISSION_GRANTED = 24;
-    private static final int EVENT_BLUETOOTH_ADVERTISE_PERMISSION_REJECTED = 25;
 
     private enum Mode {
         QR, // QR code scanned by external app.
@@ -241,8 +241,15 @@ public class CableAuthenticatorUI extends Fragment implements OnClickListener {
                 case QR_CONFIRM:
                     if (event == Event.QR_ALLOW_BUTTON_CLICKED) {
                         ViewGroup top = (ViewGroup) getView();
-                        mAuthenticator.setQRLinking(
-                                ((CheckBox) top.findViewById(R.id.qr_link)).isChecked());
+                        boolean link = ((CheckBox) top.findViewById(R.id.qr_link)).isChecked();
+                        if (link
+                                && !DeviceFeatureMap.isEnabled(
+                                        DeviceFeatureList
+                                                .WEBAUTHN_HYBRID_LINK_WITHOUT_NOTIFICATIONS)) {
+                            link = NotificationManagerCompat.from(getContext())
+                                           .areNotificationsEnabled();
+                        }
+                        mAuthenticator.setQRLinking(link);
                         mState = State.CHECK_SCREENLOCK;
                         break;
                     } else if (event == Event.QR_DENY_BUTTON_CLICKED) {

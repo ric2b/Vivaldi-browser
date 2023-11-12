@@ -46,27 +46,35 @@ class RemovedPartnersTracker::MetaInfoChangeFilter {
   std::string nickname_;
 };
 
+#if !BUILDFLAG(IS_IOS)
+/*static*/
+void RemovedPartnersTracker::Create(Profile* profile,
+                                    bookmarks::BookmarkModel* model) {
+  new RemovedPartnersTracker(profile, model);
+}
+#else
 /*static*/
 void RemovedPartnersTracker::Create(PrefService* prefs,
                                     bookmarks::BookmarkModel* model) {
   new RemovedPartnersTracker(prefs, model);
 }
+#endif // !IS_IOS
 
 /*static*/
-std::set<base::GUID> RemovedPartnersTracker::ReadRemovedPartners(
+std::set<base::Uuid> RemovedPartnersTracker::ReadRemovedPartners(
     const base::Value::List& deleted_partners,
     bool& upgraded_old_id) {
   upgraded_old_id = false;
-  std::set<base::GUID> removed_partners;
+  std::set<base::Uuid> removed_partners;
 
   for (const base::Value& deleted_partner : deleted_partners) {
     if (!deleted_partner.is_string())
       continue;
-    base::GUID migrated_removed_partner =
-        base::GUID::ParseCaseInsensitive(deleted_partner.GetString());
+    base::Uuid migrated_removed_partner =
+        base::Uuid::ParseCaseInsensitive(deleted_partner.GetString());
     if (migrated_removed_partner.is_valid()) {
       // Upgrade from old, locale-based id to new id.
-      upgraded_old_id = upgraded_old_id || vivaldi_partners::MapLocaleIdToGUID(
+      upgraded_old_id = upgraded_old_id || vivaldi_partners::MapLocaleIdToUuid(
                                                migrated_removed_partner);
       removed_partners.insert(migrated_removed_partner);
     }
@@ -74,6 +82,15 @@ std::set<base::GUID> RemovedPartnersTracker::ReadRemovedPartners(
   return removed_partners;
 }
 
+#if !BUILDFLAG(IS_IOS)
+RemovedPartnersTracker::RemovedPartnersTracker(Profile* profile,
+                                               bookmarks::BookmarkModel* model)
+    : model_(model), prefs_(profile->GetPrefs()), profile_(profile) {
+  model_->AddObserver(this);
+  if (model_->loaded())
+    BookmarkModelLoaded(model, false);
+}
+#else
 RemovedPartnersTracker::RemovedPartnersTracker(PrefService* prefs,
                                                bookmarks::BookmarkModel* model)
     : model_(model), prefs_(prefs) {
@@ -81,6 +98,7 @@ RemovedPartnersTracker::RemovedPartnersTracker(PrefService* prefs,
   if (model_->loaded())
     BookmarkModelLoaded(model, false);
 }
+#endif // !IS_IOS
 
 RemovedPartnersTracker::~RemovedPartnersTracker() {
   model_->RemoveObserver(this);
@@ -157,7 +175,7 @@ void RemovedPartnersTracker::TrackRemovals(const bookmarks::BookmarkNode* node,
 void RemovedPartnersTracker::DoTrackRemovals(
     const bookmarks::BookmarkNode* node,
     bool recursive) {
-  base::GUID partner_id = vivaldi_bookmark_kit::GetPartner(node);
+  base::Uuid partner_id = vivaldi_bookmark_kit::GetPartner(node);
   if (partner_id.is_valid()) {
     removed_partners_.insert(partner_id);
     vivaldi_bookmark_kit::RemovePartnerId(model_, node);
@@ -168,5 +186,14 @@ void RemovedPartnersTracker::DoTrackRemovals(
     }
   }
 }
+
+#if !BUILDFLAG(IS_IOS)
+void RemovedPartnersTracker::OnProfileMarkedForPermanentDeletion(
+    Profile* profile) {
+  if (profile_ == profile) {
+    delete this;
+  }
+}
+#endif // !BUILDFLAG(IS_IOS)
 
 }  // namespace vivaldi_partners

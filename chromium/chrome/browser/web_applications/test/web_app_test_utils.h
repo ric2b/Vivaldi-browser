@@ -43,16 +43,6 @@ enum class OsIntegrationSubManagersState {
 
 namespace test {
 
-enum class ExternalPrefMigrationTestCases {
-  kDisableMigrationReadPref,
-  kDisableMigrationReadDB,
-  kEnableMigrationReadPref,
-  kEnableMigrationReadDB,
-};
-
-std::string GetExternalPrefMigrationTestName(
-    const ::testing::TestParamInfo<ExternalPrefMigrationTestCases>& info);
-
 std::string GetOsIntegrationSubManagersTestName(
     const ::testing::TestParamInfo<OsIntegrationSubManagersState>& info);
 
@@ -64,9 +54,13 @@ std::unique_ptr<WebApp> CreateWebApp(
 
 // Do not use this for installation! Instead, use the utilities in
 // web_app_install_test_util.h.
-std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
-                                           uint32_t seed,
-                                           bool allow_system_source = true);
+struct CreateRandomWebAppParams {
+  GURL base_url{"https://example.com/path"};
+  uint32_t seed = 0;
+  bool non_zero = false;
+  bool allow_system_source = true;
+};
+std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params);
 
 void TestAcceptDialogCallback(
     content::WebContents* initiator_web_contents,

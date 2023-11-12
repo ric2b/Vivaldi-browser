@@ -118,8 +118,9 @@ std::string GenerateAbstractAddress() {
 bool HasDiskImage(const vm_tools::concierge::StartArcVmRequest& request,
                   const std::string& disk_path) {
   for (const auto& disk : request.disks()) {
-    if (disk.path() == disk_path)
+    if (disk.path() == disk_path) {
       return true;
+    }
   }
   return false;
 }
@@ -170,8 +171,9 @@ class TestConciergeClient : public ash::FakeConciergeClient {
     ++stop_vm_call_count_;
     stop_vm_request_ = request;
     ash::FakeConciergeClient::StopVm(request, std::move(callback));
-    if (on_stop_vm_callback_ && (stop_vm_call_count_ == callback_count_))
+    if (on_stop_vm_callback_ && (stop_vm_call_count_ == callback_count_)) {
       std::move(on_stop_vm_callback_).Run();
+    }
   }
 
   void StartArcVm(
@@ -292,8 +294,9 @@ class TestArcVmBootNotificationServer
     char buf[256];
     while (true) {
       ssize_t len = HANDLE_EINTR(read(client_fd.get(), buf, sizeof(buf)));
-      if (len <= 0)
+      if (len <= 0) {
         break;
+      }
       out.append(buf, len);
     }
     received_.append(out);
@@ -498,15 +501,17 @@ class ArcVmClientAdapterTest : public testing::Test,
   void SendVmStartedSignal() {
     vm_tools::concierge::VmStartedSignal signal;
     signal.set_name(kArcVmName);
-    for (auto& observer : GetTestConciergeClient()->vm_observer_list())
+    for (auto& observer : GetTestConciergeClient()->vm_observer_list()) {
       observer.OnVmStarted(signal);
+    }
   }
 
   void SendVmStartedSignalNotForArcVm() {
     vm_tools::concierge::VmStartedSignal signal;
     signal.set_name("penguin");
-    for (auto& observer : GetTestConciergeClient()->vm_observer_list())
+    for (auto& observer : GetTestConciergeClient()->vm_observer_list()) {
       observer.OnVmStarted(signal);
+    }
   }
 
   void SendVmStoppedSignalForCid(vm_tools::concierge::VmStopReason reason,
@@ -515,8 +520,9 @@ class ArcVmClientAdapterTest : public testing::Test,
     signal.set_name(kArcVmName);
     signal.set_cid(cid);
     signal.set_reason(reason);
-    for (auto& observer : GetTestConciergeClient()->vm_observer_list())
+    for (auto& observer : GetTestConciergeClient()->vm_observer_list()) {
       observer.OnVmStopped(signal);
+    }
   }
 
   void SendVmStoppedSignal(vm_tools::concierge::VmStopReason reason) {
@@ -529,13 +535,15 @@ class ArcVmClientAdapterTest : public testing::Test,
     signal.set_name("penguin");
     signal.set_cid(kCid);
     signal.set_reason(reason);
-    for (auto& observer : GetTestConciergeClient()->vm_observer_list())
+    for (auto& observer : GetTestConciergeClient()->vm_observer_list()) {
       observer.OnVmStopped(signal);
+    }
   }
 
   void SendNameOwnerChangedSignal() {
-    for (auto& observer : GetTestConciergeClient()->observer_list())
+    for (auto& observer : GetTestConciergeClient()->observer_list()) {
       observer.ConciergeServiceStopped();
+    }
   }
 
   void InjectUpstartStartJobFailure(const std::string& job_name_to_fail) {
@@ -871,8 +879,9 @@ TEST_F(ArcVmClientAdapterTest, DoesNotGetArcInstanceStoppedOnNestedInstance) {
     Observer& operator=(const Observer&) = delete;
 
     ~Observer() override {
-      if (child_observer_ && nested_adapter_)
+      if (child_observer_ && nested_adapter_) {
         nested_adapter_->RemoveObserver(child_observer_);
+      }
     }
 
     bool stopped_called() const { return stopped_called_; }
@@ -1055,11 +1064,10 @@ TEST_F(ArcVmClientAdapterTest, StartMiniArc_UreadaheadByDefault) {
   StartMiniArcWithParams(true, std::move(start_params));
 
   const auto& ops = upstart_operations();
-  const auto it =
-      base::ranges::find_if(ops, [](const UpstartOperation& op) {
-        return op.type == UpstartOperationType::START &&
-               kArcVmPreLoginServicesJobName == op.name;
-      });
+  const auto it = base::ranges::find_if(ops, [](const UpstartOperation& op) {
+    return op.type == UpstartOperationType::START &&
+           kArcVmPreLoginServicesJobName == op.name;
+  });
   ASSERT_NE(ops.end(), it);
   EXPECT_TRUE(it->env.empty());
 }
@@ -1073,11 +1081,10 @@ TEST_F(ArcVmClientAdapterTest, StartMiniArc_DisableUreadahead) {
   StartMiniArcWithParams(true, std::move(start_params));
 
   const auto& ops = upstart_operations();
-  const auto it =
-      base::ranges::find_if(ops, [](const UpstartOperation& op) {
-        return op.type == UpstartOperationType::START &&
-               kArcVmPreLoginServicesJobName == op.name;
-      });
+  const auto it = base::ranges::find_if(ops, [](const UpstartOperation& op) {
+    return op.type == UpstartOperationType::START &&
+           kArcVmPreLoginServicesJobName == op.name;
+  });
   ASSERT_NE(ops.end(), it);
   const auto it_ureadahead =
       base::ranges::find(it->env, "DISABLE_UREADAHEAD=1");
@@ -2300,18 +2307,19 @@ TEST_F(ArcVmClientAdapterTest,
   EXPECT_GE(GetTestConciergeClient()->start_arc_vm_call_count(), 1);
   EXPECT_FALSE(is_system_shutdown().has_value());
   const auto& request = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_TRUE(request.enable_consumer_auto_update_toggle());
+  EXPECT_TRUE(
+      request.mini_instance_request().enable_consumer_auto_update_toggle());
 }
 
 TEST_F(ArcVmClientAdapterTest,
        StartArc_EnableConsumerAutoUpdateToggle_Enabled) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(ash::features::kConsumerAutoUpdateToggleAllowed);
+  feature_list.InitAndEnableFeature(
+      ash::features::kConsumerAutoUpdateToggleAllowed);
   StartMiniArc();
   EXPECT_GE(GetTestConciergeClient()->start_arc_vm_call_count(), 1);
   EXPECT_FALSE(is_system_shutdown().has_value());
   const auto& request = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_TRUE(request.enable_consumer_auto_update_toggle());
   EXPECT_TRUE(
       request.mini_instance_request().enable_consumer_auto_update_toggle());
 }
@@ -2319,12 +2327,12 @@ TEST_F(ArcVmClientAdapterTest,
 TEST_F(ArcVmClientAdapterTest,
        StartArc_EnableConsumerAutoUpdateToggle_Disabled) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(ash::features::kConsumerAutoUpdateToggleAllowed);
+  feature_list.InitAndDisableFeature(
+      ash::features::kConsumerAutoUpdateToggleAllowed);
   StartMiniArc();
   EXPECT_GE(GetTestConciergeClient()->start_arc_vm_call_count(), 1);
   EXPECT_FALSE(is_system_shutdown().has_value());
   const auto& request = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_FALSE(request.enable_consumer_auto_update_toggle());
   EXPECT_FALSE(
       request.mini_instance_request().enable_consumer_auto_update_toggle());
 }
@@ -2454,41 +2462,6 @@ TEST_P(ArcVmClientAdapterDalvikMemoryProfileTest, Profile) {
             test_param.arc_profile);
 }
 
-struct UsapProfileTestParam {
-  // Requested profile.
-  StartParams::UsapProfile profile;
-  // Name of profile that is expected.
-  const char* profile_name;
-  int memory;
-};
-
-constexpr UsapProfileTestParam kUsapProfileTestCases[] = {
-    {StartParams::UsapProfile::DEFAULT, nullptr,
-     vm_tools::concierge::StartArcVmRequest::USAP_PROFILE_DEFAULT},
-    {StartParams::UsapProfile::M4G, "4G",
-     vm_tools::concierge::StartArcVmRequest::USAP_PROFILE_4G},
-    {StartParams::UsapProfile::M8G, "8G",
-     vm_tools::concierge::StartArcVmRequest::USAP_PROFILE_8G},
-    {StartParams::UsapProfile::M16G, "16G",
-     vm_tools::concierge::StartArcVmRequest::USAP_PROFILE_16G}};
-
-class ArcVmClientAdapterUsapProfileTest
-    : public ArcVmClientAdapterTest,
-      public testing::WithParamInterface<UsapProfileTestParam> {};
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         ArcVmClientAdapterUsapProfileTest,
-                         ::testing::ValuesIn(kUsapProfileTestCases));
-
-TEST_P(ArcVmClientAdapterUsapProfileTest, Profile) {
-  const auto& test_param = GetParam();
-  StartParams start_params(GetPopulatedStartParams());
-  start_params.usap_profile = test_param.profile;
-  StartMiniArcWithParams(true, std::move(start_params));
-  const auto& request = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_EQ(request.usap_profile(), test_param.memory);
-}
-
 TEST_F(ArcVmClientAdapterTest, ArcVmTTSCachingDefault) {
   StartParams start_params(GetPopulatedStartParams());
   StartMiniArcWithParams(true, std::move(start_params));
@@ -2558,26 +2531,6 @@ TEST_F(ArcVmClientAdapterTest, ConvertUpgradeParams_EnableTtsCacheSetup) {
   UpgradeArcWithParams(true, std::move(upgrade_params));
   EXPECT_TRUE(base::Contains(boot_notification_server()->received_data(),
                              "ro.boot.skip_tts_cache=0"));
-}
-
-// Test that update_o4c_list_via_a2c2 is not set with the feature flag disabled.
-TEST_F(ArcVmClientAdapterTest, ArcUpdateO4CListViaA2C2Disabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(kArcUpdateO4CListViaA2C2);
-  StartParams start_params(GetPopulatedStartParams());
-  StartMiniArcWithParams(true, std::move(start_params));
-  auto request = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_FALSE(request.update_o4c_list_via_a2c2());
-}
-
-// Test that update_o4c_list_via_a2c2 is set with the feature flag enabled.
-TEST_F(ArcVmClientAdapterTest, ArcUpdateO4CListViaA2C2Enabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kArcUpdateO4CListViaA2C2);
-  StartParams start_params(GetPopulatedStartParams());
-  StartMiniArcWithParams(true, std::move(start_params));
-  auto request = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_TRUE(request.update_o4c_list_via_a2c2());
 }
 
 TEST_F(ArcVmClientAdapterTest, mglruReclaimDisabled) {
@@ -2732,6 +2685,24 @@ TEST_F(ArcVmClientAdapterTest, ArcPriorityAppLmkDelayEnabled_SomeApp) {
   EXPECT_TRUE(
       base::Contains(boot_notification_server()->received_data(),
                      "ro.boot.arc.lmk.priority_app_delay_duration_sec=60"));
+}
+
+TEST_F(ArcVmClientAdapterTest, ArcLmkPerceptibleMinStateUpdateDisabled) {
+  StartMiniArc();
+  UpgradeParams upgrade_params = GetPopulatedUpgradeParams();
+  upgrade_params.enable_lmk_perceptible_min_state_update = false;
+  UpgradeArcWithParams(true, std::move(upgrade_params));
+  EXPECT_FALSE(base::Contains(boot_notification_server()->received_data(),
+                              "ro.boot.arc.lmk.perceptible_min_state_update"));
+}
+
+TEST_F(ArcVmClientAdapterTest, ArcLmkPerceptibleMinStateUpdateEnabled) {
+  StartMiniArc();
+  UpgradeParams upgrade_params = GetPopulatedUpgradeParams();
+  upgrade_params.enable_lmk_perceptible_min_state_update = true;
+  UpgradeArcWithParams(true, std::move(upgrade_params));
+  EXPECT_TRUE(base::Contains(boot_notification_server()->received_data(),
+                             "ro.boot.arc.lmk.perceptible_min_state_update=1"));
 }
 
 }  // namespace

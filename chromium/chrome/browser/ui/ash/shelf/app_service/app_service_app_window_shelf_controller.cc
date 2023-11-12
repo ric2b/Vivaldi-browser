@@ -99,7 +99,7 @@ AppServiceAppWindowShelfController::AppServiceAppWindowShelfController(
       app_service_instance_helper_(
           std::make_unique<AppServiceInstanceRegistryHelper>(this)) {
   aura::Env::GetInstance()->AddObserver(this);
-  Observe(&proxy_->InstanceRegistry());
+  instance_registry_observation_.Observe(&proxy_->InstanceRegistry());
 
   if (arc::IsArcAllowedForProfile(owner->profile()))
     arc_tracker_ = std::make_unique<AppServiceAppWindowArcTracker>(this);
@@ -457,7 +457,7 @@ void AppServiceAppWindowShelfController::OnInstanceUpdate(
 
 void AppServiceAppWindowShelfController::OnInstanceRegistryWillBeDestroyed(
     apps::InstanceRegistry* instance_registry) {
-  Observe(nullptr);
+  instance_registry_observation_.Reset();
 }
 
 int AppServiceAppWindowShelfController::GetActiveTaskId() const {
@@ -592,6 +592,7 @@ void AppServiceAppWindowShelfController::RegisterWindow(
     window->SetProperty(chromeos::kEscHoldToExitFullscreen, true);
   } else if (borealis::BorealisWindowManager::IsBorealisWindow(window)) {
     window->SetProperty(chromeos::kUseOverviewToExitFullscreen, true);
+    window->SetProperty(chromeos::kNoExitFullscreenOnLock, true);
     window->SetProperty(chromeos::kUseOverviewToExitPointerLock, true);
   } else if (crostini::IsCrostiniWindow(window)) {
     window->SetProperty(chromeos::kUseOverviewToExitFullscreen, true);

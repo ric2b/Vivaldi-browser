@@ -1161,12 +1161,16 @@ XRSystem::RequestedXRSessionFeatureSet XRSystem::ParseRequestedFeatures(
   for (const auto& feature : features) {
     String feature_string;
     if (feature.ToString(feature_string)) {
-      auto feature_enum =
-          StringToXRSessionFeature(GetExecutionContext(), feature_string);
+      auto feature_enum = StringToXRSessionFeature(feature_string);
 
       if (!feature_enum) {
         AddConsoleMessage(error_level,
                           "Unrecognized feature requested: " + feature_string);
+        result.invalid_features = true;
+      } else if (!IsFeatureEnabledForContext(feature_enum.value(),
+                                             GetExecutionContext())) {
+        AddConsoleMessage(error_level,
+                          "Unsupported feature requested: " + feature_string);
         result.invalid_features = true;
       } else if (!IsFeatureValidForMode(feature_enum.value(), session_mode,
                                         session_init, GetExecutionContext(),
@@ -1572,12 +1576,6 @@ void XRSystem::FinishSessionCreation(
       // The session is using DOM overlay mode. At this point the overlay
       // element is already in fullscreen mode, and the session can proceed.
       session->SetDOMOverlayElement(query->DOMOverlayElement());
-    }
-
-    if (query->mode() == device::mojom::blink::XRSessionMode::kImmersiveVr &&
-        session->UsesInputEventing()) {
-      frameProvider()->GetImmersiveDataProvider()->SetInputSourceButtonListener(
-          session->GetInputClickListener());
     }
   }
 

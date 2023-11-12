@@ -9,6 +9,7 @@ import {NativeEventTarget as EventTarget} from 'chrome://resources/ash/common/ev
 import {mountGuest} from '../../common/js/api.js';
 import {AsyncQueue, ConcurrentQueue} from '../../common/js/async_util.js';
 import {createDOMError} from '../../common/js/dom_utils.js';
+import {isEntryInsideDrive} from '../../common/js/entry_utils.js';
 import {FileType} from '../../common/js/file_type.js';
 import {EntryList} from '../../common/js/files_app_entry_types.js';
 import {metrics} from '../../common/js/metrics.js';
@@ -258,6 +259,20 @@ export class SearchV2ContentScanner extends ContentScanner {
     this.rootType_ = locationInfo ? locationInfo.rootType : null;
     this.query_ = query.toLowerCase();
     this.options_ = options || getDefaultSearchOptions();
+    this.driveSearchTypeMap_ = new Map([
+      [
+        VolumeManagerCommon.RootType.DRIVE_OFFLINE,
+        chrome.fileManagerPrivate.SearchType.OFFLINE,
+      ],
+      [
+        VolumeManagerCommon.RootType.DRIVE_SHARED_WITH_ME,
+        chrome.fileManagerPrivate.SearchType.EXCLUDE_DIRECTORIES,
+      ],
+      [
+        VolumeManagerCommon.RootType.DRIVE_RECENT,
+        chrome.fileManagerPrivate.SearchType.EXCLUDE_DIRECTORIES,
+      ],
+    ]);
   }
 
   /**
@@ -287,21 +302,22 @@ export class SearchV2ContentScanner extends ContentScanner {
    * volume would be the Linux volume. However, in the UI Linux is nested inside
    * My files, so we need to get My files as the top-most volume of a Linux
    * directory.
+   * @param {!DirectoryEntry|!FilesAppEntry} entry
    * @return {!DirectoryEntry|!FilesAppEntry}
    * @private
    */
-  getTopMostVolume_() {
-    const volumeInfo = this.volumeManager_.getVolumeInfo(this.entry_);
+  getTopMostVolume_(entry) {
+    const volumeInfo = this.volumeManager_.getVolumeInfo(entry);
     if (!volumeInfo) {
       // It's a placeholder or a fake entry.
-      return this.entry_;
+      return entry;
     }
-    const entry = volumeInfo.prefixEntry ? volumeInfo.prefixEntry :
-                                           volumeInfo.displayRoot;
+    const topEntry = volumeInfo.prefixEntry ? volumeInfo.prefixEntry :
+                                              volumeInfo.displayRoot;
     // Here entry should never be null, but due to Closure annotations, Closure
     // thinks it may be (both prefixEntry and displayRoot above are not
     // guaranteed to be non-null).
-    return entry ? this.getWrappedVolumeEntry_(entry) : this.entry_;
+    return topEntry ? this.getWrappedVolumeEntry_(topEntry) : entry;
   }
 
   /**
@@ -321,15 +337,37 @@ export class SearchV2ContentScanner extends ContentScanner {
   }
 
   /**
+   * For the given colume type returns root directories for all volumes with the
+   * given `volumeType`.
+   * @param {string} volumeType
+   * @return {!Array<!DirectoryEntry>}
+   */
+  getRootFoldersByVolumeType_(volumeType) {
+    const rootDirs = [];
+    const volumeInfoList = this.volumeManager_.volumeInfoList;
+    for (let index = 0; index < volumeInfoList.length; ++index) {
+      const volumeInfo = volumeInfoList.item(index);
+      if (volumeInfo.volumeType === volumeType) {
+        const displayRoot = volumeInfo.displayRoot;
+        if (displayRoot) {
+          rootDirs.push(...this.getSearchRoots_(displayRoot));
+        }
+      }
+    }
+    return rootDirs;
+  }
+
+  /**
    * Creates a single promise that, when fulfilled, returns a non-null array of
    * file entries. The array may be empty.
    * @param {!chrome.fileManagerPrivate.SearchMetadataParams} params
+   * @param {string} metricVariant The name of the UMA search metric variant.
    * @return {!Promise<!Array<!Entry>>}
    * @private
    */
-  makeFileSearchPromise_(params) {
+  makeFileSearchPromise_(params, metricVariant) {
     return new Promise((resolve, reject) => {
-      metrics.startInterval('Search.Local.Latency');
+      metrics.startInterval(`Search.${metricVariant}.Latency`);
       chrome.fileManagerPrivate.searchFiles(
           params,
           /**
@@ -343,9 +381,93 @@ export class SearchV2ContentScanner extends ContentScanner {
                   util.FileError.NOT_READABLE_ERR,
                   chrome.runtime.lastError.message));
             } else {
-              metrics.recordInterval('Search.Local.Latency');
+              metrics.recordInterval(`Search.${metricVariant}.Latency`);
               resolve(entries);
             }
+          });
+    });
+  }
+
+  /**
+   * Creates a promise that, when fulfilled, returns a non-null array of
+   * file entries. This promise uses a client side recursive entry reader.
+   * @param {number} modifiedTimestamp
+   * @param {chrome.fileManagerPrivate.FileCategory} category
+   * @param {number} maxResults
+   * @param {string} metricVariant
+   * @return {!Promise<!Array<!Entry>>}
+   * @private
+   */
+  makeReadEntriesRecursivelyPromise_(
+      folder, modifiedTimestamp, category, maxResults, metricVariant) {
+    // A promise that resolves to an entry if it is modified after cutoffDate or
+    // null, otherwise. Used to filter entries by modified time. If we fail to
+    // get metadata for an entry we return it without comparison, to be on the
+    // safe side.
+    const newDateFilterPromise = (entry, cutoffDate) => new Promise(resolve => {
+      entry.getMetadata(
+          (metadata) => {
+            resolve(metadata.modificationTime > cutoffDate ? entry : null);
+          },
+          () => {
+            resolve(entry);
+          });
+    });
+    return new Promise((resolve, reject) => {
+      metrics.startInterval(`Search.${metricVariant}.Latency`);
+      const collectedEntries = [];
+      let workLeft = 1;
+      util.readEntriesRecursively(
+          folder,
+          // More entries found callback.
+          (entries) => {
+            const filtered = entries.filter(entry => {
+              if (entry.name.toLowerCase().indexOf(this.query_) < 0) {
+                return false;
+              }
+              if (category !== chrome.fileManagerPrivate.FileCategory.ALL) {
+                if (!FileType.isType([category], entry)) {
+                  return false;
+                }
+              }
+              return true;
+            });
+            if (modifiedTimestamp === 0) {
+              collectedEntries.push(...filtered);
+            } else {
+              workLeft += filtered.length;
+              const cutoff = new Date(modifiedTimestamp);
+              Promise
+                  .all(filtered.map(
+                      entry => newDateFilterPromise(entry, cutoff)))
+                  .then((modified) => {
+                    collectedEntries.push(...modified.filter(e => e !== null));
+                    workLeft -= modified.length;
+                    if (workLeft <= 0) {
+                      metrics.recordInterval(`Search.${metricVariant}.Latency`);
+                      resolve(collectedEntries);
+                    }
+                  });
+            }
+          },
+          // All entries read callback.
+          () => {
+            if (--workLeft <= 0) {
+              metrics.recordInterval(`Search.${metricVariant}.Latency`);
+              resolve(collectedEntries);
+            }
+          },
+          // Error callback.
+          () => {
+            if (!this.cancelled_ && collectedEntries.length >= maxResults) {
+              resolve(collectedEntries);
+            } else {
+              reject();
+            }
+          },
+          // Should stop callback.
+          () => {
+            return collectedEntries.length >= maxResults || this.cancelled_;
           });
     });
   }
@@ -357,17 +479,19 @@ export class SearchV2ContentScanner extends ContentScanner {
    * @param {number} modifiedTimestamp
    * @param {chrome.fileManagerPrivate.FileCategory} category
    * @param {number} maxResults
+   * @param {string} metricVariant
    * @param {!Array<!DirectoryEntry>} folders
    * @return {!Array<!Promise<!Array<!Entry>>>}
    * @private
    */
-  makeFileSearchPromiseList_(modifiedTimestamp, category, maxResults, folders) {
+  makeFileSearchPromiseList_(
+      modifiedTimestamp, category, maxResults, metricVariant, folders) {
     /** @type {!chrome.fileManagerPrivate.SearchMetadataParams} */
     const baseParams = {
       query: this.query_,
       types: chrome.fileManagerPrivate.SearchType.ALL,
       maxResults: maxResults,
-      timestamp: modifiedTimestamp,
+      modifiedTimestamp: modifiedTimestamp,
       category: category,
     };
     return folders.map(
@@ -375,7 +499,8 @@ export class SearchV2ContentScanner extends ContentScanner {
             /** @type {!chrome.fileManagerPrivate.SearchMetadataParams} */ ({
               ...baseParams,
               rootDir: searchDir,
-            })));
+            }),
+            metricVariant));
   }
 
   /**
@@ -396,7 +521,7 @@ export class SearchV2ContentScanner extends ContentScanner {
     }
     const myFilesEntry = this.getWrappedVolumeEntry_(myFilesVolume.displayRoot);
     return this.makeFileSearchPromiseList_(
-        modifiedTimestamp, category, maxResults,
+        modifiedTimestamp, category, maxResults, 'Local',
         this.getSearchRoots_(myFilesEntry));
   }
 
@@ -411,19 +536,49 @@ export class SearchV2ContentScanner extends ContentScanner {
    * @private
    */
   createRemovablesSearch_(modifiedTimestamp, category, maxResults) {
-    const removableRootDirs = [];
-    const volumeInfoList = this.volumeManager_.volumeInfoList;
-    for (let index = 0; index < volumeInfoList.length; ++index) {
-      const volumeInfo = volumeInfoList.item(index);
-      if (volumeInfo.volumeType === VolumeManagerCommon.VolumeType.REMOVABLE) {
-        const displayRoot = volumeInfo.displayRoot;
-        if (displayRoot) {
-          removableRootDirs.push(...this.getSearchRoots_(displayRoot));
-        }
-      }
-    }
+    const rootFolderList = this.getRootFoldersByVolumeType_(
+        VolumeManagerCommon.VolumeType.REMOVABLE);
     return this.makeFileSearchPromiseList_(
-        modifiedTimestamp, category, maxResults, removableRootDirs);
+        modifiedTimestamp, category, maxResults, 'Removable',
+        this.getRootFoldersByVolumeType_(
+            VolumeManagerCommon.VolumeType.REMOVABLE));
+  }
+
+  /**
+   * Returns an array of promises that, when fulfilled, return an array of
+   * entries matching the current query, modified timestamp, and category for
+   * all known document providers.
+   * @param {number} modifiedTimestamp
+   * @param {chrome.fileManagerPrivate.FileCategory} category
+   * @param {number} maxResults
+   * @return {!Array<!Promise<!Array<Entry>>>}
+   * @private
+   */
+  createDocumentsProviderSearch_(modifiedTimestamp, category, maxResults) {
+    const rootFolderList = this.getRootFoldersByVolumeType_(
+        VolumeManagerCommon.VolumeType.DOCUMENTS_PROVIDER);
+    return rootFolderList.map(
+        rootFolder => this.makeReadEntriesRecursivelyPromise_(
+            rootFolder, modifiedTimestamp, category, maxResults,
+            'DocumentsProvider'));
+  }
+
+  /**
+   * Returns an array of promises that, when fulfilled, return an array of
+   * entries matching the current query, modified timestamp, and category for
+   * all known file system provider volumes.
+   * @param {number} modifiedTimestamp
+   * @param {chrome.fileManagerPrivate.FileCategory} category
+   * @param {number} maxResults
+   * @return {!Array<!Promise<!Array<Entry>>>}
+   * @private
+   */
+  createFileSystemProviderSearch_(modifiedTimestamp, category, maxResults) {
+    const rootFolderList = this.getRootFoldersByVolumeType_(
+        VolumeManagerCommon.VolumeType.PROVIDED);
+    return rootFolderList.map(
+        rootFolder => this.makeReadEntriesRecursivelyPromise_(
+            rootFolder, modifiedTimestamp, category, maxResults, 'Provided'));
   }
 
   /**
@@ -432,31 +587,35 @@ export class SearchV2ContentScanner extends ContentScanner {
    * located on Drive.
    * @param {number} modifiedTimestamp
    * @param {chrome.fileManagerPrivate.FileCategory} category
+   * @param {number} maxResults
    * @return {Promise<!Array<Entry>>}
    * @private
    */
-  createDriveSearch_(modifiedTimestamp, category) {
+  createDriveSearch_(modifiedTimestamp, category, maxResults) {
+    const searchType = this.driveSearchTypeMap_.get(this.rootType_) ||
+        chrome.fileManagerPrivate.SearchType.ALL;
     return new Promise((resolve, reject) => {
       metrics.startInterval('Search.Drive.Latency');
-      chrome.fileManagerPrivate.searchDrive(
+      chrome.fileManagerPrivate.searchDriveMetadata(
           {
             query: this.query_,
             category: category,
+            types: searchType,
+            maxResults: maxResults,
             modifiedTimestamp: modifiedTimestamp,
-            nextFeed: '',
           },
-          (entries, nextFeed) => {
+          (results) => {
             if (chrome.runtime.lastError) {
               reject(createDOMError(
                   util.FileError.NOT_READABLE_ERR,
                   chrome.runtime.lastError.message));
             } else if (this.cancelled_) {
               reject(createDOMError(util.FileError.ABORT_ERR));
-            } else if (!entries) {
+            } else if (!results) {
               reject(createDOMError(util.FileError.INVALID_MODIFICATION_ERR));
             } else {
               metrics.recordInterval('Search.Drive.Latency');
-              resolve(entries);
+              resolve(results.map(r => r.entry));
             }
           });
     });
@@ -470,17 +629,31 @@ export class SearchV2ContentScanner extends ContentScanner {
    * @private
    */
   createDirectorySearch_(modifiedTimestamp, category, maxResults) {
-    if (this.rootType_ === VolumeManagerCommon.RootType.DRIVE) {
-      return [this.createDriveSearch_(modifiedTimestamp, category)];
+    if (isEntryInsideDrive({rootType: this.rootType_})) {
+      return [
+        this.createDriveSearch_(modifiedTimestamp, category, maxResults),
+      ];
     }
-    if (this.options_.location == SearchLocation.THIS_FOLDER) {
-      return this.makeFileSearchPromiseList_(
-          modifiedTimestamp, category, maxResults,
-          this.getSearchRoots_(this.entry_));
+    const searchFolder = this.options_.location === SearchLocation.THIS_FOLDER ?
+        this.entry_ :
+        this.getTopMostVolume_(this.entry_);
+    if (this.rootType_ === VolumeManagerCommon.RootType.DOCUMENTS_PROVIDER) {
+      return [this.makeReadEntriesRecursivelyPromise_(
+          searchFolder, modifiedTimestamp, category, maxResults,
+          'DocumentsProvider')];
     }
+    if (this.rootType_ === VolumeManagerCommon.RootType.PROVIDED) {
+      return [this.makeReadEntriesRecursivelyPromise_(
+          searchFolder, modifiedTimestamp, category, maxResults, 'Provided')];
+    }
+    const metricVariant =
+        this.rootType_ === VolumeManagerCommon.RootType.REMOVABLE ?
+        'Removable' :
+        'Local';
+    // My Files or a folder nested in it.
     return this.makeFileSearchPromiseList_(
-        modifiedTimestamp, category, maxResults,
-        this.getSearchRoots_(this.getTopMostVolume_()));
+        modifiedTimestamp, category, maxResults, metricVariant,
+        this.getSearchRoots_(searchFolder));
   }
 
   /**
@@ -494,7 +667,11 @@ export class SearchV2ContentScanner extends ContentScanner {
     return [
       ...this.createMyFilesSearch_(modifiedTimestamp, category, maxResults),
       ...this.createRemovablesSearch_(modifiedTimestamp, category, maxResults),
-      this.createDriveSearch_(modifiedTimestamp, category),
+      this.createDriveSearch_(modifiedTimestamp, category, maxResults),
+      ...this.createDocumentsProviderSearch_(
+          modifiedTimestamp, category, maxResults),
+      ...this.createFileSystemProviderSearch_(
+          modifiedTimestamp, category, maxResults),
     ];
   }
 
@@ -506,34 +683,43 @@ export class SearchV2ContentScanner extends ContentScanner {
       entriesCallback, successCallback, errorCallback,
       invalidateCache = false) {
     const category = this.options_.fileCategory;
-    const timestamp = getEarliestTimestamp(this.options_.recency, new Date());
+    const modifiedTimestamp =
+        getEarliestTimestamp(this.options_.recency, new Date());
     const maxResults = 100;
 
     const searchPromises =
         this.options_.location === SearchLocation.EVERYWHERE ?
-        this.createEverywhereSearch_(timestamp, category, maxResults) :
-        this.createDirectorySearch_(timestamp, category, maxResults);
+        this.createEverywhereSearch_(modifiedTimestamp, category, maxResults) :
+        this.createDirectorySearch_(modifiedTimestamp, category, maxResults);
 
     if (!searchPromises) {
       console.warn(
           `No search promises for options ${JSON.stringify(this.options_)}`);
       successCallback();
     }
-    Promise.allSettled(searchPromises).then((results) => {
-      let resultCount = 0;
-      for (const result of results) {
-        if (result.status === 'rejected') {
-          errorCallback(/** @type {DOMError} */ (result.reason));
-        } else if (result.status === 'fulfilled') {
-          if (result.value) {
-            entriesCallback(result.value);
-            resultCount += result.value.length;
-          }
-        }
+    // The job of entriesCallbackCaller is to call entriesCallback as soon as
+    // entries are available. We call successCallback only once all of them are
+    // settled, but we do not wish to wait for all of promises to be settled
+    // before showing the entries.
+    const entriesCallbackCaller = (entries) => {
+      if (entries && entries.length > 0) {
+        entriesCallback(entries);
       }
-      successCallback();
-      metrics.recordMediumCount('Search.ResultCount', resultCount);
-    });
+      return entries ? entries.length : 0;
+    };
+    Promise.allSettled(searchPromises.map(p => p.then(entriesCallbackCaller)))
+        .then((results) => {
+          let resultCount = 0;
+          for (const result of results) {
+            if (result.status === 'rejected') {
+              errorCallback(/** @type {DOMError} */ (result.reason));
+            } else if (result.status === 'fulfilled') {
+              resultCount += result.value;
+            }
+          }
+          successCallback();
+          metrics.recordMediumCount('Search.ResultCount', resultCount);
+        });
   }
 }
 

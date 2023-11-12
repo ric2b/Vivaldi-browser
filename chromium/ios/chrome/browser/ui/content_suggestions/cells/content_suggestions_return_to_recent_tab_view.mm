@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_return_to_recent_tab_view.h"
 
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_return_to_recent_tab_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
@@ -13,7 +14,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -24,6 +25,7 @@ using vivaldi::IsVivaldiRunning;
 
 namespace {
 const CGFloat kContentViewCornerRadius = 12.0f;
+const CGFloat kMagicStackContentViewCornerRadius = 24.0f;
 const CGFloat kContentViewBorderWidth = 1.0f;
 const CGFloat kIconCornerRadius = 4.0f;
 const CGFloat kContentViewSubviewSpacing = 12.0f;
@@ -38,8 +40,13 @@ const CGFloat kIconWidth = 32.0f;
     [self.layer
         setBorderColor:[UIColor colorNamed:kTertiaryBackgroundColor].CGColor];
     [self.layer setBorderWidth:kContentViewBorderWidth];
-    self.layer.cornerRadius = kContentViewCornerRadius;
+    self.layer.cornerRadius = IsMagicStackEnabled()
+                                  ? kMagicStackContentViewCornerRadius
+                                  : kContentViewCornerRadius;
     self.layer.masksToBounds = YES;
+    if (IsMagicStackEnabled()) {
+      self.backgroundColor = [UIColor colorNamed:kBackgroundColor];
+    }
 
     _titleLabel = [[UILabel alloc] init];
     _titleLabel.isAccessibilityElement = NO;
@@ -64,11 +71,13 @@ const CGFloat kIconWidth = 32.0f;
     if (IsVivaldiRunning()) {
       _iconImageView = [[UIImageView alloc]
           initWithImage:[UIImage imageNamed:vNTPSDFallbackFavicon]];
+      _iconImageView.tintColor = [UIColor colorNamed:kTextPrimaryColor];
     } else {
     _iconImageView = [[UIImageView alloc]
-        initWithImage:[UIImage imageNamed:@"default_world_favicon_regular"]];
+        initWithImage:DefaultSymbolWithPointSize(kGlobeAmericasSymbol,
+                                                 kIconWidth)];
+    _iconImageView.tintColor = [UIColor colorNamed:kGrey400Color];
     } // End Vivaldi
-
     _iconImageView.layer.cornerRadius = kIconCornerRadius;
     _iconImageView.layer.masksToBounds = YES;
     [self addSubview:_iconImageView];

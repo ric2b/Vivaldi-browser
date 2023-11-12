@@ -42,6 +42,8 @@ VpxEncoder::VpxEncoder(
               on_encoded_video_cb,
               bits_per_second),
       use_vp9_(use_vp9) {
+  std::memset(&codec_config_, 0, sizeof(codec_config_));
+  std::memset(&alpha_codec_config_, 0, sizeof(alpha_codec_config_));
   codec_config_.g_timebase.den = 0;        // Not initialized.
   alpha_codec_config_.g_timebase.den = 0;  // Not initialized.
 }
@@ -51,7 +53,8 @@ bool VpxEncoder::CanEncodeAlphaChannel() const {
 }
 
 void VpxEncoder::EncodeFrame(scoped_refptr<media::VideoFrame> frame,
-                             base::TimeTicks capture_timestamp) {
+                             base::TimeTicks capture_timestamp,
+                             bool request_keyframe) {
   using media::VideoFrame;
   TRACE_EVENT0("media", "VpxEncoder::EncodeFrame");
 
@@ -75,7 +78,7 @@ void VpxEncoder::EncodeFrame(scoped_refptr<media::VideoFrame> frame,
   }
 
   bool keyframe = false;
-  bool force_keyframe = false;
+  bool force_keyframe = request_keyframe;
   bool alpha_keyframe = false;
   std::string data;
   std::string alpha_data;
@@ -130,7 +133,7 @@ void VpxEncoder::EncodeFrame(scoped_refptr<media::VideoFrame> frame,
         std::fill(alpha_dummy_planes_.begin(), alpha_dummy_planes_.end(), 0x80);
       }
       // If we introduced a new alpha frame, force keyframe.
-      force_keyframe = !last_frame_had_alpha_;
+      force_keyframe = force_keyframe || !last_frame_had_alpha_;
       last_frame_had_alpha_ = true;
 
       DoEncode(encoder_.get(), frame_size, frame->data(VideoFrame::kYPlane),
@@ -270,17 +273,14 @@ bool VpxEncoder::ConfigureEncoder(const gfx::Size& size,
   codec_config->g_timebase.num = 1;
   codec_config->g_timebase.den = base::Time::kMicrosecondsPerSecond;
 
-  // Let the encoder decide where to place the Keyframes, between min and max.
-  // In VPX_KF_AUTO mode libvpx will sometimes emit keyframes regardless of min/
-  // max distance out of necessity.
+  // The periodical keyframe interval is configured by KeyFrameRequestProcessor.
+  // Aside from the periodical keyframe, let the encoder decide where to place
+  // the Keyframes In VPX_KF_AUTO mode libvpx will sometimes emit keyframes out
+  // of necessity.
   // Note that due to http://crbug.com/440223, it might be necessary to force a
   // key frame after 10,000frames since decoding fails after 30,000 non-key
   // frames.
-  // Forcing a keyframe in regular intervals also allows seeking in the
-  // resulting recording with decent performance.
   codec_config->kf_mode = VPX_KF_AUTO;
-  codec_config->kf_min_dist = 0;
-  codec_config->kf_max_dist = 100;
 
   codec_config->g_threads = GetNumberOfThreadsForEncoding();
 

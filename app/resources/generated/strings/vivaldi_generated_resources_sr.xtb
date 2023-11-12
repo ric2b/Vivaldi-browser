@@ -58,7 +58,6 @@
 <translation id="1925021887439448749">Унесите прилагођену веб адресу</translation>
 <translation id="1932098463447129402">Не пре</translation>
 <translation id="1936931585862840749">Наведите број примерака за штампање (1–<ph name="MAX_COPIES" />).</translation>
-<translation id="1994173015038366702">URL сајта</translation>
 <translation id="2019718679933488176">&amp;Отвори звучни запис у новој картици</translation>
 <translation id="2050339315714019657">Усправно</translation>
 <translation id="2076269580855484719">Сакриј ову додатну компоненту</translation>
@@ -74,7 +73,6 @@
 <translation id="219008588003277019">Модул основног клијента: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Налепи као чист текст</translation>
 <translation id="2249605167705922988">нпр. 1–5, 8, 11–13</translation>
-<translation id="225240747099314620">Дозволи идентификаторе за заштићени садржај (можда је потребно поновно покретање рачунара)</translation>
 <translation id="2280486287150724112">Десна маргина</translation>
 <translation id="2282146716419988068">GPU процес</translation>
 <translation id="2301382460326681002">Основни директоријум проширења је неважећи.</translation>
@@ -85,7 +83,6 @@
 <translation id="2348176352564285430">Апликација: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Изаберите директоријум проширења.</translation>
 <translation id="2379281330731083556">Штампај помоћу системског дијалога... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="2381756643783702095">Питај пре слања (препоручено)</translation>
 <translation id="241082044617551207">Непозната додатна компонента</translation>
 <translation id="2423578206845792524">&amp;Сачувај слику као...</translation>
 <translation id="2439110203301358333">Други програм на рачунару је додао проширење које може да промени начин на који Vivaldi функционише.</translation>
@@ -109,7 +106,6 @@
 <translation id="2721037002783622288">&amp;Тражи слику помоћу <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Не после</translation>
 <translation id="2749881179542288782">Провери граматику са правописом</translation>
-<translation id="2783321960289401138">Креирај пречицу...</translation>
 <translation id="2785873697295365461">Дескриптори датотека</translation>
 <translation id="2809586584051668049">и још <ph name="NUMBER_ADDITIONAL_DISABLED" /> других</translation>
 <translation id="2825758591930162672">Јавни кључ субјекта</translation>
@@ -118,7 +114,6 @@
 <translation id="2881076733170862447">Када кликнете на проширење</translation>
 <translation id="2889064240420137087">Отвори везу помоћу...</translation>
 <translation id="2902127500170292085">Комуникација проширења <ph name="EXTENSION_NAME" /> са овим штампачем није успела. Проверите да ли је штампач прикључен и покушајте поново.</translation>
-<translation id="2913331724188855103">Дозволи сајтовима да чувају и читају податке колачића (препоручено)</translation>
 <translation id="2916745397441987255">Претражи проширења</translation>
 <translation id="2931157624143513983">Прилагоди подручју за штампање</translation>
 <translation id="2932085390869194046">Предложи лозинку...</translation>
@@ -127,7 +122,6 @@
 <translation id="2972581237482394796">&amp;Понови</translation>
 <translation id="2993517869960930405">Информације о апликацији</translation>
 <translation id="3003623123441819449">CSS кеш</translation>
-<translation id="3008272652534848354">Врати дозволе на подразумевано</translation>
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3021678814754966447">&amp;Прикажи извор оквира</translation>
 <translation id="3036546437875325427">Омогући Flash</translation>
@@ -163,14 +157,11 @@
 <translation id="3393582007140394275">Није могуће пребацивање екрана.</translation>
 <translation id="345693547134384690">Отвори &amp;слику у новој картици</translation>
 <translation id="3493881266323043047">Рок важења</translation>
-<translation id="3494769164076977169">Питај када сајт покуша да аутоматски преузима датотеке после прве датотеке (препоручено)</translation>
-<translation id="3505030558724226696">Опозови приступ уређају</translation>
 <translation id="3511307672085573050">Копирај адр&amp;есу везе</translation>
 <translation id="354068948465830244">Ово може да чита и мења податке сајта</translation>
 <translation id="3560034655160545939">&amp;Провера правописа</translation>
 <translation id="3587482841069643663">Све</translation>
 <translation id="3627588569887975815">Отвори везу у при&amp;ватном прозору</translation>
-<translation id="3627879631695760395">Инсталирај апликацију <ph name="APP" />...</translation>
 <translation id="3678156199662914018">Проширење: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Захтев за дељење екрана апликације <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Не дозволи затвореним сајтовима да заврше слање или примање података</translation>
@@ -179,7 +170,6 @@
 <translation id="3760460896538743390">Испитај страницу у &amp;позадини</translation>
 <translation id="3797900183766075808">&amp;Тражи „<ph name="SEARCH_TERMS" />“ помоћу <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3798449238516105146">Верзија</translation>
-<translation id="3800806661949714323">Прикажи све (препоручено)</translation>
 <translation id="3810973564298564668">Управљај</translation>
 <translation id="3838085852053358637">Учитавање проширења није успело</translation>
 <translation id="383891835335927981">Ниједан сајт није увећан или умањен</translation>
@@ -194,7 +184,6 @@
 <translation id="3936390757709632190">&amp;Отвори звучни запис у новој картици</translation>
 <translation id="3943582379552582368">&amp;Назад</translation>
 <translation id="3948116654032448504">&amp;Тражи слику помоћу <ph name="SEARCH_ENGINE" /></translation>
-<translation id="3955193568934677022">Дозволи сајтовима да репродукују заштићени садржај (препоручено)</translation>
 <translation id="3979395879372752341">Ново проширење је додато (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Копирај везу до истакнутог текста</translation>
 <translation id="4021279097213088397">–</translation>
@@ -246,7 +235,7 @@
 <translation id="4839303808932127586">Сачувај &amp;видео запис као...</translation>
 <translation id="4840096453115567876">Ипак затворити приватни режим?</translation>
 <translation id="488785315393301722">Прикажи детаље</translation>
-<translation id="4907306957610201395">Категорија дозволе</translation>
+<translation id="4895799941222633551">Креирај &amp;пречицу…</translation>
 <translation id="4912643508233590958">Активирања из стања мировања</translation>
 <translation id="49265687513387605">Није могуће пребацивање екрана. Проверите да ли сте потврдили упит за почетак дељења екрана.</translation>
 <translation id="4927753642311223124">Нема грешака, наставите.</translation>
@@ -255,7 +244,6 @@
 <translation id="4988526792673242964">Странице</translation>
 <translation id="49896407730300355">Окрени у с&amp;меру супротном од казаљке на сату</translation>
 <translation id="4989966318180235467">Испитај &amp;страницу у позадини</translation>
-<translation id="5000922062037820727">Блокирано (препоручено)</translation>
 <translation id="5027562294707732951">Додај проширење</translation>
 <translation id="5039804452771397117">Дозволи</translation>
 <translation id="5057110919553308744">Када кликнете на проширење</translation>
@@ -285,10 +273,10 @@
 <translation id="5370819323174483825">Поново &amp;учитај</translation>
 <translation id="5390743329570580756">Пошаљи за</translation>
 <translation id="5398572795982417028">Превелика референца за странице, ограничење је <ph name="MAXIMUM_PAGE" /></translation>
+<translation id="5423753908060469325">Креирај &amp;пречицу…</translation>
 <translation id="5425042808445046667">Настави преузимање</translation>
 <translation id="5427459444770871191">Окрени &amp;у смеру казаљке на сату</translation>
 <translation id="5431318178759467895">Боја</translation>
-<translation id="5483785310822538350">Опозови приступ датотекама и уређају</translation>
 <translation id="5485102783864353244">Додај апликацију</translation>
 <translation id="5486561344817861625">Симулирај поновно покретање прегледача</translation>
 <translation id="5487521232677179737">Обриши податке</translation>
@@ -301,7 +289,6 @@
 <translation id="5614553682702429503">Сачувати лозинку?</translation>
 <translation id="5623842676595125836">Евиденција</translation>
 <translation id="5627086634964711283">Контролише и која страница ће се приказати када кликнете на дугме матичне странице.</translation>
-<translation id="563535393368633106">Питај пре приступања (препоручено)</translation>
 <translation id="5638309510554459422">Пронађите проширења и теме у <ph name="BEGIN_LINK" />Chrome веб продавници<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Блокирано</translation>
 <translation id="5707185214361380026">Неуспешно учитавање проширења из:</translation>
@@ -353,7 +340,6 @@
 <translation id="6315493146179903667">Постави све напред</translation>
 <translation id="6326855256003666642">Број задржавања активности</translation>
 <translation id="6374469231428023295">Покушај поново</translation>
-<translation id="6385543213911723544">Сајтови могу да чувају и читају податке колачића</translation>
 <translation id="6398765197997659313">Изађи из режима целог екрана</translation>
 <translation id="6406303162637086258">Симулирај поновно покретање прегледача</translation>
 <translation id="6445450263907939268">Ако нисте желели ове промене, можете да вратите претходна подешавања.</translation>
@@ -373,13 +359,11 @@
 <translation id="6787839852456839824">Тастерске пречице</translation>
 <translation id="6798954102094737107">Додатна компонента: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Задржи промене</translation>
-<translation id="6817174620439930047">Питај када сајт жели да користи ексклузивне поруке система за приступ MIDI уређајима (препоручено)</translation>
 <translation id="6824564591481349393">Копирај адресу &amp;е-поште</translation>
 <translation id="6840155290835956714">Питај пре слања</translation>
 <translation id="6886871292305414135">Отвори везу у новој &amp;картици</translation>
 <translation id="6892812721183419409">Отвори везу као <ph name="USER" /></translation>
 <translation id="6900284862687837908">Апликација у позадини: <ph name="BACKGROUND_APP_URL" /></translation>
-<translation id="6904344821472985372">Опозови приступ датотекама</translation>
 <translation id="6916590542764765824">Управљај проширењима</translation>
 <translation id="6945221475159498467">Изабери</translation>
 <translation id="6955446738988643816">Испитај искачући прозор</translation>
@@ -391,6 +375,7 @@
 <translation id="7070484045139057854">Ово може да чита и мења податке сајтова</translation>
 <translation id="708060913198414444">К&amp;опирај адресу звучног записа</translation>
 <translation id="7121728544325372695">Паметне цртице</translation>
+<translation id="7144856456372460176">&amp;Инсталирај <ph name="APP" />...</translation>
 <translation id="7175353351958621980">Учитано из:</translation>
 <translation id="7186088072322679094">Задржи на траци алата</translation>
 <translation id="7287143125007575591">Приступ је одбијен.</translation>
@@ -400,7 +385,6 @@
 <translation id="7385854874724088939">Дошло је до грешке при покушају штампања. Проверите штампач и покушајте поново.</translation>
 <translation id="7412226954991670867">GPU меморија</translation>
 <translation id="7421925624202799674">&amp;Прикажи извор странице</translation>
-<translation id="7423098979219808738">Прво питај</translation>
 <translation id="7427348830195639090">Страница у позадини: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Када изаберете овај штампач, дајете дозволу за приступ штампачу следећем проширењу:</translation>
 <translation id="749028671485790643">Профил <ph name="VALUE" /></translation>
@@ -456,7 +440,6 @@
 <translation id="8261378640211443080"><ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> не наводи ово проширење и можда је додато без вашег знања.</translation>
 <translation id="8351419472474436977">Ово проширење је преузело контролу над подешавањима проксија, што значи да може да мења, прекида или шпијунира све што радите на мрежи. Ако нисте сигурни зашто је дошло до ове промене, вероватно вам није потребна.</translation>
 <translation id="8382913212082956454">Копирај адресу &amp;е-поште</translation>
-<translation id="8413385045638830869">Прво питај (препоручено)</translation>
 <translation id="8434480141477525001">NaCl порт за отклањање грешака</translation>
 <translation id="8449008133205184768">Налепи са подударањем стила</translation>
 <translation id="8477384620836102176">&amp;Опште</translation>
@@ -465,7 +448,6 @@
 <translation id="8523493869875972733">Задржи промене</translation>
 <translation id="8546306075665861288">Кеш слика</translation>
 <translation id="8569682776816196752">Нема пронађених одредишта</translation>
-<translation id="857943718398505171">Дозвољено (препоручено)</translation>
 <translation id="8584280235376696778">&amp;Отвори видео запис у новој картици</translation>
 <translation id="8605428685123651449">SQLite меморија</translation>
 <translation id="8615618338313291042">Апликација у приватном режиму: <ph name="APP_NAME" /></translation>
@@ -496,7 +478,6 @@
 <translation id="9056810968620647706">Није пронађено ниједно подударање.</translation>
 <translation id="9084064520949870008">Отвори као прозор</translation>
 <translation id="9137916601698928395">Отвори везу као <ph name="USER" /></translation>
-<translation id="91568222606626347">Креирај пречицу...</translation>
 <translation id="916607977885256133">Слика у слици</translation>
 <translation id="9170848237812810038">&amp;Опозови</translation>
 <translation id="9215293857209265904">Додат је „<ph name="EXTENSION_NAME" />“</translation>

@@ -6,12 +6,15 @@
 <translation id="1352919863522755794">「Google 密碼管理工具」無法檢查您的密碼。請檢查互聯網連線。</translation>
 <translation id="1462727070346936664">登入以充分運用 Chrome 的所有功能。</translation>
 <translation id="1479202195792305274">Chrome 可在您使用 Google 帳戶登入時檢查密碼。</translation>
+<translation id="1491435845014430217">開啟「關閉 Chrome 時鎖定無痕式分頁」。</translation>
 <translation id="1493827051843127077">將 Chrome 設定為預設瀏覽器，即可在所有裝置上同步分頁、密碼和付款資料</translation>
 <translation id="1504372625950710826">Chrome 無法檢查更新，請檢查互聯網連線。</translation>
 <translation id="1511320244449497906">您已登入 <ph name="DOMAIN" /> 的受管帳戶並正在同步資料，其系統管理員現可設定針對該帳戶的使用者政策，該政策可變更 Chrome 的行為。</translation>
 <translation id="1554731936187952550">Chrome 最強大的安全功能可協助防範有害網站</translation>
 <translation id="1682483655351012182">同步處理 Chromium 資料</translation>
+<translation id="1733654336159102143">在您離開 Chrome 或切換至其他應用程式時鎖定無痕模式。</translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1843217788865538014">當您輕按訊息、文件和其他應用程式中的連結時，自動使用 Chrome 開啟網頁。</translation>
 <translation id="1917964099031477364">此帳戶和所有未儲存的資料將從 Chrome 和此裝置上的其他 Google 應用程式中移除。</translation>
 <translation id="2009224836393115614">Chrome 無法檢查密碼，請檢查互聯網連線。</translation>
 <translation id="2056123005618757196">Google Chrome 比以前更簡便、安全而快速，讓您事半功倍。</translation>
@@ -34,6 +37,7 @@
 <translation id="2732745070297234559">Chrome 無法檢查所有密碼。請明天再試。</translation>
 <translation id="2736805085127235148">目前未在裝置設定中開啟 Chrome 通知。</translation>
 <translation id="2767464022270041271">沒有已儲存的密碼。當您儲存密碼時，「Google 密碼管理工具」可檢查您的密碼。</translation>
+<translation id="2840432500933227975">在 iOS 中開啟 Chromium 設定，輕按 [瀏覽器預設應用程式]，然後選取 [Chrome]。</translation>
 <translation id="2869959624320573933">登入 Chrome</translation>
 <translation id="2957447865124070833">選取 [Chrome]<ph name="BEGIN_BOLD" /><ph name="END_BOLD" /></translation>
 <translation id="3030414234702425231">由於您即將登出由 <ph name="SIGNOUT_MANAGED_DOMAIN" /> 管理的帳戶，系統將刪除您在此裝置上的 Chrome 資料，但這些資料仍會保留在您的 Google 帳戶中。</translation>
@@ -46,9 +50,10 @@
 <translation id="3503014945441706099">同時為此 Chrome 個人檔案取得「強化安全瀏覽」功能</translation>
 <translation id="3522659714780527202">如要在任何使用 Chrome 的裝置上查看分頁，請開啟同步處理功能</translation>
 <translation id="3533694711092285624">沒有已儲存的密碼。儲存密碼時，Chrome 可檢查您的密碼。</translation>
+<translation id="3594076341410558780">隱藏「充分運用 Chrome 的功能」</translation>
 <translation id="3655656110921623717">這代表 Chrome 每次都會要求取得流動網站。</translation>
-<translation id="3706101708757577809">您現在只要在訊息、文件或其他應用程式中輕按連結，即可使用 Chrome。</translation>
 <translation id="3720541637541300822">關閉 Chrome 時鎖定無痕式分頁</translation>
+<translation id="3827545470516145620">此裝置即將啟用標準安全保護功能保護</translation>
 <translation id="384394811301901750">Google Chrome 目前無法使用您的相機</translation>
 <translation id="3980220367029651214">您正在將同步處理帳戶從 <ph name="USER_EMAIL1" /> 切換為 <ph name="USER_EMAIL2" />。您現有的 Chrome 資料由 <ph name="DOMAIN" /> 管理。這會刪除此裝置上的資料，但這些資料仍會保留在 <ph name="USER_EMAIL1" /> 中。</translation>
 <translation id="3984746313391923992">您的機構要求您保持登出 Chrome。</translation>
@@ -58,13 +63,16 @@
 <translation id="4233521129555661685"><ph name="USER_EMAIL1" /> 之前曾在此裝置上使用 Chrome，並儲存書籤、密碼和其他設定。</translation>
 <translation id="424864128008805179">要登出 Chrome 嗎？</translation>
 <translation id="4249068189593983585">Chrome 提示。如果要多啲標籤選項，請㩒住螢幕底部或者頂部工具列入面中嘅 [顯示分頁] 掣。</translation>
+<translation id="4508370294876102450">從任何應用程式開啟 Chrome</translation>
 <translation id="4523886039239821078">部份外掛程式造成 Chrome 當機。請解除安裝以下程式：</translation>
 <translation id="4633328489441962921">Chrome 無法檢查更新</translation>
 <translation id="4636900170638246267">登入此網站和 Chrome。</translation>
 <translation id="4698415050768537821">Chrome 無法檢查所有密碼。請明天再試，或<ph name="BEGIN_LINK" />檢查 Google 帳戶中的密碼<ph name="END_LINK" />。</translation>
 <translation id="4819268619367838612">Chrome 會向 Google 傳送使用情況和當機資料，以協助改善應用程式。<ph name="BEGIN_LINK" />管理<ph name="END_LINK" /></translation>
+<translation id="4830799082179398588">要將 Chrome 設定為預設瀏覽器嗎？</translation>
 <translation id="484033449593719797">Chrome Beta 版本上不支援此功能</translation>
 <translation id="4840404732697892756">當您登入 Google 帳戶後，「Google 密碼管理工具」可檢查您的密碼。</translation>
+<translation id="4903674399067644695">此資訊卡會建議您如何充分運用 Chrome 的功能。</translation>
 <translation id="5030102366287574140">Chrome 能確保系統安全，避免發生資料外洩或瀏覽不安全網站等問題。</translation>
 <translation id="5108659628347594808">讓 Chrome 更臻完美</translation>
 <translation id="5119391094379141756">選取 [Chrome]</translation>
@@ -73,6 +81,7 @@
 <translation id="5395376160638294582">請確保您可隨時使用 Google 帳戶中的 Chrome 資料</translation>
 <translation id="5460571915754665838">4. 選取 [Chrome]</translation>
 <translation id="5492504007368565877">「Google 密碼管理工具」無法檢查您的密碼。</translation>
+<translation id="5527026824954593399">輕按「在 Chrome 中使用『Google 地圖』查看」。</translation>
 <translation id="5552137475244467770">Chrome 會定期將您的密碼與網上發佈的清單互相核對。核對時，您的密碼和使用者名稱將會加密，任何人 (包括 Google) 均無法讀取。</translation>
 <translation id="5639704535586432836">開啟 [設定] &gt; [私隱權] &gt; [相機] &gt; [Google Chrome]，然後開啟相機。</translation>
 <translation id="5642200033778930880">Google Chrome 無法在「分割檢視」模式中使用相機</translation>
@@ -87,6 +96,7 @@
 <translation id="6110625574506755980">部分 Chrome 功能將無法再使用。</translation>
 <translation id="6181930887571472871">切換至 Chrome</translation>
 <translation id="6238746320622508509">讓 Chrome 鎖定您的無痕式分頁。</translation>
+<translation id="6247557882553405851">Google 密碼管理工具</translation>
 <translation id="6412673304250309937">使用儲存在 Chrome 中的不安全網站清單來檢查網址。如果有網站試圖盜取您的密碼，或當您下載有害檔案時，Chrome 亦可能將網址 (包括部分網頁內容) 傳送至「安全瀏覽」功能。</translation>
 <translation id="6427126399757991875">您的機構正在設定 Chrome…</translation>
 <translation id="6600954340915313787">已複製至 Chrome</translation>
@@ -97,7 +107,6 @@
 <translation id="6822673484890854830">Chrome 無法檢查所有密碼。請稍後再試。</translation>
 <translation id="6964931465519938134">您現在只要在訊息、文件或其他應用程式中輕按連結，即可使用 Chrome。</translation>
 <translation id="6975725306479268850">選擇使用 Chrome 的自動填入功能</translation>
-<translation id="701356708427365932">瞭解新的 Chrome 選單</translation>
 <translation id="7059914902409643750">自訂屬於您的 Chrome</translation>
 <translation id="7124339256045485976">取得 Chrome 最新更新</translation>
 <translation id="7161390184744336561">Google Chrome 版本過舊</translation>
@@ -108,10 +117,12 @@
 <translation id="7261678641327190792">Chrome 無法檢查密碼</translation>
 <translation id="7272930098487145294">如要儲存圖片，請輕按 [設定] 並允許 Chrome 新增您的相片</translation>
 <translation id="7275945473750112644">由於您的帳戶由 <ph name="HOSTED_DOMAIN" /> 管理，因此您的 Chrome 資料將會從此裝置上清除</translation>
+<translation id="7394108421562933108">Chrome 的地圖</translation>
 <translation id="7400722733683201933">關於 Google Chrome</translation>
 <translation id="7501046334262221972">如要將 Chrome 設定為預設瀏覽器，請開啟 [設定]。輕按 [預設的瀏覽器應用程式]，然後選取 Chrome。</translation>
 <translation id="756809126120519699">已清除 Chrome 資料</translation>
 <translation id="7662994914830945754">如要在任何使用 Chrome 的裝置上查看分頁，請登入並開啟同步功能</translation>
+<translation id="7669869107155339016">前往 Chrome 設定。</translation>
 <translation id="7693590760643069321">您現在只要在訊息、文件或其他應用程式中輕按連結，即可使用 Chrome。</translation>
 <translation id="7698568245838009292">Chrome 要求存取相機</translation>
 <translation id="7754633291442704733">您的機構 <ph name="DOMAIN" /> 將可存取您儲存在此帳戶中的 Chrome 資料、書籤、記錄、密碼和其他設定。登出帳戶後，系統會清除此裝置中的資料。不過，您的資料仍會儲存在受管 Google 帳戶中，並可供機構使用。您的機構亦可為該帳戶設定特定使用者政策，以變更 Chrome 的行為。</translation>
@@ -148,7 +159,6 @@
   • Chromium 當機時，有關當機詳情可能會包括部分個人資料。
 
   • 開啟同步處理功能後，數據可能亦會包括先前瀏覽網址的資料。<ph name="END_INDENT" /></translation>
-<translation id="9103442491611662960">此 Chrome 個人檔案正受標準安全保護功能保護</translation>
 <translation id="9112744793181547300">要將 Chrome 設定為預設瀏覽器嗎？</translation>
 <translation id="9122931302567044771">這代表 Chrome 每次都會要求取得桌面版網站。</translation>
 </translationbundle>

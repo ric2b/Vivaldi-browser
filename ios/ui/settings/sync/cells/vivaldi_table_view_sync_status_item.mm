@@ -15,11 +15,8 @@
 namespace {
 const CGFloat kStackMargin = 13.0;
 const CGFloat kStackViewSpacing = 13.0;
-const CGFloat kStatusLabelCornerRadius = 13.0;
-const CGFloat kStatusLabelLeadingPadding = 6.0;
-const CGFloat kStatusLabelTrailingPadding = 8.0;
-const CGFloat kStatusLabelVerticalPadding = 3.0;
-const CGFloat kStatusIndicatorPointSize = 10.0;
+const CGFloat kStatusLabelHorizontalPadding = 15.0;
+const CGFloat kStatusLabelVerticalPadding = 4.0;
 
 const int kSyncStatusTextColor = 0x3B3B3B;
 
@@ -55,15 +52,9 @@ const UIFontTextStyle fontTextStyle = UIFontTextStyleSubheadline;
   }
 
   cell.syncActiveLabel.text = self.statusText;
-  cell.syncStatusView.backgroundColor = self.statusBackgroundColor;
+  [cell updateLabelCornerRadius];
 
-  UIImageSymbolConfiguration* configuration =
-    [UIImageSymbolConfiguration configurationWithPointSize:
-      kStatusIndicatorPointSize];
-  cell.statusCircle.image = [[UIImage systemImageNamed:@"circle.fill"
-                     withConfiguration:configuration]
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-  cell.statusCircle.tintColor = self.statusIndicatorColor;
+  cell.syncStatusView.backgroundColor = self.statusBackgroundColor;
 
   if (styler.cellBackgroundColor) {
     cell.backgroundColor = styler.cellBackgroundColor;
@@ -99,17 +90,9 @@ const UIFontTextStyle fontTextStyle = UIFontTextStyleSubheadline;
     _syncActiveLabel.numberOfLines = 0;
     _syncActiveLabel.backgroundColor = [UIColor clearColor];
 
-    _statusCircle = [[UIImageView alloc] init];
-
-    UIView* syncIndicatorAndLabel = [[UIView alloc] init];
-    [syncIndicatorAndLabel addSubview:_statusCircle];
-    [syncIndicatorAndLabel addSubview:_syncActiveLabel];
-    syncIndicatorAndLabel.backgroundColor = [UIColor clearColor];
-
     _syncStatusView = [[UIView alloc] init];
-    _syncStatusView.layer.cornerRadius = kStatusLabelCornerRadius;
     _syncStatusView.layer.masksToBounds = YES;
-    [_syncStatusView addSubview:syncIndicatorAndLabel];
+    [_syncStatusView addSubview:_syncActiveLabel];
 
     UIStackView* stackView = [[UIStackView alloc] initWithArrangedSubviews:@[
       _lastSyncDateLabel, _syncStatusView
@@ -127,26 +110,24 @@ const UIFontTextStyle fontTextStyle = UIFontTextStyleSubheadline;
             trailing:stackView.trailingAnchor];
     }
 
-    [_statusCircle anchorTop:nil
-                      leading:syncIndicatorAndLabel.leadingAnchor
-                      bottom:nil
-                    trailing:nil];
-    [_statusCircle centerYInSuperview];
-    [_syncActiveLabel anchorTop:syncIndicatorAndLabel.topAnchor
-                      leading:_statusCircle.trailingAnchor
-                      bottom:syncIndicatorAndLabel.bottomAnchor
-                    trailing:syncIndicatorAndLabel.trailingAnchor];
-    [syncIndicatorAndLabel fillSuperviewWithPadding:UIEdgeInsetsMake(
+    [_syncActiveLabel fillSuperviewWithPadding:UIEdgeInsetsMake(
                 kStatusLabelVerticalPadding,
-                kStatusLabelLeadingPadding,
+                kStatusLabelHorizontalPadding,
                 kStatusLabelVerticalPadding,
-                kStatusLabelTrailingPadding)];
+                kStatusLabelHorizontalPadding)];
 
     [stackView fillSuperviewWithPadding:UIEdgeInsetsMake(
               kStackMargin,kStackMargin,
               kStackMargin,kStackMargin)];
   }
+
   return self;
+}
+
+- (void)updateLabelCornerRadius {
+  [_syncStatusView layoutIfNeeded];
+  CGFloat height = CGRectGetHeight(_syncStatusView.bounds);
+  _syncStatusView.layer.cornerRadius = height/2.0;
 }
 
 - (void)prepareForReuse {

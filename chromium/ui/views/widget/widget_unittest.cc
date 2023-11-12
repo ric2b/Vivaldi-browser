@@ -509,6 +509,77 @@ TEST_F(WidgetColorModeTest, ColorModeOverride_LightOverride) {
             widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
 }
 
+TEST_F(WidgetColorModeTest, ChildInheritsColorMode_NoOverrides) {
+  // Create the parent widget and set the native theme to dark.
+  ui::TestNativeTheme test_theme;
+  WidgetAutoclosePtr widget(CreateTopLevelPlatformWidget());
+  test_theme.SetDarkMode(true);
+  widget->SetNativeThemeForTest(&test_theme);
+
+  // Create the child widget.
+  Widget* widget_child = CreateChildPlatformWidget(widget->GetNativeView());
+
+  // Ensure neither has an override set. The child should inherit the color mode
+  // of the parent.
+  widget->SetColorModeOverride({});
+  widget_child->SetColorModeOverride({});
+  EXPECT_EQ(kDarkColor,
+            widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+  EXPECT_EQ(kDarkColor,
+            widget_child->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+
+  // Set the parent's native theme to light. The child should inherit the color
+  // mode of the parent.
+  test_theme.SetDarkMode(false);
+  EXPECT_EQ(kLightColor,
+            widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+  EXPECT_EQ(kLightColor,
+            widget_child->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+}
+
+TEST_F(WidgetColorModeTest, ChildInheritsColorMode_Overrides) {
+  // Create the parent widget and set the native theme to dark.
+  ui::TestNativeTheme test_theme;
+  WidgetAutoclosePtr widget(CreateTopLevelPlatformWidget());
+  test_theme.SetDarkMode(true);
+  widget->SetNativeThemeForTest(&test_theme);
+
+  // Create the child widget.
+  Widget* widget_child = CreateChildPlatformWidget(widget->GetNativeView());
+
+  // Ensure neither has an override set. The child should inherit the color mode
+  // of the parent.
+  widget->SetColorModeOverride({});
+  widget_child->SetColorModeOverride({});
+  EXPECT_EQ(kDarkColor,
+            widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+  EXPECT_EQ(kDarkColor,
+            widget_child->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+
+  // Set the parent's override to light, then back to dark. the child should
+  // follow the parent's overridden color mode.
+  widget->SetColorModeOverride(ui::ColorProviderManager::ColorMode::kLight);
+  EXPECT_EQ(kLightColor,
+            widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+  EXPECT_EQ(kLightColor,
+            widget_child->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+
+  widget->SetColorModeOverride(ui::ColorProviderManager::ColorMode::kDark);
+  EXPECT_EQ(kDarkColor,
+            widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+  EXPECT_EQ(kDarkColor,
+            widget_child->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+
+  // Override the child's color mode to light. The parent should continue to
+  // report a dark color mode.
+  widget_child->SetColorModeOverride(
+      ui::ColorProviderManager::ColorMode::kLight);
+  EXPECT_EQ(kDarkColor,
+            widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+  EXPECT_EQ(kLightColor,
+            widget_child->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+}
+
 TEST_F(WidgetTest, NativeWindowProperty) {
   const char* key = "foo";
   int value = 3;
@@ -2039,12 +2110,12 @@ class WidgetObserverTest : public WidgetTest, public WidgetObserver {
  private:
   raw_ptr<Widget> active_ = nullptr;
 
-  raw_ptr<Widget> widget_closed_ = nullptr;
+  raw_ptr<Widget, DanglingUntriaged> widget_closed_ = nullptr;
   raw_ptr<Widget> widget_activated_ = nullptr;
-  raw_ptr<Widget> widget_deactivated_ = nullptr;
-  raw_ptr<Widget> widget_shown_ = nullptr;
-  raw_ptr<Widget> widget_hidden_ = nullptr;
-  raw_ptr<Widget> widget_bounds_changed_ = nullptr;
+  raw_ptr<Widget, DanglingUntriaged> widget_deactivated_ = nullptr;
+  raw_ptr<Widget, DanglingUntriaged> widget_shown_ = nullptr;
+  raw_ptr<Widget, DanglingUntriaged> widget_hidden_ = nullptr;
+  raw_ptr<Widget, DanglingUntriaged> widget_bounds_changed_ = nullptr;
 
   raw_ptr<Widget> widget_to_close_on_hide_ = nullptr;
 };
@@ -2770,7 +2841,8 @@ class DesktopAuraPaintWidgetTest : public DesktopWidgetTest {
     }
   };
 
-  raw_ptr<DesktopAuraTestValidPaintWidget> paint_widget_ = nullptr;
+  raw_ptr<DesktopAuraTestValidPaintWidget, DanglingUntriaged> paint_widget_ =
+      nullptr;
 };
 
 TEST_F(DesktopAuraPaintWidgetTest, DesktopNativeWidgetNoPaintAfterCloseTest) {
@@ -3088,9 +3160,8 @@ TEST_F(WidgetTest, MousePressCausesCapture) {
   event_count_view->SetBounds(0, 0, 300, 300);
 
   // No capture has been set.
-  EXPECT_EQ(
-      gfx::kNullNativeView,
-      internal::NativeWidgetPrivate::GetGlobalCapture(widget->GetNativeView()));
+  EXPECT_EQ(gfx::NativeView(), internal::NativeWidgetPrivate::GetGlobalCapture(
+                                   widget->GetNativeView()));
 
   MousePressEventConsumer consumer;
   event_count_view->AddPostTargetHandler(&consumer);
@@ -3136,8 +3207,8 @@ class CaptureEventConsumer : public ui::EventHandler {
     }
   }
 
-  raw_ptr<EventCountView> event_count_view_;
-  raw_ptr<Widget> widget_;
+  raw_ptr<EventCountView, DanglingUntriaged> event_count_view_;
+  raw_ptr<Widget, DanglingUntriaged> widget_;
 };
 
 }  // namespace
@@ -3153,9 +3224,8 @@ TEST_F(WidgetTest, CaptureDuringMousePressNotOverridden) {
       widget->GetRootView()->AddChildView(std::make_unique<EventCountView>());
   event_count_view->SetBounds(0, 0, 300, 300);
 
-  EXPECT_EQ(
-      gfx::kNullNativeView,
-      internal::NativeWidgetPrivate::GetGlobalCapture(widget->GetNativeView()));
+  EXPECT_EQ(gfx::NativeView(), internal::NativeWidgetPrivate::GetGlobalCapture(
+                                   widget->GetNativeView()));
 
   Widget* widget2 = CreateTopLevelNativeWidget();
   // Gives explicit capture to |widget2|
@@ -3196,7 +3266,7 @@ class ClosingEventObserver : public ui::EventObserver {
   }
 
  private:
-  raw_ptr<Widget> widget_;
+  raw_ptr<Widget, DanglingUntriaged> widget_;
 };
 
 class ClosingView : public View {
@@ -3416,6 +3486,49 @@ TEST_F(DesktopWidgetTest,
   EXPECT_TRUE(top_level_widget->ShouldPaintAsActive());
   EXPECT_EQ(top_level_counter.CallCount(), 0);
   EXPECT_EQ(bubble_counter.CallCount(), 0);
+}
+
+// Widget delegate that holds paint as active lock during its lifetime.
+class PaintAsActiveTestDesktopWidgetDelegate
+    : public TestDesktopWidgetDelegate {
+ public:
+  PaintAsActiveTestDesktopWidgetDelegate() = default;
+  ~PaintAsActiveTestDesktopWidgetDelegate() override = default;
+
+  void LockWidgetPaintAsActive() {
+    paint_as_active_lock_ = GetWidget()->LockPaintAsActive();
+  }
+
+ private:
+  std::unique_ptr<Widget::PaintAsActiveLock> paint_as_active_lock_;
+};
+
+// Tests that there is no crash when paint as active lock is removed for child
+// widget while its parent widget is being closed.
+TEST_F(DesktopWidgetTest, LockPaintAsActiveAndCloseParent) {
+  // Make sure that DesktopNativeWidgetAura is used for widgets.
+  test_views_delegate()->set_use_desktop_native_widgets(true);
+
+  std::unique_ptr<Widget> parent = CreateTestWidget();
+  parent->Show();
+
+  auto* delegate = new PaintAsActiveTestDesktopWidgetDelegate();
+  // Ensure that the delegate is destroyed in Widget::OnNativeWidgetDestroyed().
+  delegate->SetOwnedByWidget(true);
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  params.parent = parent->GetNativeView();
+  delegate->InitWidget(std::move(params));
+  delegate->LockWidgetPaintAsActive();
+  base::WeakPtr<Widget> child = delegate->GetWidget()->GetWeakPtr();
+  child->ShowInactive();
+
+  // Child widget and its delegate are destroyed when the parent widget is being
+  // closed. PaintAsActiveTestDesktopWidgetDelegate::paint_as_active_lock_ is
+  // also deleted which should not cause a crash.
+  parent->CloseNow();
+
+  // Ensure that child widget has been destroyed.
+  ASSERT_FALSE(child);
 }
 
 // Widget used to destroy itself when OnNativeWidgetDestroyed is called.
@@ -4791,7 +4904,7 @@ class ChildDesktopWidgetTest : public DesktopWidgetTest {
   }
 
  private:
-  gfx::NativeWindow context_ = nullptr;
+  gfx::NativeWindow context_ = gfx::NativeWindow();
 };
 
 // Verifies Widget::IsActive() invoked from

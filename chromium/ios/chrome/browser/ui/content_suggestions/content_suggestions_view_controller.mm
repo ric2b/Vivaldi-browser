@@ -9,9 +9,10 @@
 #import "base/metrics/user_metrics_action.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/drag_and_drop/url_drag_drop_handler.h"
+#import "ios/chrome/browser/ntp/set_up_list_item.h"
+#import "ios/chrome/browser/ntp/set_up_list_item_type.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/action_list_module.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_cells_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_action_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
@@ -22,6 +23,8 @@
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_shortcut_tile_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_layout_util.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/magic_stack_module_container.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/magic_stack_module_container_delegate.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/multi_row_container_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/query_suggestion_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
@@ -31,6 +34,10 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recorder.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
+#import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_item_view.h"
+#import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_item_view_data.h"
+#import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_view.h"
+#import "ios/chrome/browser/ui/content_suggestions/set_up_list/utils.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
@@ -40,6 +47,7 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/favicon/favicon_view.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
 
@@ -51,13 +59,32 @@ namespace {
 
 // The bottom padding for the vertical stack view.
 const float kBottomStackViewPadding = 6.0f;
+const float kBottomStackViewExtraPadding = 14.0f;
+
+// The minimum scroll velocity in order to swipe between modules in the Magic
+// Stack.
+const float kMagicStackMinimumPaginationScrollVelocity = 0.2f;
+
+// The spacing between modules in the Magic Stack.
+const float kMagicStackSpacing = 10.0f;
+
+// The max width of the SetUpList on phone and tablet.
+const CGFloat kSetUpListWidthRegular = 393;
+const CGFloat kSetUpListWidthWide = 418;
+
+// The duration of the animation that hides the Set Up List.
+const base::TimeDelta kSetUpListHideAnimationDuration = base::Milliseconds(250);
 
 }  // namespace
 
 @interface ContentSuggestionsViewController () <
     UIGestureRecognizerDelegate,
     ContentSuggestionsSelectionActions,
-    URLDropDelegate>
+    MagicStackModuleContainerDelegate,
+    SetUpListItemViewTapDelegate,
+    URLDropDelegate,
+    UIScrollViewDelegate,
+    UIScrollViewAccessibilityDelegate>
 
 @property(nonatomic, strong) URLDragDropHandler* dragDropHandler;
 
@@ -76,6 +103,9 @@ const float kBottomStackViewPadding = 6.0f;
     ContentSuggestionsReturnToRecentTabView* returnToRecentTabTile;
 // StackView holding all of `mostVisitedViews`.
 @property(nonatomic, strong) UIStackView* mostVisitedStackView;
+// Module Container for the `mostVisitedViews` when being shown in Magic Stack.
+@property(nonatomic, strong)
+    MagicStackModuleContainer* mostVisitedModuleContainer;
 // Width Anchor of the Most Visited Tiles container.
 @property(nonatomic, strong)
     NSLayoutConstraint* mostVisitedContainerWidthAnchor;
@@ -83,19 +113,31 @@ const float kBottomStackViewPadding = 6.0f;
 @property(nonatomic, strong)
     NSMutableArray<ContentSuggestionsMostVisitedTileView*>* mostVisitedViews;
 // Module Container for the Shortcuts when being shown in Magic Stack.
-@property(nonatomic, strong) ActionListModule* shortcutsModuleContainer;
+@property(nonatomic, strong)
+    MagicStackModuleContainer* shortcutsModuleContainer;
 // StackView holding all of `shortcutsViews`.
 @property(nonatomic, strong) UIStackView* shortcutsStackView;
 // List of all of the Shortcut views.
 @property(nonatomic, strong)
     NSMutableArray<ContentSuggestionsShortcutTileView*>* shortcutsViews;
+// The SetUpListView, if it is currently being displayed.
+@property(nonatomic, strong) SetUpListView* setUpListView;
 @end
 
 @implementation ContentSuggestionsViewController {
+  // Width Anchor of the Return To Recent Tab tile.
+  NSLayoutConstraint* _returnToRecentTabWidthAnchor;
   UIScrollView* _magicStackScrollView;
+  UIStackView* _magicStack;
   BOOL _shouldShowMagicStack;
-  NSArray<NSNumber*>* _magicStackModuleOrder;
+  NSMutableArray<NSNumber*>* _magicStackModuleOrder;
   NSLayoutConstraint* _magicStackScrollViewWidthAnchor;
+  NSArray<SetUpListItemViewData*>* _savedSetUpListItems;
+  SetUpListItemView* _setUpListSyncItemView;
+  SetUpListItemView* _setUpListDefaultBrowserItemView;
+  SetUpListItemView* _setUpListAutofillItemView;
+  SetUpListItemView* _setUpListAllSetItemView;
+  NSMutableArray<SetUpListItemView*>* _compactedSetUpListViews;
 }
 
 - (instancetype)init {
@@ -109,7 +151,11 @@ const float kBottomStackViewPadding = 6.0f;
   self.dragDropHandler.dropDelegate = self;
   [self.view addInteraction:[[UIDropInteraction alloc]
                                 initWithDelegate:self.dragDropHandler]];
-  self.view.backgroundColor = ntp_home::NTPBackgroundColor();
+  if (IsMagicStackEnabled()) {
+    self.view.backgroundColor = [UIColor clearColor];
+  } else {
+    self.view.backgroundColor = ntp_home::NTPBackgroundColor();
+  }
   self.view.accessibilityIdentifier = kContentSuggestionsCollectionIdentifier;
 
   self.verticalStackView = [[UIStackView alloc] init];
@@ -121,9 +167,6 @@ const float kBottomStackViewPadding = 6.0f;
   // height/width configurations for each row.
   self.verticalStackView.distribution = UIStackViewDistributionFill;
   [self.view addSubview:self.verticalStackView];
-  // Add bottom spacing to last module by applying it after
-  // `_verticalStackView`. If ShouldMinimizeSpacingForModuleRefresh() is YES,
-  // then no space is added after the last module.
 
   // Add bottom spacing to the last module by applying it after
   // `_verticalStackView`. If `IsContentSuggestionsUIModuleRefreshEnabled()` is
@@ -132,6 +175,10 @@ const float kBottomStackViewPadding = 6.0f;
   // `IsContentSuggestionsUIModuleRefreshEnabled()` is NO, then we add
   // `kBottomStackViewPadding`
   CGFloat bottomSpacing = kBottomStackViewPadding;
+  if (IsMagicStackEnabled()) {
+    // Add more spacing between magic stack and feed header.
+    bottomSpacing = kBottomStackViewExtraPadding;
+  }
   [NSLayoutConstraint activateConstraints:@[
     [self.verticalStackView.leadingAnchor
         constraintEqualToAnchor:self.view.leadingAnchor],
@@ -144,40 +191,18 @@ const float kBottomStackViewPadding = 6.0f;
                        constant:-bottomSpacing]
   ]];
 
-  CGFloat horizontalSpacing =
-      ContentSuggestionsTilesHorizontalSpacing(self.traitCollection);
   if (self.returnToRecentTabTile) {
-    UIView* parentView = self.returnToRecentTabTile;
     [self addUIElement:self.returnToRecentTabTile
         withCustomBottomSpacing:content_suggestions::
                                     kReturnToRecentTabSectionBottomMargin];
-    CGFloat cardWidth = content_suggestions::SearchFieldWidth(
-        self.view.bounds.size.width, self.traitCollection);
-    [NSLayoutConstraint activateConstraints:@[
-      [parentView.widthAnchor constraintEqualToConstant:cardWidth],
-      [parentView.heightAnchor
-          constraintEqualToConstant:ReturnToRecentTabHeight()]
-    ]];
+    [self layoutReturnToRecentTabTile];
   }
   if ([self.mostVisitedViews count] > 0) {
-    self.mostVisitedStackView = [[UIStackView alloc] init];
-    self.mostVisitedStackView.axis = UILayoutConstraintAxisHorizontal;
-    self.mostVisitedStackView.distribution = UIStackViewDistributionFillEqually;
-    self.mostVisitedStackView.spacing = horizontalSpacing;
-    self.mostVisitedStackView.alignment = UIStackViewAlignmentTop;
-    [self addUIElement:self.mostVisitedStackView
-        withCustomBottomSpacing:kMostVisitedBottomMargin];
-    CGFloat width =
-        MostVisitedTilesContentHorizontalSpace(self.traitCollection);
-    CGFloat height =
-        MostVisitedCellSize(self.traitCollection.preferredContentSizeCategory)
-            .height;
-    [NSLayoutConstraint activateConstraints:@[
-      [self.mostVisitedStackView.widthAnchor constraintEqualToConstant:width],
-      [self.mostVisitedStackView.heightAnchor
-          constraintGreaterThanOrEqualToConstant:height]
-    ]];
+    [self createAndInsertMostVisitedModule];
     [self populateMostVisitedModule];
+  }
+  if (_savedSetUpListItems) {
+    [self showSetUpListWithItems:_savedSetUpListItems];
   }
   if (self.shortcutsViews) {
     self.shortcutsStackView = [self createShortcutsStackView];
@@ -249,20 +274,13 @@ const float kBottomStackViewPadding = 6.0f;
   // If the Content Suggestions is already shown, add the Return to Recent Tab
   // tile to the StackView, otherwise, add to the verticalStackView.
   if (self.isViewLoaded) {
-    UIView* parentView = self.returnToRecentTabTile;
     [self.verticalStackView insertArrangedSubview:self.returnToRecentTabTile
                                           atIndex:0];
     [self.verticalStackView
         setCustomSpacing:content_suggestions::
                              kReturnToRecentTabSectionBottomMargin
                afterView:self.returnToRecentTabTile];
-    CGFloat cardWidth = content_suggestions::SearchFieldWidth(
-        self.view.bounds.size.width, self.traitCollection);
-    [NSLayoutConstraint activateConstraints:@[
-      [parentView.widthAnchor constraintEqualToConstant:cardWidth],
-      [parentView.heightAnchor
-          constraintEqualToConstant:ReturnToRecentTabHeight()]
-    ]];
+    [self layoutReturnToRecentTabTile];
     [self.audience returnToRecentTabWasAdded];
   }
   // Trigger a relayout so that the Return To Recent Tab view will be counted in
@@ -328,8 +346,17 @@ const float kBottomStackViewPadding = 6.0f;
     [self.mostVisitedViews addObject:view];
     index++;
   }
+  // If viewDidLoad has been called before the first valid Most Visited Tiles
+  // are available, construct `mostVisitedStackView`.
+  if (self.verticalStackView && !self.mostVisitedStackView) {
+    [self createAndInsertMostVisitedModule];
+  }
   [self populateMostVisitedModule];
   [self.contentSuggestionsMetricsRecorder recordMostVisitedTilesShown];
+  if (IsMagicStackEnabled()) {
+    [self logTopModuleImpressionForType:ContentSuggestionsModuleType::
+                                            kMostVisited];
+  }
   // Trigger a relayout so that the MVTs will be counted in the Content
   // Suggestions height. Upon app startup when this is often added
   // asynchronously as the NTP is constructing the entire surface, so accurate
@@ -356,6 +383,10 @@ const float kBottomStackViewPadding = 6.0f;
         [[ContentSuggestionsShortcutTileView alloc] initWithConfiguration:item];
     [self.shortcutsViews addObject:view];
   }
+  if (IsMagicStackEnabled()) {
+    [self
+        logTopModuleImpressionForType:ContentSuggestionsModuleType::kShortcuts];
+  }
 }
 
 - (void)updateShortcutTileConfig:
@@ -380,13 +411,225 @@ const float kBottomStackViewPadding = 6.0f;
 }
 
 - (void)setMagicStackOrder:(NSArray<NSNumber*>*)order {
+  CHECK([order count] > 0);
   _shouldShowMagicStack = YES;
-  _magicStackModuleOrder = order;
+  _magicStackModuleOrder = [order mutableCopy];
+}
+
+- (void)scrollToNextMagicStackModuleForCompletedModule:
+    (ContentSuggestionsModuleType)moduleType {
+  ContentSuggestionsModuleType currentModule = [self currentlyShownModule];
+  // Do not scroll if the completed module is not the currently shown module.
+  if (currentModule != moduleType) {
+    return;
+  }
+  CGFloat nextPageContentOffsetX = [self
+      getNextPageOffsetForOffset:_magicStackScrollView.contentOffset.x
+                        velocity:kMagicStackMinimumPaginationScrollVelocity +
+                                 1];
+  [_magicStackScrollView
+      setContentOffset:CGPointMake(nextPageContentOffsetX,
+                                   _magicStackScrollView.contentOffset.y)
+              animated:YES];
+}
+
+- (void)showSetUpListWithItems:(NSArray<SetUpListItemViewData*>*)items {
+  if (!self.viewLoaded) {
+    _savedSetUpListItems = items;
+    return;
+  }
+  NSUInteger index = [self.verticalStackView.arrangedSubviews
+      indexOfObject:self.mostVisitedStackView];
+  if (index == NSNotFound && self.returnToRecentTabTile) {
+    index = [self.verticalStackView.arrangedSubviews
+        indexOfObject:self.returnToRecentTabTile];
+  }
+  if (index == NSNotFound) {
+    index = 0;
+  } else {
+    index++;
+  }
+  if (IsMagicStackEnabled()) {
+    BOOL shouldShowCompactedSetUpListModule =
+        set_up_list_utils::ShouldShowCompactedSetUpListModule();
+    if (shouldShowCompactedSetUpListModule) {
+      _compactedSetUpListViews = [NSMutableArray array];
+    }
+    ContentSuggestionsModuleType firstItemType =
+        SetUpListModuleTypeForSetUpListType([items firstObject].type);
+    [self logTopModuleImpressionForType:shouldShowCompactedSetUpListModule
+                                            ? ContentSuggestionsModuleType::
+                                                  kCompactedSetUpList
+                                            : firstItemType];
+    for (SetUpListItemViewData* data in items) {
+      data.compactLayout = shouldShowCompactedSetUpListModule;
+      data.heroCellMagicStackLayout = !shouldShowCompactedSetUpListModule;
+      SetUpListItemView* view = [[SetUpListItemView alloc] initWithData:data];
+      view.tapDelegate = self;
+      ContentSuggestionsModuleType type =
+          SetUpListModuleTypeForSetUpListType(data.type);
+      if (shouldShowCompactedSetUpListModule) {
+        [_compactedSetUpListViews addObject:view];
+      }
+      switch (type) {
+        case ContentSuggestionsModuleType::kSetUpListSync:
+          _setUpListSyncItemView = view;
+          break;
+        case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
+          _setUpListDefaultBrowserItemView = view;
+          break;
+        case ContentSuggestionsModuleType::kSetUpListAutofill:
+          _setUpListAutofillItemView = view;
+          break;
+        case ContentSuggestionsModuleType::kSetUpListAllSet:
+          _setUpListAllSetItemView = view;
+          break;
+        default:
+          break;
+      }
+      // Only add it to the Magic Stack here if it is after the inital
+      // construction of the Magic Stack.
+      if (_magicStack) {
+        if (shouldShowCompactedSetUpListModule) {
+          MultiRowContainerView* multiRowContainer =
+              [[MultiRowContainerView alloc]
+                  initWithViews:_compactedSetUpListViews];
+          MagicStackModuleContainer* setUpListCompactedModule =
+              [[MagicStackModuleContainer alloc]
+                  initWithContentView:multiRowContainer
+                                 type:ContentSuggestionsModuleType::
+                                          kCompactedSetUpList
+                             delegate:self];
+          [_magicStack
+              insertArrangedSubview:setUpListCompactedModule
+                            atIndex:[self indexForMagicStackModule:
+                                              ContentSuggestionsModuleType::
+                                                  kCompactedSetUpList]];
+        } else {
+          MagicStackModuleContainer* setUpListModule =
+              [[MagicStackModuleContainer alloc] initWithContentView:view
+                                                                type:type
+                                                            delegate:self];
+          [_magicStack
+              insertArrangedSubview:setUpListModule
+                            atIndex:[self indexForMagicStackModule:type]];
+        }
+      }
+    }
+  } else {
+    SetUpListView* setUpListView =
+        [[SetUpListView alloc] initWithItems:items rootView:self.view];
+    setUpListView.delegate = self.setUpListViewDelegate;
+    self.setUpListView = setUpListView;
+    [self.verticalStackView insertArrangedSubview:setUpListView atIndex:index];
+
+    // The width of the SetUpList should match the Discover Feed. This seems to
+    // closely match the feed's logic.
+    CGFloat width = kSetUpListWidthRegular;
+    CGSize viewSize = self.view.frame.size;
+    if (MIN(viewSize.width, viewSize.height) >= kSetUpListWidthWide) {
+      width = kSetUpListWidthWide;
+    }
+    // Since this view is put into a StackView, this width constraint acts as
+    // a max width constraint - if the StackView is narrower, it will make the
+    // SetUpListView narrower.
+    [NSLayoutConstraint activateConstraints:@[
+      [setUpListView.widthAnchor constraintEqualToConstant:width],
+    ]];
+  }
+}
+
+- (void)markSetUpListItemComplete:(SetUpListItemType)type
+                       completion:(ProceduralBlock)completion {
+  if (IsMagicStackEnabled()) {
+    switch (type) {
+      case SetUpListItemType::kSignInSync:
+        [_setUpListSyncItemView markCompleteWithCompletion:completion];
+        break;
+      case SetUpListItemType::kDefaultBrowser:
+        [_setUpListDefaultBrowserItemView
+            markCompleteWithCompletion:completion];
+        break;
+      case SetUpListItemType::kAutofill:
+        [_setUpListAutofillItemView markCompleteWithCompletion:completion];
+        break;
+      default:
+        break;
+    }
+  } else {
+    [self.setUpListView markItemComplete:type completion:completion];
+  }
+}
+
+- (void)hideSetUpListWithAnimations:(ProceduralBlock)animations {
+  if (IsMagicStackEnabled()) {
+    // Remove Modules with animation
+    [self removeSetUpListItemsWithNewModule:nil];
+    return;
+  }
+
+  CHECK(self.setUpListView);
+  NSInteger index = [self.verticalStackView.arrangedSubviews
+      indexOfObject:self.setUpListView];
+  CHECK_NE(index, NSNotFound);
+
+  __weak __typeof(self) weakSelf = self;
+  [UIView animateWithDuration:kSetUpListHideAnimationDuration.InSecondsF()
+      animations:^{
+        __typeof(self) strongSelf = weakSelf;
+        if (!strongSelf) {
+          return;
+        }
+        strongSelf.setUpListView.hidden = YES;
+        strongSelf.setUpListView.alpha = 0;
+        [strongSelf.view setNeedsLayout];
+        [strongSelf.view layoutIfNeeded];
+        if (animations) {
+          animations();
+        }
+      }
+      completion:^(BOOL finished) {
+        __typeof(self) strongSelf = weakSelf;
+        if (!strongSelf) {
+          return;
+        }
+        [strongSelf.setUpListView removeFromSuperview];
+        strongSelf.setUpListView.delegate = nil;
+        strongSelf.setUpListView = nil;
+      }];
+}
+
+- (void)showSetUpListDoneWithAnimations:(ProceduralBlock)animations {
+  if (IsMagicStackEnabled()) {
+    SetUpListItemViewData* allSetData =
+        [[SetUpListItemViewData alloc] initWithType:SetUpListItemType::kAllSet
+                                           complete:NO];
+    allSetData.heroCellMagicStackLayout =
+        !set_up_list_utils::ShouldShowCompactedSetUpListModule();
+    SetUpListItemView* view =
+        [[SetUpListItemView alloc] initWithData:allSetData];
+    MagicStackModuleContainer* allSetModule = [[MagicStackModuleContainer alloc]
+        initWithContentView:view
+                       type:ContentSuggestionsModuleType::kSetUpListAllSet
+                   delegate:self];
+    // Determine which module to swap out.
+    [self removeSetUpListItemsWithNewModule:allSetModule];
+    return;
+  }
+  __weak __typeof(self) weakSelf = self;
+  [self.setUpListView showDoneWithAnimations:^{
+    [weakSelf.view setNeedsLayout];
+    [weakSelf.view layoutIfNeeded];
+    if (animations) {
+      animations();
+    }
+  }];
 }
 
 - (CGFloat)contentSuggestionsHeight {
   CGFloat height = 0;
-  if ([self.mostVisitedViews count] > 0) {
+  if ([self.mostVisitedViews count] > 0 &&
+      !ShouldPutMostVisitedSitesInMagicStack()) {
     height += MostVisitedCellSize(
                   UIApplication.sharedApplication.preferredContentSizeCategory)
                   .height +
@@ -405,7 +648,16 @@ const float kBottomStackViewPadding = 6.0f;
   if (self.returnToRecentTabTile) {
     height += ReturnToRecentTabHeight();
   }
+  if (self.setUpListView && !self.setUpListView.isHidden) {
+    height += self.setUpListView.frame.size.height;
+  }
   return height;
+}
+
+#pragma mark - SetUpListItemViewTapDelegate methods
+
+- (void)didTapSetUpListItemView:(SetUpListItemView*)view {
+  [self.audience didSelectSetUpListItem:view.type];
 }
 
 #pragma mark - ContentSuggestionsSelectionActions
@@ -471,11 +723,65 @@ const float kBottomStackViewPadding = 6.0f;
 
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  if (previousTraitCollection.horizontalSizeClass !=
-      self.traitCollection.horizontalSizeClass) {
+  if (content_suggestions::ShouldShowWiderMagicStackLayer(self.traitCollection,
+                                                          self.view.window)) {
+    if (_returnToRecentTabWidthAnchor) {
+      // Match Module width when Magic Stack is enabled.
+      _returnToRecentTabWidthAnchor.constant = kMagicStackWideWidth;
+    }
+    _magicStackScrollView.clipsToBounds = YES;
+    _magicStackScrollViewWidthAnchor.constant = kMagicStackWideWidth;
+  } else {
+    if (_returnToRecentTabWidthAnchor) {
+      _returnToRecentTabWidthAnchor.constant =
+          content_suggestions::SearchFieldWidth(self.view.bounds.size.width,
+                                                self.traitCollection);
+    }
+    _magicStackScrollView.clipsToBounds = NO;
     _magicStackScrollViewWidthAnchor.constant = [MagicStackModuleContainer
         moduleWidthForHorizontalTraitCollection:self.traitCollection];
   }
+}
+
+#pragma mark - UIScrollViewDelegate
+
+- (void)scrollViewWillEndDragging:(UIScrollView*)scrollView
+                     withVelocity:(CGPoint)velocity
+              targetContentOffset:(inout CGPoint*)targetContentOffset {
+  DCHECK(IsMagicStackEnabled());
+  targetContentOffset->x =
+      [self getNextPageOffsetForOffset:scrollView.contentOffset.x
+                              velocity:velocity.x];
+}
+
+#pragma mark - UIScrollViewAccessibilityDelegate
+
+// This reads out the new page whenever the user scrolls in VoiceOver.
+- (NSString*)accessibilityScrollStatusForScrollView:(UIScrollView*)scrollView {
+  return [MagicStackModuleContainer
+      titleStringForModule:[self currentlyShownModule]];
+}
+
+#pragma mark - MagicStackModuleContainerDelegate
+
+- (BOOL)doesMagicStackShowOnlyOneModule:(ContentSuggestionsModuleType)type {
+  // Return NO if Most Visited Module is asking while it is not in the Magic
+  // Stack.
+  if (type == ContentSuggestionsModuleType::kMostVisited &&
+      !ShouldPutMostVisitedSitesInMagicStack()) {
+    return NO;
+  }
+  ContentSuggestionsModuleType firstModuleType = (ContentSuggestionsModuleType)[
+      [_magicStackModuleOrder objectAtIndex:0] intValue];
+  return [_magicStackModuleOrder count] == 1 && firstModuleType == type;
+}
+
+- (void)seeMoreWasTappedForModuleType:(ContentSuggestionsModuleType)type {
+  [self.audience showSetUpListShowMoreMenu];
+}
+
+- (void)neverShowModuleType:(ContentSuggestionsModuleType)type {
+  [self.audience neverShowModuleType:type];
 }
 
 #pragma mark - Private
@@ -487,23 +793,61 @@ const float kBottomStackViewPadding = 6.0f;
   }
 }
 
-// Add the elements in `mostVisitedViews` into `verticalStackView`, constructing
-// `verticalStackView` beforehand if it has not been yet.
-- (void)populateMostVisitedModule {
-  // If viewDidLoad has been called before the first valid Most Visited Tiles
-  // are available, construct `mostVisitedStackView`.
-  if (self.verticalStackView && !self.mostVisitedStackView) {
-    self.mostVisitedStackView = [[UIStackView alloc] init];
-    self.mostVisitedStackView.axis = UILayoutConstraintAxisHorizontal;
-    self.mostVisitedStackView.alignment = UIStackViewAlignmentTop;
-    self.mostVisitedStackView.distribution = UIStackViewDistributionFillEqually;
-    self.mostVisitedStackView.spacing =
-        ContentSuggestionsTilesHorizontalSpacing(self.traitCollection);
-    // Find correct insertion position in the stack.
-    int insertionIndex = 0;
-    if (self.returnToRecentTabTile) {
-      insertionIndex++;
+- (void)layoutReturnToRecentTabTile {
+  CGFloat cardWidth = content_suggestions::SearchFieldWidth(
+      self.view.bounds.size.width, self.traitCollection);
+  if (IsMagicStackEnabled() &&
+      content_suggestions::ShouldShowWiderMagicStackLayer(self.traitCollection,
+                                                          self.view.window)) {
+    // Match Module width when Magic Stack is enabled.
+    cardWidth = kMagicStackWideWidth;
+  }
+  _returnToRecentTabWidthAnchor =
+      [_returnToRecentTabTile.widthAnchor constraintEqualToConstant:cardWidth];
+  [NSLayoutConstraint activateConstraints:@[
+    _returnToRecentTabWidthAnchor,
+    [_returnToRecentTabTile.heightAnchor
+        constraintEqualToConstant:ReturnToRecentTabHeight()]
+  ]];
+}
+
+- (void)createAndInsertMostVisitedModule {
+  CGFloat horizontalSpacing =
+      ContentSuggestionsTilesHorizontalSpacing(self.traitCollection);
+  self.mostVisitedStackView = [[UIStackView alloc] init];
+  self.mostVisitedStackView.axis = UILayoutConstraintAxisHorizontal;
+  self.mostVisitedStackView.distribution = UIStackViewDistributionFillEqually;
+  self.mostVisitedStackView.spacing = horizontalSpacing;
+  self.mostVisitedStackView.alignment = UIStackViewAlignmentTop;
+
+  // Find correct insertion position in the stack.
+  int insertionIndex = 0;
+  if (self.returnToRecentTabTile) {
+    insertionIndex++;
+  }
+  if (IsMagicStackEnabled()) {
+    self.mostVisitedModuleContainer = [[MagicStackModuleContainer alloc]
+        initWithContentView:self.mostVisitedStackView
+                       type:ContentSuggestionsModuleType::kMostVisited
+                   delegate:self];
+    if (ShouldPutMostVisitedSitesInMagicStack()) {
+      // Only add it to the Magic Stack here if it is after the inital
+      // construction of the Magic Stack.
+      if (_magicStack) {
+        [_magicStack
+            insertArrangedSubview:self.mostVisitedModuleContainer
+                          atIndex:[self indexForMagicStackModule:
+                                            ContentSuggestionsModuleType::
+                                                kMostVisited]];
+      }
+    } else {
+      [self.verticalStackView
+          insertArrangedSubview:self.mostVisitedModuleContainer
+                        atIndex:insertionIndex];
+      [self.verticalStackView setCustomSpacing:kMostVisitedBottomMargin
+                                     afterView:self.mostVisitedModuleContainer];
     }
+  } else {
     [self.verticalStackView insertArrangedSubview:self.mostVisitedStackView
                                           atIndex:insertionIndex];
     [self.verticalStackView setCustomSpacing:kMostVisitedBottomMargin
@@ -518,6 +862,10 @@ const float kBottomStackViewPadding = 6.0f;
           constraintEqualToConstant:size.height]
     ]];
   }
+}
+
+// Add the elements in `mostVisitedViews` into `verticalStackView`.
+- (void)populateMostVisitedModule {
   for (ContentSuggestionsMostVisitedTileView* view in self.mostVisitedViews) {
     view.menuProvider = self.menuProvider;
     UITapGestureRecognizer* tapRecognizer = [[UITapGestureRecognizer alloc]
@@ -554,50 +902,276 @@ const float kBottomStackViewPadding = 6.0f;
   return shortcutsStackView;
 }
 
+// Logs `type` as the top module shown if it is first in
+// `_magicStackModuleOrder`
+- (void)logTopModuleImpressionForType:(ContentSuggestionsModuleType)type {
+  ContentSuggestionsModuleType firstModuleType = (ContentSuggestionsModuleType)[
+      [_magicStackModuleOrder objectAtIndex:0] intValue];
+  if (firstModuleType == type) {
+    [self.contentSuggestionsMetricsRecorder
+        recordMagicStackTopModuleImpressionForType:type];
+  }
+}
+
 - (void)createMagicStack {
-  CGFloat width = [MagicStackModuleContainer
-      moduleWidthForHorizontalTraitCollection:self.traitCollection];
   _magicStackScrollView = [[UIScrollView alloc] init];
   [_magicStackScrollView setShowsHorizontalScrollIndicator:NO];
-  _magicStackScrollView.clipsToBounds = NO;
+  _magicStackScrollView.clipsToBounds =
+      content_suggestions::ShouldShowWiderMagicStackLayer(self.traitCollection,
+                                                          self.view.window);
+  _magicStackScrollView.delegate = self;
+  _magicStackScrollView.decelerationRate = UIScrollViewDecelerationRateFast;
+  _magicStackScrollView.accessibilityIdentifier =
+      kMagicStackScrollViewAccessibilityIdentifier;
   [self addUIElement:_magicStackScrollView
       withCustomBottomSpacing:kMostVisitedBottomMargin];
 
-  UIStackView* magicStack = [[UIStackView alloc] init];
-  magicStack.translatesAutoresizingMaskIntoConstraints = NO;
-  magicStack.axis = UILayoutConstraintAxisHorizontal;
-  magicStack.distribution = UIStackViewDistributionEqualSpacing;
-  magicStack.spacing = 10;
-  magicStack.alignment = UIStackViewAlignmentCenter;
-  [_magicStackScrollView addSubview:magicStack];
+  _magicStack = [[UIStackView alloc] init];
+  _magicStack.translatesAutoresizingMaskIntoConstraints = NO;
+  _magicStack.axis = UILayoutConstraintAxisHorizontal;
+  _magicStack.distribution = UIStackViewDistributionEqualSpacing;
+  _magicStack.spacing = kMagicStackSpacing;
+  // Ensures modules take up entire height of the Magic Stack.
+  _magicStack.alignment = UIStackViewAlignmentFill;
+  [_magicStackScrollView addSubview:_magicStack];
 
   // Add Magic Stack modules in order dictated by `_magicStackModuleOrder`.
   for (NSNumber* moduleType in _magicStackModuleOrder) {
     ContentSuggestionsModuleType type =
         (ContentSuggestionsModuleType)[moduleType intValue];
     switch (type) {
-      case ContentSuggestionsModuleType::kShortcuts:
-        self.shortcutsModuleContainer = [[ActionListModule alloc]
+      case ContentSuggestionsModuleType::kShortcuts: {
+        self.shortcutsModuleContainer = [[MagicStackModuleContainer alloc]
             initWithContentView:self.shortcutsStackView
-                           type:type];
-        [magicStack addArrangedSubview:self.shortcutsModuleContainer];
+                           type:type
+                       delegate:self];
+        [_magicStack addArrangedSubview:self.shortcutsModuleContainer];
         break;
+      }
+      case ContentSuggestionsModuleType::kMostVisited: {
+        if (ShouldPutMostVisitedSitesInMagicStack()) {
+          [_magicStack addArrangedSubview:self.mostVisitedModuleContainer];
+        }
+        break;
+      }
+      case ContentSuggestionsModuleType::kSetUpListSync: {
+        MagicStackModuleContainer* setUpListSyncModule =
+            [[MagicStackModuleContainer alloc]
+                initWithContentView:_setUpListSyncItemView
+                               type:type
+                           delegate:self];
+        [_magicStack addArrangedSubview:setUpListSyncModule];
+        break;
+      }
+      case ContentSuggestionsModuleType::kSetUpListDefaultBrowser: {
+        MagicStackModuleContainer* setUpListDefaultBrowserModule =
+            [[MagicStackModuleContainer alloc]
+                initWithContentView:_setUpListDefaultBrowserItemView
+                               type:type
+                           delegate:self];
+        [_magicStack addArrangedSubview:setUpListDefaultBrowserModule];
+        break;
+      }
+      case ContentSuggestionsModuleType::kSetUpListAutofill: {
+        MagicStackModuleContainer* setUpListAutofillModule =
+            [[MagicStackModuleContainer alloc]
+                initWithContentView:_setUpListAutofillItemView
+                               type:type
+                           delegate:self];
+        [_magicStack addArrangedSubview:setUpListAutofillModule];
+        break;
+      }
+      case ContentSuggestionsModuleType::kCompactedSetUpList: {
+        MultiRowContainerView* multiRowContainer =
+            [[MultiRowContainerView alloc]
+                initWithViews:_compactedSetUpListViews];
+        MagicStackModuleContainer* setUpListCompactedModule =
+            [[MagicStackModuleContainer alloc]
+                initWithContentView:multiRowContainer
+                               type:ContentSuggestionsModuleType::
+                                        kCompactedSetUpList
+                           delegate:self];
+        [_magicStack addArrangedSubview:setUpListCompactedModule];
+        break;
+      }
+      case ContentSuggestionsModuleType::kSetUpListAllSet: {
+        MagicStackModuleContainer* setUpListAllSetModule =
+            [[MagicStackModuleContainer alloc]
+                initWithContentView:_setUpListAllSetItemView
+                               type:type
+                           delegate:self];
+        [_magicStack addArrangedSubview:setUpListAllSetModule];
+        break;
+      }
       default:
         break;
     }
   }
-  AddSameConstraints(magicStack, _magicStackScrollView);
+  AddSameConstraints(_magicStack, _magicStackScrollView);
   // Define width of ScrollView. Instrinsic content height of the
   // StackView within the ScrollView will define the height of the
   // ScrollView.
+  CGFloat width = [MagicStackModuleContainer
+      moduleWidthForHorizontalTraitCollection:self.traitCollection];
+  // Magic Stack has a wider width for wider screens so that clipToBounds can be
+  // YES with a peeking module still visible.
+  if (content_suggestions::ShouldShowWiderMagicStackLayer(self.traitCollection,
+                                                          self.view.window)) {
+    width = kMagicStackWideWidth;
+  }
   _magicStackScrollViewWidthAnchor =
       [_magicStackScrollView.widthAnchor constraintEqualToConstant:width];
   [NSLayoutConstraint activateConstraints:@[
     // Ensures only horizontal scrolling
-    [magicStack.heightAnchor
+    [_magicStack.heightAnchor
         constraintEqualToAnchor:_magicStackScrollView.heightAnchor],
     _magicStackScrollViewWidthAnchor
   ]];
+}
+
+// Returns the index position `moduleType` should be placed in the Magic Stack.
+// This should only be used when looking to add a module after the inital Magic
+// Stack construction.
+- (NSUInteger)indexForMagicStackModule:
+    (ContentSuggestionsModuleType)moduleType {
+  NSUInteger index = 0;
+  for (NSNumber* moduleTypeNum in _magicStackModuleOrder) {
+    ContentSuggestionsModuleType type =
+        (ContentSuggestionsModuleType)[moduleTypeNum intValue];
+    if (type == moduleType) {
+      return index;
+    }
+    index++;
+  }
+  NOTREACHED_NORETURN();
+}
+
+// Returns the `ContentSuggestionsModuleType` type of the module being currently
+// shown in the Magic Stack.
+- (ContentSuggestionsModuleType)currentlyShownModule {
+  CGFloat offset = _magicStackScrollView.contentOffset.x;
+  CGFloat moduleWidth = [MagicStackModuleContainer
+      moduleWidthForHorizontalTraitCollection:self.traitCollection];
+  NSUInteger moduleCount = [_magicStackModuleOrder count];
+  // Find closest page to the current scroll offset.
+  CGFloat closestPage = roundf(offset / moduleWidth);
+  closestPage = fminf(closestPage, moduleCount - 1);
+  return (ContentSuggestionsModuleType)[_magicStackModuleOrder[(
+      NSUInteger)closestPage] intValue];
+}
+
+// Replaces the currently visible Set Up List module with `newModule` if valid
+// and then removes all other Set Up List modules.
+- (void)removeSetUpListItemsWithNewModule:
+    (MagicStackModuleContainer*)newModule {
+  int index = 0;
+  NSMutableArray* viewIndicesToRemove = [NSMutableArray array];
+  for (NSNumber* moduleType in _magicStackModuleOrder) {
+    ContentSuggestionsModuleType type =
+        (ContentSuggestionsModuleType)[moduleType intValue];
+    switch (type) {
+      case ContentSuggestionsModuleType::kSetUpListSync:
+      case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
+      case ContentSuggestionsModuleType::kSetUpListAutofill:
+      case ContentSuggestionsModuleType::kCompactedSetUpList:
+        [viewIndicesToRemove addObject:@(index)];
+        break;
+      default:
+        break;
+    }
+    index++;
+  }
+
+  __weak __typeof(self) weakSelf = self;
+  ProceduralBlock removeRemainingModules = ^{
+    __typeof(self) strongSelf = weakSelf;
+    if (!strongSelf) {
+      return;
+    }
+    // Remove all non-visible modules in reverse order
+    int removedModuleCount = [viewIndicesToRemove count];
+    for (int i = removedModuleCount - 1; i >= 0; i--) {
+      NSUInteger moduleIndex = [viewIndicesToRemove[i] integerValue];
+      UIView* moduleToRemove =
+          [strongSelf->_magicStack arrangedSubviews][moduleIndex];
+      [moduleToRemove removeFromSuperview];
+      [strongSelf->_magicStackModuleOrder removeObjectAtIndex:moduleIndex];
+    }
+  };
+
+  if (newModule) {
+    // Replace last Set Up List item with "All Set" hero cell.
+    NSUInteger moduleIndexToReplace =
+        [[viewIndicesToRemove lastObject] integerValue];
+    // Do not remove the replaced module.
+    [viewIndicesToRemove removeObjectAtIndex:moduleIndexToReplace];
+    [self replaceModuleAtIndex:moduleIndexToReplace
+                    withModule:newModule
+                    completion:removeRemainingModules];
+  } else {
+    removeRemainingModules();
+  }
+}
+
+// Replaces the module at `index` with `newModule` in the Magic Stack, executing
+// `completion` after the completion of the replace animation.
+- (void)replaceModuleAtIndex:(NSUInteger)index
+                  withModule:(MagicStackModuleContainer*)newModule
+                  completion:(ProceduralBlock)completion {
+  newModule.alpha = 0;
+  UIView* moduleToHide = [_magicStack arrangedSubviews][index];
+  __weak __typeof(self) weakSelf = self;
+  [UIView animateWithDuration:1.0
+      delay:0.0
+      options:UIViewAnimationOptionTransitionCurlDown
+      animations:^{
+        __typeof(self) strongSelf = weakSelf;
+        if (!strongSelf) {
+          return;
+        }
+        [strongSelf->_magicStack removeArrangedSubview:moduleToHide];
+        [strongSelf->_magicStack insertArrangedSubview:newModule atIndex:index];
+        moduleToHide.alpha = 0;
+        newModule.alpha = 1;
+      }
+      completion:^(BOOL finished) {
+        __typeof(self) strongSelf = weakSelf;
+        if (!strongSelf) {
+          return;
+        }
+        if (completion) {
+          completion();
+        }
+        [moduleToHide removeFromSuperview];
+        [strongSelf->_magicStack setNeedsLayout];
+        [strongSelf->_magicStack layoutIfNeeded];
+      }];
+}
+
+// Determines the final page offset given the scroll `offset` and the `velocity`
+// scroll. If the drag is slow enough, then the closest page is the final state.
+// If the drag is in the negative direction, then go to the page previous to the
+// closest current page. If the drag is in the positive direction, then go to
+// the page after the closest current page.
+- (CGFloat)getNextPageOffsetForOffset:(CGFloat)offset
+                             velocity:(CGFloat)velocity {
+  CGFloat moduleWidth = [MagicStackModuleContainer
+      moduleWidthForHorizontalTraitCollection:self.traitCollection];
+  NSUInteger moduleCount = [_magicStackModuleOrder count];
+
+  // Find closest page to the current scroll offset.
+  CGFloat closestPage = roundf(offset / moduleWidth);
+  closestPage = fminf(closestPage, moduleCount);
+
+  if (fabs(velocity) < kMagicStackMinimumPaginationScrollVelocity) {
+    return closestPage * moduleWidth + (closestPage * 10);
+  }
+  if (velocity < 0) {
+    return (closestPage - 1) * moduleWidth +
+           ((closestPage - 1) * kMagicStackSpacing);
+  }
+  return (closestPage + 1) * moduleWidth +
+         ((closestPage + 1) * kMagicStackSpacing);
 }
 
 @end

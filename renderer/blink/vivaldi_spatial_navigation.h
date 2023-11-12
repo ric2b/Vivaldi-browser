@@ -30,6 +30,7 @@ void CORE_EXPORT ClearHover(blink::Element* element);
 std::vector<blink::WebElement> CORE_EXPORT
 GetSpatialNavigationElements(blink::Document* document,
                              float scale,
+                             blink::Element* current,
                              std::vector<blink::WebElement>& spatnav_elements);
 
 }  // namespace vivaldi

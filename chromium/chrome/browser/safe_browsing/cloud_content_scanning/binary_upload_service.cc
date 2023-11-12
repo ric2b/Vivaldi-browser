@@ -114,6 +114,14 @@ BinaryUploadService::Request::Request(
 
 BinaryUploadService::Request::~Request() = default;
 
+void BinaryUploadService::Request::set_id(Id id) {
+  id_ = id;
+}
+
+BinaryUploadService::Request::Id BinaryUploadService::Request::id() const {
+  return id_;
+}
+
 void BinaryUploadService::Request::set_per_profile_request(
     bool per_profile_request) {
   per_profile_request_ = per_profile_request;
@@ -206,6 +214,21 @@ void BinaryUploadService::Request::set_tab_url(const GURL& tab_url) {
   content_analysis_request_.mutable_request_data()->set_tab_url(tab_url.spec());
 }
 
+void BinaryUploadService::Request::set_printer_name(
+    const std::string& printer_name) {
+  content_analysis_request_.mutable_request_data()
+      ->mutable_print_metadata()
+      ->set_printer_name(printer_name);
+}
+
+void BinaryUploadService::Request::set_printer_type(
+    enterprise_connectors::ContentMetaData::PrintMetadata::PrinterType
+        printer_type) {
+  content_analysis_request_.mutable_request_data()
+      ->mutable_print_metadata()
+      ->set_printer_type(printer_type);
+}
+
 std::string BinaryUploadService::Request::SetRandomRequestToken() {
   DCHECK(request_token().empty());
 
@@ -251,6 +274,12 @@ const std::string& BinaryUploadService::Request::user_action_id() const {
 
 const std::string& BinaryUploadService::Request::tab_title() const {
   return content_analysis_request_.request_data().tab_title();
+}
+
+const std::string& BinaryUploadService::Request::printer_name() const {
+  return content_analysis_request_.request_data()
+      .print_metadata()
+      .printer_name();
 }
 
 uint64_t BinaryUploadService::Request::user_action_requests_count() const {

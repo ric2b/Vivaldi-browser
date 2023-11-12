@@ -13,8 +13,8 @@
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper_delegate.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
-#import "ios/chrome/browser/url/url_util.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/web/common/features.h"
 #import "ios/web/public/navigation/navigation_context.h"
 #import "ios/web/public/navigation/navigation_item.h"
@@ -53,9 +53,11 @@ FeedType NewTabPageTabHelper::DefaultFeedType() {
 void NewTabPageTabHelper::SetDelegate(
     id<NewTabPageTabHelperDelegate> delegate) {
   delegate_ = delegate;
-  active_ = IsUrlNtp(web_state_->GetVisibleURL());
-  if (active_) {
-    UpdateItem(web_state_->GetNavigationManager()->GetPendingItem());
+  if (delegate_) {
+    active_ = IsUrlNtp(web_state_->GetVisibleURL());
+    if (active_) {
+      UpdateItem(web_state_->GetNavigationManager()->GetPendingItem());
+    }
   }
 }
 

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "ash/system/phonehub/phone_hub_tray.h"
+#include <string>
 #include <utility>
 
 #include "ash/accessibility/accessibility_controller_impl.h"
@@ -38,9 +39,11 @@
 #include "chromeos/ash/components/phonehub/icon_decoder.h"
 #include "chromeos/ash/components/phonehub/phone_hub_manager.h"
 #include "chromeos/ash/components/phonehub/phone_model.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -112,10 +115,15 @@ PhoneHubTray::PhoneHubTray(Shelf* shelf)
       views::ImageButton::VerticalAlignment::ALIGN_MIDDLE);
   icon->SetImageHorizontalAlignment(
       views::ImageButton::HorizontalAlignment::ALIGN_CENTER);
-  icon->SetImageModel(views::ImageButton::STATE_NORMAL,
-                      ui::ImageModel::FromVectorIcon(
-                          kPhoneHubPhoneIcon, kColorAshIconColorPrimary));
   icon_ = tray_container()->AddChildView(std::move(icon));
+  if (chromeos::features::IsJellyEnabled()) {
+    UpdateTrayItemColor(is_active());
+  } else {
+    icon_->SetImageModel(views::ImageButton::STATE_NORMAL,
+                         ui::ImageModel::FromVectorIcon(
+                             kPhoneHubPhoneIcon, kColorAshIconColorPrimary));
+  }
+
   Shell::Get()->window_tree_host_manager()->AddObserver(this);
 }
 
@@ -142,6 +150,16 @@ void PhoneHubTray::SetPhoneHubManager(
 
 void PhoneHubTray::ClickedOutsideBubble() {
   CloseBubble();
+}
+
+void PhoneHubTray::UpdateTrayItemColor(bool is_active) {
+  DCHECK(chromeos::features::IsJellyEnabled());
+  icon_->SetImageModel(
+      views::ImageButton::STATE_NORMAL,
+      ui::ImageModel::FromVectorIcon(
+          kPhoneHubPhoneIcon,
+          is_active ? cros_tokens::kCrosSysSystemOnPrimaryContainer
+                    : cros_tokens::kCrosSysOnSurface));
 }
 
 std::u16string PhoneHubTray::GetAccessibleNameForTray() {
@@ -241,20 +259,9 @@ void PhoneHubTray::ShowBubble() {
 
   ui_controller_->HandleBubbleOpened();
 
-  TrayBubbleView::InitParams init_params;
-  init_params.delegate = GetWeakPtr();
-  init_params.parent_window = GetBubbleWindowContainer();
-  init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
-  init_params.anchor_rect = shelf()->GetSystemTrayAnchorRect();
-  init_params.insets = GetTrayBubbleInsets();
-  init_params.shelf_alignment = shelf()->alignment();
-  init_params.preferred_width = kTrayMenuWidth;
-  init_params.close_on_deactivate = true;
-  init_params.translucent = true;
-  init_params.reroute_event_handler = true;
-  init_params.corner_radius = kTrayItemCornerRadius;
-
-  auto bubble_view = std::make_unique<TrayBubbleView>(init_params);
+  auto bubble_view =
+      std::make_unique<TrayBubbleView>(CreateInitParamsForTrayBubble(
+          /*tray=*/this, /*anchor_to_shelf_corner=*/true));
   bubble_view->SetBorder(views::CreateEmptyBorder(kBubblePadding));
 
   // Creates header view on top for displaying phone status and settings icon.
@@ -401,7 +408,10 @@ void PhoneHubTray::UpdateVisibility() {
                       IsInUserSession());
   if (features::IsPhoneHubNudgeEnabled() && IsInUserSession()) {
     if (ui_state == PhoneHubUiController::UiState::kOnboardingWithoutPhone) {
-      phone_hub_nudge_controller_->ShowNudge();
+      // TODO(b/282057052): update text based on different groups.
+      phone_hub_nudge_controller_->ShowNudge(
+          this, l10n_util::GetStringUTF16(
+                    IDS_ASH_MULTI_DEVICE_SETUP_NOTIFIER_TEXT_WITH_PHONE_HUB));
       // TODO (b/266853434): Animation of icon.
     }
   }
@@ -429,15 +439,16 @@ void PhoneHubTray::EcheIconActivated(const ui::Event& event) {
 }
 
 void PhoneHubTray::PhoneHubIconActivated(const ui::Event& event) {
+  if (features::IsPhoneHubNudgeEnabled()) {
+    phone_hub_nudge_controller_->HideNudge();
+    phone_hub_nudge_controller_->MaybeRecordNudgeAction();
+  }
   // Simply toggle between visible/invisibvle
   if (bubble_ && bubble_->bubble_view()->GetVisible()) {
     CloseBubble();
     return;
   }
   ShowBubble();
-  if (features::IsPhoneHubNudgeEnabled()) {
-    phone_hub_nudge_controller_->HideNudge();
-  }
 }
 
 views::View* PhoneHubTray::GetPhoneStatusView() {

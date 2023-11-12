@@ -56,7 +56,7 @@
 - (void)tabStripSizeDidChange;
 
 // Vivaldi
-- (void)scrollToSelectedTab:(web::WebState*)webState;
+- (void)scrollToSelectedTab:(web::WebState*)webState animated:(BOOL)animated;
 // End Vivaldi
 
 @end

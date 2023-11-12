@@ -25,13 +25,23 @@ public class ReauthenticatorBridge {
     }
 
     /**
-     * Checks if authentication can be used. Note that whether check is specific to biometric
-     * authentication or biometric + screen lock is based on DeviceAuthRequester.
+     * Checks if biometric authentication can be used.
      *
      * @return Whether authentication can be used.
      */
-    public boolean canUseAuthentication() {
-        return ReauthenticatorBridgeJni.get().canUseAuthentication(mNativeReauthenticatorBridge);
+    public boolean canUseAuthenticationWithBiometric() {
+        return ReauthenticatorBridgeJni.get().canUseAuthenticationWithBiometric(
+                mNativeReauthenticatorBridge);
+    }
+
+    /**
+     * Checks if biometric or screen lock authentication can be used.
+     *
+     * @return Whether authentication can be used.
+     */
+    public boolean canUseAuthenticationWithBiometricOrScreenLock() {
+        return ReauthenticatorBridgeJni.get().canUseAuthenticationWithBiometricOrScreenLock(
+                mNativeReauthenticatorBridge);
     }
 
     /**
@@ -42,10 +52,11 @@ public class ReauthenticatorBridge {
      *         validated auth for passing the current authentication request.
      */
     public void reauthenticate(Callback<Boolean> callback, boolean useLastValidAuth) {
-        assert mAuthResultCallback == null;
-        mAuthResultCallback = callback;
-        ReauthenticatorBridgeJni.get().reauthenticate(
-                mNativeReauthenticatorBridge, useLastValidAuth);
+        if (mAuthResultCallback == null) {
+            mAuthResultCallback = callback;
+            ReauthenticatorBridgeJni.get().reauthenticate(
+                    mNativeReauthenticatorBridge, useLastValidAuth);
+        }
     }
 
     /**
@@ -75,7 +86,8 @@ public class ReauthenticatorBridge {
     @NativeMethods
     interface Natives {
         long create(ReauthenticatorBridge reauthenticatorBridge, int requester);
-        boolean canUseAuthentication(long nativeReauthenticatorBridge);
+        boolean canUseAuthenticationWithBiometric(long nativeReauthenticatorBridge);
+        boolean canUseAuthenticationWithBiometricOrScreenLock(long nativeReauthenticatorBridge);
         void reauthenticate(long nativeReauthenticatorBridge, boolean useLastValidAuth);
     }
 }

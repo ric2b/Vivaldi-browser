@@ -40,11 +40,17 @@ class ThumbnailCaptureContents : protected content::WebContentsDelegate,
   using CaptureCallback =
       base::OnceCallback<void(scoped_refptr<base::RefCountedMemory> png_data)>;
   // Starts the navigation with the given size.
-  static void Capture(content::BrowserContext* browser_context,
+  static ThumbnailCaptureContents* Capture(content::BrowserContext* browser_context,
                       const GURL& start_url,
                       gfx::Size initial_size,
                       gfx::Size target_size,
                       CaptureCallback callback);
+
+
+  content::WebContents* GetWebContents() {return offscreen_tab_web_contents_.get();}
+
+  // "this" is no longer valid after the call
+  void RespondAndDelete(SkBitmap bitmap = SkBitmap());
 
  private:
   ThumbnailCaptureContents();
@@ -99,9 +105,6 @@ class ThumbnailCaptureContents : protected content::WebContentsDelegate,
   // Do the capture itself, called initially from a timer to delay it for a
   // second.
   void TryCapture(bool last_try);
-
-  // "this" is no longer valid after the call
-  void RespondAndDelete(SkBitmap bitmap = SkBitmap());
 
   void OnCopyImageReady(const SkBitmap& bitmap);
 

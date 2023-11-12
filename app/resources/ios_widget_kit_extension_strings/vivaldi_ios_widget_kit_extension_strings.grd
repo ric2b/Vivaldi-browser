@@ -131,6 +131,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_WIDGET_KIT_EXTENSION_QUICK_ACTIONS_DESCRIPTION" desc="Description for the quick actions widget" meaning="String that appears as description in the installation window for the Quick Actions widget. [CHAR_LIMIT=150][iOS only]">
         Search or navigate in a new tab, in Private mode or with a QR code.
       </message>
+      <message name="IDS_IOS_WIDGET_KIT_EXTENSION_LOCKSCREEN_LAUNCHER_INCOGNITO_DESCRIPTION" desc="Description for the lockscreen launcher incognito widget" meaning="String that appears as description in the installation window for the lockscreen launcher Incognito widget. [CHAR_LIMIT=150][iOS only]">
+        Search or navigate in a new Private tab in Vivaldi.
+      </message>
     </messages>
   </release>
 </grit>

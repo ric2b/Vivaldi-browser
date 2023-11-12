@@ -34,11 +34,6 @@ struct RegistrationRequest;
 
 // PersistedData uses the PrefService to persist updater data that outlives
 // the updater processes.
-//
-// This class has sequence affinity.
-//
-// A mechanism to remove apps or app versions from prefs is needed.
-// TODO(sorin): crbug.com/1056450
 class PersistedData : public base::RefCountedThreadSafe<PersistedData> {
  public:
   // Constructs a provider using the specified |pref_service|.
@@ -83,6 +78,14 @@ class PersistedData : public base::RefCountedThreadSafe<PersistedData> {
   void SetDateLastActive(const std::string& id, int dla);
   absl::optional<int> GetDateLastRollcall(const std::string& id) const;
   void SetDateLastRollcall(const std::string& id, int dlrc);
+
+  // These functions access the cohort values for the specified id.
+  std::string GetCohort(const std::string& id) const;
+  void SetCohort(const std::string& id, const std::string& cohort);
+  std::string GetCohortName(const std::string& id) const;
+  void SetCohortName(const std::string& id, const std::string& cohort_name);
+  std::string GetCohortHint(const std::string& id) const;
+  void SetCohortHint(const std::string& id, const std::string& cohort_hint);
 
   // This function sets any non-empty field in the registration request object
   // into the persistent data store.
@@ -150,7 +153,7 @@ class PersistedData : public base::RefCountedThreadSafe<PersistedData> {
   SEQUENCE_CHECKER(sequence_checker_);
 
   const UpdaterScope scope_;
-  raw_ptr<PrefService> pref_service_ = nullptr;  // Not owned by this class.
+  raw_ptr<PrefService, DanglingUntriaged> pref_service_ = nullptr;
 };
 
 void RegisterPersistedDataPrefs(scoped_refptr<PrefRegistrySimple> registry);

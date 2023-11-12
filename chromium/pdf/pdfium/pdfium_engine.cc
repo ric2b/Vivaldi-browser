@@ -19,7 +19,6 @@
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
-#include "base/debug/alias.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -501,7 +500,9 @@ void ParamsTransformPageToScreen(unsigned long view_fit_type,
 
 }  // namespace
 
-void InitializeSDK(bool enable_v8, FontMappingMode font_mapping_mode) {
+void InitializeSDK(bool enable_v8,
+                   bool use_skia,
+                   FontMappingMode font_mapping_mode) {
   FPDF_LIBRARY_CONFIG config;
   config.version = 4;
   config.m_pUserFontPaths = nullptr;
@@ -509,9 +510,7 @@ void InitializeSDK(bool enable_v8, FontMappingMode font_mapping_mode) {
   config.m_pPlatform = nullptr;
   config.m_v8EmbedderSlot = gin::kEmbedderPDFium;
   config.m_RendererType =
-      base::FeatureList::IsEnabled(features::kPdfUseSkiaRenderer)
-          ? FPDF_RENDERERTYPE_SKIA
-          : FPDF_RENDERERTYPE_AGG;
+      use_skia ? FPDF_RENDERERTYPE_SKIA : FPDF_RENDERERTYPE_AGG;
 
 #if defined(PDF_ENABLE_V8)
   if (enable_v8) {
@@ -2066,12 +2065,6 @@ bool PDFiumEngine::SelectFindResult(bool forward) {
   // If the result is not in view, scroll to it.
   gfx::Rect bounding_rect;
   gfx::Rect visible_rect = GetVisibleRect();
-
-  // TODO(crbug.com/1108574): Remove after fixing the issue.
-  size_t find_results_size = find_results_.size();
-  base::debug::Alias(&find_results_size);
-  size_t current_find_index_value = current_find_index_.value();
-  base::debug::Alias(&current_find_index_value);
 
   // Use zoom of 1.0 since `visible_rect` is without zoom.
   const std::vector<gfx::Rect>& rects =

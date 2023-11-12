@@ -80,6 +80,10 @@ const char kSafeBrowsingEnterpriseRealTimeUrlCheckMode[] =
     "safebrowsing.enterprise_real_time_url_check_mode";
 const char kSafeBrowsingEnterpriseRealTimeUrlCheckScope[] =
     "safebrowsing.enterprise_real_time_url_check_scope";
+const char kSafeBrowsingEsbProtegoPingWithTokenLastLogTime[] =
+    "safebrowsing.esb_protego_ping_with_token_last_log_time";
+const char kSafeBrowsingEsbProtegoPingWithoutTokenLastLogTime[] =
+    "safebrowsing.esb_protego_ping_without_token_last_log_time";
 const char kSafeBrowsingExtendedReportingOptInAllowed[] =
     "safebrowsing.extended_reporting_opt_in_allowed";
 const char kSafeBrowsingIncidentsSent[] = "safebrowsing.incidents_sent";
@@ -130,6 +134,8 @@ const char kRealTimeDownloadProtectionRequestAllowedByPolicy[] =
     "safebrowsing.real_time_download_protection_request_allowed_by_policy";
 const char kSafeBrowsingExtensionProtectionAllowedByPolicy[] =
     "safebrowsing.extension_protection_allowed_by_policy";
+const char kHashPrefixRealTimeChecksAllowedByPolicy[] =
+    "safebrowsing.hash_prefix_real_time_checks_allowed_by_policy";
 }  // namespace prefs
 
 namespace safe_browsing {
@@ -220,6 +226,10 @@ bool IsSafeBrowsingExtensionProtectionAllowed(const PrefService& prefs) {
       prefs::kSafeBrowsingExtensionProtectionAllowedByPolicy);
 }
 
+bool AreHashPrefixRealTimeLookupsAllowedByPolicy(const PrefService& prefs) {
+  return prefs.GetBoolean(prefs::kHashPrefixRealTimeChecksAllowedByPolicy);
+}
+
 void RecordExtendedReportingMetrics(const PrefService& prefs) {
   // This metric tracks the extended browsing opt-in based on whichever setting
   // the user is currently seeing. It tells us whether extended reporting is
@@ -238,6 +248,10 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
       prefs::kSafeBrowsingSawInterstitialScoutReporting, false);
   registry->RegisterBooleanPref(
       prefs::kSafeBrowsingExtendedReportingOptInAllowed, !vivaldi::IsVivaldiRunning());
+  registry->RegisterTimePref(
+      prefs::kSafeBrowsingEsbProtegoPingWithTokenLastLogTime, base::Time());
+  registry->RegisterTimePref(
+      prefs::kSafeBrowsingEsbProtegoPingWithoutTokenLastLogTime, base::Time());
   registry->RegisterBooleanPref(
       prefs::kSafeBrowsingEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
@@ -276,14 +290,14 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
       prefs::kEnhancedProtectionEnabledViaTailoredSecurity, false);
   registry->RegisterTimePref(prefs::kExtensionTelemetryLastUploadTime,
                              base::Time::Now());
-  registry->RegisterDictionaryPref(prefs::kExtensionTelemetryConfig,
-                                   base::Value::Dict());
-  registry->RegisterDictionaryPref(prefs::kExtensionTelemetryFileData,
-                                   base::Value::Dict());
+  registry->RegisterDictionaryPref(prefs::kExtensionTelemetryConfig);
+  registry->RegisterDictionaryPref(prefs::kExtensionTelemetryFileData);
   registry->RegisterBooleanPref(
       prefs::kRealTimeDownloadProtectionRequestAllowedByPolicy, true);
   registry->RegisterBooleanPref(
       prefs::kSafeBrowsingExtensionProtectionAllowedByPolicy, true);
+  registry->RegisterBooleanPref(prefs::kHashPrefixRealTimeChecksAllowedByPolicy,
+                                true);
 }
 
 const base::Value::Dict& GetExtensionTelemetryConfig(const PrefService& prefs) {

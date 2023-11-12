@@ -21,9 +21,6 @@ const char kReadingListMenuOpened[] = "reading_list_menu_opened";
 const char kBookmarkStarMenuOpened[] = "bookmark_star_menu_opened";
 const char kCustomizeChromeOpened[] = "customize_chrome_opened";
 
-const char kReopenTabConditionsMet[] = "reopen_tab_conditions_met";
-const char kTabReopened[] = "tab_reopened";
-
 const char kMediaBackgrounded[] = "media_backgrounded";
 const char kGlobalMediaControlsOpened[] = "global_media_controls_opened";
 
@@ -89,6 +86,13 @@ const char kBlueDotPromoSettingsDismissed[] =
     "blue_dot_promo_settings_dismissed";
 const char kCredentialProviderExtensionPromoSnoozed[] =
     "credential_provider_extension_promo_snoozed";
+const char kOpenUrlFromOmnibox[] = "open_url_from_omnibox";
+const char kNewTabToolbarItemUsed[] = "new_tab_toolbar_item_used";
+const char kTabGridToolbarItemUsed[] = "tab_grid_toolbar_item_used";
+const char kHistoryOnOverflowMenuUsed[] = "history_on_overflow_menu_used";
+const char kShareToolbarItemUsed[] = "share_toolbar_item_used";
+const char kDefaultBrowserVideoPromoConditionsMet[] =
+    "default_browser_video_promo_conditions_met";
 #endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_ANDROID)

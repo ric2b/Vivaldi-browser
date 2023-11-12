@@ -97,7 +97,6 @@ public class WebApkUmaRecorder {
     private static final String HISTOGRAM_NEW_STYLE_LAUNCH_TO_SPLASHSCREEN_VISIBLE =
             "WebApk.Startup.Cold.NewStyle.ShellLaunchToSplashscreenVisible";
 
-    private static final int WEBAPK_OPEN_MAX = 3;
     public static final int WEBAPK_OPEN_LAUNCH_SUCCESS = 0;
     // Obsolete: WEBAPK_OPEN_NO_LAUNCH_INTENT = 1;
     public static final int WEBAPK_OPEN_ACTIVITY_NOT_FOUND = 2;
@@ -213,23 +212,9 @@ public class WebApkUmaRecorder {
         RecordHistogram.recordCount1MHistogram("WebApk.Update.NumStaleUpdateRequestFiles", count);
     }
 
-    /** Records whether Chrome could bind to the WebAPK service. */
-    public static void recordBindToWebApkServiceSucceeded(boolean bindSucceeded) {
-        RecordHistogram.recordBooleanHistogram("WebApk.WebApkService.BindSuccess", bindSucceeded);
-    }
-
     /** Records the network error code caught when a WebAPK is launched. */
     public static void recordNetworkErrorWhenLaunch(int errorCode) {
         RecordHistogram.recordSparseHistogram("WebApk.Launch.NetworkError", -errorCode);
-    }
-
-    /**
-     * Records whether a WebAPK navigation is within the WebAPK's scope.
-     * @param isChildTab Whether {@link Tab#getParentId()} is non-empty.
-     * @param isNavigationInScope
-     */
-    public static void recordNavigation(boolean isNavigationInScope) {
-        RecordHistogram.recordBooleanHistogram("WebApk.Navigation.InScope", isNavigationInScope);
     }
 
     /** Records number of unique origins for WebAPKs in WebappRegistry */

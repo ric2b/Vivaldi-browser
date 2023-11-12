@@ -13,32 +13,32 @@
 namespace extensions {
 
 void ComponentLoader::AddVivaldiApp(const base::FilePath* path) {
-  base::FilePath current_dir;
-  base::PathService::Get(base::DIR_CURRENT, &current_dir);
-  base::FilePath path_to_use =
-      path ? path->IsAbsolute() ? *path : current_dir.Append(*path)
-           : base::FilePath(FILE_PATH_LITERAL("vivaldi"));
-
-  // ReadFileToString called below will refuse any path containing a
-  // reference to parent (..) component, for security reasons. Since the
-  // path to vivapp used in development commonly contains those, we have to
-  // strip them. Since the path in question can be specified directly as an
-  // absolute path anyway, allowing this shouldn't cause a security issue.
-  if (path_to_use.ReferencesParent()) {
-    std::vector<base::FilePath::StringType> components(
-        path_to_use.GetComponents());
-    path_to_use.clear();
-
-    for (const auto& component : components) {
-      if (component.compare(FILE_PATH_LITERAL("..")) == 0)
-        path_to_use = path_to_use.DirName();
-      else
-        path_to_use = path_to_use.Append(component);
-    }
-  }
   if (path) {
     // Custom path, don't load it from the resources section but from disk
     // instead.
+    base::FilePath current_dir;
+    base::PathService::Get(base::DIR_CURRENT, &current_dir);
+    base::FilePath path_to_use =
+        path->IsAbsolute() ? *path : current_dir.Append(*path);
+
+    // ReadFileToString called below will refuse any path containing a
+    // reference to parent (..) component, for security reasons. Since the
+    // path to vivapp used in development commonly contains those, we have to
+    // strip them. Since the path in question can be specified directly as an
+    // absolute path anyway, allowing this shouldn't cause a security issue.
+    if (path_to_use.ReferencesParent()) {
+      std::vector<base::FilePath::StringType> components(
+          path_to_use.GetComponents());
+      path_to_use.clear();
+
+      for (const auto& component : components) {
+        if (component.compare(FILE_PATH_LITERAL("..")) == 0)
+          path_to_use = path_to_use.DirName();
+        else
+          path_to_use = path_to_use.Append(component);
+      }
+    }
+
     std::string manifest;
     base::FilePath manifest_file = path_to_use.AppendASCII("manifest.json");
 
@@ -46,8 +46,9 @@ void ComponentLoader::AddVivaldiApp(const base::FilePath* path) {
       DCHECK(!manifest.empty());
       Add(manifest, path_to_use, true);
     }
+
   } else {
-    Add(VIVALDI_MANIFEST_JS, path_to_use);
+    Add(VIVALDI_MANIFEST_JS, base::FilePath(FILE_PATH_LITERAL("vivaldi")));
   }
 
   // Make sure that Vivaldi can access the extension preferences. See

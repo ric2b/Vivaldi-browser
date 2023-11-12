@@ -24,13 +24,19 @@ VerdictCacheManager* VerdictCacheManagerFactory::GetForProfile(
 
 // static
 VerdictCacheManagerFactory* VerdictCacheManagerFactory::GetInstance() {
-  return base::Singleton<VerdictCacheManagerFactory>::get();
+  static base::NoDestructor<VerdictCacheManagerFactory> instance;
+  return instance.get();
 }
 
 VerdictCacheManagerFactory::VerdictCacheManagerFactory()
     : ProfileKeyedServiceFactory(
           "VerdictCacheManager",
-          ProfileSelections::BuildForRegularAndIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {
   DependsOn(HistoryServiceFactory::GetInstance());
   DependsOn(HostContentSettingsMapFactory::GetInstance());
   DependsOn(SyncServiceFactory::GetInstance());

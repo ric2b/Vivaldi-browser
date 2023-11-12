@@ -52,7 +52,7 @@ gfx::RectF GetUserScrollableRect(const ScrollableArea& area) {
 static base::RepeatingCallback<void(ScrollableArea::ScrollCompletionMode)>
 MakeViewportScrollCompletion(ScrollableArea::ScrollCallback callback) {
   return callback
-             ? BarrierCallback<ScrollableArea::ScrollCompletionMode>(
+             ? base::BarrierCallback<ScrollableArea::ScrollCompletionMode>(
                    2, WTF::BindOnce(
                           [](ScrollableArea::ScrollCallback on_finish,
                              const std::vector<
@@ -385,6 +385,7 @@ PhysicalRect RootFrameViewport::ScrollIntoView(
 
   if (new_scroll_offset != GetScrollOffset()) {
     if (params->is_for_scroll_sequence) {
+      CHECK(GetSmoothScrollSequencer());
       DCHECK(params->type == mojom::blink::ScrollType::kProgrammatic ||
              params->type == mojom::blink::ScrollType::kUser);
       mojom::blink::ScrollBehavior behavior = DetermineScrollBehavior(

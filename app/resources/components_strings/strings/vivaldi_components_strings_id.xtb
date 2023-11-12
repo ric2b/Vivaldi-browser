@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Tekan tombol muat ulang untuk mengirimkan lagi data yang dibutuhkan untuk memuat halaman ini.</translation>
 <translation id="3234666976984236645">Selalu deteksi konten penting di situs ini</translation>
 <translation id="3308738399950580893">iklan</translation>
+<translation id="3384522979010096022">Organisasi tidak mengizinkan Anda melihat situs ini</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> saat ini tidak dapat dijangkau.</translation>
 <translation id="3427092606871434483">Izinkan (standar)</translation>
 <translation id="3447661539832366887">Pemilik perangkat ini mematikan permainan dinosaurus.</translation>
@@ -193,7 +194,6 @@
 <translation id="8150722005171944719">Berkas pada <ph name="URL" /> tidak dapat dibaca.  Berkas mungkin telah dihapus, dipindahkan, atau izin berkas mungkin mencegah akses.</translation>
 <translation id="8184538546369750125">Gunakan standar global (Izinkan)</translation>
 <translation id="8211406090763984747">Koneksi aman</translation>
-<translation id="8225771182978767009">Orang yang menyiapkan komputer ini telah memilih untuk memblokir situs ini.</translation>
 <translation id="8241707690549784388">Halaman yang dicari menggunakan informasi yang Anda masukkan. Kembali ke halaman tersebut dapat menyebabkan pengulangan tindakan apapun yang Anda lakukan. Apakah Anda ingin melanjutkan?</translation>
 <translation id="8241712895048303527">Blokir di situs ini</translation>
 <translation id="8286036467436129157">Masuk</translation>
@@ -214,7 +214,6 @@
 <translation id="9062620674789239642">Berkas mungkin telah dipindahkan, diedit, atau dihapus.</translation>
 <translation id="9069693763241529744">Diblokir oleh ekstensi</translation>
 <translation id="9073799351042754113">Anda telah memilih untuk menonaktifkan peringatan keamanan untuk situs ini.</translation>
-<translation id="910924428752220542">Sandi Vivaldi</translation>
 <translation id="9169664750068251925">Selalu blokir di situs ini</translation>
 <translation id="9180553614777056266">Pemblokir Iklan</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> menggunakan protokol yang tidak didukung.</translation>

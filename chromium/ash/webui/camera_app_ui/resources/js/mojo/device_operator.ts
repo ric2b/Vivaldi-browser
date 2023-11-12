@@ -51,10 +51,8 @@ import {
 /**
  * Parse the entry data according to its type.
  *
- * @param entry Camera metadata entry from which to parse the data according to
- *     its type.
  * @return An array containing elements whose types correspond to the format of
- *     input |tag|.
+ *     input |entry|.
  * @throws If entry type is not supported.
  */
 export function parseMetadata(entry: CameraMetadataEntry): number[] {
@@ -92,10 +90,8 @@ export function parseMetadata(entry: CameraMetadataEntry): number[] {
 }
 
 /**
- * Gets the data from Camera metadata by its tag.
+ * Gets the data from Camera metadata by given |tag|.
  *
- * @param metadata Camera metadata from which to query the data.
- * @param tag Camera metadata tag to query for.
  * @return An array containing elements whose types correspond to the format of
  *     input |tag|. If nothing is found, returns an empty array.
  */
@@ -176,13 +172,13 @@ export class DeviceOperator {
       new Map<string, CameraInfo|Promise<CameraInfo>>();
 
   /**
-   * Map for camera info error handlers.
+   * Map which maps from device id to camera info error handlers.
    */
   private readonly cameraInfoErrorHandlers =
       new Map<string, (error: Error) => void>();
 
   /**
-   * Return if the direct communication between camera app and video capture
+   * Returns if the direct communication between camera app and video capture
    * devices is supported.
    */
   async isSupported(): Promise<boolean> {
@@ -205,11 +201,9 @@ export class DeviceOperator {
   }
 
   /**
-   * Gets corresponding device remote by given id.
+   * Gets corresponding device remote by given |deviceId|.
    *
-   * @param deviceId The id of target camera device.
-   * @return Corresponding device remote.
-   * @throws Thrown when given device id is invalid.
+   * @throws Thrown when given |deviceId| is invalid.
    */
   private getDevice(deviceId: string): Promise<CameraAppDeviceRemote> {
     const d = this.devices.get(deviceId);
@@ -255,7 +249,6 @@ export class DeviceOperator {
    * @param deviceId The id of target camera device.
    * @param tag Camera metadata tag to query.
    * @return Promise of the corresponding data array.
-   * @throws Thrown when given device id is invalid.
    */
   async getStaticMetadata(deviceId: string, tag: CameraMetadataTag):
       Promise<number[]> {
@@ -289,7 +282,10 @@ export class DeviceOperator {
     };
     const vid = await getTag(0x80010000);
     const pid = await getTag(0x80010001);
-    return vid && pid && `${vid}:${pid}`;
+    if (vid === null || pid === null) {
+      return null;
+    }
+    return `${vid}:${pid}`;
   }
 
   /**
@@ -297,7 +293,6 @@ export class DeviceOperator {
    *
    * @param deviceId The renderer-facing device id of the target camera which
    *     could be retrieved from MediaDeviceInfo.deviceId.
-   * @return Promise of supported resolutions.
    * @throws Thrown when fail to parse the metadata or the device operation is
    *    not supported.
    */
@@ -332,7 +327,6 @@ export class DeviceOperator {
    *
    * @param deviceId The renderer-facing device id of the target camera which
    *     could be retrieved from MediaDeviceInfo.deviceId.
-   * @return Promise of supported video configurations.
    * @throws Thrown when fail to parse the metadata or the device operation is
    *     not supported.
    */
@@ -371,7 +365,6 @@ export class DeviceOperator {
    *
    * @param deviceId The renderer-facing device id of the target camera which
    *     could be retrieved from MediaDeviceInfo.deviceId.
-   * @return Promise of device facing.
    * @throws Thrown when the device operation is not supported.
    */
   async getCameraFacing(deviceId: string): Promise<Facing> {
@@ -431,7 +424,6 @@ export class DeviceOperator {
    *
    * @param deviceId The renderer-facing device id of the target camera which
    *     could be retrieved from MediaDeviceInfo.deviceId.
-   * @return Promise of the active array size.
    * @throws Thrown when fail to parse the metadata or the device operation is
    *     not supported.
    */
@@ -449,7 +441,6 @@ export class DeviceOperator {
    *
    * @param deviceId The renderer-facing device id of the target camera which
    *     could be retrieved from MediaDeviceInfo.deviceId.
-   * @return Promise of the sensor orientation.
    * @throws Thrown when fail to parse the metadata or the device operation is
    *     not supported.
    */
@@ -465,6 +456,9 @@ export class DeviceOperator {
    *     support pan control.
    */
   async getPanDefault(deviceId: string): Promise<number|undefined> {
+    // This is a custom USB HAL vendor tag, defined in hal/usb/vendor_tag.h on
+    // platform side.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     const tag = 0x8001000d as CameraMetadataTag;
     const data = await this.getStaticMetadata(deviceId, tag);
     return data[0];
@@ -475,6 +469,9 @@ export class DeviceOperator {
    *     support tilt control.
    */
   async getTiltDefault(deviceId: string): Promise<number|undefined> {
+    // This is a custom USB HAL vendor tag, defined in hal/usb/vendor_tag.h on
+    // platform side.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     const tag = 0x80010016 as CameraMetadataTag;
     const data = await this.getStaticMetadata(deviceId, tag);
     return data[0];
@@ -485,6 +482,9 @@ export class DeviceOperator {
    *     support zoom control.
    */
   async getZoomDefault(deviceId: string): Promise<number|undefined> {
+    // This is a custom USB HAL vendor tag, defined in hal/usb/vendor_tag.h on
+    // platform side.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     const tag = 0x80010019 as CameraMetadataTag;
     const data = await this.getStaticMetadata(deviceId, tag);
     return data[0];
@@ -518,7 +518,6 @@ export class DeviceOperator {
    *     could be retrieved from MediaDeviceInfo.deviceId.
    * @param captureIntent The purpose of this capture, to help the camera
    *     device decide optimal configurations.
-   * @return Promise for the operation.
    */
   async setCaptureIntent(deviceId: string, captureIntent: CaptureIntent):
       Promise<void> {
@@ -527,15 +526,15 @@ export class DeviceOperator {
   }
 
   /**
-   * Checks if portrait mode is supported.
-   *
    * @param deviceId The renderer-facing device id of the target camera which
    *     could be retrieved from MediaDeviceInfo.deviceId.
-   * @return Promise of the boolean result.
    * @throws Thrown when the device operation is not supported.
    */
   async isPortraitModeSupported(deviceId: string): Promise<boolean> {
+    // This is a custom vendor tag, defined in common/vendor_tag_manager.h on
+    // platform side.
     // TODO(wtlee): Change to portrait mode tag.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     const portraitModeTag = 0x80000000 as CameraMetadataTag;
 
     const portraitMode =
@@ -544,12 +543,12 @@ export class DeviceOperator {
   }
 
   /**
-   * Adds a metadata observer to Camera App Device through Mojo IPC.
+   * Adds a metadata observer to Camera App Device through Mojo IPC and returns
+   * added observer endpoint.
    *
    * @param deviceId The id for target camera device.
    * @param callback Callback that handles the metadata.
    * @param streamType Stream type which the observer gets the metadata from.
-   * @return Added observer endpoint.
    * @throws If fails to construct device connection.
    */
   async addMetadataObserver(
@@ -566,7 +565,7 @@ export class DeviceOperator {
   }
 
   /**
-   * Adds observer to observe shutter event.
+   * Adds observer to observe shutter event and returns added observer endpoint.
    *
    * The shutter event is defined as CAMERA3_MSG_SHUTTER in
    * media/capture/video/chromeos/mojom/camera3.mojom which will be sent from
@@ -574,7 +573,6 @@ export class DeviceOperator {
    *
    * @param deviceId The id for target camera device.
    * @param callback Callback to trigger on shutter done.
-   * @return Added observer endpoint.
    * @throws If fails to construct device connection.
    */
   async addShutterObserver(deviceId: string, callback: () => void):
@@ -656,18 +654,18 @@ export class DeviceOperator {
   }
 
   /**
-   * Changes whether the camera frame rotation is enabled inside the ChromeOS
+   * Sets whether the camera frame rotation is enabled inside the ChromeOS
    * video capture device.
    *
    * @param deviceId The id of target camera device.
-   * @param isEnabled Whether to enable the camera frame rotation at source.
+   * @param enabled Whether to enable the camera frame rotation at source.
    * @return Whether the operation was successful.
    */
   async setCameraFrameRotationEnabledAtSource(
-      deviceId: string, isEnabled: boolean): Promise<boolean> {
+      deviceId: string, enabled: boolean): Promise<boolean> {
     const device = await this.getDevice(deviceId);
     const {isSuccess} =
-        await device.setCameraFrameRotationEnabledAtSource(isEnabled);
+        await device.setCameraFrameRotationEnabledAtSource(enabled);
     return isSuccess;
   }
 
@@ -676,7 +674,6 @@ export class DeviceOperator {
    * display the camera preview upright in the UI.
    *
    * @param deviceId The id of target camera device.
-   * @return The camera frame rotation.
    */
   async getCameraFrameRotation(deviceId: string): Promise<number> {
     const device = await this.getDevice(deviceId);
@@ -707,13 +704,15 @@ export class DeviceOperator {
    */
   async setVirtualDeviceEnabled(deviceId: string, enabled: boolean):
       Promise<void> {
-    if (deviceId) {
+    // TODO(pihsun): Check if there's actually case that deviceId is empty
+    // string here.
+    if (deviceId !== '') {
       await this.deviceProvider.setVirtualDeviceEnabled(deviceId, enabled);
     }
   }
 
   /**
-   * Enable/Disables the multiple streams feature for video recording on the
+   * Enables/Disables the multiple streams feature for video recording on the
    * target camera device.
    */
   async setMultipleStreamsEnabled(deviceId: string, enabled: boolean):
@@ -796,7 +795,7 @@ export class DeviceOperator {
   }
 
   /**
-   * Initialize the singleton instance.
+   * Initializes the singleton instance.
    *
    * This should be called before all invocation of static getInstance() and
    * static isSupported().
@@ -813,12 +812,11 @@ export class DeviceOperator {
     const deviceOperatorWrapper: ProxyHandler<DeviceOperator> = {
       get: function(target, property) {
         const val = Reflect.get(target, property);
-        if (val instanceof Function) {
-          return (...args: unknown[]) => operationQueue.push(
-                     () =>
-                         Reflect.apply(val, target, args) as Promise<unknown>);
+        if (!(val instanceof Function)) {
+          return val;
         }
-        return val;
+        return (...args: unknown[]) =>
+                   operationQueue.push(() => Reflect.apply(val, target, args));
       },
     };
     instance = new Proxy(rawInstance, deviceOperatorWrapper);
@@ -835,9 +833,7 @@ export class DeviceOperator {
   }
 
   /**
-   * Gets if DeviceOperator is supported.
-   *
-   * @return True if the DeviceOperator is supported.
+   * Returns if DeviceOperator is supported.
    */
   static isSupported(): boolean {
     return this.getInstance() !== null;

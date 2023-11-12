@@ -387,7 +387,7 @@ const bookmarks::BookmarkNode* CreateBookmarkNodeFromSpecifics(
 
   // NOTE(julien@vivaldi.com): See UpdateBookmarkNodeFromSpecifics for more
   // details about the logic here.
-  base::GUID vivaldi_partner = vivaldi_bookmark_kit::GetPartner(metainfo);
+  base::Uuid vivaldi_partner = vivaldi_bookmark_kit::GetPartner(metainfo);
   std::string synced_thumbnail = vivaldi_bookmark_kit::GetThumbnail(metainfo);
   if (vivaldi_partner.is_valid() &&
       (vivaldi_data_url_utils::IsResourceURL(synced_thumbnail) ||
@@ -423,7 +423,7 @@ const bookmarks::BookmarkNode* CreateBookmarkNodeFromSpecifics(
                 // Use FromDeltaSinceWindowsEpoch because last_used_time_us has
                 // always used the Windows epoch.
                 base::Microseconds(last_used_time_us));
-        model->UpdateLastUsedTime(node, last_used_time);
+        model->UpdateLastUsedTime(node, last_used_time, /*just_opened=*/false);
       }
       SetBookmarkFaviconFromSpecifics(specifics, node, favicon_service);
       return node;
@@ -453,7 +453,7 @@ void UpdateBookmarkNodeFromSpecifics(
 
   bookmarks::BookmarkNode::MetaInfoMap map = GetBookmarkMetaInfo(specifics);
 
-  base::GUID vivaldi_partner = vivaldi_bookmark_kit::GetPartner(map);
+  base::Uuid vivaldi_partner = vivaldi_bookmark_kit::GetPartner(map);
   std::string synced_thumbnail = vivaldi_bookmark_kit::GetThumbnail(map);
   std::string thumbnail = vivaldi_bookmark_kit::GetThumbnail(node);
 
@@ -508,7 +508,7 @@ void UpdateBookmarkNodeFromSpecifics(
           // Use FromDeltaSinceWindowsEpoch because last_used_time_us has
           // always used the Windows epoch.
           base::Microseconds(last_used_time_us));
-      model->UpdateLastUsedTime(node, last_used_time);
+      model->UpdateLastUsedTime(node, last_used_time, /*just_opened=*/false);
     }
   }
 }
@@ -702,7 +702,7 @@ bool ShouldReuploadBookmarkForThumbnail(
   if (!node)
     return false;
 
-  base::GUID vivaldi_partner = vivaldi_bookmark_kit::GetPartner(metainfo);
+  base::Uuid vivaldi_partner = vivaldi_bookmark_kit::GetPartner(metainfo);
   const std::string& remote_thumbnail =
       vivaldi_bookmark_kit::GetThumbnail(metainfo);
   if (!remote_thumbnail.empty())

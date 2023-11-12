@@ -16,16 +16,21 @@ CaptivePortalServiceFactory::GetForProfile(Profile* profile) {
 
 // static
 CaptivePortalServiceFactory* CaptivePortalServiceFactory::GetInstance() {
-  return base::Singleton<CaptivePortalServiceFactory>::get();
+  static base::NoDestructor<CaptivePortalServiceFactory> instance;
+  return instance.get();
 }
 
 CaptivePortalServiceFactory::CaptivePortalServiceFactory()
     : ProfileKeyedServiceFactory(
           "captive_portal::CaptivePortalService",
-          ProfileSelections::BuildForRegularAndIncognito()) {}
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {}
 
-CaptivePortalServiceFactory::~CaptivePortalServiceFactory() {
-}
+CaptivePortalServiceFactory::~CaptivePortalServiceFactory() = default;
 
 KeyedService* CaptivePortalServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* profile) const {

@@ -110,7 +110,8 @@
   return self.isDeviceTablet &&
       ((self.isHorizontalTraitRegular && self.isVerticalTraitRegular) ||
        self.iPadLayoutState == LayoutStateFullScreen ||
-       self.iPadLayoutState == LayoutStateTwoThirdScreen);
+       (self.isHorizontalTraitRegular &&
+        self.iPadLayoutState == LayoutStateTwoThirdScreen));
 }
 
 + (BOOL)isValidDomain:(NSString* _Nonnull)urlString {

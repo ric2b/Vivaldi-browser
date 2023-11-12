@@ -29,9 +29,9 @@
   "  Rust variables: aliased_deps, crate_root, crate_name, crate_type\n"
 #define ACTION_VARS \
   "  Action variables: args, bridge_header, configs, data, depfile,\n" \
-  "                    framework_dirs, inputs, module_deps, module_name,\n" \
-  "                    outputs*, pool, response_file_contents, script*,\n" \
-  "                    sources\n"
+  "                    framework_dirs, inputs, mnemonic, module_deps,\n" \
+  "                    module_name, outputs*, pool, response_file_contents,\n" \
+  "                    script*, sources\n"
 
 namespace functions {
 
@@ -259,6 +259,10 @@ Example
   action_foreach("my_idl") {
     script = "idl_processor.py"
     sources = [ "foo.idl", "bar.idl" ]
+
+    # Causes ninja to output "IDL <label>" rather than the default
+    # "ACTION <label>" when building this action.
+    mnemonic = "IDL"
 
     # Our script reads this file each time, so we need to list it as a
     # dependency so we can rebuild if it changes.

@@ -378,7 +378,6 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void ShowOneClickSigninConfirmation(
       const std::u16string& email,
       base::OnceCallback<void(bool)> start_sync_callback) override {}
-  void OnTabRestored(int command_id) override {}
   void OnTabDetached(content::WebContents* contents, bool was_active) override {
   }
   void TabDraggingStatusChanged(bool is_dragging) override {}
@@ -438,11 +437,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool IsVisibleOnAllWorkspaces() const override;
   bool IsLocationBarVisible() const override;
   bool IsBorderlessModeEnabled() const override;
-
-  void ShowSidePanel(
-    absl::optional<SidePanelEntryId> entry_id = absl::nullopt,
-    absl::optional<SidePanelOpenTrigger> open_trigger = absl::nullopt
-  ) override {}
+  void ShowChromeLabs() override {}
 
   // BrowserWindow overrides end
 

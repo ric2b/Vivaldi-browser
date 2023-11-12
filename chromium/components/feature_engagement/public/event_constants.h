@@ -32,13 +32,6 @@ extern const char kBookmarkStarMenuOpened[];
 // Customize chrome was opened.
 extern const char kCustomizeChromeOpened[];
 
-// All conditions for reopen closed tab IPH were met. Since this IPH needs to
-// track user events (opening/closing tabs, focusing the omnibox, etc) on the
-// second level, it must be done manually.
-extern const char kReopenTabConditionsMet[];
-// The user reopened a previously closed tab.
-extern const char kTabReopened[];
-
 // A tab with playing media was sent to the background.
 extern const char kMediaBackgrounded[];
 
@@ -165,6 +158,25 @@ extern const char kBlueDotPromoSettingsDismissed[];
 
 // The user snoozed the Credential Provider Extension Promo
 extern const char kCredentialProviderExtensionPromoSnoozed[];
+
+// The user opened an url from omnibox.
+extern const char kOpenUrlFromOmnibox[];
+
+// The new tab toolbar item is used.
+extern const char kNewTabToolbarItemUsed[];
+
+// The tab grid toolbar item is used.
+extern const char kTabGridToolbarItemUsed[];
+
+// The history item on overflow menu is used.
+extern const char kHistoryOnOverflowMenuUsed[];
+
+// The share item on the toolbar is used.
+extern const char kShareToolbarItemUsed[];
+
+// The user has met a condition that makes the default browser video promo
+// eligible to be displayed.
+extern const char kDefaultBrowserVideoPromoConditionsMet[];
 
 #endif  // BUILDFLAG(IS_IOS)
 

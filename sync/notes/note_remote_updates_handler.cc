@@ -11,7 +11,7 @@
 #include <unordered_set>
 #include <utility>
 
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -34,26 +34,26 @@ namespace {
 // emit updates in top-down order. |ordered_updates| must not be null because
 // traversed updates are appended to |*ordered_updates|.
 void TraverseAndAppendChildren(
-    const base::GUID& node_guid,
-    const std::unordered_multimap<base::GUID,
+    const base::Uuid& node_uuid,
+    const std::unordered_multimap<base::Uuid,
                                   const syncer::UpdateResponseData*,
-                                  base::GUIDHash>& guid_to_updates,
-    const std::unordered_map<base::GUID,
-                             std::vector<base::GUID>,
-                             base::GUIDHash>& node_to_children,
+                                  base::UuidHash>& uuid_to_updates,
+    const std::unordered_map<base::Uuid,
+                             std::vector<base::Uuid>,
+                             base::UuidHash>& node_to_children,
     std::vector<const syncer::UpdateResponseData*>* ordered_updates) {
   // If no children to traverse, we are done.
-  if (node_to_children.count(node_guid) == 0) {
+  if (node_to_children.count(node_uuid) == 0) {
     return;
   }
   // Recurse over all children.
-  for (const base::GUID& child : node_to_children.at(node_guid)) {
-    auto [begin, end] = guid_to_updates.equal_range(child);
+  for (const base::Uuid& child : node_to_children.at(node_uuid)) {
+    auto [begin, end] = uuid_to_updates.equal_range(child);
     DCHECK(begin != end);
     for (auto it = begin; it != end; ++it) {
       ordered_updates->push_back(it->second);
     }
-    TraverseAndAppendChildren(child, guid_to_updates, node_to_children,
+    TraverseAndAppendChildren(child, uuid_to_updates, node_to_children,
                               ordered_updates);
   }
 }
@@ -114,8 +114,8 @@ bool IsValidUpdate(const syncer::EntityData& update_entity) {
                            update_entity.client_tag_hash,
                            update_entity.originator_cache_guid,
                            update_entity.originator_client_item_id)) {
-    // Ignore updates with an unexpected GUID.
-    DLOG(ERROR) << "Couldn't process an update note with unexpected GUID: "
+    // Ignore updates with an unexpected UUID.
+    DLOG(ERROR) << "Couldn't process an update note with unexpected Uuid: "
                 << update_entity.specifics.notes().guid();
     return false;
   }
@@ -123,14 +123,14 @@ bool IsValidUpdate(const syncer::EntityData& update_entity) {
   return true;
 }
 
-// Determines the parent's GUID included in |update_entity|. |update_entity|
+// Determines the parent's UUID included in |update_entity|. |update_entity|
 // must be a valid update as defined in IsValidUpdate().
-base::GUID GetParentGUIDInUpdate(const syncer::EntityData& update_entity) {
+base::Uuid GetParentUuidInUpdate(const syncer::EntityData& update_entity) {
   DCHECK(IsValidUpdate(update_entity));
-  base::GUID parent_guid =
-      base::GUID::ParseLowercase(update_entity.specifics.notes().parent_guid());
-  DCHECK(parent_guid.is_valid());
-  return parent_guid;
+  base::Uuid parent_uuid =
+      base::Uuid::ParseLowercase(update_entity.specifics.notes().parent_guid());
+  DCHECK(parent_uuid.is_valid());
+  return parent_uuid;
 }
 
 void ApplyRemoteUpdate(const syncer::UpdateResponseData& update,
@@ -145,8 +145,8 @@ void ApplyRemoteUpdate(const syncer::UpdateResponseData& update,
   DCHECK(new_parent_tracked_entity);
   DCHECK(model);
   DCHECK(tracker);
-  DCHECK_EQ(tracked_entity->note_node()->guid(),
-            base::GUID::ParseLowercase(update_entity.specifics.notes().guid()));
+  DCHECK_EQ(tracked_entity->note_node()->uuid(),
+            base::Uuid::ParseLowercase(update_entity.specifics.notes().guid()));
 
   const vivaldi::NoteNode* node = tracked_entity->note_node();
   const vivaldi::NoteNode* old_parent = node->parent();
@@ -237,10 +237,10 @@ void NoteRemoteUpdatesHandler::Process(
                               update->response_version) {
       if (update_entity.id == tracked_entity->metadata().server_id()) {
         // Seen this update before. This update may be a reflection and may have
-        // missing the GUID in specifics. Next reupload will populate GUID in
+        // missing the UUID in specifics. Next reupload will populate UUID in
         // specifics and this codepath will not repeat indefinitely. This logic
         // is needed for the case when there is only one device and hence the
-        // GUID will not be set by other devices.
+        // UUID will not be set by other devices.
         ReuploadEntityIfNeeded(update_entity, tracked_entity);
       }
       continue;
@@ -251,7 +251,7 @@ void NoteRemoteUpdatesHandler::Process(
     // fast enough(e.g. before shutdown or crash), then the |note_tracker_|
     // might assume that it was never committed. The server will track the
     // client that sent up the original commit and return this in a get updates
-    // response. This also may happen due to duplicate GUIDs. In this case it's
+    // response. This also may happen due to duplicate UUIDs. In this case it's
     // better to update to the latest server ID.
     if (tracked_entity) {
       note_tracker_->UpdateSyncIdIfNeeded(tracked_entity,
@@ -361,15 +361,15 @@ NoteRemoteUpdatesHandler::ReorderValidUpdates(
   // 3. Start at each root in |roots|, emit the update and recurse over its
   //    children.
 
-  // Normally there shouldn't be multiple updates for the same GUID, but let's
+  // Normally there shouldn't be multiple updates for the same UUID, but let's
   // avoiding dedupping here just in case (e.g. the could in theory be a
   // combination of client-tagged and non-client-tagged updated that
   // ModelTypeWorker failed to deduplicate.
-  std::unordered_multimap<base::GUID, const syncer::UpdateResponseData*,
-                          base::GUIDHash>
-      guid_to_updates;
+  std::unordered_multimap<base::Uuid, const syncer::UpdateResponseData*,
+                          base::UuidHash>
+      uuid_to_updates;
 
-  // Add only valid, non-deletions to |guid_to_updates|.
+  // Add only valid, non-deletions to |uuid_to_updates|.
   int invalid_updates_count = 0;
   int root_node_updates_count = 0;
   for (const syncer::UpdateResponseData& update : *updates) {
@@ -386,34 +386,34 @@ NoteRemoteUpdatesHandler::ReorderValidUpdates(
       ++invalid_updates_count;
       continue;
     }
-    base::GUID guid =
-        base::GUID::ParseLowercase(update_entity.specifics.notes().guid());
-    DCHECK(guid.is_valid());
-    guid_to_updates.emplace(std::move(guid), &update);
+    base::Uuid uuid =
+        base::Uuid::ParseLowercase(update_entity.specifics.notes().guid());
+    DCHECK(uuid.is_valid());
+    uuid_to_updates.emplace(std::move(uuid), &update);
   }
 
-  // Iterate over |guid_to_updates| and construct |roots| and
+  // Iterate over |uuid_to_updates| and construct |roots| and
   // |parent_to_children|.
-  std::set<base::GUID> roots;
-  std::unordered_map<base::GUID, std::vector<base::GUID>, base::GUIDHash>
+  std::set<base::Uuid> roots;
+  std::unordered_map<base::Uuid, std::vector<base::Uuid>, base::UuidHash>
       parent_to_children;
-  for (const auto& [guid, update] : guid_to_updates) {
-    base::GUID parent_guid = GetParentGUIDInUpdate(update->entity);
-    base::GUID child_guid =
-        base::GUID::ParseLowercase(update->entity.specifics.notes().guid());
-    DCHECK(child_guid.is_valid());
+  for (const auto& [uuid, update] : uuid_to_updates) {
+    base::Uuid parent_uuid = GetParentUuidInUpdate(update->entity);
+    base::Uuid child_uuid =
+        base::Uuid::ParseLowercase(update->entity.specifics.notes().guid());
+    DCHECK(child_uuid.is_valid());
 
-    parent_to_children[parent_guid].emplace_back(std::move(child_guid));
+    parent_to_children[parent_uuid].emplace_back(std::move(child_uuid));
     // If this entity's parent has no pending update, add it to |roots|.
-    if (guid_to_updates.count(parent_guid) == 0) {
-      roots.insert(std::move(parent_guid));
+    if (uuid_to_updates.count(parent_uuid) == 0) {
+      roots.insert(std::move(parent_uuid));
     }
   }
   // |roots| contains only root of all trees in the forest all of which are
   // ready to be processed because none has a pending update.
   std::vector<const syncer::UpdateResponseData*> ordered_updates;
-  for (const base::GUID& root : roots) {
-    TraverseAndAppendChildren(root, guid_to_updates, parent_to_children,
+  for (const base::Uuid& root : roots) {
+    TraverseAndAppendChildren(root, uuid_to_updates, parent_to_children,
                               &ordered_updates);
   }
   // Add deletions.
@@ -448,7 +448,7 @@ NoteRemoteUpdatesHandler::DetermineLocalTrackedEntityToUpdate(
   const syncer::ClientTagHash client_tag_hash_in_update =
       !update_entity.client_tag_hash.value().empty()
           ? update_entity.client_tag_hash
-          : SyncedNoteTracker::GetClientTagHashFromGUID(
+          : SyncedNoteTracker::GetClientTagHashFromUuid(
                 InferGuidFromLegacyOriginatorId(
                     update_entity.originator_cache_guid,
                     update_entity.originator_client_item_id));
@@ -466,7 +466,7 @@ NoteRemoteUpdatesHandler::DetermineLocalTrackedEntityToUpdate(
     return tracked_entity_by_client_tag;
   }
 
-  // Client-tags (GUIDs) are known at all times and immutable (as opposed to
+  // Client-tags (UUIDs) are known at all times and immutable (as opposed to
   // server IDs which get a temp value for local creations), so they cannot have
   // changed.
   if (tracked_entity_by_sync_id &&
@@ -476,7 +476,7 @@ NoteRemoteUpdatesHandler::DetermineLocalTrackedEntityToUpdate(
     // protocol violation. This should be practically unreachable, but guard
     // against misbehaving servers.
     DLOG(ERROR) << "Ignoring remote note update with protocol violation: "
-                   "GUID must be immutable";
+                   "Uuid must be immutable";
     *should_ignore_update = true;
     return nullptr;
   }
@@ -548,7 +548,7 @@ void NoteRemoteUpdatesHandler::ProcessUpdate(
          (old_parent->is_note() && node->is_attachment()));
 
   const SyncedNoteTrackerEntity* new_parent_entity =
-      note_tracker_->GetEntityForGUID(GetParentGUIDInUpdate(update_entity));
+      note_tracker_->GetEntityForUuid(GetParentUuidInUpdate(update_entity));
   if (!new_parent_entity) {
     return;
   }
@@ -654,7 +654,7 @@ const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessConflict(
          (old_parent->is_note() && node->is_attachment()));
 
   const SyncedNoteTrackerEntity* new_parent_entity =
-      note_tracker_->GetEntityForGUID(GetParentGUIDInUpdate(update_entity));
+      note_tracker_->GetEntityForUuid(GetParentUuidInUpdate(update_entity));
   // The |new_parent_entity| could be null in some racy conditions.  For
   // example, when a client A moves a node and deletes the old parent and
   // commits, and then updates the node again, and at the same time client B
@@ -717,7 +717,7 @@ const vivaldi::NoteNode* NoteRemoteUpdatesHandler::GetParentNode(
   DCHECK(IsValidNotesSpecifics(update_entity.specifics.notes()));
 
   const SyncedNoteTrackerEntity* parent_entity =
-      note_tracker_->GetEntityForGUID(GetParentGUIDInUpdate(update_entity));
+      note_tracker_->GetEntityForUuid(GetParentUuidInUpdate(update_entity));
   if (!parent_entity) {
     return nullptr;
   }

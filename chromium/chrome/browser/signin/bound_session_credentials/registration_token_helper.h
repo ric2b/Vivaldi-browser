@@ -31,7 +31,18 @@ class UnexportableKeyService;
 class RegistrationTokenHelper {
  public:
   struct Result {
+    Result(unexportable_keys::UnexportableKeyId binding_key_id,
+           std::vector<uint8_t> wrapped_binding_key,
+           std::string registration_token);
+    ~Result();
+
+    Result(const Result&) = delete;
+    Result& operator=(const Result&) = delete;
+    Result(Result&& other);
+    Result& operator=(Result&& other);
+
     unexportable_keys::UnexportableKeyId binding_key_id;
+    std::vector<uint8_t> wrapped_binding_key;
     std::string registration_token;
   };
 
@@ -65,7 +76,7 @@ class RegistrationTokenHelper {
   void OnDataSigned(
       unexportable_keys::ServiceErrorOr<std::vector<uint8_t>> result);
 
-  const base::raw_ref<unexportable_keys::UnexportableKeyService>
+  const raw_ref<unexportable_keys::UnexportableKeyService>
       unexportable_key_service_;
   const std::string client_id_;
   const std::string auth_code_;

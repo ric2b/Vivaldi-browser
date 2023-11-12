@@ -18,7 +18,6 @@ import android.os.Bundle;
 
 import androidx.annotation.Nullable;
 import androidx.preference.TwoStatePreference;
-import androidx.test.InstrumentationRegistry;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.espresso.contrib.RecyclerViewActions;
 
@@ -41,6 +40,7 @@ import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
+import org.chromium.components.sync.SyncService;
 import org.chromium.components.sync.protocol.AutofillWalletSpecifics;
 import org.chromium.components.sync.protocol.EntitySpecifics;
 import org.chromium.components.sync.protocol.SyncEntity;
@@ -184,7 +184,7 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mFakeServerHelper = null;
             FakeServerHelper.destroyInstance();
-            SyncService.resetForTests();
+            SyncServiceFactory.resetForTests();
             mSyncService = null;
         });
     }
@@ -294,7 +294,7 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
         // tests do.
         SyncTestUtil.triggerSync();
         CriteriaHelper.pollUiThread(() -> {
-            return !SyncService.get().isSyncFeatureEnabled();
+            return !SyncServiceFactory.get().isSyncFeatureEnabled();
         }, SyncTestUtil.TIMEOUT_MS, SyncTestUtil.INTERVAL_MS);
     }
 
@@ -357,13 +357,13 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
                 startMainActivityForSyncTest();
 
                 TestThreadUtils.runOnUiThreadBlocking(() -> {
-                    SyncServiceImpl syncService = createSyncServiceImpl();
+                    SyncService syncService = createSyncServiceImpl();
                     if (syncService != null) {
-                        SyncService.overrideForTests(syncService);
+                        SyncServiceFactory.overrideForTests(syncService);
                     }
-                    mSyncService = SyncService.get();
+                    mSyncService = SyncServiceFactory.get();
 
-                    mContext = InstrumentationRegistry.getTargetContext();
+                    mContext = ApplicationProvider.getApplicationContext();
                     mFakeServerHelper = FakeServerHelper.createInstanceAndGet();
                 });
 
@@ -431,9 +431,9 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
     }
 
     /**
-     * Returns an instance of SyncServiceImpl that can be overridden by subclasses.
+     * Returns an instance of SyncService that can be overridden by subclasses.
      */
-    protected SyncServiceImpl createSyncServiceImpl() {
+    protected SyncService createSyncServiceImpl() {
         return null;
     }
 

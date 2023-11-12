@@ -10,6 +10,11 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -52,6 +57,10 @@ NSString* const kGenerateQrCodeActivityType =
 }
 
 - (UIImage*)activityImage {
+
+  if (vivaldi::IsVivaldiRunning())
+    return [UIImage imageNamed:vMenuQRCode]; // End Vivaldi
+
   return DefaultSymbolWithPointSize(kQRCodeSymbol, kSymbolActionPointSize);
 }
 

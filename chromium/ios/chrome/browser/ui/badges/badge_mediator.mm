@@ -8,7 +8,6 @@
 
 #import "base/mac/foundation_util.h"
 #import "base/metrics/user_metrics.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/infobars/badge_state.h"
 #import "ios/chrome/browser/infobars/infobar_badge_tab_helper.h"
 #import "ios/chrome/browser/infobars/infobar_badge_tab_helper_delegate.h"
@@ -19,10 +18,11 @@
 #import "ios/chrome/browser/infobars/overlays/default_infobar_overlay_request_factory.h"
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_request_inserter.h"
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_util.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter_observer_bridge.h"
 #import "ios/chrome/browser/overlays/public/overlay_request_queue.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_model.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -32,8 +32,6 @@
 #import "ios/chrome/browser/ui/badges/badge_static_item.h"
 #import "ios/chrome/browser/ui/badges/badge_tappable_item.h"
 #import "ios/chrome/browser/ui/badges/badge_type_util.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/web/public/permissions/permissions.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 
@@ -87,23 +85,23 @@ const char kInfobarOverflowBadgeShownUserAction[] =
 
 @implementation BadgeMediator
 
-- (instancetype)initWithBrowser:(Browser*)browser {
+- (instancetype)initWithWebStateList:(WebStateList*)webStateList
+                    overlayPresenter:(OverlayPresenter*)overlayPresenter
+                         isIncognito:(BOOL)isIncognito {
   self = [super init];
   if (self) {
-    DCHECK(browser);
     // Create the incognito badge if `browser` is off-the-record.
-    if (browser->GetBrowserState()->IsOffTheRecord()) {
+    if (isIncognito) {
       _offTheRecordBadge =
           [[BadgeStaticItem alloc] initWithBadgeType:kBadgeTypeIncognito];
     }
     // Set up the OverlayPresenterObserver for the infobar banner presentation.
     _overlayPresenterObserver =
         std::make_unique<OverlayPresenterObserverBridge>(self);
-    _overlayPresenter =
-        OverlayPresenter::FromBrowser(browser, OverlayModality::kInfobarBanner);
+    _overlayPresenter = overlayPresenter;
     _overlayPresenter->AddObserver(_overlayPresenterObserver.get());
     // Set up the WebStateList and its observer.
-    _webStateList = browser->GetWebStateList();
+    _webStateList = webStateList;
     _webState = _webStateList->GetActiveWebState();
 
     _webStateListObserver = std::make_unique<WebStateListObserverBridge>(self);
@@ -392,13 +390,35 @@ const char kInfobarOverflowBadgeShownUserAction[] =
 
 #pragma mark - WebStateListObserver
 
-- (void)webStateList:(WebStateList*)webStateList
-    didReplaceWebState:(web::WebState*)oldWebState
-          withWebState:(web::WebState*)newWebState
-               atIndex:(int)atIndex {
-  DCHECK_EQ(self.webStateList, webStateList);
-  if (atIndex == webStateList->active_index())
-    self.webState = newWebState;
+- (void)didChangeWebStateList:(WebStateList*)webStateList
+                       change:(const WebStateListChange&)change
+                    selection:(const WebStateSelection&)selection {
+  switch (change.type()) {
+    case WebStateListChange::Type::kSelectionOnly:
+      // TODO(crbug.com/1442546): Move the implementation from
+      // webStateList:didChangeActiveWebState:oldWebState:atIndex:reason to
+      // here. Note that here is reachable only when `reason` ==
+      // ActiveWebStateChangeReason::Activated.
+      break;
+    case WebStateListChange::Type::kDetach:
+      // Do nothing when a WebState is detached.
+      break;
+    case WebStateListChange::Type::kMove:
+      // Do nothing when a WebState is moved.
+      break;
+    case WebStateListChange::Type::kReplace: {
+      DCHECK_EQ(self.webStateList, webStateList);
+      const WebStateListChangeReplace& replaceChange =
+          change.As<WebStateListChangeReplace>();
+      if (selection.index == webStateList->active_index()) {
+        self.webState = replaceChange.inserted_web_state();
+      }
+      break;
+    }
+    case WebStateListChange::Type::kInsert:
+      // Do nothing when a new WebState is inserted.
+      break;
+  }
 }
 
 - (void)webStateList:(WebStateList*)webStateList

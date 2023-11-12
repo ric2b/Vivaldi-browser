@@ -58,7 +58,7 @@ class SyncedNoteTrackerEntity {
   void clear_note_node() { note_node_ = nullptr; }
 
   // Used when replacing a node in order to update its otherwise immutable
-  // GUID.
+  // UUID.
   void set_note_node(const vivaldi::NoteNode* note_node) {
     note_node_ = note_node;
   }

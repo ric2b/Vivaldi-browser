@@ -9,7 +9,7 @@
 #import "base/ios/ios_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
@@ -116,9 +116,12 @@
 
   // Types some javascript in the omnibox to trigger a navigation.
   NSString* script =
-      [NSString stringWithFormat:@"javascript:location.href='%s'\n",
+      [NSString stringWithFormat:@"javascript:location.href='%s'",
                                  destinationURL.spec().c_str()];
   [ChromeEarlGreyUI focusOmniboxAndType:script];
+  // TODO(crbug.com/1454516): Use simulatePhysicalKeyboardEvent until
+  // replaceText can properly handle \n.
+  [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"\n" flags:0];
 
   // In the omnibox, the new URL should be present, without the http:// prefix.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]

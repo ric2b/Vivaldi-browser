@@ -24,6 +24,10 @@ struct CORE_EXPORT NGInlineItemsData
  public:
   virtual ~NGInlineItemsData() = default;
 
+  NGInlineItemTextIndex End() const {
+    return {items.size(), text_content.length()};
+  }
+
   // Text content for all inline items represented by a single NGInlineNode.
   // Encoded either as UTF-16 or latin-1 depending on the content.
   String text_content;
@@ -40,6 +44,9 @@ struct CORE_EXPORT NGInlineItemsData
 
   bool IsValidOffset(unsigned index, unsigned offset) const {
     return index < items.size() && items[index].IsValidOffset(offset);
+  }
+  bool IsValidOffset(const NGInlineItemTextIndex& index) const {
+    return IsValidOffset(index.item_index, index.text_offset);
   }
 
   void AssertOffset(unsigned index, unsigned offset) const {

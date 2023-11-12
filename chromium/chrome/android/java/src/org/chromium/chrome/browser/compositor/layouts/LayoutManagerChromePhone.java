@@ -24,8 +24,12 @@ import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 // Vivaldi
+import android.view.View;
+
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
@@ -64,7 +68,10 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             Supplier<StartSurface> startSurfaceSupplier, Supplier<TabSwitcher> tabSwitcherSupplier,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider,
-            ActivityLifecycleDispatcher lifecycleDispatcher) { // Vivaldi
+            ObservableSupplier<StripLayoutHelperManager.TabModelStartupInfo>
+                    tabModelStartupInfoSupplier,
+            ActivityLifecycleDispatcher lifecycleDispatcher,
+            MultiInstanceManager multiInstanceManager, View toolbarContainerView) {
         super(host, contentContainer, startSurfaceSupplier, tabSwitcherSupplier,
                 tabContentManagerSupplier, topUiThemeColorProvider, null, null);
 
@@ -72,7 +79,11 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         // The second one is the stack strip.
         for (int i = 0; i < 2; i++) {
             mTabStrips.add(new StripLayoutHelperManager(mHost.getContext(), host, this,
-                    mHost.getLayoutRenderHost(), () -> mLayerTitleCache, lifecycleDispatcher));
+                    mHost.getLayoutRenderHost(),
+                    ()
+                            -> mLayerTitleCache,
+                    tabModelStartupInfoSupplier, lifecycleDispatcher, multiInstanceManager,
+                    toolbarContainerView));
             mTabStrips.get(i).setIsStackStrip(i != 0);
             addObserver(mTabStrips.get(i).getTabSwitcherObserver());
         }
@@ -125,6 +136,8 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
     @Override
     public void onTabsAllClosing(boolean incognito) {
+        // Vivaldi
+        if (!BuildConfig.IS_VIVALDI)
         if (getActiveLayout() == mStaticLayout && !incognito) {
             startShowing(DeviceClassManager.enableAccessibilityLayout(mHost.getContext())
                             ? mOverviewListLayout
@@ -135,48 +148,23 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     }
 
     @Override
-    protected LayoutManagerTabModelObserver createTabModelObserver() {
-        return new LayoutManagerTabModelObserver() {
-            @Override
-            public void willCloseTab(Tab tab, boolean animate, boolean didCloseAlone) {
-                super.willCloseTab(tab, animate, didCloseAlone);
-                if (animate) tabClosing(tab.getId());
-            }
-        };
-    }
-
-    private void tabClosing(int id) {
-        Tab closedTab = getTabById(id);
-        if (closedTab == null) return;
-
-        if (getActiveLayout().handlesTabClosing()) {
-            // The user is currently interacting with the {@code LayoutHost}.
-            // Allow the foreground layout to animate the tab closing.
-            getActiveLayout().onTabClosing(time(), id);
-        } else if (animationsEnabled() && !hasExplicitNextLayout()) {
-            startShowing(mSimpleAnimationLayout, false);
-            getActiveLayout().onTabClosing(time(), id);
-        }
-    }
-
-    @Override
     protected void tabClosed(int id, int nextId, boolean incognito, boolean tabRemoved) {
         boolean showOverview = nextId == Tab.INVALID_TAB_ID;
+
+        // Vivaldi
+        if (BuildConfig.IS_VIVALDI)
+            showOverview = false;
+
         if (getActiveLayoutType() != LayoutType.TAB_SWITCHER
                 && getActiveLayoutType() != LayoutType.START_SURFACE && showOverview) {
             // Since there will be no 'next' tab to display, switch to
             // overview mode when the animation is finished.
             if (getActiveLayoutType() == LayoutType.SIMPLE_ANIMATION) {
                 setNextLayout(getLayoutForType(LayoutType.TAB_SWITCHER), true);
+                getActiveLayout().onTabClosed(time(), id, nextId, incognito);
             } else {
-                showLayout(LayoutType.TAB_SWITCHER, true);
+                super.tabClosed(id, nextId, incognito, tabRemoved);
             }
-        }
-        getActiveLayout().onTabClosed(time(), id, nextId, incognito);
-        boolean animate = !tabRemoved && animationsEnabled();
-        if (getActiveLayoutType() != LayoutType.TAB_SWITCHER
-                && getActiveLayoutType() != LayoutType.START_SURFACE && showOverview && !animate) {
-            showLayout(LayoutType.TAB_SWITCHER, false);
         }
     }
 

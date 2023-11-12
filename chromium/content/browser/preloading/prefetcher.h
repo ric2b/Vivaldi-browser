@@ -52,9 +52,9 @@ class CONTENT_EXPORT Prefetcher : public SpeculationHostDevToolsObserver {
   }
 
   void ProcessCandidatesForPrefetch(
-      const absl::optional<base::UnguessableToken>&
-          initiator_devtools_navigation_token,
       std::vector<blink::mojom::SpeculationCandidatePtr>& candidates);
+
+  bool MaybePrefetch(blink::mojom::SpeculationCandidatePtr candidate);
 
   // Whether the prefetch attempt for target |url| failed or discarded.
   bool IsPrefetchAttemptFailedOrDiscarded(const GURL& url);

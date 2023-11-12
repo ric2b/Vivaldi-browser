@@ -39,7 +39,7 @@ absl_cc_test(
     "any_invocable_test.cc"
     "internal/any_invocable.h"
   COPTS
-    ${ABSL_DEFAULT_COPTS}
+    ${ABSL_TEST_COPTS}
   DEPS
     absl::any_invocable
     absl::base_internal
@@ -90,6 +90,7 @@ absl_cc_library(
   DEPS
     absl::base_internal
     absl::core_headers
+    absl::any_invocable
     absl::meta
   PUBLIC
 )

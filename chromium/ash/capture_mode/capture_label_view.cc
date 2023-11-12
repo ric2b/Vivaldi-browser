@@ -166,7 +166,7 @@ CaptureLabelView::CaptureLabelView(
   capture_button_container_ = AddChildView(std::make_unique<CaptureButtonView>(
       std::move(on_capture_button_pressed),
       std::move(on_drop_down_button_pressed),
-      capture_mode_session_->is_in_projector_mode()));
+      capture_mode_session_->active_behavior()));
   capture_button_container_->SetPaintToLayer();
   capture_button_container_->layer()->SetFillsBoundsOpaquely(false);
   capture_button_container_->SetNotifyEnterExitOnChild(true);
@@ -312,6 +312,12 @@ void CaptureLabelView::AddedToWidget() {
   parent->StackAtBottom(shadow_->GetLayer());
 }
 
+void CaptureLabelView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
+  // The shadow layer is a sibling of this view's layer, and should have the
+  // same bounds.
+  shadow_->SetContentBounds(layer()->bounds());
+}
+
 void CaptureLabelView::Layout() {
   gfx::Rect label_bounds = GetLocalBounds();
   capture_button_container_->SetBoundsRect(label_bounds);
@@ -322,10 +328,6 @@ void CaptureLabelView::Layout() {
   // This is necessary to update the focus ring, which is a child view of
   // `this`.
   views::View::Layout();
-
-  // The shadow layer is a sibling of this view's layer, and should have the
-  // same bounds.
-  shadow_->SetContentBounds(layer()->bounds());
 }
 
 gfx::Size CaptureLabelView::CalculatePreferredSize() const {

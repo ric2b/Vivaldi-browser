@@ -38,6 +38,12 @@ a {
       url(default_200_percent/vivaldi/error_network_generic.png) 2x);
 }
 
+.icon-info {
+  content: -webkit-image-set(
+      url(../../../../chromium/components/security_interstitials/core/browser/resources/images/1x/info.png) 1x,
+      url(../../../../chromium/components/security_interstitials/core/browser/resources/images/2x/info.png) 2x);
+}
+
 .icon-offline {
   content: -webkit-image-set(
       url(default_100_percent/vivaldi/100-error-offline.png) 1x,

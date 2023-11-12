@@ -1515,6 +1515,9 @@ void NGInlineNode::ShapeTextForFirstLineIfNeeded(NGInlineNodeData* data) const {
     ShapeText(first_line_items);
 
   data->first_line_items_ = first_line_items;
+  // The score line breaker can't apply different styles by different line
+  // breaking.
+  data->is_score_line_break_disabled_ = true;
 }
 
 void NGInlineNode::ShapeTextIncludingFirstLine(
@@ -1629,12 +1632,12 @@ static LayoutUnit ComputeContentSize(
       mode == NGLineBreakerMode::kMaxContent ? LayoutUnit::Max() : LayoutUnit();
 
   NGExclusionSpace empty_exclusion_space;
-  NGPositionedFloatVector empty_leading_floats;
+  NGLeadingFloats empty_leading_floats;
   NGLineLayoutOpportunity line_opportunity(available_inline_size);
   LayoutUnit result;
   NGLineBreaker line_breaker(
       node, mode, space, line_opportunity, empty_leading_floats,
-      /* handled_leading_floats_index */ 0u, /* break_token */ nullptr,
+      /* break_token */ nullptr,
       /* column_spanner_path */ nullptr, &empty_exclusion_space);
   line_breaker.SetIntrinsicSizeOutputs(max_size_cache,
                                        depends_on_block_constraints_out);

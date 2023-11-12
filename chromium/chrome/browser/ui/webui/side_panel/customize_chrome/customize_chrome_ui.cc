@@ -13,6 +13,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/background/ntp_custom_background_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/webui/cr_components/customize_color_scheme_mode/customize_color_scheme_mode_handler.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.h"
 #include "chrome/browser/ui/webui/sanitized_image_source.h"
 #include "chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.h"
@@ -22,6 +23,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/side_panel_customize_chrome_resources.h"
 #include "chrome/grit/side_panel_customize_chrome_resources_map.h"
+#include "chrome/grit/side_panel_shared_resources.h"
+#include "chrome/grit/side_panel_shared_resources_map.h"
 #include "components/search/ntp_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
@@ -93,6 +96,12 @@ CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
       {"controlledSettingPolicy", IDS_CONTROLLED_SETTING_POLICY},
       {"close", IDS_NEW_TAB_VOICE_CLOSE_TOOLTIP},
       {"ok", IDS_OK},
+      // CustomizeColorSchemeMode strings.
+      {"colorSchemeModeLabel",
+       IDS_NTP_CUSTOMIZE_CHROME_COLOR_SCHEME_MODE_GROUP_LABEL},
+      {"lightMode", IDS_NTP_CUSTOMIZE_CHROME_COLOR_SCHEME_MODE_LIGHT_LABEL},
+      {"darkMode", IDS_NTP_CUSTOMIZE_CHROME_COLOR_SCHEME_MODE_DARK_LABEL},
+      {"systemMode", IDS_NTP_CUSTOMIZE_CHROME_COLOR_SCHEME_MODE_SYSTEM_LABEL},
   };
   source->AddLocalizedStrings(kLocalizedStrings);
 
@@ -112,6 +121,8 @@ CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
       base::make_span(kSidePanelCustomizeChromeResources,
                       kSidePanelCustomizeChromeResourcesSize),
       IDR_SIDE_PANEL_CUSTOMIZE_CHROME_CUSTOMIZE_CHROME_HTML);
+  source->AddResourcePaths(base::make_span(kSidePanelSharedResources,
+                                           kSidePanelSharedResourcesSize));
 
   content::URLDataSource::Add(profile_,
                               std::make_unique<SanitizedImageSource>(profile_));
@@ -159,6 +170,17 @@ void CustomizeChromeUI::BindInterface(
 }
 
 void CustomizeChromeUI::BindInterface(
+    mojo::PendingReceiver<customize_color_scheme_mode::mojom::
+                              CustomizeColorSchemeModeHandlerFactory>
+        pending_receiver) {
+  if (customize_color_scheme_mode_handler_factory_receiver_.is_bound()) {
+    customize_color_scheme_mode_handler_factory_receiver_.reset();
+  }
+  customize_color_scheme_mode_handler_factory_receiver_.Bind(
+      std::move(pending_receiver));
+}
+
+void CustomizeChromeUI::BindInterface(
     mojo::PendingReceiver<color_change_listener::mojom::PageHandler>
         pending_receiver) {
   color_provider_handler_ = std::make_unique<ui::ColorChangeHandler>(
@@ -191,4 +213,16 @@ void CustomizeChromeUI::CreateHelpBubbleHandler(
           CustomizeChromeUI::kChromeThemeCollectionElementId,
           CustomizeChromeUI::kChromeThemeElementId,
           CustomizeChromeUI::kChromeThemeBackElementId});
+}
+
+void CustomizeChromeUI::CreateCustomizeColorSchemeModeHandler(
+    mojo::PendingRemote<
+        customize_color_scheme_mode::mojom::CustomizeColorSchemeModeClient>
+        client,
+    mojo::PendingReceiver<
+        customize_color_scheme_mode::mojom::CustomizeColorSchemeModeHandler>
+        handler) {
+  customize_color_scheme_mode_handler_ =
+      std::make_unique<CustomizeColorSchemeModeHandler>(
+          std::move(client), std::move(handler), profile_);
 }

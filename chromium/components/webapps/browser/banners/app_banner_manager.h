@@ -12,6 +12,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/types/pass_key.h"
 #include "components/site_engagement/content/site_engagement_observer.h"
 #include "components/webapps/browser/installable/installable_logging.h"
 #include "components/webapps/browser/installable/installable_params.h"
@@ -32,8 +33,13 @@ class RenderFrameHost;
 class WebContents;
 }  // namespace content
 
+namespace segmentation_platform {
+class SegmentationPlatformService;
+}  // namespace segmentation_platform
+
 namespace webapps {
 class InstallableManager;
+class MLInstallabilityPromoter;
 enum class WebappInstallSource;
 struct InstallableData;
 struct Screenshot;
@@ -90,9 +96,6 @@ class AppBannerManager : public content::WebContentsObserver,
     // engagement to trigger the banner.
     PENDING_ENGAGEMENT,
 
-    // The pipeline is waiting for service worker install to trigger the banner.
-    PENDING_WORKER,
-
     // The beforeinstallprompt event has been sent and the pipeline is waiting
     // for the response.
     SENDING_EVENT,
@@ -136,9 +139,6 @@ class AppBannerManager : public content::WebContentsObserver,
 
   // Fast-forwards the current time for testing.
   static void SetTimeDeltaForTesting(int days);
-
-  // Sets the total engagement required for triggering the banner in testing.
-  static void SetTotalEngagementToTrigger(double engagement);
 
   // TODO(https://crbug.com/930612): Move |GetInstallableAppName| and
   // |IsExternallyInstalledWebApp| out into a more general purpose
@@ -194,7 +194,13 @@ class AppBannerManager : public content::WebContentsObserver,
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
-  virtual base::WeakPtr<AppBannerManager> GetWeakPtr() = 0;
+  // This weak pointer should be valid for a given navigation, and will be
+  // invalidated when `InvalidateWeakPtrsForThisNavigation` is called.
+  virtual base::WeakPtr<AppBannerManager> GetWeakPtrForThisNavigation() = 0;
+
+  // This weak pointer is NOT invalidated when
+  // `InvalidateWeakPtrsForThisNavigation` is called.
+  base::WeakPtr<AppBannerManager> GetWeakPtr();
 
   // This is used to determine if the `AppBannerManager` pipeline should be
   // disabled. A test may disable the original `AppBannerManager` (by using
@@ -226,6 +232,40 @@ class AppBannerManager : public content::WebContentsObserver,
 
   // Tracks that the IPH has been shown. Only used on Android.
   void TrackIphWasShown();
+
+  // Tracks whether the current site URL obtained from the web_contents is fully
+  // installed. The only difference from IsWebAppConsideredInstalled() is that
+  // the former considers the scope obtained from a manifest as check for if an
+  // app is already installed.
+  virtual bool IsAppFullyInstalledForSiteUrl(const GURL& site_url) const = 0;
+
+  // Tracks whether the current site URL obtained from the web_contents is not
+  // locally installed.
+  virtual bool IsAppPartiallyInstalledForSiteUrl(
+      const GURL& site_url) const = 0;
+
+  // The user has ignored the installation dialog and it went away due to
+  // another interaction (e.g. the tab was changed, page navigated, etc).
+  virtual void SaveInstallationIgnoredForMl(const GURL& manifest_id) = 0;
+  // The user has taken active action on the dialog to make it go away.
+  virtual void SaveInstallationDismissedForMl(const GURL& manifest_id) = 0;
+  virtual void SaveInstallationAcceptedForMl(const GURL& manifest_id) = 0;
+  virtual bool IsMlPromotionBlockedByHistoryGuardrail(
+      const GURL& manifest_id) = 0;
+
+  // This is called by the MLInstallabilityPromoter when, for this current web
+  // contents:
+  // - There is no existing install (tracked by the MlInstallOperationTracker).
+  // - Ml install prompting is not blocked by guardrails (via
+  //   IsMlPromotionBlockedByHistoryGuardrail).
+  // - The web contents is visible.
+  // - Metrics have been gathered and the ML model has returned with a given
+  //   classification.
+  virtual void OnMlInstallPrediction(base::PassKey<MLInstallabilityPromoter>,
+                                     std::string result_label) = 0;
+
+  virtual segmentation_platform::SegmentationPlatformService*
+  GetSegmentationPlatformService() = 0;
 
  protected:
   explicit AppBannerManager(content::WebContents* web_contents);
@@ -261,7 +301,7 @@ class AppBannerManager : public content::WebContentsObserver,
   // alerting websites that a banner is about to be created.
   virtual std::string GetBannerType();
 
-  virtual void InvalidateWeakPtrs() = 0;
+  virtual void InvalidateWeakPtrsForThisNavigation() = 0;
 
   // Returns true if |has_sufficient_engagement_| is true or
   // ShouldBypassEngagementChecks() returns true.
@@ -293,11 +333,6 @@ class AppBannerManager : public content::WebContentsObserver,
   // overwritten with a new app install for the current page.
   virtual bool ShouldAllowWebAppReplacementInstall();
 
-  // Possibly retries the installable manager request given the current state
-  // and the result. Returns |true| if the request was restarted.
-  // Currently only called during requests to InstallationManager
-  bool DidRetryInstallableManagerRequest(const InstallableData& result);
-
   // Callback invoked by the InstallableManager once it has fetched the page's
   // manifest.
   virtual void OnDidGetManifest(const InstallableData& data);
@@ -305,10 +340,6 @@ class AppBannerManager : public content::WebContentsObserver,
   // Returns an InstallableParams object that requests all checks
   // necessary for a web app banner.
   virtual InstallableParams ParamsToPerformInstallableWebAppCheck();
-
-  // Returns an InstallableParams object that requests service worker check
-  // only.
-  virtual InstallableParams ParamsToPerformWorkerCheck();
 
   // Run at the conclusion of OnDidGetManifest. For web app banners, this calls
   // back to the InstallableManager to continue checking criteria. For native
@@ -323,15 +354,6 @@ class AppBannerManager : public content::WebContentsObserver,
   // all other installable properties.
   virtual void OnDidPerformInstallableWebAppCheck(const InstallableData& data);
 
-  // Run at the conclusion of OnDidPerformInstallableWebAppCheck. This calls
-  // back to the InstallableManager to continue checking service worker criteria
-  // for web app banners.
-  virtual void PerformServiceWorkerCheck();
-
-  // Callback invoked by the InstallableManager once it has finished checking
-  // service worker.
-  virtual void OnDidPerformWorkerCheck(const InstallableData& data);
-
   // Records that a banner was shown.
   void RecordDidShowBanner();
 
@@ -341,7 +363,8 @@ class AppBannerManager : public content::WebContentsObserver,
   // Voids all outstanding service pointers.
   void ResetBindings();
 
-  // Resets all fetched data for the current page.
+  // Resets all fetched data for the current page. Should only be called once
+  // per navigation, at the beginning of the navigation.
   virtual void ResetCurrentPageData();
 
   // Stops the banner pipeline early.
@@ -394,7 +417,9 @@ class AppBannerManager : public content::WebContentsObserver,
   bool IsRunning() const;
 
   void SetInstallableWebAppCheckResult(InstallableWebAppCheckResult result);
-  void RecheckInstallabilityForLoadedPage(const GURL& url, bool uninstalled);
+  // Virtual so the TestAppBannerManagerDesktop can reset its installability
+  // state when called.
+  virtual void RecheckInstallabilityForLoadedPage();
 
   // The URL for which the banner check is being conducted.
   GURL validated_url_;
@@ -419,9 +444,6 @@ class AppBannerManager : public content::WebContentsObserver,
 
   // The screenshots to show in the install UI.
   std::vector<Screenshot> screenshots_;
-
-  // True if the service worker check has passed or no required.
-  bool passed_worker_check_ = false;
 
  private:
   friend class AppBannerManagerTest;
@@ -452,9 +474,6 @@ class AppBannerManager : public content::WebContentsObserver,
   // Called when Blink has prevented a banner from being shown, and is now
   // requesting that it be shown later.
   void DisplayAppBanner() override;
-
-  // Returns a status code indicating whether a banner should be shown.
-  InstallableStatusCode ShouldShowBannerCode();
 
   // Returns a status code based on the current state, to log when terminating.
   InstallableStatusCode TerminationCode() const;
@@ -496,6 +515,8 @@ class AppBannerManager : public content::WebContentsObserver,
   PwaInstallPathTracker install_path_tracker_;
 
   base::ObserverList<Observer, true> observer_list_;
+
+  base::WeakPtrFactory<AppBannerManager> weak_factory_{this};
 };
 
 }  // namespace webapps

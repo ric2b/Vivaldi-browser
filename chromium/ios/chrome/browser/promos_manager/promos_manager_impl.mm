@@ -21,11 +21,11 @@
 #import "components/feature_engagement/public/tracker.h"
 #import "components/prefs/pref_service.h"
 #import "components/prefs/scoped_user_pref_update.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/promos_manager/constants.h"
 #import "ios/chrome/browser/promos_manager/features.h"
 #import "ios/chrome/browser/promos_manager/impression_limit.h"
 #import "ios/chrome/browser/promos_manager/promos_manager_event_exporter.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "third_party/abseil-cpp/absl/types/optional.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -52,7 +52,7 @@ void ConditionallyAppendPromoToPrefList(promos_manager::Promo promo,
 
   ScopedListPrefUpdate update(local_state, pref_path);
 
-  base::StringPiece promo_name = promos_manager::NameForPromo(promo);
+  std::string promo_name = promos_manager::NameForPromo(promo);
 
   // Erase `promo_name` if it already exists in `active_promos`; avoid polluting
   // `active_promos` with duplicate `promo_name` entries.
@@ -170,7 +170,7 @@ void PromosManagerImpl::RegisterPromoForSingleDisplay(
   // update the pending promos saved in pref.
   ScopedDictPrefUpdate pending_promos_update(
       local_state_, prefs::kIosPromosManagerSingleDisplayPendingPromos);
-  base::StringPiece promo_name = promos_manager::NameForPromo(promo);
+  std::string promo_name = promos_manager::NameForPromo(promo);
   base::Time becomes_active_time = clock_->Now() + becomes_active_after_period;
   pending_promos_update->Set(promo_name,
                              base::TimeToValue(becomes_active_time));
@@ -190,7 +190,7 @@ void PromosManagerImpl::DeregisterPromo(promos_manager::Promo promo) {
   ScopedDictPrefUpdate pending_promos_update(
       local_state_, prefs::kIosPromosManagerSingleDisplayPendingPromos);
 
-  base::StringPiece promo_name = promos_manager::NameForPromo(promo);
+  std::string promo_name = promos_manager::NameForPromo(promo);
 
   // Erase `promo_name` from the single-display and continuous-display active
   // promos lists.
@@ -548,7 +548,21 @@ std::vector<promos_manager::Promo> PromosManagerImpl::SortPromos(
   auto compare_promo = [&impression_history](
                            std::pair<promos_manager::Promo, PromoContext> lhs,
                            std::pair<promos_manager::Promo, PromoContext> rhs) {
-    // PostRestoreSignIn types are to be displayed first.
+    // Choice types are to be displayed first.
+    if (lhs.first == Promo::Choice) {
+      return true;
+    }
+    if (rhs.first == Promo::Choice) {
+      return false;
+    }
+    // PostRestoreDefaultBrowser comes next.
+    if (lhs.first == Promo::PostRestoreDefaultBrowserAlert) {
+      return true;
+    }
+    if (rhs.first == Promo::PostRestoreDefaultBrowserAlert) {
+      return false;
+    }
+    // PostRestoreSignIn types come next.
     if (lhs.first == Promo::PostRestoreSignInFullscreen ||
         lhs.first == Promo::PostRestoreSignInAlert) {
       return true;

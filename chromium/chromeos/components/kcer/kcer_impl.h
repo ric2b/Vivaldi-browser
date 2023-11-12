@@ -17,6 +17,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/task/task_runner.h"
 #include "chromeos/components/kcer/kcer.h"
+#include "chromeos/components/kcer/kcer_notifier_net.h"
 #include "chromeos/components/kcer/kcer_token.h"
 #include "net/cert/x509_certificate.h"
 
@@ -90,8 +91,69 @@ class KcerImpl : public Kcer {
  private:
   base::WeakPtr<KcerToken>& GetToken(Token token);
 
-  // Tast runner for the tokens. Can be nullptr if no tokens are available to
-  // the current Kcer instance.
+  // Finds the token where the `key` is stored. If `allow_guessing` is true, it
+  // can return a token where the key *might* be (and no other token can
+  // possibly have it), this is good enough for most methods that would just
+  // fail if the key is not on the returned token either. If `allow_guessing` is
+  // false, the result is precise and reliable. Returns a token on success, an
+  // nullopt if the key was not found, an error on failure.
+  void FindKeyToken(
+      bool allow_guessing,
+      PrivateKeyHandle key,
+      base::OnceCallback<void(base::expected<absl::optional<Token>, Error>)>
+          callback);
+
+  // Attempts to find the token for the `key` (guessing is allowed). Returns a
+  // PrivateKeyHandle with the token populated on success, an error on failure.
+  void PopulateTokenForKey(
+      PrivateKeyHandle key,
+      base::OnceCallback<void(base::expected<PrivateKeyHandle, Error>)>
+          callback);
+  void PopulateTokenForKeyWithToken(
+      PrivateKeyHandle key,
+      base::OnceCallback<void(base::expected<PrivateKeyHandle, Error>)>
+          callback,
+      base::expected<absl::optional<Token>, Error> find_key_result);
+
+  void RemoveKeyAndCertsWithToken(
+      StatusCallback callback,
+      base::expected<PrivateKeyHandle, Error> key_or_error);
+
+  void DoesPrivateKeyExistWithToken(
+      DoesKeyExistCallback callback,
+      base::expected<absl::optional<Token>, Error> find_key_result);
+
+  void SignWithToken(SigningScheme signing_scheme,
+                     DataToSign data,
+                     SignCallback callback,
+                     base::expected<PrivateKeyHandle, Error> key_or_error);
+
+  void SignRsaPkcs1RawWithToken(
+      DigestWithPrefix digest_with_prefix,
+      SignCallback callback,
+      base::expected<PrivateKeyHandle, Error> key_or_error);
+
+  void GetKeyInfoWithToken(
+      GetKeyInfoCallback callback,
+      base::expected<PrivateKeyHandle, Error> key_or_error);
+
+  void SetKeyNicknameWithToken(
+      std::string nickname,
+      StatusCallback callback,
+      base::expected<PrivateKeyHandle, Error> key_or_error);
+
+  void SetKeyPermissionsWithToken(
+      chaps::KeyPermissions key_permissions,
+      StatusCallback callback,
+      base::expected<PrivateKeyHandle, Error> key_or_error);
+
+  void SetCertProvisioningProfileIdWithToken(
+      std::string profile_id,
+      StatusCallback callback,
+      base::expected<PrivateKeyHandle, Error> key_or_error);
+
+  // Task runner for the tokens. Can be nullptr if no tokens are available
+  // to the current Kcer instance.
   scoped_refptr<base::TaskRunner> token_task_runner_;
   // Pointers to kcer tokens. Can contain nullptr-s if a token is not available
   // to the current instance of Kcer. All requests to the tokens must be posted
@@ -100,8 +162,7 @@ class KcerImpl : public Kcer {
   // very limited way (consult documentation for WeakPtr for details).
   base::WeakPtr<KcerToken> user_token_;
   base::WeakPtr<KcerToken> device_token_;
-
-  base::RepeatingCallbackList<void()> observers_;
+  KcerNotifierNet notifier_;
 
   base::WeakPtrFactory<KcerImpl> weak_factory_{this};
 };

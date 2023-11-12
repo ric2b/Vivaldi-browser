@@ -2,9 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {TestRunner} from 'test_runner';
+import {ApplicationTestRunner} from 'application_test_runner';
+import {ConsoleTestRunner} from 'console_test_runner';
+
 (async function() {
   TestRunner.addResult(`Tests that database names are correctly loaded and saved in IndexedDBModel.\n`);
-  await TestRunner.loadLegacyModule('console'); await TestRunner.loadTestModule('application_test_runner');
+  await TestRunner.loadLegacyModule('console');
   // Note: every test that uses a storage API must manually clean-up state from previous tests.
   await ApplicationTestRunner.resetState();
 
@@ -12,7 +16,7 @@
   var mainFrameId = TestRunner.resourceTreeModel.mainFrame.id;
   var databaseName = 'testDatabase1';
   var storageKey = 'http://127.0.0.1:8000/';
-  var databaseId = new Resources.IndexedDBModel.DatabaseId(storageKey, databaseName);
+  var databaseId = new Resources.IndexedDBModel.DatabaseId({storageKey}, databaseName);
 
   function dumpDatabase() {
     TestRunner.addResult('Dumping database:');
@@ -43,7 +47,7 @@
     TestRunner.addResult('');
 }
 
-  TestRunner.addSniffer(Resources.IndexedDBModel.prototype, 'updateStorageKeyDatabaseNames', step2, false);
+  step2();
 
   function step2() {
     ApplicationTestRunner.createDatabaseWithVersion(mainFrameId, databaseName, 2147483647, step3);

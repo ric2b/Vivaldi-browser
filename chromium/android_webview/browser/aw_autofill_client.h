@@ -16,6 +16,7 @@
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/core/browser/autofill_trigger_source.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
+#include "components/autofill/core/browser/ui/popup_item_ids.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "ui/android/view_android.h"
 
@@ -58,6 +59,7 @@ namespace android_webview {
 // profile). Since there is only one pref service for a given browser context,
 // we cannot enable this feature via UserPrefs. Rather, we always keep the
 // feature enabled at the pref service, and control it via the delegates.
+// Lifetime: WebView
 class AwAutofillClient : public autofill::ContentAutofillClient {
  public:
   static AwAutofillClient* FromWebContents(content::WebContents* web_contents) {
@@ -161,7 +163,6 @@ class AwAutofillClient : public autofill::ContentAutofillClient {
   void DidFillOrPreviewField(const std::u16string& autofilled_value,
                              const std::u16string& profile_full_name) override;
   bool IsContextSecure() const override;
-  void ExecuteCommand(int id) override;
   void OpenPromoCodeOfferDetailsURL(const GURL& url) override;
   autofill::FormInteractionsFlowId GetCurrentFormInteractionsFlowId() override;
 

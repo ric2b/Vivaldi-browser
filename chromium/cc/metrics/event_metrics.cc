@@ -102,6 +102,7 @@ constexpr struct {
                                         .max = kScrollHistogramMax,
                                         .count = kScrollHistogramBucketCount,
                                         .version_suffix = "2"}}),
+    EVENT_TYPE(MouseMoved, ui::ET_MOUSE_MOVED),
 #undef EVENT_TYPE
 };
 static_assert(std::size(kInterestingEvents) ==
@@ -650,10 +651,11 @@ ScrollUpdateEventMetrics::CreateFromExisting(
   if (!existing)
     return nullptr;
 
-  std::unique_ptr<ScrollUpdateEventMetrics> metrics =
-      CreateInternal(type, input_type, is_inertial, scroll_update_type, delta,
-                     base::TimeTicks(), base::TimeTicks(),
-                     existing->tick_clock_, absl::nullopt);
+  base::TimeTicks generation_ts =
+      existing->GetDispatchStageTimestamp(DispatchStage::kGenerated);
+  std::unique_ptr<ScrollUpdateEventMetrics> metrics = CreateInternal(
+      type, input_type, is_inertial, scroll_update_type, delta, generation_ts,
+      base::TimeTicks(), existing->tick_clock_, absl::nullopt);
   if (!metrics)
     return nullptr;
 

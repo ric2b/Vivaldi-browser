@@ -229,7 +229,8 @@ class DeleteForeignVisitsDBTask : public HistoryDBTask {
       return true;
     }
 
-    backend->RemoveVisits(visits);
+    backend->RemoveVisits(visits,
+                          DeletionInfo::Reason::kDeleteAllForeignVisits);
 
     bool done = visits.size() < static_cast<size_t>(max_count);
     if (done) {
@@ -716,7 +717,7 @@ void HistoryBackend::SetPageLanguageForVisitByVisitID(
       annotations.page_language = page_language;
       db_->AddContentAnnotationsForVisit(visit_id, annotations);
     }
-    NotifyVisitUpdated(visit_row);
+    NotifyVisitUpdated(visit_row, VisitUpdateReason::kSetPageLanguage);
     ScheduleCommit();
   }
 }
@@ -753,7 +754,7 @@ void HistoryBackend::SetPasswordStateForVisitByVisitID(
       annotations.password_state = password_state;
       db_->AddContentAnnotationsForVisit(visit_id, annotations);
     }
-    NotifyVisitUpdated(visit_row);
+    NotifyVisitUpdated(visit_row, VisitUpdateReason::kSetPasswordState);
     ScheduleCommit();
   }
 }
@@ -892,7 +893,7 @@ void HistoryBackend::UpdateVisitDuration(VisitID visit_id, const Time end_ts) {
                                    ? end_ts - visit_row.visit_time
                                    : base::Microseconds(0);
     db_->UpdateVisitRow(visit_row);
-    NotifyVisitUpdated(visit_row);
+    NotifyVisitUpdated(visit_row, VisitUpdateReason::kUpdateVisitDuration);
   }
 }
 
@@ -1080,7 +1081,7 @@ void HistoryBackend::AddPage(const HistoryAddPageArgs& request) {
             visit_row.transition = ui::PageTransitionFromInt(
                 visit_row.transition & ~ui::PAGE_TRANSITION_CHAIN_END);
             db_->UpdateVisitRow(visit_row);
-            NotifyVisitUpdated(visit_row);
+            NotifyVisitUpdated(visit_row, VisitUpdateReason::kUpdateTransition);
           }
 
           extended_redirect_chain = GetCachedRecentRedirects(request.referrer);
@@ -1810,7 +1811,7 @@ VisitID HistoryBackend::UpdateSyncedVisit(
                                       content_annotations->password_state);
   }
 
-  NotifyVisitUpdated(updated_row);
+  NotifyVisitUpdated(updated_row, VisitUpdateReason::kUpdateSyncedVisit);
   ScheduleCommit();
   return updated_row.visit_id;
 }
@@ -1879,11 +1880,12 @@ void HistoryBackend::DeleteAllForeignVisitsAndResetIsKnownToSync() {
   }
 }
 
-bool HistoryBackend::RemoveVisits(const VisitVector& visits) {
+bool HistoryBackend::RemoveVisits(const VisitVector& visits,
+                                  DeletionInfo::Reason deletion_reason) {
   if (!db_)
     return false;
 
-  expirer_.ExpireVisits(visits);
+  expirer_.ExpireVisits(visits, deletion_reason);
   ScheduleCommit();
   return true;
 }
@@ -2033,6 +2035,16 @@ HistoryBackend::GetDomainDiversity(
   return std::make_pair(local_result, all_result);
 }
 
+DomainsVisitedResult HistoryBackend::GetUniqueDomainsVisited(
+    base::Time begin_time,
+    base::Time end_time) {
+  if (!db_) {
+    return {};
+  }
+
+  return db_->GetUniqueDomainsVisited(begin_time, end_time);
+}
+
 HistoryLastVisitResult HistoryBackend::GetLastVisitToHost(
     const std::string& host,
     base::Time begin_time,
@@ -2150,7 +2162,7 @@ void HistoryBackend::AddContextAnnotationsForVisit(
   if (!db_ || !db_->GetRowForVisit(visit_id, &visit_row))
     return;
   db_->AddContextAnnotationsForVisit(visit_id, visit_context_annotations);
-  NotifyVisitUpdated(visit_row);
+  NotifyVisitUpdated(visit_row, VisitUpdateReason::kAddContextAnnotations);
   ScheduleCommit();
 }
 
@@ -2172,12 +2184,14 @@ void HistoryBackend::SetOnCloseContextAnnotationsForVisit(
   } else {
     db_->AddContextAnnotationsForVisit(visit_id, visit_context_annotations);
   }
-  NotifyVisitUpdated(visit_row);
+  NotifyVisitUpdated(visit_row,
+                     VisitUpdateReason::kSetOnCloseContextAnnotations);
   ScheduleCommit();
 }
 
 std::vector<AnnotatedVisit> HistoryBackend::GetAnnotatedVisits(
     const QueryOptions& options,
+    bool compute_redirect_chain_start_properties,
     bool* limited_by_max_count) {
   // Gets `VisitVector` matching `options`, then for each visit, gets the
   // associated `URLRow`, `VisitContextAnnotations`, and
@@ -2201,11 +2215,12 @@ std::vector<AnnotatedVisit> HistoryBackend::GetAnnotatedVisits(
 
   DCHECK_LE(static_cast<int>(visit_rows.size()), options.EffectiveMaxCount());
 
-  return ToAnnotatedVisits(visit_rows);
+  return ToAnnotatedVisits(visit_rows, compute_redirect_chain_start_properties);
 }
 
 std::vector<AnnotatedVisit> HistoryBackend::ToAnnotatedVisits(
-    const VisitVector& visit_rows) {
+    const VisitVector& visit_rows,
+    bool compute_redirect_chain_start_properties) {
   if (!db_)
     return {};
 
@@ -2234,10 +2249,13 @@ std::vector<AnnotatedVisit> HistoryBackend::ToAnnotatedVisits(
     db_->GetContentAnnotationsForVisit(visit_row.visit_id,
                                        &content_annotations);
 
-    VisitRow redirect_start = GetRedirectChainStart(visit_row);
-    VisitID referring_visit_of_redirect_chain_start =
-        redirect_start.referring_visit;
-    VisitID opener_visit_of_redirect_chain_start = redirect_start.opener_visit;
+    VisitID referring_visit_of_redirect_chain_start = 0;
+    VisitID opener_visit_of_redirect_chain_start = 0;
+    if (compute_redirect_chain_start_properties) {
+      VisitRow redirect_start = GetRedirectChainStart(visit_row);
+      referring_visit_of_redirect_chain_start = redirect_start.referring_visit;
+      opener_visit_of_redirect_chain_start = redirect_start.opener_visit;
+    }
 
     const auto source = sources.count(visit_row.visit_id) == 0
                             ? VisitSource::SOURCE_BROWSED
@@ -2253,7 +2271,8 @@ std::vector<AnnotatedVisit> HistoryBackend::ToAnnotatedVisits(
 }
 
 std::vector<AnnotatedVisit> HistoryBackend::ToAnnotatedVisits(
-    const std::vector<VisitID>& visit_ids) {
+    const std::vector<VisitID>& visit_ids,
+    bool compute_redirect_chain_start_properties) {
   if (!db_)
     return {};
   VisitVector visit_rows;
@@ -2262,13 +2281,14 @@ std::vector<AnnotatedVisit> HistoryBackend::ToAnnotatedVisits(
     if (db_->GetRowForVisit(visit_id, &visit_row))
       visit_rows.push_back(visit_row);
   }
-  return ToAnnotatedVisits(visit_rows);
+  return ToAnnotatedVisits(visit_rows, compute_redirect_chain_start_properties);
 }
 
 std::vector<ClusterVisit> HistoryBackend::ToClusterVisits(
     const std::vector<VisitID>& visit_ids,
     bool include_duplicates) {
-  auto annotated_visits = ToAnnotatedVisits(visit_ids);
+  auto annotated_visits = ToAnnotatedVisits(
+      visit_ids, /*compute_redirect_chain_start_properties=*/false);
   std::vector<ClusterVisit> cluster_visits;
   std::set<VisitID> seen_duplicate_ids;
   base::ranges::for_each(annotated_visits, [&](const auto& annotated_visit) {
@@ -3535,9 +3555,10 @@ void HistoryBackend::NotifyURLsDeleted(DeletionInfo deletion_info) {
   delegate_->NotifyURLsDeleted(std::move(deletion_info));
 }
 
-void HistoryBackend::NotifyVisitUpdated(const VisitRow& visit) {
+void HistoryBackend::NotifyVisitUpdated(const VisitRow& visit,
+                                        VisitUpdateReason reason) {
   for (HistoryBackendObserver& observer : observers_) {
-    observer.OnVisitUpdated(visit);
+    observer.OnVisitUpdated(visit, reason);
   }
 }
 

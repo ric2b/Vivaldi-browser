@@ -8,7 +8,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "components/sync/driver/trusted_vault_client.h"
+#include "components/trusted_vault/trusted_vault_client.h"
 #include "components/trusted_vault/trusted_vault_registration_verifier.h"
 
 namespace network {
@@ -25,7 +25,7 @@ class TrustedVaultClientBackend;
 
 // iOS version of TrustedVaultClient. This class uses the Chrome trusted vault
 // service to store the shared keys.
-class IOSTrustedVaultClient : public syncer::TrustedVaultClient {
+class IOSTrustedVaultClient : public trusted_vault::TrustedVaultClient {
  public:
   IOSTrustedVaultClient(
       ChromeAccountManagerService* account_manager_service,
@@ -70,8 +70,8 @@ class IOSTrustedVaultClient : public syncer::TrustedVaultClient {
       const std::string& gaia_id,
       const std::vector<uint8_t>& public_key);
 
-  const base::raw_ptr<ChromeAccountManagerService> account_manager_service_;
-  const base::raw_ptr<TrustedVaultClientBackend> backend_;
+  const raw_ptr<ChromeAccountManagerService> account_manager_service_;
+  const raw_ptr<TrustedVaultClientBackend> backend_;
   trusted_vault::TrustedVaultRegistrationVerifier registration_verifier_;
   base::WeakPtrFactory<IOSTrustedVaultClient> weak_ptr_factory_{this};
 };

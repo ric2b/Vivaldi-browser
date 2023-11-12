@@ -26,6 +26,7 @@ namespace blink {
 
 namespace {
 constexpr base::TimeDelta kLongAnimationFrameDuration = base::Milliseconds(50);
+constexpr base::TimeDelta kLongTaskDuration = base::Milliseconds(50);
 constexpr base::TimeDelta kLongScriptDuration = base::Milliseconds(5);
 }  // namespace
 
@@ -159,8 +160,14 @@ void AnimationFrameTimingMonitor::OnTaskCompleted(
 
   // If we already need an update and a new task is processed, count its
   // duration towards blockingTime.
-  if (frame && state_ == State::kPendingFrame) {
-    ApplyTaskDuration(task_duration);
+  if (frame) {
+    if (RuntimeEnabledFeatures::LongTaskFromLongAnimationFrameEnabled() &&
+        task_duration >= kLongTaskDuration) {
+      client_.ReportLongTaskTiming(start_time, end_time, frame->DomWindow());
+    }
+    if (state_ == State::kPendingFrame) {
+      ApplyTaskDuration(task_duration);
+    }
   }
 
   if (state_ != State::kProcessingTask) {
@@ -216,7 +223,8 @@ void AnimationFrameTimingMonitor::OnTaskCompleted(
     timing_info->SetDidPause();
   }
 
-  if (RuntimeEnabledFeatures::LongAnimationFrameTimingEnabled()) {
+  if (RuntimeEnabledFeatures::LongAnimationFrameTimingEnabled(
+          frame->DomWindow())) {
     DOMWindowPerformance::performance(*frame->DomWindow())
         ->ReportLongAnimationFrameTiming(timing_info);
   }
@@ -330,12 +338,13 @@ ScriptTimingInfo* AnimationFrameTimingMonitor::MaybeAddScript(
 
   script_timing_info->SetSourceLocation(pending_script_info_->source_location);
   if (pending_script_info_->class_like_name) {
-    script_timing_info->SetClassLikeName(pending_script_info_->class_like_name);
+    script_timing_info->SetClassLikeName(
+        AtomicString(pending_script_info_->class_like_name));
   }
 
   if (pending_script_info_->property_like_name) {
     script_timing_info->SetPropertyLikeName(
-        pending_script_info_->property_like_name);
+        AtomicString(pending_script_info_->property_like_name));
   }
 
   script_timing_info->SetPauseDuration(pending_script_info_->pause_duration);
@@ -382,14 +391,15 @@ void AnimationFrameTimingMonitor::OnMicrotasksCompleted(
 
 void AnimationFrameTimingMonitor::WillHandlePromise(
     ExecutionContext* context,
+    ScriptState* script_state,
     bool resolving,
     const char* class_like_name,
     const char* property_like_name) {
   // Make sure we only monitor top-level promise resolvers that are outside the
   // update-the-rendering phase (promise resolvers directly handled from a
   // posted task).
-  if (!context->IsWindow() || pending_script_info_ ||
-      state_ != State::kProcessingTask) {
+  if (!context->IsWindow() || !script_state->World().IsMainWorld() ||
+      pending_script_info_ || state_ != State::kProcessingTask) {
     return;
   }
 
@@ -545,26 +555,6 @@ void AnimationFrameTimingMonitor::Did(const probe::UpdateLayout& probe_data) {
   }
 }
 
-void AnimationFrameTimingMonitor::Will(
-    const probe::InvokeCallback& probe_data) {
-  // Callbacks can be recursive. We only want the top-level one. We need to
-  // keep track of the depth so that we report only when the top-levle one is
-  // done.
-  user_callback_depth_++;
-  if (pending_script_info_) {
-    return;
-  }
-
-  if (!probe_data.context->IsWindow() ||
-      !client_.ShouldReportLongAnimationFrameTiming()) {
-    return;
-  }
-  pending_script_info_ =
-      PendingScriptInfo{.type = ScriptTimingInfo::Type::kUserCallback,
-                        .start_time = probe_data.CaptureStartTime(),
-                        .execution_start_time = probe_data.CaptureStartTime()};
-}
-
 namespace {
 
 ScriptTimingInfo::ScriptSourceLocation CaptureScriptSourceLocation(
@@ -580,12 +570,12 @@ ScriptTimingInfo::ScriptSourceLocation CaptureScriptSourceLocation(
   }
 
   v8::Local<v8::Value> bound = value.As<v8::Function>()->GetBoundFunction();
-  if (bound.IsEmpty() || !bound->IsFunction()) {
-    return ScriptTimingInfo::ScriptSourceLocation();
+  if (!bound.IsEmpty() && bound->IsFunction()) {
+    value = bound;
   }
 
   if (std::unique_ptr<SourceLocation> location =
-          CaptureSourceLocation(bound.As<v8::Function>())) {
+          CaptureSourceLocation(value.As<v8::Function>())) {
     return ScriptTimingInfo::ScriptSourceLocation{
         location->Url(), location->Function(), location->LineNumber(),
         location->ColumnNumber()};
@@ -594,7 +584,45 @@ ScriptTimingInfo::ScriptSourceLocation CaptureScriptSourceLocation(
   return ScriptTimingInfo::ScriptSourceLocation();
 }
 
+bool IsCallbackFromMainWorld(v8::MaybeLocal<v8::Value> callback) {
+  v8::Local<v8::Value> function;
+  v8::Local<v8::Context> context;
+  return callback.ToLocal(&function) && function->IsFunction() &&
+         function.As<v8::Function>()->GetCreationContext().ToLocal(&context) &&
+         ScriptState::From(context)->World().IsMainWorld();
+}
+
 }  // namespace
+
+void AnimationFrameTimingMonitor::Will(
+    const probe::InvokeCallback& probe_data) {
+  // Callbacks can be recursive. We only want the top-level one. We need to
+  // keep track of the depth so that we report only when the top-levle one is
+  // done.
+  user_callback_depth_++;
+  if (pending_script_info_) {
+    return;
+  }
+
+  if (!probe_data.context->IsWindow() ||
+      !client_.ShouldReportLongAnimationFrameTiming() ||
+      (probe_data.callback &&
+       probe_data.callback->GetWorld().IsIsolatedWorld()) ||
+      (!probe_data.function.IsEmpty() &&
+       !IsCallbackFromMainWorld(probe_data.function))) {
+    return;
+  }
+
+  pending_script_info_ =
+      PendingScriptInfo{.type = ScriptTimingInfo::Type::kUserCallback,
+                        .start_time = probe_data.CaptureStartTime(),
+                        .execution_start_time = probe_data.CaptureStartTime()};
+  v8::HandleScope handle_scope(probe_data.context->GetIsolate());
+
+  pending_script_info_->source_location = CaptureScriptSourceLocation(
+      probe_data.callback ? probe_data.callback->CallbackObject()
+                          : probe_data.function);
+}
 
 void AnimationFrameTimingMonitor::Did(const probe::InvokeCallback& probe_data) {
   user_callback_depth_--;
@@ -607,14 +635,7 @@ void AnimationFrameTimingMonitor::Did(const probe::InvokeCallback& probe_data) {
     return;
   }
 
-  info->SetPropertyLikeName(probe_data.name);
-  v8::HandleScope handle_scope(probe_data.context->GetIsolate());
-  if (probe_data.callback) {
-    info->SetSourceLocation(
-        CaptureScriptSourceLocation(probe_data.callback->CallbackObject()));
-  } else {
-    info->SetSourceLocation(CaptureScriptSourceLocation(probe_data.function));
-  }
+  info->SetPropertyLikeName(AtomicString(probe_data.name));
 }
 
 void AnimationFrameTimingMonitor::Will(
@@ -624,8 +645,13 @@ void AnimationFrameTimingMonitor::Will(
     return;
   }
 
+  v8::HandleScope handle_scope(probe_data.context->GetIsolate());
   if (!probe_data.context->IsWindow() ||
-      !client_.ShouldReportLongAnimationFrameTiming()) {
+      !client_.ShouldReportLongAnimationFrameTiming() || !probe_data.listener ||
+      !probe_data.listener->IsJSBasedEventListener() ||
+      !IsCallbackFromMainWorld(
+          To<JSBasedEventListener>(probe_data.listener)
+              ->GetListenerObject(*probe_data.event_target))) {
     return;
   }
   pending_script_info_ =

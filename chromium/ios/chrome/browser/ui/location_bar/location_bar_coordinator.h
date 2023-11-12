@@ -18,6 +18,7 @@
 
 // Vivaldi
 @protocol SharingPositioner;
+@protocol LocationBarSteadyViewConsumer;
 // End Vivaldi
 
 // Location bar coordinator.
@@ -62,6 +63,7 @@
 // Vivaldi
 // Positioner for activity services attached to the location bar i.e. share page
 - (id<SharingPositioner>)vivaldiPositioner;
+@property(nonatomic, weak) id<LocationBarSteadyViewConsumer> steadyViewConsumer;
 // End Vivaldi
 
 @end

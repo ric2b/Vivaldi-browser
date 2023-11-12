@@ -27,8 +27,9 @@ TEST_F(CWVAutofillSuggestionTest, Initialization) {
   FormSuggestion* formSuggestion =
       [FormSuggestion suggestionWithValue:@"TestValue"
                        displayDescription:@"TestDisplayDescription"
-                                     icon:@"TestIcon"
-                               identifier:1337
+                                     icon:nil
+                              popupItemId:autofill::PopupItemId::kAddressEntry
+                        backendIdentifier:nil
                            requiresReauth:NO];
   CWVAutofillSuggestion* suggestion =
       [[CWVAutofillSuggestion alloc] initWithFormSuggestion:formSuggestion
@@ -41,7 +42,6 @@ TEST_F(CWVAutofillSuggestionTest, Initialization) {
   EXPECT_NSEQ(frameID, suggestion.frameID);
   EXPECT_NSEQ(formSuggestion.displayDescription, suggestion.displayDescription);
   EXPECT_NSEQ(formSuggestion.value, suggestion.value);
-  EXPECT_EQ(1337, suggestion.uniqueIdentifier);
   EXPECT_EQ(formSuggestion, suggestion.formSuggestion);
   EXPECT_FALSE([suggestion isPasswordSuggestion]);
 }

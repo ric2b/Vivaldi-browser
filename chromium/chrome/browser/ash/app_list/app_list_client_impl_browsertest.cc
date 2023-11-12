@@ -41,7 +41,7 @@
 #include "chrome/browser/ash/app_list/test/chrome_app_list_test_support.h"
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
-#include "chrome/browser/ash/login/demo_mode/demo_setup_test_utils.h"
+#include "chrome/browser/ash/login/demo_mode/demo_mode_test_utils.h"
 #include "chrome/browser/ash/login/login_manager_test.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
 #include "chrome/browser/ash/login/ui/user_adding_screen.h"
@@ -500,7 +500,7 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest,
                        OpenSearchResultOnPrimaryDisplay) {
   display::test::DisplayManagerTestApi display_manager(
       ash::ShellTestApi().display_manager());
-  display_manager.UpdateDisplay("400x300,500x500");
+  display_manager.UpdateDisplay("400x300,500x400");
 
   const display::Display& primary_display =
       display::Screen::GetScreen()->GetPrimaryDisplay();
@@ -567,7 +567,7 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest,
                        OpenSearchResultOnSecondaryDisplay) {
   display::test::DisplayManagerTestApi display_manager(
       ash::ShellTestApi().display_manager());
-  display_manager.UpdateDisplay("400x300,500x500");
+  display_manager.UpdateDisplay("400x300,500x400");
 
   const display::Display& secondary_display =
       display_manager.GetSecondaryDisplay();

@@ -11,7 +11,6 @@ import android.util.AttributeSet;
 import android.view.View;
 
 import androidx.annotation.VisibleForTesting;
-import androidx.core.content.ContextCompat;
 
 import org.chromium.base.Callback;
 import org.chromium.base.TraceEvent;
@@ -23,9 +22,6 @@ import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButtonDelegate;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.widget.RectProvider;
-
-// Vivaldi
-import org.chromium.build.BuildConfig;
 
 /**
  * The home button.
@@ -44,14 +40,6 @@ public class HomeButton extends ListMenuButton {
 
     public HomeButton(Context context, AttributeSet attrs) {
         super(context, attrs);
-
-        if (BuildConfig.IS_VIVALDI) {
-            final int homeButtonIcon = R.drawable.main_toolbar_home;
-            setImageDrawable(ContextCompat.getDrawable(context, homeButtonIcon));
-        } else {
-        final int homeButtonIcon = R.drawable.btn_toolbar_home;
-        setImageDrawable(ContextCompat.getDrawable(context, homeButtonIcon));
-        }
     }
 
     /**

@@ -86,6 +86,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
+#include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
@@ -205,6 +206,9 @@ bool HasTimelines(const StyleResolverState& state) {
     return true;
   }
   if (state.StyleBuilder().ViewTimelineName()) {
+    return true;
+  }
+  if (state.StyleBuilder().TimelineScope()) {
     return true;
   }
   if (ElementAnimations* element_animations = GetElementAnimations(state)) {
@@ -522,7 +526,8 @@ static inline ScopedStyleResolver* ScopedResolverFor(const Element& element) {
 // It matches rules from the ShadowHostRules of the ScopedStyleResolver
 // of the attached shadow root.
 static void MatchHostRules(const Element& element,
-                           ElementRuleCollector& collector) {
+                           ElementRuleCollector& collector,
+                           StyleRuleUsageTracker* tracker) {
   ShadowRoot* shadow_root = element.GetShadowRoot();
   ScopedStyleResolver* resolver =
       shadow_root ? shadow_root->GetScopedStyleResolver() : nullptr;
@@ -532,13 +537,17 @@ static void MatchHostRules(const Element& element,
   collector.ClearMatchedRules();
   collector.BeginAddingAuthorRulesForTreeScope(resolver->GetTreeScope());
   resolver->CollectMatchingShadowHostRules(collector);
-  collector.SortAndTransferMatchedRules();
+  collector.SortAndTransferMatchedRules(/*is_vtt_embedded_style=*/false,
+                                        tracker);
   collector.FinishAddingAuthorRulesForTreeScope();
 }
 
-static void MatchSlottedRules(const Element&, ElementRuleCollector&);
+static void MatchSlottedRules(const Element&,
+                              ElementRuleCollector&,
+                              StyleRuleUsageTracker* tracker);
 static void MatchSlottedRulesForUAHost(const Element& element,
-                                       ElementRuleCollector& collector) {
+                                       ElementRuleCollector& collector,
+                                       StyleRuleUsageTracker* tracker) {
   if (element.ShadowPseudoId() !=
       shadow_element_names::kPseudoInputPlaceholder) {
     return;
@@ -566,7 +575,7 @@ static void MatchSlottedRulesForUAHost(const Element& element,
   // Here we need to match the ::slotted rule from the #host shadow tree where
   // the input is slotted on the placeholder element.
   DCHECK(element.OwnerShadowHost());
-  MatchSlottedRules(*element.OwnerShadowHost(), collector);
+  MatchSlottedRules(*element.OwnerShadowHost(), collector, tracker);
 }
 
 // Matches `::slotted` selectors. It matches rules in the element's slot's
@@ -574,8 +583,9 @@ static void MatchSlottedRulesForUAHost(const Element& element,
 // slot's scope and so on. The result is that it considers a chain of scopes
 // descending from the element's own scope.
 static void MatchSlottedRules(const Element& element,
-                              ElementRuleCollector& collector) {
-  MatchSlottedRulesForUAHost(element, collector);
+                              ElementRuleCollector& collector,
+                              StyleRuleUsageTracker* tracker) {
+  MatchSlottedRulesForUAHost(element, collector, tracker);
   HeapVector<std::pair<Member<HTMLSlotElement>, Member<ScopedStyleResolver>>>
       resolvers;
   {
@@ -597,7 +607,8 @@ static void MatchSlottedRules(const Element& element,
     collector.ClearMatchedRules();
     collector.BeginAddingAuthorRulesForTreeScope(slot->GetTreeScope());
     resolver->CollectMatchingSlottedRules(collector);
-    collector.SortAndTransferMatchedRules();
+    collector.SortAndTransferMatchedRules(/*is_vtt_embedded_style=*/false,
+                                          tracker);
     collector.FinishAddingAuthorRulesForTreeScope();
   }
 }
@@ -613,7 +624,8 @@ const static TextTrack* GetTextTrackFromElement(const Element& element) {
 }
 
 static void MatchVTTRules(const Element& element,
-                          ElementRuleCollector& collector) {
+                          ElementRuleCollector& collector,
+                          StyleRuleUsageTracker* tracker) {
   const TextTrack* text_track = GetTextTrackFromElement(element);
   if (!text_track) {
     return;
@@ -633,7 +645,8 @@ static void MatchVTTRules(const Element& element,
         style_sheet_index++;
       }
     }
-    collector.SortAndTransferMatchedRules(true /* is_vtt_embedded_style */);
+    collector.SortAndTransferMatchedRules(true /* is_vtt_embedded_style */,
+                                          tracker);
   }
 }
 
@@ -641,18 +654,20 @@ static void MatchVTTRules(const Element& element,
 // boundaries during matching, like for :host-context.
 static void MatchElementScopeRules(const Element& element,
                                    ScopedStyleResolver* element_scope_resolver,
-                                   ElementRuleCollector& collector) {
+                                   ElementRuleCollector& collector,
+                                   StyleRuleUsageTracker* tracker) {
   if (element_scope_resolver) {
     collector.ClearMatchedRules();
     collector.BeginAddingAuthorRulesForTreeScope(
         element_scope_resolver->GetTreeScope());
     element_scope_resolver->CollectMatchingElementScopeRules(collector);
-    collector.SortAndTransferMatchedRules();
+    collector.SortAndTransferMatchedRules(/*is_vtt_embedded_style=*/false,
+                                          tracker);
   } else {
     collector.BeginAddingAuthorRulesForTreeScope(element.GetTreeScope());
   }
 
-  MatchVTTRules(element, collector);
+  MatchVTTRules(element, collector, tracker);
   if (element.IsStyledElement() && element.InlineStyle() &&
       collector.GetPseudoId() == kPseudoIdNone) {
     // Do not add styles depending on style attributes to the
@@ -726,7 +741,8 @@ void StyleResolver::MatchPseudoPartRules(const Element& part_matching_element,
       collector.BeginAddingAuthorRulesForTreeScope(resolver->GetTreeScope());
       resolver->CollectMatchingPartPseudoRules(collector, current_names,
                                                for_shadow_pseudo);
-      collector.SortAndTransferMatchedRules();
+      collector.SortAndTransferMatchedRules(/*is_vtt_embedded_style=*/false,
+                                            tracker_);
       collector.FinishAddingAuthorRulesForTreeScope();
     }
 
@@ -749,16 +765,17 @@ void StyleResolver::MatchAuthorRules(
     const Element& element,
     ScopedStyleResolver* element_scope_resolver,
     ElementRuleCollector& collector) {
-  MatchHostRules(element, collector);
-  MatchSlottedRules(element, collector);
-  MatchElementScopeRules(element, element_scope_resolver, collector);
+  MatchHostRules(element, collector, tracker_);
+  MatchSlottedRules(element, collector, tracker_);
+  MatchElementScopeRules(element, element_scope_resolver, collector, tracker_);
   MatchPseudoPartRules(element, collector);
 }
 
 void StyleResolver::MatchUserRules(ElementRuleCollector& collector) {
   collector.ClearMatchedRules();
   GetDocument().GetStyleEngine().CollectMatchingUserRules(collector);
-  collector.SortAndTransferMatchedRules();
+  collector.SortAndTransferMatchedRules(/*is_vtt_embedded_style=*/false,
+                                        tracker_);
   collector.FinishAddingUserRules();
 }
 
@@ -795,6 +812,9 @@ void StyleResolver::ForEachUARulesForElement(const Element& element,
       func(default_style_sheets.DefaultSVGStyle());
     } else if (element.namespaceURI() == mathml_names::kNamespaceURI) {
       func(default_style_sheets.DefaultMathMLStyle());
+    }
+    if (Fullscreen::HasFullscreenElements()) {
+      func(default_style_sheets.DefaultFullscreenStyle());
     }
   } else {
     func(default_style_sheets.DefaultPrintStyle());
@@ -834,7 +854,7 @@ void StyleResolver::MatchUARules(const Element& element,
 
   MatchRequest match_request;
   auto func = [&match_request](RuleSet* rules) {
-    match_request.AddRuleset(rules, /*style_sheet=*/nullptr);
+    match_request.AddRuleset(rules);
   };
   ForEachUARulesForElement(element, &collector, func);
 
@@ -850,7 +870,8 @@ void StyleResolver::MatchRuleSets(ElementRuleCollector& collector,
                                   const MatchRequest& match_request) {
   collector.ClearMatchedRules();
   collector.CollectMatchingRules(match_request);
-  collector.SortAndTransferMatchedRules();
+  collector.SortAndTransferMatchedRules(/*is_vtt_embedded_style=*/false,
+                                        tracker_);
 }
 
 void StyleResolver::MatchPresentationalHints(StyleResolverState& state,
@@ -1389,10 +1410,6 @@ void StyleResolver::ApplyBaseStyleNoCache(
         style_request.matching_behavior != kMatchAllRulesExcludingSMIL);
   }
 
-  if (tracker_) {
-    AddMatchedRulesToTracker(collector);
-  }
-
   const MatchResult& match_result = collector.MatchedResult();
 
   if (style_request.IsPseudoStyleRequest()) {
@@ -1430,14 +1447,17 @@ void StyleResolver::ApplyBaseStyleNoCache(
   if (match_result.HasFlag(MatchFlag::kAffectedByActive)) {
     state.StyleBuilder().SetAffectedByActive();
   }
-  if (match_result.HasFlag(MatchFlag::kAffectedByInitial)) {
-    state.StyleBuilder().SetIsPseudoInitialStyle();
+  if (match_result.HasFlag(MatchFlag::kAffectedByStartingStyle)) {
+    state.StyleBuilder().SetIsStartingStyle();
   }
   if (match_result.DependsOnSizeContainerQueries()) {
     state.StyleBuilder().SetDependsOnSizeContainerQueries(true);
   }
   if (match_result.DependsOnStyleContainerQueries()) {
     state.StyleBuilder().SetDependsOnStyleContainerQueries(true);
+  }
+  if (match_result.DependsOnStickyContainerQueries()) {
+    state.StyleBuilder().SetDependsOnStickyContainerQueries(true);
   }
   if (match_result.FirstLineDependsOnSizeContainerQueries()) {
     state.StyleBuilder().SetFirstLineDependsOnSizeContainerQueries(true);
@@ -2229,6 +2249,7 @@ FilterOperations StyleResolver::ComputeFilterOperations(
                            nullptr /* StyleRecalcContext */,
                            StyleRequest(parent.get()));
 
+  GetDocument().GetStyleEngine().UpdateViewportSize();
   state.SetStyle(*parent);
 
   StyleBuilder::ApplyProperty(GetCSSPropertyFilter(), state,
@@ -2346,7 +2367,7 @@ void StyleResolver::CascadeAndApplyMatchedProperties(StyleResolverState& state,
 }
 
 void StyleResolver::ApplyCallbackSelectors(StyleResolverState& state) {
-  StyleRuleList* rules = CollectMatchingRulesFromRuleSet(
+  StyleRuleList* rules = CollectMatchingRulesFromUnconnectedRuleSet(
       state, GetDocument().GetStyleEngine().WatchedSelectorsRuleSet(),
       /*scope=*/nullptr);
   if (!rules) {
@@ -2359,7 +2380,7 @@ void StyleResolver::ApplyCallbackSelectors(StyleResolverState& state) {
 
 void StyleResolver::ApplyDocumentRulesSelectors(StyleResolverState& state,
                                                 ContainerNode* scope) {
-  StyleRuleList* rules = CollectMatchingRulesFromRuleSet(
+  StyleRuleList* rules = CollectMatchingRulesFromUnconnectedRuleSet(
       state, GetDocument().GetStyleEngine().DocumentRulesSelectorsRuleSet(),
       scope);
   if (!rules) {
@@ -2370,7 +2391,7 @@ void StyleResolver::ApplyDocumentRulesSelectors(StyleResolverState& state,
   }
 }
 
-StyleRuleList* StyleResolver::CollectMatchingRulesFromRuleSet(
+StyleRuleList* StyleResolver::CollectMatchingRulesFromUnconnectedRuleSet(
     StyleResolverState& state,
     RuleSet* rule_set,
     ContainerNode* scope) {
@@ -2382,14 +2403,14 @@ StyleRuleList* StyleResolver::CollectMatchingRulesFromRuleSet(
   ElementRuleCollector collector(state.ElementContext(), StyleRecalcContext(),
                                  selector_filter_, match_result,
                                  state.StyleBuilder().InsideLink());
+  collector.SetMatchingRulesFromNoStyleSheet(true);
   collector.SetMode(SelectorChecker::kCollectingStyleRules);
   MatchRequest match_request(rule_set, scope);
   collector.CollectMatchingRules(match_request);
-  collector.SortAndTransferMatchedRules();
+  collector.SortAndTransferMatchedRules(/*is_vtt_embedded_style=*/false,
+                                        tracker_);
+  collector.SetMatchingRulesFromNoStyleSheet(false);
 
-  if (tracker_) {
-    AddMatchedRulesToTracker(collector);
-  }
   return collector.MatchedStyleRuleList();
 }
 
@@ -2409,6 +2430,7 @@ Font StyleResolver::ComputeFont(Element& element,
   StyleResolverState state(GetDocument(), element,
                            nullptr /* StyleRecalcContext */,
                            StyleRequest(&style));
+  GetDocument().GetStyleEngine().UpdateViewportSize();
   state.SetStyle(style);
   if (const ComputedStyle* parent_style = element.GetComputedStyle()) {
     state.SetParentStyle(parent_style);
@@ -2725,6 +2747,18 @@ void StyleResolver::PropagateStyleToViewport() {
                    SetForcedColorAdjust, EForcedColorAdjust::kAuto);
   }
 
+  // scroll-start
+  {
+    PROPAGATE_FROM(document_element_style, ScrollStartBlock,
+                   SetScrollStartBlock, ScrollStartData());
+    PROPAGATE_FROM(document_element_style, ScrollStartInline,
+                   SetScrollStartInline, ScrollStartData());
+    PROPAGATE_FROM(document_element_style, ScrollStartX, SetScrollStartX,
+                   ScrollStartData());
+    PROPAGATE_FROM(document_element_style, ScrollStartY, SetScrollStartY,
+                   ScrollStartData());
+  }
+
   changed |= PropagateScrollSnapStyleToViewport(
       GetDocument(), document_element_style, new_viewport_style_builder);
 
@@ -2925,6 +2959,7 @@ scoped_refptr<const ComputedStyle> StyleResolver::ResolvePositionFallbackStyle(
   StyleRuleTry* try_rule = position_fallback_rule->TryRules()[index];
   StyleResolverState state(GetDocument(), element);
   state.SetStyle(base_style);
+  state.SetIsResolvingPositionFallbackStyle();
   const CSSPropertyValueSet& properties = try_rule->Properties();
 
   STACK_UNINITIALIZED StyleCascade cascade(state);

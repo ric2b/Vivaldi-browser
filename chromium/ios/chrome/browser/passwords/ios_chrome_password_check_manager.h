@@ -15,7 +15,7 @@
 #include "components/password_manager/core/browser/ui/credential_utils.h"
 #include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 
 class IOSChromePasswordCheckManager;
 namespace {
@@ -88,7 +88,8 @@ class IOSChromePasswordCheckManager
   ~IOSChromePasswordCheckManager() override;
 
   // password_manager::SavedPasswordsPresenter::Observer:
-  void OnSavedPasswordsChanged() override;
+  void OnSavedPasswordsChanged(
+      const password_manager::PasswordStoreChangeList& changes) override;
 
   // password_manager::InsecureCredentialsManager::Observer:
   void OnInsecureCredentialsChanged() override;
@@ -102,6 +103,9 @@ class IOSChromePasswordCheckManager
   void OnWeakOrReuseCheckFinished();
 
   void NotifyPasswordCheckStatusChanged();
+
+  // Logs counts of insecure credentials after each password check.
+  void LogInsecureCredentialsCountMetrics();
 
   // Remembers whether a password check is running right now.
   bool is_check_running_ = false;

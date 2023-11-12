@@ -11,7 +11,6 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.Card
 import static org.chromium.chrome.browser.tasks.tab_management.TabProperties.CLOSE_BUTTON_DESCRIPTION_STRING;
 import static org.chromium.chrome.browser.tasks.tab_management.TabProperties.TAB_ID;
 
-import android.app.Activity;
 import android.content.ComponentCallbacks;
 import android.content.Context;
 import android.content.res.ColorStateList;
@@ -41,7 +40,6 @@ import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
@@ -96,9 +94,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+// Vivaldi
+import android.app.Activity;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
-import org.vivaldi.browser.tabmodel.VivaldiTabModelFilterProvider;
+import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.vivaldi.browser.tasks.tab_management.TabSwitcherView;
+
 
 /**
  * Mediator for business logic for the tab grid. This class should be initialized with a list of
@@ -331,6 +332,7 @@ class TabListMediator {
     private final TabListFaviconProvider mTabListFaviconProvider;
     private final PriceWelcomeMessageController mPriceWelcomeMessageController;
 
+    private Size mDefaultGridCardSize;
     private String mComponentName;
     private ThumbnailProvider mThumbnailProvider;
     private boolean mActionsOnAllRelatedTabs;
@@ -577,7 +579,9 @@ class TabListMediator {
                     // undo, identify the related TabIds and determine newIndex based on if any of
                     // the related ids are present in model.
                     newIndex = getIndexForTabWithRelatedTabs(tab);
-                    model.updateTabListModelIdForGroup(tab, newIndex);
+                    if (newIndex != Tab.INVALID_TAB_ID) {
+                        model.updateTabListModelIdForGroup(tab, newIndex);
+                    }
                 }
 
                 mLastSelectedTabListModelIndex = oldIndex;
@@ -794,6 +798,20 @@ class TabListMediator {
                     .OnLongPressTabItemEventListener onLongPressTabItemEventListener) {
         mTabGridItemTouchHelperCallback.setOnLongPressTabItemEventListener(
                 onLongPressTabItemEventListener);
+    }
+
+    /**
+     * @param size The default size to use for any new Tab cards.
+     */
+    void setDefaultGridCardSize(Size size) {
+        mDefaultGridCardSize = size;
+    }
+
+    /**
+     * @return The default size to use for any tab cards.
+     */
+    Size getDefaultGridCardSize() {
+        return mDefaultGridCardSize;
     }
 
     private void selectTab(int oldIndex, int newIndex) {
@@ -1186,32 +1204,6 @@ class TabListMediator {
         return position != TabModel.INVALID_TAB_INDEX && position < mModel.size();
     }
 
-    /**
-     * Hide the blue border for selected tab for the Tab-to-Grid resizing stage.
-     * The selected border should re-appear in the final fading-in stage.
-     * TODO(https://crbug.com/1413213): Revist this it is very inefficient for multi-thumbnails.
-     */
-    void prepareTabSwitcherView() {
-        if (!TabUiFeatureUtilities.isTabToGtsAnimationEnabled(mContext)
-                || !mTabModelSelector.isTabStateInitialized()) {
-            return;
-        }
-
-        assert mVisible;
-        int selectedTabCount = 0;
-        int tabsCount = 0;
-        for (int i = 0; i < mModel.size(); i++) {
-            if (mModel.get(i).model.get(CARD_TYPE) != TAB) continue;
-
-            if (mModel.get(i).model.get(TabProperties.IS_SELECTED)) selectedTabCount++;
-            mModel.get(i).model.set(TabProperties.IS_SELECTED, false);
-            tabsCount += 1;
-        }
-        assert (selectedTabCount == 1 || tabsCount == 0)
-            : "There should be exactly one selected tab or no tabs at all when calling "
-              + "TabListMediator.prepareOverview()";
-    }
-
     private boolean areTabsUnchanged(@Nullable List<PseudoTab> tabs) {
         int tabsCount = 0;
         for (int i = 0; i < mModel.size(); i++) {
@@ -1375,8 +1367,7 @@ class TabListMediator {
                 tabSelectedListener = mTabSelectedListener;
             }
         }
-        boolean selectionStateChanged =
-                mModel.get(index).model.get(TabProperties.IS_SELECTED) != isSelected;
+
         mModel.get(index).model.set(TabProperties.TAB_SELECTED_LISTENER, tabSelectedListener);
         mModel.get(index).model.set(TabProperties.IS_SELECTED, isSelected);
         mModel.get(index).model.set(TabProperties.SHOULD_SHOW_PRICE_DROP_TOOLTIP, false);
@@ -1398,12 +1389,14 @@ class TabListMediator {
         boolean forceUpdate = isSelected && !quickMode;
         boolean forceUpdateLastSelected =
                 mActionsOnAllRelatedTabs && index == mLastSelectedTabListModelIndex && !quickMode;
-        boolean forceUpdateColorForSelectableGroup = selectionStateChanged
-                && PseudoTab.getRelatedTabs(mContext, pseudoTab, mTabModelSelector).size() > 1;
+        // TODO(crbug.com/1457653): Fetching thumbnail for group is expansive, we should consider to
+        // improve it.
+        boolean forceUpdateGroupTab =
+                PseudoTab.getRelatedTabs(mContext, pseudoTab, mTabModelSelector).size() > 1;
         if (mThumbnailProvider != null && mVisible
                 && (mModel.get(index).model.get(TabProperties.THUMBNAIL_FETCHER) == null
                         || forceUpdate || isUpdatingId || forceUpdateLastSelected
-                        || forceUpdateColorForSelectableGroup)) {
+                        || forceUpdateGroupTab)) {
             boolean isSelectable = mUiType == UiType.SELECTABLE;
             ThumbnailFetcher callback = new ThumbnailFetcher(mThumbnailProvider, pseudoTab.getId(),
                     (forceUpdate || forceUpdateLastSelected) && !isSelectable,
@@ -1437,8 +1430,7 @@ class TabListMediator {
         mComponentCallbacks = new ComponentCallbacks() {
             @Override
             public void onConfigurationChanged(Configuration newConfig) {
-                updateSpanCount(
-                        manager, newConfig.orientation, newConfig.screenWidthDp);
+                updateSpanCount(manager, newConfig.screenWidthDp);
                 if (mMode == TabListMode.GRID && mUiType != UiType.SELECTABLE) updateLayout();
             }
 
@@ -1452,17 +1444,17 @@ class TabListMediator {
     /**
      * Update the grid layout span count and span size lookup base on orientation.
      * @param manager     The {@link GridLayoutManager} used to update the span count.
-     * @param orientation The orientation based on which we update the span count.
      * @param screenWidthDp The screnWidth based on which we update the span count.
+     * @return whether the span count changed.
      */
-    void updateSpanCount(
-            GridLayoutManager manager, int orientation, int screenWidthDp) {
-        int spanCount = getSpanCount(orientation, screenWidthDp);
+    boolean updateSpanCount(GridLayoutManager manager, int screenWidthDp) {
+        final int oldSpanCount = manager.getSpanCount();
+        int newSpanCount = getSpanCount(screenWidthDp);
 
         // Vivaldi
-        spanCount = calculateGridSpanCount(orientation);
+        newSpanCount = calculateGridSpanCount();
 
-        manager.setSpanCount(spanCount);
+        manager.setSpanCount(newSpanCount);
         manager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
             @Override
             public int getSpanSize(int position) {
@@ -1476,6 +1468,7 @@ class TabListMediator {
                 return 1;
             }
         });
+        return oldSpanCount != newSpanCount;
     }
 
     /**
@@ -1517,7 +1510,7 @@ class TabListMediator {
      * When in multi-window mode on phone, the span count is fixed to 2 to keep tab card size
      * reasonable.
      */
-    private int getSpanCount(int orientation, int screenWidthDp) {
+    private int getSpanCount(int screenWidthDp) {
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext)
                 && TabUiFeatureUtilities.isGridTabSwitcherEnabled(mContext)) {
             return screenWidthDp < TabListCoordinator.MAX_SCREEN_WIDTH_COMPACT_DP
@@ -1526,8 +1519,7 @@ class TabListMediator {
                             ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_MEDIUM
                             : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_LARGE;
         }
-        return orientation == Configuration.ORIENTATION_PORTRAIT
-                        || MultiWindowUtils.getInstance().isInMultiWindowMode((Activity) mContext)
+        return screenWidthDp < TabListCoordinator.MAX_SCREEN_WIDTH_COMPACT_DP
                 ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_COMPACT
                 : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_MEDIUM;
     }
@@ -1731,6 +1723,10 @@ class TabListMediator {
 
         updateFaviconForTab(pseudoTab, null, null);
 
+        if (mThumbnailProvider != null && mDefaultGridCardSize != null) {
+            tabInfo.set(TabProperties.GRID_CARD_SIZE,
+                    new Size(mDefaultGridCardSize.getWidth(), mDefaultGridCardSize.getHeight()));
+        }
         if (mThumbnailProvider != null && mVisible) {
             boolean isSelectable = mUiType == UiType.SELECTABLE;
             ThumbnailFetcher callback = new ThumbnailFetcher(mThumbnailProvider, pseudoTab.getId(),
@@ -1890,7 +1886,8 @@ class TabListMediator {
         };
 
         if (mActionsOnAllRelatedTabs && relatedTabList.size() > 1) {
-            if (!TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)) {
+            if (mMode != TabListMode.LIST
+                    || !TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)) {
                 // For tab group card in grid tab switcher, the favicon is set to be null.
                 mModel.get(modelIndex).model.set(TabProperties.FAVICON, null);
                 mModel.get(modelIndex).model.set(TabProperties.FAVICON_FETCHER, null);
@@ -1905,7 +1902,7 @@ class TabListMediator {
                 urls.add(relatedTabList.get(i).getUrl());
             }
 
-            // For tab group card in grid tab switcher, the favicon is the composed favicon.
+            // For tab group card in list tab switcher, the favicon is the composed favicon.
             mModel.get(modelIndex)
                     .model.set(TabProperties.FAVICON_FETCHER,
                             mTabListFaviconProvider.getComposedFaviconImageFetcher(
@@ -2105,7 +2102,8 @@ class TabListMediator {
     }
 
     /** Vivaldi: Calculates the tab switcher grid layout span depending on device size */
-    public int calculateGridSpanCount(int orientation) {
+    public int calculateGridSpanCount() {
+        int orientation = mContext.getResources().getConfiguration().orientation;
         int spanCount = orientation == Configuration.ORIENTATION_PORTRAIT
                 ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_COMPACT
                 : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_MEDIUM;

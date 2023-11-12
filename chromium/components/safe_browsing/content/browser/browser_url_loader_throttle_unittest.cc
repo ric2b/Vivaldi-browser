@@ -11,6 +11,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/time/time.h"
+#include "components/safe_browsing/core/browser/hashprefix_realtime/hash_realtime_utils.h"
 #include "components/safe_browsing/core/browser/safe_browsing_url_checker_impl.h"
 #include "components/safe_browsing/core/browser/url_checker_delegate.h"
 #include "content/public/test/browser_task_environment.h"
@@ -115,8 +116,8 @@ class MockSafeBrowsingUrlChecker : public SafeBrowsingUrlCheckerImpl {
       UnsafeResource::RenderProcessId render_process_id,
       UnsafeResource::RenderFrameId render_frame_id,
       UnsafeResource::FrameTreeNodeId frame_tree_node_id,
-      bool real_time_lookup_enabled,
-      bool can_rt_check_subresource_url,
+      bool url_real_time_lookup_enabled,
+      bool can_urt_check_subresource_url,
       bool can_check_db,
       bool can_check_high_confidence_allowlist,
       std::string url_lookup_service_metric_suffix,
@@ -127,7 +128,8 @@ class MockSafeBrowsingUrlChecker : public SafeBrowsingUrlCheckerImpl {
       base::WeakPtr<HashRealTimeService> hash_realtime_service_on_ui,
       scoped_refptr<SafeBrowsingLookupMechanismExperimenter>
           mechanism_experimenter,
-      bool is_mechanism_experiment_allowed)
+      bool is_mechanism_experiment_allowed,
+      hash_realtime_utils::HashRealTimeSelection hash_realtime_selection)
       : SafeBrowsingUrlCheckerImpl(headers,
                                    load_flags,
                                    request_destination,
@@ -137,8 +139,8 @@ class MockSafeBrowsingUrlChecker : public SafeBrowsingUrlCheckerImpl {
                                    render_process_id,
                                    render_frame_id,
                                    frame_tree_node_id,
-                                   real_time_lookup_enabled,
-                                   can_rt_check_subresource_url,
+                                   url_real_time_lookup_enabled,
+                                   can_urt_check_subresource_url,
                                    can_check_db,
                                    can_check_high_confidence_allowlist,
                                    url_lookup_service_metric_suffix,
@@ -148,7 +150,8 @@ class MockSafeBrowsingUrlChecker : public SafeBrowsingUrlCheckerImpl {
                                    webui_delegate,
                                    hash_realtime_service_on_ui,
                                    mechanism_experimenter,
-                                   is_mechanism_experiment_allowed) {}
+                                   is_mechanism_experiment_allowed,
+                                   hash_realtime_selection) {}
 
   // Returns the CallbackInfo that was previously added in |AddCallbackInfo|.
   // It will crash if |AddCallbackInfo| was not called.
@@ -167,8 +170,8 @@ class MockSafeBrowsingUrlChecker : public SafeBrowsingUrlCheckerImpl {
                               /*proceed=*/callback_info.should_proceed,
                               /*show_interstitial=*/
                               callback_info.should_show_interstitial,
-                              /*did_perform_real_time_check=*/false,
-                              /*did_check_allowlist=*/false);
+                              /*did_perform_url_real_time_check=*/false,
+                              /*did_check_url_real_time_allowlist=*/false);
     }
   }
 
@@ -180,8 +183,8 @@ class MockSafeBrowsingUrlChecker : public SafeBrowsingUrlCheckerImpl {
              /*proceed=*/callback_infos_[index].should_proceed,
              /*show_interstitial=*/
              callback_infos_[index].should_show_interstitial,
-             /*did_perform_real_time_check=*/false,
-             /*did_check_allowlist=*/false);
+             /*did_perform_url_real_time_check=*/false,
+             /*did_check_url_real_time_allowlist=*/false);
   }
 
   // Informs how the callback in |CheckUrl| should be handled. The info applies
@@ -225,7 +228,9 @@ class SBBrowserUrlLoaderThrottleTest : public ::testing::Test {
     throttle_ = BrowserURLLoaderThrottle::Create(
         std::move(url_checker_delegate_getter), mock_web_contents_getter.Get(),
         /*frame_tree_node_id=*/0, /*url_lookup_service=*/nullptr,
-        /*hash_realtime_service=*/nullptr, /*ping_manager=*/nullptr);
+        /*hash_realtime_service=*/nullptr, /*ping_manager=*/nullptr,
+        /*hash_realtime_selection=*/
+        hash_realtime_utils::HashRealTimeSelection::kNone);
 
     url_checker_delegate_ = base::MakeRefCounted<MockUrlCheckerDelegate>();
     throttle_delegate_ = std::make_unique<MockThrottleDelegate>();
@@ -238,8 +243,8 @@ class SBBrowserUrlLoaderThrottleTest : public ::testing::Test {
             mock_web_contents_getter.Get(), UnsafeResource::kNoRenderProcessId,
             UnsafeResource::kNoRenderFrameId,
             UnsafeResource::kNoFrameTreeNodeId,
-            /*real_time_lookup_enabled=*/false,
-            /*can_rt_check_subresource_url=*/false, /*can_check_db=*/true,
+            /*url_real_time_lookup_enabled=*/false,
+            /*can_urt_check_subresource_url=*/false, /*can_check_db=*/true,
             /*can_check_high_confidence_allowlist=*/true,
             /*url_lookup_service_metric_suffix=*/"",
             /*last_committed_url=*/GURL(),
@@ -248,7 +253,9 @@ class SBBrowserUrlLoaderThrottleTest : public ::testing::Test {
             /*webui_delegate_=*/nullptr,
             /*hash_realtime_service_on_ui=*/nullptr,
             /*mechanism_experimenter=*/nullptr,
-            /*is_mechanism_experiment_allowed=*/false);
+            /*is_mechanism_experiment_allowed=*/false,
+            /*hash_realtime_selection=*/
+            hash_realtime_utils::HashRealTimeSelection::kNone);
     url_checker_ = url_checker.get();
 
     throttle_->GetSBCheckerForTesting()->SetUrlCheckerForTesting(
@@ -308,7 +315,7 @@ class SBBrowserUrlLoaderThrottleTest : public ::testing::Test {
   std::unique_ptr<BrowserURLLoaderThrottle> throttle_;
   // Owned by |throttle_|. May be deleted before the test completes. Prefer
   // setting it up at the start of the test.
-  raw_ptr<MockSafeBrowsingUrlChecker> url_checker_;
+  raw_ptr<MockSafeBrowsingUrlChecker, DanglingUntriaged> url_checker_;
   scoped_refptr<MockUrlCheckerDelegate> url_checker_delegate_;
   std::unique_ptr<MockThrottleDelegate> throttle_delegate_;
 };

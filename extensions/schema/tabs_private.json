@@ -328,28 +328,6 @@
         }
       },
       {
-        "name": "getCurrentSpatnavRect",
-        "type": "function",
-        "description": "Get the currently focused spatnav rect",
-        "parameters": [
-          {
-            "name": "tabId",
-            "type": "integer",
-            "minimum": 0
-          }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "optional": "true",
-          "parameters": [
-            {
-              "name": "currentRect",
-              "$ref": "NavigationRect"
-            }
-          ]
-        }
-      },
-      {
         "name": "moveSpatnavRect",
         "type": "function",
         "description": "Move current spatnav rect in |direction|",

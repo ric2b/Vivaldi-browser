@@ -359,7 +359,7 @@ class RasterImplementation::PaintOpSerializer {
 
  private:
   const raw_ptr<RasterImplementation> ri_;
-  raw_ptr<char, AllowPtrArithmetic> buffer_;
+  raw_ptr<char, AllowPtrArithmetic | DanglingUntriaged> buffer_;
   const raw_ptr<cc::DecodeStashingImageProvider> stashing_image_provider_;
   const raw_ptr<TransferCacheSerializeHelperImpl> transfer_cache_helper_;
   raw_ptr<ClientFontManager> font_manager_;
@@ -1733,7 +1733,8 @@ void RasterImplementation::ReadbackYUVPixelsAsync(
   yuv_request_queue_.push(std::move(request));
   SignalQuery(query,
               base::BindOnce(&RasterImplementation::OnAsyncYUVReadbackDone,
-                             base::Unretained(this), request_ptr));
+                             base::Unretained(this),
+                             base::UnsafeDanglingUntriaged(request_ptr)));
 }
 
 void RasterImplementation::OnAsyncYUVReadbackDone(

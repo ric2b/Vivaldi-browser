@@ -4,8 +4,11 @@
 
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_app_interface.h"
 
+#import <WebKit/WebKit.h>
+
 #import "base/command_line.h"
 #import "base/containers/contains.h"
+#import "base/files/file.h"
 #import "base/files/file_util.h"
 #import "base/ios/ios_util.h"
 #import "base/json/json_string_value_serializer.h"
@@ -29,19 +32,22 @@
 #import "components/variations/variations_associated_data.h"
 #import "components/variations/variations_ids_provider.h"
 #import "ios/chrome/app/main_controller.h"
-#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/autofill/personal_data_manager_factory.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
 #import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/default_browser/utils_test_support.h"
-#import "ios/chrome/browser/main/browser_provider.h"
+#import "ios/chrome/browser/first_run/first_run.h"
 #import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/search_engines/search_engines_util.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -53,7 +59,6 @@
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #import "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/test/app/bookmarks_test_util.h"
 #import "ios/chrome/test/app/browsing_data_test_util.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -147,8 +152,19 @@ NSString* SerializedValue(const base::Value* value) {
     return nil;
   }
 
+  [self killWebKitNetworkProcess];
   return testing::NSErrorWithLocalizedDescription(
       @"Clearing browser history timed out");
+}
+
++ (void)killWebKitNetworkProcess {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wundeclared-selector"
+  if (@available(iOS 15, *)) {
+    [[WKWebsiteDataStore defaultDataStore]
+        performSelector:@selector(_terminateNetworkProcess)];
+  }
+#pragma clang diagnostic pop
 }
 
 + (NSInteger)browsingHistoryEntryCountWithError:
@@ -244,6 +260,10 @@ NSString* SerializedValue(const base::Value* value) {
 
 + (NSUInteger)mainTabCount {
   return chrome_test_util::GetMainTabCount();
+}
+
++ (NSUInteger)inactiveTabCount {
+  return chrome_test_util::GetInactiveTabCount();
 }
 
 + (NSUInteger)incognitoTabCount {
@@ -691,8 +711,8 @@ NSString* SerializedValue(const base::Value* value) {
   return nil;
 }
 
-+ (void)signOutAndClearIdentities {
-  chrome_test_util::SignOutAndClearIdentities();
++ (void)signOutAndClearIdentitiesWithCompletion:(ProceduralBlock)completion {
+  chrome_test_util::SignOutAndClearIdentities(completion);
 }
 
 + (BOOL)hasIdentities {
@@ -1161,8 +1181,7 @@ NSString* SerializedValue(const base::Value* value) {
   TemplateURLService* service =
       ios::TemplateURLServiceFactory::GetForBrowserState(
           chrome_test_util::GetOriginalBrowserState());
-  return base::FeatureList::IsEnabled(kUseLensToSearchForImage) &&
-         ios::provider::IsLensSupported() &&
+  return ios::provider::IsLensSupported() &&
          ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET &&
          search_engines::SupportsSearchImageWithLens(service);
 }
@@ -1179,6 +1198,11 @@ NSString* SerializedValue(const base::Value* value) {
 + (BOOL)isUIButtonConfigurationEnabled {
   return IsUIButtonConfigurationEnabled();
 }
+
++ (BOOL)isSortingTabsByRecency {
+  return IsTabGridSortedByRecency();
+}
+
 #pragma mark - ContentSettings
 
 + (ContentSetting)popupPrefValue {
@@ -1431,6 +1455,23 @@ int watchRunNumber = 0;
   chrome_test_util::GetMainController().appState.shouldShowDefaultBrowserPromo =
       NO;
   LogUserInteractionWithFullscreenPromo();
+}
+
+#pragma mark - First Run Utilities
+
++ (void)writeFirstRunSentinel {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  FirstRun::RemoveSentinel();
+  base::File::Error fileError;
+  FirstRun::CreateSentinel(&fileError);
+  FirstRun::LoadSentinelInfo();
+}
+
++ (void)removeFirstRunSentinel {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  if (FirstRun::RemoveSentinel()) {
+    FirstRun::LoadSentinelInfo();
+  }
 }
 
 @end

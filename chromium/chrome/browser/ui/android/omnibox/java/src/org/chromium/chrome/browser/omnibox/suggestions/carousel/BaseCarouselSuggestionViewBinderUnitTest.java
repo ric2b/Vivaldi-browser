@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.omnibox.suggestions.carousel;
 
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -31,7 +32,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
@@ -55,7 +55,9 @@ import java.util.List;
 @Config(manifest = Config.NONE)
 public class BaseCarouselSuggestionViewBinderUnitTest {
     static final int SUGGESTION_VERTICAL_PADDING = 123;
+    static final int SUGGESTION_SMALLER_VERTICAL_PADDING = 67;
     static final int SUGGESTION_SMALL_BOTTOM_PADDING = 31;
+    static final int SUGGESTION_SMALLEST_VERTICAL_PADDING = 17;
 
     public @Rule TestRule mFeatures = new Features.JUnitProcessor();
 
@@ -76,11 +78,12 @@ public class BaseCarouselSuggestionViewBinderUnitTest {
 
     @Mock
     Resources mResources;
+    @Mock
+    private Context mContext;
 
     private ModelList mTiles;
     private PropertyModel mModel;
     private Configuration mConfiguration;
-    private Context mContext;
 
     @Before
     public void setUp() {
@@ -91,7 +94,6 @@ public class BaseCarouselSuggestionViewBinderUnitTest {
         mTiles = new ModelList();
         mConfiguration = new Configuration();
         mConfiguration.orientation = Configuration.ORIENTATION_PORTRAIT;
-        mContext = ContextUtils.getApplicationContext();
 
         when(mView.getHeaderTextView()).thenReturn(mHeaderTextView);
         when(mView.getHeaderView()).thenReturn(mHeaderView);
@@ -101,11 +103,18 @@ public class BaseCarouselSuggestionViewBinderUnitTest {
 
         when(mResources.getDimensionPixelSize(eq(R.dimen.omnibox_carousel_suggestion_padding)))
                 .thenReturn(SUGGESTION_VERTICAL_PADDING);
+        doReturn(SUGGESTION_SMALLER_VERTICAL_PADDING)
+                .when(mResources)
+                .getDimensionPixelSize(eq(R.dimen.omnibox_carousel_suggestion_padding_smaller));
+        doReturn(SUGGESTION_SMALLEST_VERTICAL_PADDING)
+                .when(mResources)
+                .getDimensionPixelSize(eq(R.dimen.omnibox_carousel_suggestion_padding_smallest));
         when(mResources.getDimensionPixelSize(
                      eq(R.dimen.omnibox_carousel_suggestion_small_bottom_padding)))
                 .thenReturn(SUGGESTION_SMALL_BOTTOM_PADDING);
         when(mResources.getConfiguration()).thenReturn(mConfiguration);
         when(mView.getContext()).thenReturn(mContext);
+        doReturn(mResources).when(mContext).getResources();
     }
 
     @Test
@@ -186,9 +195,33 @@ public class BaseCarouselSuggestionViewBinderUnitTest {
         verify(mHeaderView, times(1)).setVisibility(eq(View.GONE));
         verify(mHeaderView, times(2)).setVisibility(anyInt());
         verify(mView, times(1))
-                .setPaddingRelative(eq(0), eq(SUGGESTION_VERTICAL_PADDING), eq(0),
+                .setPaddingRelative(eq(0), eq(SUGGESTION_SMALLER_VERTICAL_PADDING), eq(0),
                         eq(SUGGESTION_SMALL_BOTTOM_PADDING));
         verify(mView, times(2)).setPaddingRelative(anyInt(), anyInt(), anyInt(), anyInt());
+    }
+
+    @Test
+    @Features.EnableFeatures({ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE})
+    public void headerTitle_visibilityChangeAltersTopPadding_smallerMargins() {
+        OmniboxFeatures.ENABLE_MODERNIZE_VISUAL_UPDATE_ON_TABLET.setForTesting(true);
+        OmniboxFeatures.MODERNIZE_VISUAL_UPDATE_SMALLER_MARGINS.setForTesting(true);
+
+        mModel.set(BaseCarouselSuggestionViewProperties.SHOW_TITLE, false);
+        verify(mView, times(1))
+                .setPaddingRelative(eq(0), eq(SUGGESTION_SMALLEST_VERTICAL_PADDING), eq(0),
+                        eq(SUGGESTION_SMALL_BOTTOM_PADDING));
+    }
+
+    @Test
+    @Features.EnableFeatures({ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE})
+    public void headerTitle_visibilityChangeAltersTopPadding_smallestMargins() {
+        OmniboxFeatures.ENABLE_MODERNIZE_VISUAL_UPDATE_ON_TABLET.setForTesting(true);
+        OmniboxFeatures.MODERNIZE_VISUAL_UPDATE_SMALLEST_MARGINS.setForTesting(true);
+
+        mModel.set(BaseCarouselSuggestionViewProperties.SHOW_TITLE, false);
+        verify(mView, times(1))
+                .setPaddingRelative(eq(0), eq(SUGGESTION_SMALLER_VERTICAL_PADDING), eq(0),
+                        eq(SUGGESTION_VERTICAL_PADDING));
     }
 
     /**

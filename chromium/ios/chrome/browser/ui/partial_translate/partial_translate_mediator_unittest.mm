@@ -13,16 +13,16 @@
 #import "components/sync_preferences/pref_service_syncable.h"
 #import "components/sync_preferences/testing_pref_service_syncable.h"
 #import "components/translate/core/browser/translate_pref_names.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/web_state_list/test/fake_web_state_list_delegate.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list_delegate.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/browser_container/edit_menu_alert_delegate.h"
 #import "ios/chrome/browser/web/chrome_web_client.h"
 #import "ios/chrome/browser/web_selection/web_selection_tab_helper.h"
-#import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/web_state_list/web_state_list_delegate.h"
-#import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #import "ios/chrome/test/providers/partial_translate/test_partial_translate.h"
 #import "ios/web/public/test/scoped_testing_web_client.h"
 #import "ios/web/public/test/web_state_test_util.h"
@@ -257,6 +257,10 @@ TEST_F(PartialTranslateMediatorTest, IncognitoSupportedSuccess) {
     // Partial translate not supported before iOS16.
     return;
   }
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      kIOSEditMenuPartialTranslate,
+      {{kIOSEditMenuPartialTranslateNoIncognitoParam, "false"}});
   PartialTranslateMediator* mediator = [[PartialTranslateMediator alloc]
         initWithWebStateList:&web_state_list_
       withBaseViewController:base_view_controller_
@@ -284,10 +288,6 @@ TEST_F(PartialTranslateMediatorTest, IncognitoNotSupported) {
     // Partial translate not supported before iOS16.
     return;
   }
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(
-      kIOSEditMenuPartialTranslate,
-      {{kIOSEditMenuPartialTranslateNoIncognitoParam, "true"}});
   PartialTranslateMediator* mediator = [[PartialTranslateMediator alloc]
         initWithWebStateList:&web_state_list_
       withBaseViewController:base_view_controller_

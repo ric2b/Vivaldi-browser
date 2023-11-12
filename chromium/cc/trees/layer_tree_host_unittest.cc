@@ -34,6 +34,7 @@
 #include "cc/layers/picture_layer.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/video_layer.h"
+#include "cc/layers/view_transition_content_layer.h"
 #include "cc/metrics/events_metrics_manager.h"
 #include "cc/metrics/ukm_smoothness_data.h"
 #include "cc/paint/image_animation_count.h"
@@ -82,12 +83,8 @@
 #include "components/viz/service/display/skia_output_surface.h"
 #include "components/viz/test/begin_frame_args_test.h"
 #include "components/viz/test/fake_output_surface.h"
-#include "components/viz/test/test_gles2_interface.h"
 #include "components/viz/test/test_raster_interface.h"
-#include "gpu/GLES2/gl2extchromium.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/khronos/GLES2/gl2.h"
-#include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
@@ -588,16 +585,16 @@ class LayerTreeHostContextCacheTest : public LayerTreeHostTest {
   std::unique_ptr<TestLayerTreeFrameSink> CreateLayerTreeFrameSink(
       const viz::RendererSettings& renderer_settings,
       double refresh_rate,
-      scoped_refptr<viz::ContextProvider> compositor_context_provider,
+      scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider)
       override {
-    // Create the main viz::ContextProvider with a MockContextSupport.
+    // Create the main viz::RasterContextProvider with a MockContextSupport.
     auto main_support = std::make_unique<MockContextSupport>();
     mock_main_context_support_ = main_support.get();
     auto test_main_context_provider =
-        viz::TestContextProvider::Create(std::move(main_support));
+        viz::TestContextProvider::CreateRaster(std::move(main_support));
 
-    // Create the main viz::ContextProvider with a MockContextSupport.
+    // Create the main viz::RasterContextProvider with a MockContextSupport.
     auto worker_support = std::make_unique<MockContextSupport>();
     mock_worker_context_support_ = worker_support.get();
     auto test_worker_context_provider =
@@ -625,8 +622,8 @@ class LayerTreeHostContextCacheTest : public LayerTreeHostTest {
                  void(bool aggressively_free_resources));
   };
 
-  raw_ptr<MockContextSupport> mock_main_context_support_;
-  raw_ptr<MockContextSupport> mock_worker_context_support_;
+  raw_ptr<MockContextSupport, DanglingUntriaged> mock_main_context_support_;
+  raw_ptr<MockContextSupport, DanglingUntriaged> mock_worker_context_support_;
 };
 
 // Test if the LTH successfully frees resources on the main/worker
@@ -1497,7 +1494,7 @@ class LayerTreeHostTestLayerListSurfaceDamage : public LayerTreeHostTest {
   }
 
  private:
-  raw_ptr<Layer> root_;
+  raw_ptr<Layer, DanglingUntriaged> root_;
   scoped_refptr<Layer> child_a_;
   scoped_refptr<Layer> child_b_;
   scoped_refptr<Layer> child_c_;
@@ -2148,10 +2145,12 @@ class LayerTreeHostTestEffectTreeSync : public LayerTreeHostTest {
         PostSetNeedsCommitToMainThread();
         break;
       case 1:
+        impl->sync_tree()->SetOpacityMutated(root->element_id(), 0.75f);
         EXPECT_EQ(node->opacity, 0.75f);
         PostSetNeedsCommitToMainThread();
         break;
       case 2:
+        impl->sync_tree()->SetOpacityMutated(root->element_id(), 0.75f);
         EXPECT_EQ(node->opacity, 0.75f);
         impl->sync_tree()->SetOpacityMutated(root->element_id(), 0.75f);
         PostSetNeedsCommitToMainThread();
@@ -2167,13 +2166,15 @@ class LayerTreeHostTestEffectTreeSync : public LayerTreeHostTest {
         PostSetNeedsCommitToMainThread();
         break;
       case 5:
+        impl->sync_tree()->SetFilterMutated(root->element_id(),
+                                            brightness_filter_);
         EXPECT_EQ(node->filters, brightness_filter_);
         PostSetNeedsCommitToMainThread();
         break;
       case 6:
-        EXPECT_EQ(node->filters, brightness_filter_);
         impl->sync_tree()->SetFilterMutated(root->element_id(),
                                             brightness_filter_);
+        EXPECT_EQ(node->filters, brightness_filter_);
         PostSetNeedsCommitToMainThread();
         break;
       case 7:
@@ -2257,12 +2258,13 @@ class LayerTreeHostTestTransformTreeSync : public LayerTreeHostTest {
         PostSetNeedsCommitToMainThread();
         break;
       case 1:
+        impl->sync_tree()->SetTransformMutated(layer->element_id(), rotate20);
         EXPECT_EQ(node->local, rotate20);
         PostSetNeedsCommitToMainThread();
         break;
       case 2:
-        EXPECT_EQ(node->local, rotate20);
         impl->sync_tree()->SetTransformMutated(layer->element_id(), rotate20);
+        EXPECT_EQ(node->local, rotate20);
         PostSetNeedsCommitToMainThread();
         break;
       case 3:
@@ -2569,7 +2571,7 @@ class LayerTreeHostTestGpuRasterDeviceSizeChanged : public LayerTreeHostTest {
   void SetUpUnboundContextProviders(
       viz::TestContextProvider* context_provider,
       viz::TestContextProvider* worker_provider) override {
-    context_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+    context_provider->UnboundTestRasterInterface()->set_gpu_rasterization(true);
     worker_provider->UnboundTestRasterInterface()->set_gpu_rasterization(true);
   }
 
@@ -2791,6 +2793,8 @@ class LayerTreeHostTestRasterColorSpaceChange : public LayerTreeHostTest {
   void SetupTree() override {
     space1_ = gfx::DisplayColorSpaces(gfx::ColorSpace::CreateXYZD50());
     space2_ = gfx::DisplayColorSpaces(gfx::ColorSpace::CreateSRGB());
+    space2_with_hdr_ = space2_;
+    space2_with_hdr_.SetHDRMaxLuminanceRelative(2.f);
 
     root_layer_ = Layer::Create();
     root_layer_->SetBounds(gfx::Size(10, 20));
@@ -2813,6 +2817,7 @@ class LayerTreeHostTestRasterColorSpaceChange : public LayerTreeHostTest {
     EXPECT_EQ(DRAW_SUCCESS, draw_result);
 
     int source_frame = host_impl->active_tree()->source_frame_number();
+    gfx::Rect expected_root_damage_rect;
     switch (source_frame) {
       case 0:
         // The first frame will have full damage, and should be in the initial
@@ -2820,6 +2825,8 @@ class LayerTreeHostTestRasterColorSpaceChange : public LayerTreeHostTest {
         EXPECT_FALSE(frame_data->has_no_damage);
         EXPECT_TRUE(space1_ ==
                     host_impl->active_tree()->display_color_spaces());
+        expected_root_damage_rect =
+            gfx::Rect(host_impl->active_tree()->root_layer()->bounds());
         break;
       case 1:
         // Empty commit.
@@ -2832,6 +2839,8 @@ class LayerTreeHostTestRasterColorSpaceChange : public LayerTreeHostTest {
         EXPECT_FALSE(frame_data->has_no_damage);
         EXPECT_TRUE(space2_ ==
                     host_impl->active_tree()->display_color_spaces());
+        expected_root_damage_rect =
+            gfx::Rect(host_impl->active_tree()->root_layer()->bounds());
         break;
       case 3:
         // Empty commit with the color space set to space2 redundantly.
@@ -2840,15 +2849,16 @@ class LayerTreeHostTestRasterColorSpaceChange : public LayerTreeHostTest {
                     host_impl->active_tree()->display_color_spaces());
         break;
       case 4:
-        // The change from space2 to space1 should cause full damage.
+        // The change from space2 to space2_with_hdr should cause full damage.
         EXPECT_FALSE(frame_data->has_no_damage);
-        EXPECT_TRUE(space1_ ==
+        EXPECT_TRUE(space2_with_hdr_ ==
                     host_impl->active_tree()->display_color_spaces());
+        expected_root_damage_rect = gfx::Rect(0, 0, 10, 10);
         break;
       case 5:
         // Empty commit.
         EXPECT_TRUE(frame_data->has_no_damage);
-        EXPECT_TRUE(space1_ ==
+        EXPECT_TRUE(space2_with_hdr_ ==
                     host_impl->active_tree()->display_color_spaces());
         EndTest();
         break;
@@ -2860,8 +2870,7 @@ class LayerTreeHostTestRasterColorSpaceChange : public LayerTreeHostTest {
     if (!frame_data->has_no_damage) {
       gfx::Rect root_damage_rect =
           frame_data->render_passes.back()->damage_rect;
-      EXPECT_EQ(gfx::Rect(host_impl->active_tree()->root_layer()->bounds()),
-                root_damage_rect);
+      EXPECT_EQ(expected_root_damage_rect, root_damage_rect);
     }
 
     return draw_result;
@@ -2886,7 +2895,17 @@ class LayerTreeHostTestRasterColorSpaceChange : public LayerTreeHostTest {
         break;
       case 4:
         EXPECT_TRUE(child_layer_->update_rect().IsEmpty());
-        layer_tree_host()->SetDisplayColorSpaces(space1_);
+        // Setting to space2_with_hdr_ should be a no-op, because there is
+        // no HDR content.
+        layer_tree_host()->SetDisplayColorSpaces(space2_with_hdr_);
+        EXPECT_TRUE(child_layer_->update_rect().IsEmpty());
+        // Same with setting back to space2_.
+        layer_tree_host()->SetDisplayColorSpaces(space2_);
+        EXPECT_TRUE(child_layer_->update_rect().IsEmpty());
+        // Now set the content to be HDR, and set to space2_with_hdr. This
+        // should trigger a commit.
+        child_layer_->set_reraster_on_hdr_change(true);
+        layer_tree_host()->SetDisplayColorSpaces(space2_with_hdr_);
         EXPECT_FALSE(child_layer_->update_rect().IsEmpty());
         break;
       case 5:
@@ -2904,9 +2923,10 @@ class LayerTreeHostTestRasterColorSpaceChange : public LayerTreeHostTest {
  private:
   gfx::DisplayColorSpaces space1_;
   gfx::DisplayColorSpaces space2_;
+  gfx::DisplayColorSpaces space2_with_hdr_;
   FakeContentLayerClient client_;
   scoped_refptr<Layer> root_layer_;
-  scoped_refptr<Layer> child_layer_;
+  scoped_refptr<FakePictureLayer> child_layer_;
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestRasterColorSpaceChange);
@@ -4166,7 +4186,7 @@ class LayerTreeHostTestAbortedCommitDoesntStall : public LayerTreeHostTest {
 class OnDrawLayerTreeFrameSink : public TestLayerTreeFrameSink {
  public:
   OnDrawLayerTreeFrameSink(
-      scoped_refptr<viz::ContextProvider> compositor_context_provider,
+      scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       const viz::RendererSettings& renderer_settings,
@@ -4210,7 +4230,7 @@ class LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor
   std::unique_ptr<TestLayerTreeFrameSink> CreateLayerTreeFrameSink(
       const viz::RendererSettings& renderer_settings,
       double refresh_rate,
-      scoped_refptr<viz::ContextProvider> compositor_context_provider,
+      scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider)
       override {
     auto on_draw_callback = base::BindRepeating(
@@ -4255,7 +4275,7 @@ class LayerTreeHostTestSynchronousCompositorActivateWithoutDraw
   std::unique_ptr<TestLayerTreeFrameSink> CreateLayerTreeFrameSink(
       const viz::RendererSettings& renderer_settings,
       double refresh_rate,
-      scoped_refptr<viz::ContextProvider> compositor_context_provider,
+      scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider)
       override {
     // Make |invalidate_callback| do nothing so there is no draw.
@@ -5988,11 +6008,9 @@ class LayerTreeHostTestElasticOverscroll : public LayerTreeHostTest {
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      features::kAvoidRasterDuringElasticOverscroll};
   FakeContentLayerClient client_;
-  raw_ptr<Layer> root_layer_;
-  raw_ptr<ScrollElasticityHelper> scroll_elasticity_helper_;
+  raw_ptr<Layer, DanglingUntriaged> root_layer_;
+  raw_ptr<ScrollElasticityHelper, DanglingUntriaged> scroll_elasticity_helper_;
   int content_layer_id_;
   int num_draws_;
 };
@@ -6628,7 +6646,7 @@ class LayerTreeHostTestGpuRasterizationDisabled : public LayerTreeHostTest {
       viz::TestContextProvider* worker_provider) override {
     // The test contexts have gpu raster disabled by default.
     gpu::Capabilities caps =
-        context_provider->UnboundTestContextGL()->test_capabilities();
+        context_provider->UnboundTestRasterInterface()->capabilities();
     EXPECT_FALSE(caps.gpu_rasterization);
     gpu::Capabilities worker_caps =
         worker_provider->UnboundTestRasterInterface()->capabilities();
@@ -6668,8 +6686,8 @@ class LayerTreeHostTestGpuRasterizationDisabled : public LayerTreeHostTest {
   }
 
   FakeContentLayerClient layer_client_;
-  raw_ptr<FakePictureLayer> layer_;
-  raw_ptr<FakeRecordingSource> recording_source_;
+  raw_ptr<FakePictureLayer, DanglingUntriaged> layer_;
+  raw_ptr<FakeRecordingSource, DanglingUntriaged> recording_source_;
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationDisabled);
@@ -6680,7 +6698,7 @@ class LayerTreeHostTestGpuRasterizationSupportedButDisabled
   void SetUpUnboundContextProviders(
       viz::TestContextProvider* context_provider,
       viz::TestContextProvider* worker_provider) override {
-    context_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+    context_provider->UnboundTestRasterInterface()->set_gpu_rasterization(true);
     worker_provider->UnboundTestRasterInterface()->set_gpu_rasterization(true);
   }
 
@@ -6720,8 +6738,8 @@ class LayerTreeHostTestGpuRasterizationSupportedButDisabled
   }
 
   FakeContentLayerClient layer_client_;
-  raw_ptr<FakePictureLayer> layer_;
-  raw_ptr<FakeRecordingSource> recording_source_;
+  raw_ptr<FakePictureLayer, DanglingUntriaged> layer_;
+  raw_ptr<FakeRecordingSource, DanglingUntriaged> recording_source_;
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationSupportedButDisabled);
@@ -6731,7 +6749,7 @@ class LayerTreeHostTestGpuRasterizationEnabled : public LayerTreeHostTest {
   void SetUpUnboundContextProviders(
       viz::TestContextProvider* context_provider,
       viz::TestContextProvider* worker_provider) override {
-    context_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+    context_provider->UnboundTestRasterInterface()->set_gpu_rasterization(true);
     worker_provider->UnboundTestRasterInterface()->set_gpu_rasterization(true);
   }
 
@@ -6769,8 +6787,8 @@ class LayerTreeHostTestGpuRasterizationEnabled : public LayerTreeHostTest {
   }
 
   FakeContentLayerClient layer_client_;
-  raw_ptr<FakePictureLayer> layer_;
-  raw_ptr<FakeRecordingSource> recording_source_;
+  raw_ptr<FakePictureLayer, DanglingUntriaged> layer_;
+  raw_ptr<FakeRecordingSource, DanglingUntriaged> recording_source_;
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationEnabled);
@@ -6780,12 +6798,10 @@ class LayerTreeHostTestGpuRasterizationEnabledWithMSAA : public LayerTreeTest {
   void SetUpUnboundContextProviders(
       viz::TestContextProvider* context_provider,
       viz::TestContextProvider* worker_provider) override {
-    viz::TestGLES2Interface* gl = context_provider->UnboundTestContextGL();
-    gl->set_gpu_rasterization(true);
-    gl->set_support_multisample_compatibility(false);
+    auto* compositor = context_provider->UnboundTestRasterInterface();
+    compositor->set_gpu_rasterization(true);
     auto* worker = worker_provider->UnboundTestRasterInterface();
     worker->set_gpu_rasterization(true);
-    worker->set_multisample_compatibility(false);
   }
 
   void InitializeSettings(LayerTreeSettings* settings) override {
@@ -6835,8 +6851,8 @@ class LayerTreeHostTestGpuRasterizationEnabledWithMSAA : public LayerTreeTest {
   }
 
   FakeContentLayerClient layer_client_;
-  raw_ptr<FakePictureLayer> layer_;
-  raw_ptr<FakeRecordingSource> recording_source_;
+  raw_ptr<FakePictureLayer, DanglingUntriaged> layer_;
+  raw_ptr<FakeRecordingSource, DanglingUntriaged> recording_source_;
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostTestGpuRasterizationEnabledWithMSAA);
@@ -7101,7 +7117,7 @@ class LayerTreeHostTestSynchronousCompositeSwapPromise
   std::unique_ptr<TestLayerTreeFrameSink> CreateLayerTreeFrameSink(
       const viz::RendererSettings& renderer_settings,
       double refresh_rate,
-      scoped_refptr<viz::ContextProvider> compositor_context_provider,
+      scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider)
       override {
     constexpr bool disable_display_vsync = false;
@@ -7445,7 +7461,7 @@ class RasterizeWithGpuRasterizationCreatesResources : public LayerTreeHostTest {
   void SetUpUnboundContextProviders(
       viz::TestContextProvider* context_provider,
       viz::TestContextProvider* worker_provider) override {
-    context_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+    context_provider->UnboundTestRasterInterface()->set_gpu_rasterization(true);
     worker_provider->UnboundTestRasterInterface()->set_gpu_rasterization(true);
   }
 
@@ -7491,7 +7507,7 @@ class GpuRasterizationRasterizesBorderTiles : public LayerTreeHostTest {
   void SetUpUnboundContextProviders(
       viz::TestContextProvider* context_provider,
       viz::TestContextProvider* worker_provider) override {
-    context_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+    context_provider->UnboundTestRasterInterface()->set_gpu_rasterization(true);
     worker_provider->UnboundTestRasterInterface()->set_gpu_rasterization(true);
   }
 
@@ -8142,7 +8158,7 @@ class GpuRasterizationSucceedsWithLargeImage : public LayerTreeHostTest {
   void SetUpUnboundContextProviders(
       viz::TestContextProvider* context_provider,
       viz::TestContextProvider* worker_provider) override {
-    context_provider->UnboundTestContextGL()->set_gpu_rasterization(true);
+    context_provider->UnboundTestRasterInterface()->set_gpu_rasterization(true);
     worker_provider->UnboundTestRasterInterface()->set_gpu_rasterization(true);
   }
 
@@ -8182,13 +8198,12 @@ class GpuRasterizationSucceedsWithLargeImage : public LayerTreeHostTest {
     // this here to ensure that our otuput surface exists.
 
     // Retrieve max texture size from Skia.
-    viz::ContextProvider* context_provider =
+    viz::RasterContextProvider* context_provider =
         host_impl->layer_tree_frame_sink()->context_provider();
     ASSERT_TRUE(context_provider);
 
-    auto* gr_context = context_provider->GrContext();
-    ASSERT_TRUE(gr_context);
-    const uint32_t max_texture_size = gr_context->maxTextureSize();
+    const uint32_t max_texture_size =
+        context_provider->ContextCapabilities().max_texture_size;
     ASSERT_GT(static_cast<uint32_t>(large_image_size_.width()),
               max_texture_size);
   }
@@ -8244,14 +8259,11 @@ class LayerTreeHostTestSubmitFrameResources : public LayerTreeHostTest {
   std::unique_ptr<TestLayerTreeFrameSink> CreateLayerTreeFrameSink(
       const viz::RendererSettings& renderer_settings,
       double refresh_rate,
-      scoped_refptr<viz::ContextProvider> compositor_context_provider,
+      scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider)
       override {
-    auto gl = std::make_unique<viz::TestGLES2Interface>();
-    gl->set_have_extension_egl_image(true);
-    auto provider = viz::TestContextProvider::Create(std::move(gl));
     return LayerTreeTest::CreateLayerTreeFrameSink(
-        renderer_settings, refresh_rate, std::move(provider),
+        renderer_settings, refresh_rate, std::move(compositor_context_provider),
         std::move(worker_context_provider));
   }
 
@@ -10654,7 +10666,7 @@ class LayerTreeHostTestBeginFramePausedChanged : public LayerTreeHostTest {
   std::unique_ptr<TestLayerTreeFrameSink> CreateLayerTreeFrameSink(
       const viz::RendererSettings& renderer_settings,
       double refresh_rate,
-      scoped_refptr<viz::ContextProvider> compositor_context_provider,
+      scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider)
       override {
     std::unique_ptr<TestLayerTreeFrameSink> frame_sink =
@@ -10667,7 +10679,7 @@ class LayerTreeHostTestBeginFramePausedChanged : public LayerTreeHostTest {
   }
 
  private:
-  raw_ptr<TestLayerTreeFrameSink> layer_tree_frame_sink_;
+  raw_ptr<TestLayerTreeFrameSink, DanglingUntriaged> layer_tree_frame_sink_;
 };
 MULTI_THREAD_TEST_F(LayerTreeHostTestBeginFramePausedChanged);
 
@@ -10852,6 +10864,216 @@ class LayerTreeHostTestForceRecreateTilingForLCDText
   scoped_refptr<FakePictureLayer> layer_on_main_;
 };
 MULTI_THREAD_TEST_F(LayerTreeHostTestForceRecreateTilingForLCDText);
+
+class LayerTreeHostTestDamagePropagatesFromViewTransitionSurface
+    : public LayerTreeHostTest {
+ public:
+  LayerTreeHostTestDamagePropagatesFromViewTransitionSurface() {
+    SetUseLayerLists();
+  }
+
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
+    switch (layer_tree_host()->SourceFrameNumber()) {
+      case 0:
+        break;
+      case 1:
+        // Damage unrelated layer and ensure that no other content is damaged.
+        unrelated_layer_->SetNeedsDisplayRect(gfx::Rect(0, 0, 5, 5));
+        break;
+      case 2:
+        // Damage view transition layer, ensure that the contributing VT pass
+        // is not redrawn.
+        view_transition_layer_->SetNeedsDisplayRect(gfx::Rect(0, 0, 5, 5));
+        break;
+      case 3:
+        // Damage layer which generates VT content. Ensure it propagates to VT
+        // layer's target.
+        layer_with_view_transition_content_->SetNeedsDisplayRect(
+            gfx::Rect(0, 0, 5, 5));
+    }
+  }
+
+  void SetupTree() override {
+    SetInitialRootBounds(root_rect_.size());
+    LayerTreeHostTest::SetupTree();
+    auto* root = layer_tree_host()->root_layer();
+
+    layer_with_view_transition_content_ = SolidColorLayer::Create();
+    CopyProperties(root, layer_with_view_transition_content_.get());
+    layer_with_view_transition_content_->SetIsDrawable(true);
+    layer_with_view_transition_content_->SetBackgroundColor(
+        SkColor4f::FromColor(SK_ColorBLUE));
+    layer_with_view_transition_content_->SetBounds(
+        layer_with_view_transition_content_rect_.size());
+    layer_with_view_transition_content_->SetOffsetToTransformParent(
+        layer_with_view_transition_content_rect_.OffsetFromOrigin());
+    root->AddChild(layer_with_view_transition_content_);
+
+    resource_id_ = viz::ViewTransitionElementResourceId::Generate();
+    view_transition_layer_ = ViewTransitionContentLayer::Create(
+        resource_id_, /*is_live_content_layer=*/true);
+    CopyProperties(root, view_transition_layer_.get());
+    view_transition_layer_->SetIsDrawable(true);
+    view_transition_layer_->SetBounds(view_transition_layer_rect_.size());
+    view_transition_layer_->SetOffsetToTransformParent(
+        view_transition_layer_rect_.OffsetFromOrigin());
+    root->AddChild(view_transition_layer_);
+
+    unrelated_layer_ = SolidColorLayer::Create();
+    CopyProperties(root, unrelated_layer_.get());
+    unrelated_layer_->SetIsDrawable(true);
+    unrelated_layer_->SetBounds(unrelated_layer_rect_.size());
+    unrelated_layer_->SetOffsetToTransformParent(
+        unrelated_layer_rect_.OffsetFromOrigin());
+    unrelated_layer_->SetBackgroundColor(SkColor4f::FromColor(SK_ColorRED));
+    root->AddChild(unrelated_layer_);
+
+    auto& layer_with_view_transition_content_node = CreateEffectNode(
+        layer_with_view_transition_content_.get(), kContentsRootPropertyNodeId);
+    layer_with_view_transition_content_->SetEffectTreeIndex(
+        layer_with_view_transition_content_node.id);
+    layer_with_view_transition_content_node.view_transition_shared_element_id =
+        ViewTransitionElementId(1u);
+    layer_with_view_transition_content_node.view_transition_shared_element_id
+        .AddIndex(0u);
+    layer_with_view_transition_content_node
+        .view_transition_element_resource_id = resource_id_;
+    layer_with_view_transition_content_node.render_surface_reason =
+        RenderSurfaceReason::kViewTransitionParticipant;
+
+    auto& view_transition_layer_node = CreateEffectNode(
+        view_transition_layer_.get(), kContentsRootPropertyNodeId);
+    view_transition_layer_->SetEffectTreeIndex(view_transition_layer_node.id);
+    view_transition_layer_node.render_surface_reason =
+        RenderSurfaceReason::kBlendMode;
+
+    layer_tree_host()
+        ->property_trees()
+        ->effect_tree_mutable()
+        .AddTransitionPseudoElementEffectId(view_transition_layer_node.id);
+  }
+
+  void BeginTest() override { layer_tree_host()->SetNeedsCommit(); }
+
+  void WillSubmitCompositorFrame(LayerTreeHostImpl* host_impl,
+                                 const viz::CompositorFrame& frame) override {
+    switch (host_impl->active_tree()->source_frame_number()) {
+      case 0: {
+        // First frame draws the entire tree with full damage.
+        ASSERT_EQ(frame.render_pass_list.size(), 3u);
+
+        const auto& vt_content_pass = frame.render_pass_list.at(0);
+        EXPECT_EQ(vt_content_pass->view_transition_element_resource_id,
+                  resource_id_);
+        EXPECT_EQ(vt_content_pass->output_rect,
+                  layer_with_view_transition_content_rect_);
+        EXPECT_TRUE(vt_content_pass->has_damage_from_contributing_content);
+
+        const auto& vt_layer_pass = frame.render_pass_list.at(1);
+        EXPECT_FALSE(
+            vt_layer_pass->view_transition_element_resource_id.IsValid());
+        EXPECT_EQ(vt_layer_pass->output_rect, view_transition_layer_rect_);
+        EXPECT_TRUE(vt_layer_pass->has_damage_from_contributing_content);
+
+        const auto& root_pass = frame.render_pass_list.back();
+        EXPECT_EQ(root_pass->damage_rect, root_rect_);
+        PostSetNeedsCommitToMainThread();
+        break;
+      }
+
+      case 1: {
+        // Second frame only damages unrelated layer.
+        ASSERT_EQ(frame.render_pass_list.size(), 3u);
+
+        const auto& vt_content_pass = frame.render_pass_list.at(0);
+        EXPECT_EQ(vt_content_pass->view_transition_element_resource_id,
+                  resource_id_);
+        EXPECT_EQ(vt_content_pass->output_rect,
+                  layer_with_view_transition_content_rect_);
+        EXPECT_FALSE(vt_content_pass->has_damage_from_contributing_content);
+
+        const auto& vt_layer_pass = frame.render_pass_list.at(1);
+        EXPECT_EQ(vt_layer_pass->output_rect, view_transition_layer_rect_);
+        EXPECT_FALSE(vt_layer_pass->has_damage_from_contributing_content);
+
+        const auto& root_pass = frame.render_pass_list.back();
+        EXPECT_EQ(root_pass->damage_rect,
+                  gfx::Rect(unrelated_layer_rect_.origin(), gfx::Size(5, 5)));
+        PostSetNeedsCommitToMainThread();
+        break;
+      }
+
+      case 2: {
+        // Third frame only damages the VT layer.
+        ASSERT_EQ(frame.render_pass_list.size(), 3u);
+
+        const auto& vt_content_pass = frame.render_pass_list.at(0);
+        EXPECT_EQ(vt_content_pass->view_transition_element_resource_id,
+                  resource_id_);
+        EXPECT_EQ(vt_content_pass->output_rect,
+                  layer_with_view_transition_content_rect_);
+        EXPECT_FALSE(vt_content_pass->has_damage_from_contributing_content);
+
+        const auto& vt_layer_pass = frame.render_pass_list.at(1);
+        EXPECT_EQ(vt_layer_pass->output_rect, view_transition_layer_rect_);
+        EXPECT_TRUE(vt_layer_pass->has_damage_from_contributing_content);
+
+        const auto& root_pass = frame.render_pass_list.back();
+        EXPECT_EQ(
+            root_pass->damage_rect,
+            gfx::Rect(view_transition_layer_rect_.origin(), gfx::Size(5, 5)));
+        PostSetNeedsCommitToMainThread();
+        break;
+      }
+
+      case 3: {
+        // Last frame damages the layer contributing to VT.
+        ASSERT_EQ(frame.render_pass_list.size(), 3u);
+
+        const auto& vt_content_pass = frame.render_pass_list.at(0);
+        EXPECT_EQ(vt_content_pass->view_transition_element_resource_id,
+                  resource_id_);
+        EXPECT_EQ(vt_content_pass->output_rect,
+                  layer_with_view_transition_content_rect_);
+        EXPECT_TRUE(vt_content_pass->has_damage_from_contributing_content);
+
+        const auto& vt_layer_pass = frame.render_pass_list.at(1);
+        EXPECT_EQ(vt_layer_pass->output_rect, view_transition_layer_rect_);
+        EXPECT_TRUE(vt_layer_pass->has_damage_from_contributing_content);
+
+        const auto& root_pass = frame.render_pass_list.back();
+
+        // TODO(khushalsagar): We shouldn't be damaging the area where
+        // layer_with_view_transition_content_ draws since the content is
+        // is instead drawn by view_transition_layer_.
+        gfx::Rect total_damage(
+            layer_with_view_transition_content_rect_.origin(), gfx::Size(5, 5));
+        total_damage.Union(
+            gfx::Rect(view_transition_layer_rect_.origin(), gfx::Size(5, 5)));
+        EXPECT_EQ(root_pass->damage_rect, total_damage);
+        EndTest();
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
+
+ private:
+  scoped_refptr<SolidColorLayer> unrelated_layer_;
+  viz::ViewTransitionElementResourceId resource_id_;
+  scoped_refptr<ViewTransitionContentLayer> view_transition_layer_;
+  scoped_refptr<SolidColorLayer> layer_with_view_transition_content_;
+
+  // All rects are in the root coordinate space.
+  const gfx::Rect root_rect_ = gfx::Rect(0, 0, 50, 50);
+  const gfx::Rect layer_with_view_transition_content_rect_ =
+      gfx::Rect(0, 0, 10, 10);
+  const gfx::Rect view_transition_layer_rect_ = gfx::Rect(20, 20, 10, 10);
+  const gfx::Rect unrelated_layer_rect_ = gfx::Rect(40, 40, 10, 10);
+};
+MULTI_THREAD_TEST_F(LayerTreeHostTestDamagePropagatesFromViewTransitionSurface);
 
 }  // namespace
 }  // namespace cc

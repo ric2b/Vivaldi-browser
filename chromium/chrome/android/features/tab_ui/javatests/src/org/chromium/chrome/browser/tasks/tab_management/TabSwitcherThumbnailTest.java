@@ -29,7 +29,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -83,8 +82,24 @@ public class TabSwitcherThumbnailTest {
 
     @Test
     @MediumTest
+    @EnableFeatures({ChromeFeatureList.THUMBNAIL_CACHE_REFACTOR})
+    public void testThumbnailDynamicAspectRatioWhenCaptured_FixedWhenShown() {
+        // With this flag bitmap aspect ratios are not applied. Check that the resultant image views
+        // still display at the right size.
+        int tabCounts = 11;
+        TabUiTestHelper.prepareTabsWithThumbnail(mActivityTestRule, tabCounts, 0, "about:blank");
+        TabUiTestHelper.enterTabSwitcher(mActivityTestRule.getActivity());
+        verifyAllThumbnailHeightWithAspectRatio(tabCounts, 0.85f);
+
+        // With hard cleanup.
+        TabUiTestHelper.leaveTabSwitcher(mActivityTestRule.getActivity());
+        TabUiTestHelper.enterTabSwitcher(mActivityTestRule.getActivity());
+        verifyAllThumbnailHeightWithAspectRatio(tabCounts, 0.85f);
+    }
+
+    @Test
+    @MediumTest
     @CommandLineFlags.Add({BASE_PARAMS + "/thumbnail_aspect_ratio/1.0"})
-    @DisabledTest(message = "https://crbug.com/1402628")
     public void testThumbnailAspectRatio_one() {
         int tabCounts = 11;
         TabUiTestHelper.prepareTabsWithThumbnail(mActivityTestRule, tabCounts, 0, "about:blank");
@@ -110,7 +125,6 @@ public class TabSwitcherThumbnailTest {
     @Test
     @MediumTest
     @CommandLineFlags.Add({BASE_PARAMS + "/cleanup-delay/10000"})
-    @DisabledTest(message = "https://crbug.com/1382858")
     public void testThumbnail_withSoftCleanup() {
         int tabCounts = 11;
         TabUiTestHelper.prepareTabsWithThumbnail(mActivityTestRule, tabCounts, 0, "about:blank");

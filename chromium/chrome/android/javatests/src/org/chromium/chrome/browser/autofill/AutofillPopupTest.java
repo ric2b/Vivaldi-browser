@@ -10,9 +10,9 @@ import android.view.View;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
-import androidx.test.InstrumentationRegistry;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.MediumTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -27,12 +27,12 @@ import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterProvider;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.CriteriaNotSatisfiedException;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -45,12 +45,14 @@ import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.autofill.AutofillFeatures;
 import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestInputMethodManagerWrapper;
-import org.chromium.content_public.browser.test.util.TouchCommon;
+import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.WebContentsUtils;
+import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.DropdownPopupWindowInterface;
 
@@ -65,10 +67,13 @@ import java.util.concurrent.TimeoutException;
  * Integration tests for the AutofillPopup.
  */
 @RunWith(ParameterizedRunner.class)
+@Batch(Batch.PER_CLASS)
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
-@EnableFeatures({ChromeFeatureList.PORTALS, ChromeFeatureList.PORTALS_CROSS_ORIGIN})
+@EnableFeatures({ChromeFeatureList.PORTALS, ChromeFeatureList.PORTALS_CROSS_ORIGIN,
+        AutofillFeatures.AUTOFILL_ENABLE_SELECT_MENU})
 @DisableFeatures({ChromeFeatureList.AUTOFILL_KEYBOARD_ACCESSORY})
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
+        ContentSwitches.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES})
 public class AutofillPopupTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
@@ -88,7 +93,6 @@ public class AutofillPopupTest {
     private static final String PHONE_NUMBER = "4158889999";
     private static final String EMAIL = "john@acme.inc";
     private static final String LANGUAGE_CODE = "";
-    private static final String ORIGIN = "https://www.example.com";
 
     private static final String TEST_SERVER_DIR = "components/test/data/autofill";
     private static final String BASIC_PAGE_DATA = "autofill_basic_page_data.html";
@@ -163,7 +167,9 @@ public class AutofillPopupTest {
         if (enabledFeature == EnabledFeature.PORTALS) {
             mActivityTestRule.startMainActivityWithURL(mServer.getURL(PORTAL_WRAPPER + formUrl));
             SwapWebContentsObserver observer = new SwapWebContentsObserver();
-            mActivityTestRule.getActivity().getActivityTab().addObserver(observer);
+            TestThreadUtils.runOnUiThreadBlocking(() -> {
+                mActivityTestRule.getActivity().getActivityTab().addObserver(observer);
+            });
             DOMUtils.clickNode(mActivityTestRule.getActivity().getCurrentWebContents(), "ACTIVATE");
             CriteriaHelper.pollUiThread(
                     () -> { return observer.mCallbackHelper.getCallCount() == 1; });
@@ -185,10 +191,20 @@ public class AutofillPopupTest {
 
         // Add an Autofill profile.
         mHelper = new AutofillTestHelper();
-        AutofillProfile profile = new AutofillProfile("" /* guid */, ORIGIN,
-                "" /* honorific prefix */, FIRST_NAME + " " + LAST_NAME, COMPANY_NAME,
-                STREET_ADDRESS_TEXTAREA, STATE, CITY, DEPENDENT_LOCALITY, ZIP_CODE, SORTING_CODE,
-                COUNTRY, PHONE_NUMBER, EMAIL, LANGUAGE_CODE);
+        AutofillProfile profile = AutofillProfile.builder()
+                                          .setFullName(FIRST_NAME + " " + LAST_NAME)
+                                          .setCompanyName(COMPANY_NAME)
+                                          .setStreetAddress(STREET_ADDRESS_TEXTAREA)
+                                          .setRegion(STATE)
+                                          .setLocality(CITY)
+                                          .setDependentLocality(DEPENDENT_LOCALITY)
+                                          .setPostalCode(ZIP_CODE)
+                                          .setSortingCode(SORTING_CODE)
+                                          .setCountryCode(COUNTRY)
+                                          .setPhoneNumber(PHONE_NUMBER)
+                                          .setEmailAddress(EMAIL)
+                                          .setLanguageCode(LANGUAGE_CODE)
+                                          .build();
         mHelper.setProfile(profile);
         Assert.assertEquals(1, mHelper.getNumberOfProfilesToSuggest());
 
@@ -223,7 +239,12 @@ public class AutofillPopupTest {
 
         waitForAutofillPopupShow(popup);
 
-        TouchCommon.singleClickView(popup.getListView(), 10, 10);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            AutofillTestHelper.disableThresholdForCurrentlyShownAutofillPopup(webContents);
+
+            popup.getListView().performItemClick(
+                    null, 0, popup.getListView().getAdapter().getItemId(0));
+        });
 
         waitForInputFieldFill();
     }
@@ -250,7 +271,6 @@ public class AutofillPopupTest {
     @Test
     @MediumTest
     @Feature({"autofill"})
-    @DisabledTest(message = "Flaky. crbug.com/936183")
     public void testClickAutofillPopupSuggestion() throws TimeoutException {
         loadAndFillForm(BASIC_PAGE_DATA, "J");
         final WebContents webContents = mActivityTestRule.getActivity().getCurrentWebContents();
@@ -298,7 +318,6 @@ public class AutofillPopupTest {
     @MediumTest
     @ParameterAnnotations.UseMethodParameter(FeatureParamProvider.class)
     @Feature({"autofill"})
-    @DisabledTest(message = "https://crbug.com/1108241")
     public void testLoggingInitiatedElementFilled(@EnabledFeature int enabledFeature)
             throws TimeoutException {
         loadAndFillForm(INITIATING_ELEMENT_FILLED, "o", enabledFeature);
@@ -319,7 +338,6 @@ public class AutofillPopupTest {
     @Test
     @MediumTest
     @Feature({"autofill"})
-    @DisabledTest(message = "Flaky. crbug.com/1030559")
     public void testLoggingAnotherElementFilled() throws TimeoutException {
         loadAndFillForm(ANOTHER_ELEMENT_FILLED, "J");
         final String profileFullName = FIRST_NAME + " " + LAST_NAME;
@@ -338,7 +356,6 @@ public class AutofillPopupTest {
     @Test
     @MediumTest
     @Feature({"autofill"})
-    @DisabledTest(message = "crbug.com/1075791")
     public void testNotLoggingInvalidOption() throws TimeoutException {
         loadAndFillForm(INVALID_OPTION, "o");
         final String profileFullName = FIRST_NAME + " " + LAST_NAME;
@@ -349,6 +366,25 @@ public class AutofillPopupTest {
         assertLogged(LAST_NAME, profileFullName);
         assertLogged(EMAIL, profileFullName);
         // Country will not be logged since "US" is not a valid <option>.
+    }
+
+    /**
+     * Tests that autofilling a form with a <selectmenu> logs an entry for the <selectmenu> field.
+     */
+    @Test
+    @MediumTest
+    @Feature({"autofill"})
+    public void testLogForSelectMenu() throws TimeoutException {
+        loadAndFillForm("autofill_selectmenu.html", "J");
+        final WebContents webContents = mActivityTestRule.getActivity().getCurrentWebContents();
+
+        final String profileFullName = FIRST_NAME + " " + LAST_NAME;
+        Assert.assertEquals(
+                "Mismatched number of logged entries", 4, mAutofillLoggedEntries.size());
+        assertLogged(FIRST_NAME, profileFullName);
+        assertLogged(LAST_NAME, profileFullName);
+        assertLogged(COUNTRY, profileFullName);
+        assertLogged(EMAIL, profileFullName);
     }
 
     // Wait and assert helper methods -------------------------------------------------------------

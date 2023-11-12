@@ -37,12 +37,11 @@ const base::flat_map<ui::KeyboardCode, std::u16string>& GetKeyDisplayMap() {
           {ui::KeyboardCode::VKEY_NEW, u"NewTab"},
           {ui::KeyboardCode::VKEY_PRIVACY_SCREEN_TOGGLE,
            u"PrivacyScreenToggle"},
-          {ui::KeyboardCode::VKEY_ALL_APPLICATIONS, u"OpenLauncher"},
+          {ui::KeyboardCode::VKEY_ALL_APPLICATIONS, u"ViewAllApps"},
           {ui::KeyboardCode::VKEY_DICTATE, u"ToggleDictation"},
           {ui::KeyboardCode::VKEY_WLAN, u"ToggleWifi"},
           {ui::KeyboardCode::VKEY_EMOJI_PICKER, u"EmojiPicker"},
           {ui::KeyboardCode::VKEY_MENU, u"alt"},
-          {ui::KeyboardCode::VKEY_LWIN, u"meta"},
           {ui::KeyboardCode::VKEY_HOME, u"home"},
           {ui::KeyboardCode::VKEY_END, u"end"},
           {ui::KeyboardCode::VKEY_DELETE, u"delete"},
@@ -165,6 +164,11 @@ const NonConfigurableActionsMap& GetNonConfigurableActionsMap() {
                IDS_AMBIENT_ACCELERATOR_OPEN_PAGE_IN_NEW_TAB,
                {TextAcceleratorPart(ui::EF_ALT_DOWN),
                 TextAcceleratorPart(ui::KeyboardCode::VKEY_RETURN)})},
+          {NonConfigurableActions::kAmbientCycleForwardMRU,
+           NonConfigurableAcceleratorDetails(
+               IDS_AMBIENT_ACCELERATOR_CYCLE_FORWARD_MRU,
+               {TextAcceleratorPart(ui::EF_ALT_DOWN),
+                TextAcceleratorPart(ui::KeyboardCode::VKEY_TAB)})},
           {NonConfigurableActions::kAmbientCycleBackwardMRU,
            NonConfigurableAcceleratorDetails(
                IDS_AMBIENT_ACCELERATOR_CYCLE_BACKWARD_MRU,
@@ -191,7 +195,7 @@ const NonConfigurableActionsMap& GetNonConfigurableActionsMap() {
                IDS_AMBIENT_ACCELERATOR_HIGHLIGHT_NEXT_ITEM_ON_SHELF,
                {TextAcceleratorPart(ui::EF_ALT_DOWN),
                 TextAcceleratorPart(ui::EF_SHIFT_DOWN),
-                TextAcceleratorPart(ui::KeyboardCode::VKEY_I),
+                TextAcceleratorPart(ui::KeyboardCode::VKEY_L),
                 TextAcceleratorPart(ui::KeyboardCode::VKEY_TAB),
                 TextAcceleratorPart(ui::KeyboardCode::VKEY_RIGHT)})},
           {NonConfigurableActions::kAmbientHighlightPreviousItemOnShelf,
@@ -199,7 +203,7 @@ const NonConfigurableActionsMap& GetNonConfigurableActionsMap() {
                IDS_AMBIENT_ACCELERATOR_HIGHTLIGHT_PREVIOUS_ITEM_ON_SHELF,
                {TextAcceleratorPart(ui::EF_ALT_DOWN),
                 TextAcceleratorPart(ui::EF_SHIFT_DOWN),
-                TextAcceleratorPart(ui::KeyboardCode::VKEY_I),
+                TextAcceleratorPart(ui::KeyboardCode::VKEY_L),
                 TextAcceleratorPart(ui::EF_SHIFT_DOWN),
                 TextAcceleratorPart(ui::KeyboardCode::VKEY_TAB),
                 TextAcceleratorPart(ui::KeyboardCode::VKEY_LEFT)})},
@@ -208,7 +212,7 @@ const NonConfigurableActionsMap& GetNonConfigurableActionsMap() {
                IDS_AMBIENT_ACCELERATOR_OPEN_HIGHLIGHTED_ITEM_ON_SHELF,
                {TextAcceleratorPart(ui::EF_ALT_DOWN),
                 TextAcceleratorPart(ui::EF_SHIFT_DOWN),
-                TextAcceleratorPart(ui::KeyboardCode::VKEY_I),
+                TextAcceleratorPart(ui::KeyboardCode::VKEY_L),
                 TextAcceleratorPart(ui::KeyboardCode::VKEY_SPACE),
                 TextAcceleratorPart(ui::KeyboardCode::VKEY_RETURN)})},
           {NonConfigurableActions::kAmbientRemoveHighlightOnShelf,
@@ -216,7 +220,7 @@ const NonConfigurableActionsMap& GetNonConfigurableActionsMap() {
                IDS_AMBIENT_ACCELERATOR_REMOVE_HIGHLIGHT_ON_SHELF,
                {TextAcceleratorPart(ui::EF_ALT_DOWN),
                 TextAcceleratorPart(ui::EF_SHIFT_DOWN),
-                TextAcceleratorPart(ui::KeyboardCode::VKEY_I),
+                TextAcceleratorPart(ui::KeyboardCode::VKEY_L),
                 TextAcceleratorPart(ui::KeyboardCode::VKEY_ESCAPE)})},
           {NonConfigurableActions::kAmbientSwitchFocus,
            NonConfigurableAcceleratorDetails(
@@ -440,8 +444,10 @@ const NonConfigurableActionsMap& GetNonConfigurableActionsMap() {
            NonConfigurableAcceleratorDetails(
                {ui::Accelerator(ui::VKEY_Z, ui::EF_CONTROL_DOWN)})},
           {NonConfigurableActions::kAmbientRedo,
-           NonConfigurableAcceleratorDetails({ui::Accelerator(
-               ui::VKEY_Z, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN)})},
+           NonConfigurableAcceleratorDetails(
+               {ui::Accelerator(ui::VKEY_Z,
+                                ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN),
+                ui::Accelerator(ui::VKEY_Y, ui::EF_CONTROL_DOWN)})},
           {NonConfigurableActions::kAmbientContentContextSelectAll,
            NonConfigurableAcceleratorDetails(
                {ui::Accelerator(ui::VKEY_A, ui::EF_CONTROL_DOWN)})},
@@ -482,6 +488,10 @@ const NonConfigurableActionsMap& GetNonConfigurableActionsMap() {
                 // TODO(longbowei): Confirm if we want to keep this accelerator
                 // or remove it.
                 ui::Accelerator(ui::VKEY_RETURN, ui::EF_SHIFT_DOWN)})},
+          {NonConfigurableActions::kBrowserFocusAddressBar,
+           NonConfigurableAcceleratorDetails(
+               {ui::Accelerator(ui::VKEY_L, ui::EF_CONTROL_DOWN),
+                ui::Accelerator(ui::VKEY_D, ui::EF_ALT_DOWN)})},
           {NonConfigurableActions::kBrowserFocusSearch,
            NonConfigurableAcceleratorDetails(
                {ui::Accelerator(ui::VKEY_K, ui::EF_CONTROL_DOWN),

@@ -137,13 +137,19 @@ IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest,
 
 IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest,
                        DiagnosticsAppRecordsScreenOpenDuration) {
+  // TODO(b/287165206): Fix the test and remove this.
+  if (GetParam().crosapi_state == TestProfileParam::CrosapiParam::kEnabled) {
+    GTEST_SKIP()
+        << "Skipping test body for CrosapiParam::kEnabled, see b/287165206.";
+  }
+
   content::WebContents* web_contents = LaunchDiagnosticsApp();
 
   histogram_tester_.ExpectUniqueSample("ChromeOS.DiagnosticsUi.InitialScreen",
                                        0, 1);
 
-  EXPECT_TRUE(content::ExecuteScript(
-      web_contents, "chrome.send('recordNavigation', [0, 1]);"));
+  EXPECT_TRUE(content::ExecJs(web_contents,
+                              "chrome.send('recordNavigation', [0, 1]);"));
 
   chrome::CloseAllBrowsers();
 
@@ -155,20 +161,26 @@ IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest,
 
 IN_PROC_BROWSER_TEST_P(DiagnosticsAppIntegrationTest,
                        DiagnosticsAppIgnoresInvalidRecordNavigationCall) {
+  // TODO(b/287165206): Fix the test and remove this.
+  if (GetParam().crosapi_state == TestProfileParam::CrosapiParam::kEnabled) {
+    GTEST_SKIP()
+        << "Skipping test body for CrosapiParam::kEnabled, see b/287165206.";
+  }
+
   content::WebContents* web_contents = LaunchDiagnosticsApp();
 
   histogram_tester_.ExpectUniqueSample("ChromeOS.DiagnosticsUi.InitialScreen",
                                        0, 1);
 
   // Simulate sending invalid navigation view value.
-  EXPECT_TRUE(content::ExecuteScript(
+  EXPECT_TRUE(content::ExecJs(
       web_contents, "chrome.send('recordNavigation', [1000, -550]);"));
-  EXPECT_TRUE(content::ExecuteScript(
+  EXPECT_TRUE(content::ExecJs(
       web_contents, "chrome.send('recordNavigation', ['1000', '-550']);"));
   EXPECT_TRUE(
-      content::ExecuteScript(web_contents, "chrome.send('recordNavigation');"));
-  EXPECT_TRUE(content::ExecuteScript(web_contents,
-                                     "chrome.send('recordNavigation', []);"));
+      content::ExecJs(web_contents, "chrome.send('recordNavigation');"));
+  EXPECT_TRUE(
+      content::ExecJs(web_contents, "chrome.send('recordNavigation', []);"));
 
   chrome::CloseAllBrowsers();
 

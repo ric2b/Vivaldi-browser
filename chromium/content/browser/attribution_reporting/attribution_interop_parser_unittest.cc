@@ -22,8 +22,10 @@
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/trigger_registration.h"
 #include "content/browser/attribution_reporting/attribution_config.h"
+#include "content/browser/attribution_reporting/attribution_interop_parser.h"
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "content/browser/attribution_reporting/common_source_info.h"
+#include "content/browser/attribution_reporting/destination_throttler.h"
 #include "content/browser/attribution_reporting/storable_source.h"
 #include "net/base/schemeful_site.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -32,16 +34,6 @@
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace content {
-
-bool operator==(const AttributionTriggerAndTime& a,
-                const AttributionTriggerAndTime& b) {
-  return a.trigger == b.trigger && a.time == b.time;
-}
-
-std::ostream& operator<<(std::ostream& out,
-                         const AttributionTriggerAndTime& t) {
-  return out << "{time=" << t.time << ",trigger=" << t.trigger << "}";
-}
 
 bool operator==(const AttributionSimulationEvent& a,
                 const AttributionSimulationEvent& b) {
@@ -55,45 +47,54 @@ std::ostream& operator<<(std::ostream& out,
   return out << ",debug_permission=" << e.debug_permission << "}";
 }
 
-bool operator==(AttributionConfig::RateLimitConfig a,
-                AttributionConfig::RateLimitConfig b) {
-  const auto tie = [](AttributionConfig::RateLimitConfig config) {
+bool operator==(const AttributionConfig::RateLimitConfig& a,
+                const AttributionConfig::RateLimitConfig& b) {
+  const auto tie = [](const AttributionConfig::RateLimitConfig& config) {
     return std::make_tuple(
         config.time_window, config.max_source_registration_reporting_origins,
-        config.max_attribution_reporting_origins, config.max_attributions);
+        config.max_attribution_reporting_origins, config.max_attributions,
+        config.max_reporting_origins_per_source_reporting_site,
+        config.origins_per_site_window);
   };
   return tie(a) == tie(b);
 }
 
-bool operator==(AttributionConfig::EventLevelLimit a,
-                AttributionConfig::EventLevelLimit b) {
-  const auto tie = [](AttributionConfig::EventLevelLimit config) {
+bool operator==(const AttributionConfig::EventLevelLimit& a,
+                const AttributionConfig::EventLevelLimit& b) {
+  const auto tie = [](const AttributionConfig::EventLevelLimit& config) {
     return std::make_tuple(config.navigation_source_trigger_data_cardinality,
                            config.event_source_trigger_data_cardinality,
                            config.randomized_response_epsilon,
                            config.max_reports_per_destination,
                            config.max_attributions_per_navigation_source,
                            config.max_attributions_per_event_source,
-                           config.first_report_window_deadline,
-                           config.second_report_window_deadline);
+                           config.first_navigation_report_window_deadline,
+                           config.second_navigation_report_window_deadline,
+                           config.first_event_report_window_deadline,
+                           config.second_event_report_window_deadline);
   };
   return tie(a) == tie(b);
 }
 
-bool operator==(AttributionConfig::AggregateLimit a,
-                AttributionConfig::AggregateLimit b) {
-  const auto tie = [](AttributionConfig::AggregateLimit config) {
-    return std::make_tuple(config.max_reports_per_destination,
-                           config.aggregatable_budget_per_source,
-                           config.min_delay, config.delay_span);
+bool operator==(const AttributionConfig::AggregateLimit& a,
+                const AttributionConfig::AggregateLimit& b) {
+  const auto tie = [](const AttributionConfig::AggregateLimit& config) {
+    return std::make_tuple(
+        config.max_reports_per_destination,
+        config.aggregatable_budget_per_source, config.min_delay,
+        config.delay_span,
+        config.null_reports_rate_include_source_registration_time,
+        config.null_reports_rate_exclude_source_registration_time,
+        config.max_aggregatable_reports_per_source);
   };
   return tie(a) == tie(b);
 }
 
-bool operator==(AttributionConfig a, AttributionConfig b) {
-  const auto tie = [](AttributionConfig config) {
+bool operator==(const AttributionConfig& a, const AttributionConfig& b) {
+  const auto tie = [](const AttributionConfig& config) {
     return std::make_tuple(config.max_sources_per_origin, config.rate_limit,
-                           config.event_level_limit, config.aggregate_limit);
+                           config.event_level_limit, config.aggregate_limit,
+                           config.throttler_policy);
   };
   return tie(a) == tie(b);
 }
@@ -164,7 +165,6 @@ TEST(AttributionInteropParserTest, ValidSourceParses) {
   base::Value::Dict value = base::test::ParseJsonDict(kJson);
 
   auto result = ParseAttributionInteropInput(std::move(value), kOffsetTime);
-
   ASSERT_TRUE(result.has_value()) << result.error();
   ASSERT_EQ(result->size(), 2u);
 
@@ -174,7 +174,7 @@ TEST(AttributionInteropParserTest, ValidSourceParses) {
   const auto* source2 = absl::get_if<StorableSource>(&result->back().event);
   ASSERT_TRUE(source2);
 
-  EXPECT_EQ(source1->common_info().source_time(),
+  EXPECT_EQ(result->front().time,
             kOffsetTime + base::Milliseconds(1643235573123));
   EXPECT_EQ(source1->common_info().source_type(),
             attribution_reporting::mojom::SourceType::kNavigation);
@@ -187,7 +187,7 @@ TEST(AttributionInteropParserTest, ValidSourceParses) {
   EXPECT_FALSE(source1->is_within_fenced_frame());
   EXPECT_TRUE(result->front().debug_permission);
 
-  EXPECT_EQ(source2->common_info().source_time(),
+  EXPECT_EQ(result->back().time,
             kOffsetTime + base::Milliseconds(1643235574123));
   EXPECT_EQ(source2->common_info().source_type(),
             attribution_reporting::mojom::SourceType::kEvent);
@@ -222,21 +222,21 @@ TEST(AttributionInteropParserTest, ValidTriggerParses) {
   base::Value::Dict value = base::test::ParseJsonDict(kJson);
 
   auto result = ParseAttributionInteropInput(std::move(value), kOffsetTime);
-
   ASSERT_TRUE(result.has_value());
   ASSERT_EQ(result->size(), 1u);
 
   const auto* trigger =
-      absl::get_if<AttributionTriggerAndTime>(&result->front().event);
+      absl::get_if<AttributionTrigger>(&result->front().event);
   ASSERT_TRUE(trigger);
 
-  EXPECT_EQ(trigger->time, kOffsetTime + base::Milliseconds(1643235575123));
-  EXPECT_EQ(trigger->trigger.reporting_origin(),
+  EXPECT_EQ(result->front().time,
+            kOffsetTime + base::Milliseconds(1643235575123));
+  EXPECT_EQ(trigger->reporting_origin(),
             *SuitableOrigin::Deserialize("https://a.r.test"));
-  EXPECT_EQ(trigger->trigger.destination_origin(),
+  EXPECT_EQ(trigger->destination_origin(),
             *SuitableOrigin::Deserialize("https://b.d.test"));
-  EXPECT_EQ(trigger->trigger.attestation(), absl::nullopt);
-  EXPECT_FALSE(trigger->trigger.is_within_fenced_frame());
+  EXPECT_THAT(trigger->verifications(), IsEmpty());
+  EXPECT_FALSE(trigger->is_within_fenced_frame());
   EXPECT_TRUE(result->front().debug_permission);
 }
 
@@ -587,61 +587,124 @@ TEST(AttributionInteropParserTest, ValidConfig) {
   } kTestCases[] = {
       {R"json({})json", false, AttributionConfig()},
       {R"json({"max_sources_per_origin":"100"})json", false,
-       AttributionConfig{.max_sources_per_origin = 100}},
-      {R"json({"max_destinations_per_source_site_reporting_origin":"100"})json",
-       false,
-       AttributionConfig{.max_destinations_per_source_site_reporting_origin =
-                             100}},
+       AttributionConfigWith(
+           [](AttributionConfig& c) { c.max_sources_per_origin = 100; })},
+      {R"json({"max_destinations_per_source_site_reporting_site":"100"})json",
+       false, AttributionConfigWith([](AttributionConfig& c) {
+         c.max_destinations_per_source_site_reporting_site = 100;
+       })},
+      {R"json({"max_destinations_per_rate_limit_window_reporting_site":"100"})json",
+       false, AttributionConfigWith([](AttributionConfig& c) {
+         c.throttler_policy = {.max_per_reporting_site = 100};
+       })},
+      {R"json({"max_destinations_per_rate_limit_window":"100"})json", false,
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.throttler_policy = {.max_total = 100};
+       })},
       {R"json({"rate_limit_time_window":"30"})json", false,
-       AttributionConfig{.rate_limit = {.time_window = base::Days(30)}}},
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.rate_limit =
+             RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+               r.time_window = base::Days(30);
+             });
+       })},
       {R"json({"rate_limit_max_source_registration_reporting_origins":"10"})json",
-       false,
-       AttributionConfig{
-           .rate_limit = {.max_source_registration_reporting_origins = 10}}},
+       false, AttributionConfigWith([](AttributionConfig& c) {
+         c.rate_limit =
+             RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+               r.max_source_registration_reporting_origins = 10;
+             });
+       })},
       {R"json({"rate_limit_max_attribution_reporting_origins":"10"})json",
-       false,
-       AttributionConfig{
-           .rate_limit = {.max_attribution_reporting_origins = 10}}},
+       false, AttributionConfigWith([](AttributionConfig& c) {
+         c.rate_limit =
+             RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+               r.max_attribution_reporting_origins = 10;
+             });
+       })},
       {R"json({"rate_limit_max_attributions":"10"})json", false,
-       AttributionConfig{.rate_limit = {.max_attributions = 10}}},
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.rate_limit =
+             RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+               r.max_attributions = 10;
+             });
+       })},
+      {R"json({"rate_limit_max_reporting_origins_per_source_reporting_site":"2"})json",
+       false, AttributionConfigWith([](AttributionConfig& c) {
+         c.rate_limit =
+             RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+               r.max_reporting_origins_per_source_reporting_site = 2;
+             });
+       })},
       {R"json({"navigation_source_trigger_data_cardinality":"10"})json", false,
-       AttributionConfig{
-           .event_level_limit = {.navigation_source_trigger_data_cardinality =
-                                     10}}},
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.event_level_limit =
+             EventLevelLimitWith([](AttributionConfig::EventLevelLimit& e) {
+               e.navigation_source_trigger_data_cardinality = 10;
+             });
+       })},
       {R"json({"event_source_trigger_data_cardinality":"10"})json", false,
-       AttributionConfig{
-           .event_level_limit = {.event_source_trigger_data_cardinality = 10}}},
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.event_level_limit =
+             EventLevelLimitWith([](AttributionConfig::EventLevelLimit& e) {
+               e.event_source_trigger_data_cardinality = 10;
+             });
+       })},
       {R"json({"randomized_response_epsilon":"inf"})json", false,
-       AttributionConfig{.event_level_limit =
-                             {.randomized_response_epsilon =
-                                  std ::numeric_limits<double>::infinity()}}},
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.event_level_limit =
+             EventLevelLimitWith([](AttributionConfig::EventLevelLimit& e) {
+               e.randomized_response_epsilon =
+                   std::numeric_limits<double>::infinity();
+             });
+       })},
       {R"json({"max_event_level_reports_per_destination":"10"})json", false,
-       AttributionConfig{
-           .event_level_limit = {.max_reports_per_destination = 10}}},
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.event_level_limit =
+             EventLevelLimitWith([](AttributionConfig::EventLevelLimit& e) {
+               e.max_reports_per_destination = 10;
+             });
+       })},
       {R"json({"max_attributions_per_navigation_source":"10"})json", false,
-       AttributionConfig{
-           .event_level_limit = {.max_attributions_per_navigation_source =
-                                     10}}},
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.event_level_limit =
+             EventLevelLimitWith([](AttributionConfig::EventLevelLimit& e) {
+               e.max_attributions_per_navigation_source = 10;
+             });
+       })},
       {R"json({"max_attributions_per_event_source":"10"})json", false,
-       AttributionConfig{
-           .event_level_limit = {.max_attributions_per_event_source = 10}}},
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.event_level_limit =
+             EventLevelLimitWith([](AttributionConfig::EventLevelLimit& e) {
+               e.max_attributions_per_event_source = 10;
+             });
+       })},
       {R"json({"max_aggregatable_reports_per_destination":"10"})json", false,
-       AttributionConfig{
-           .aggregate_limit = {.max_reports_per_destination = 10}}},
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.aggregate_limit = {.max_reports_per_destination = 10};
+       })},
       {R"json({"aggregatable_budget_per_source":"100"})json", false,
-       AttributionConfig{
-           .aggregate_limit = {.aggregatable_budget_per_source = 100}}},
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.aggregate_limit = {.aggregatable_budget_per_source = 100};
+       })},
       {R"json({"aggregatable_report_min_delay":"0"})json", false,
-       AttributionConfig{.aggregate_limit = {.min_delay = base::TimeDelta()}}},
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.aggregate_limit = {.min_delay = base::TimeDelta()};
+       })},
       {R"json({"aggregatable_report_delay_span":"0"})json", false,
-       AttributionConfig{.aggregate_limit = {.delay_span = base::TimeDelta()}}},
+       AttributionConfigWith([](AttributionConfig& c) {
+         c.aggregate_limit = {.delay_span = base::TimeDelta()};
+       })},
       {R"json({
         "max_sources_per_origin":"10",
-        "max_destinations_per_source_site_reporting_origin":"10",
+        "max_destinations_per_source_site_reporting_site":"10",
+        "max_destinations_per_rate_limit_window_reporting_site": "1",
+        "max_destinations_per_rate_limit_window": "2",
         "rate_limit_time_window":"10",
         "rate_limit_max_source_registration_reporting_origins":"20",
         "rate_limit_max_attribution_reporting_origins":"15",
         "rate_limit_max_attributions":"10",
+        "rate_limit_max_reporting_origins_per_source_reporting_site":"5",
         "navigation_source_trigger_data_cardinality":"100",
         "event_source_trigger_data_cardinality":"10",
         "randomized_response_epsilon":"0.2",
@@ -653,32 +716,38 @@ TEST(AttributionInteropParserTest, ValidConfig) {
         "aggregatable_report_min_delay":"10",
         "aggregatable_report_delay_span":"20"
       })json",
-       true,
-       AttributionConfig{
-           .max_sources_per_origin = 10,
-           .max_destinations_per_source_site_reporting_origin = 10,
-           .rate_limit = {.time_window = base::Days(10),
-                          .max_source_registration_reporting_origins = 20,
-                          .max_attribution_reporting_origins = 15,
-                          .max_attributions = 10},
-           .event_level_limit = {.navigation_source_trigger_data_cardinality =
-                                     100,
-                                 .event_source_trigger_data_cardinality = 10,
-                                 .randomized_response_epsilon = 0.2,
-                                 .max_reports_per_destination = 10,
-                                 .max_attributions_per_navigation_source = 5,
-                                 .max_attributions_per_event_source = 1},
-           .aggregate_limit = {.max_reports_per_destination = 10,
-                               .aggregatable_budget_per_source = 1000,
-                               .min_delay = base::Minutes(10),
-                               .delay_span = base::Minutes(20)}}},
-  };
+       true, AttributionConfigWith([](AttributionConfig& c) {
+         c.max_sources_per_origin = 10;
+         c.max_destinations_per_source_site_reporting_site = 10;
+         c.rate_limit =
+             RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+               r.time_window = base::Days(10);
+               r.max_source_registration_reporting_origins = 20;
+               r.max_attribution_reporting_origins = 15;
+               r.max_attributions = 10;
+               r.max_reporting_origins_per_source_reporting_site = 5;
+             });
+         c.event_level_limit =
+             EventLevelLimitWith([](AttributionConfig::EventLevelLimit& e) {
+               e.navigation_source_trigger_data_cardinality = 100;
+               e.event_source_trigger_data_cardinality = 10;
+               e.randomized_response_epsilon = 0.2;
+               e.max_reports_per_destination = 10;
+               e.max_attributions_per_navigation_source = 5;
+               e.max_attributions_per_event_source = 1;
+             }),
+         c.aggregate_limit = {.max_reports_per_destination = 10,
+                              .aggregatable_budget_per_source = 1000,
+                              .min_delay = base::Minutes(10),
+                              .delay_span = base::Minutes(20)},
+         c.throttler_policy = {.max_total = 2, .max_per_reporting_site = 1};
+       })}};
 
   for (const auto& test_case : kTestCases) {
     base::Value::Dict json = base::test::ParseJsonDict(test_case.json);
     if (test_case.required) {
       auto result = ParseAttributionConfig(json);
-      EXPECT_TRUE(result.has_value()) << json;
+      ASSERT_TRUE(result.has_value()) << json;
       EXPECT_EQ(result, test_case.expected) << json;
     } else {
       AttributionConfig config;
@@ -691,11 +760,14 @@ TEST(AttributionInteropParserTest, ValidConfig) {
 TEST(AttributionInteropParserTest, InvalidConfigPositiveIntegers) {
   const char* const kFields[] = {
       "max_sources_per_origin",
-      "max_destinations_per_source_site_reporting_origin",
+      "max_destinations_per_source_site_reporting_site",
+      "max_destinations_per_rate_limit_window_reporting_site",
+      "max_destinations_per_rate_limit_window",
       "rate_limit_time_window",
       "rate_limit_max_source_registration_reporting_origins",
       "rate_limit_max_attribution_reporting_origins",
       "rate_limit_max_attributions",
+      "rate_limit_max_reporting_origins_per_source_reporting_site",
       "navigation_source_trigger_data_cardinality",
       "event_source_trigger_data_cardinality",
       "max_event_level_reports_per_destination",

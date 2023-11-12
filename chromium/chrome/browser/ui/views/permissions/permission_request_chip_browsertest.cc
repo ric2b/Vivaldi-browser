@@ -96,8 +96,13 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestChipGestureSensitiveBrowserTest,
   // location icon isn't offset by the chip and the bubble is hidden.
   EXPECT_FALSE(lbv->chip_controller()->IsPermissionPromptChipVisible());
   EXPECT_FALSE(lbv->chip_controller()->IsBubbleShowing());
-  EXPECT_EQ(lbv->location_icon_view()->bounds().x(),
-            GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING));
+  if (!features::IsChromeRefresh2023()) {
+    // CR2023 has a few experimental flavors of LocationIconView positioning.
+    // It does not make sense to test them here.
+    // See LocationBarView::Layout().
+    EXPECT_EQ(lbv->location_icon_view()->bounds().x(),
+              GetLayoutConstant(LOCATION_BAR_ELEMENT_PADDING));
+  }
 
   // Ensure no callbacks are pending.
   EXPECT_FALSE(lbv->chip_controller()->is_collapse_timer_running_for_testing());
@@ -372,16 +377,11 @@ class PermissionRequestChipDialogBrowserTest : public UiBrowserTest {
     if (!chip)
       return false;
 
-// TODO(olesiamrukhno): VerifyPixelUi works only for these platforms, revise
-// this if supported platforms change.
-#if BUILDFLAG(IS_WIN) || (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
     auto* test_info = testing::UnitTest::GetInstance()->current_test_info();
     const std::string screenshot_name =
         base::StrCat({test_info->test_case_name(), "_", test_info->name()});
-    return VerifyPixelUi(chip, "BrowserUi", screenshot_name);
-#else
-    return true;
-#endif
+    return VerifyPixelUi(chip, "BrowserUi", screenshot_name) !=
+           ui::test::ActionResult::kFailed;
   }
 
   void WaitForUserDismissal() override {

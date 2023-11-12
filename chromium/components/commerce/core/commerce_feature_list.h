@@ -82,11 +82,24 @@ BASE_DECLARE_FEATURE(kCommerceAllowLocalImages);
 BASE_DECLARE_FEATURE(kCommerceAllowOnDemandBookmarkUpdates);
 BASE_DECLARE_FEATURE(kCommerceAllowOnDemandBookmarkBatchUpdates);
 BASE_DECLARE_FEATURE(kCommerceAllowServerImages);
+BASE_DECLARE_FEATURE(kCommerceLocalPDPDetection);
 BASE_DECLARE_FEATURE(kCommerceMerchantViewer);
 BASE_DECLARE_FEATURE(kCommerceMerchantViewerRegionLaunched);
 extern const base::FeatureParam<bool> kDeleteAllMerchantsOnClearBrowsingHistory;
+
+// Feature flag for Price Insights.
+BASE_DECLARE_FEATURE(kPriceInsights);
+BASE_DECLARE_FEATURE(kPriceInsightsRegionLaunched);
+extern const char kPriceInsightsDelayChipParam[];
+extern const base::FeatureParam<bool> kPriceInsightsDelayChip;
+extern const char kPriceInsightsChipLabelExpandOnHighPriceParam[];
+extern const base::FeatureParam<bool> kPriceInsightsChipLabelExpandOnHighPrice;
+extern const char kPriceInsightsShowFeedbackParam[];
+extern const base::FeatureParam<bool> kPriceInsightsShowFeedback;
+
 BASE_DECLARE_FEATURE(kShoppingList);
 BASE_DECLARE_FEATURE(kShoppingListRegionLaunched);
+BASE_DECLARE_FEATURE(kShoppingListTrackByDefault);
 BASE_DECLARE_FEATURE(kShoppingPDPMetrics);
 BASE_DECLARE_FEATURE(kShoppingPDPMetricsRegionLaunched);
 BASE_DECLARE_FEATURE(kRetailCoupons);

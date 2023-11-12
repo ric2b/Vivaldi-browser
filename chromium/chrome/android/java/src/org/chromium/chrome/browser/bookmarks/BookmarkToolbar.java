@@ -25,6 +25,7 @@ import org.chromium.components.browser_ui.util.ToolbarUtils;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
@@ -48,7 +49,7 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
     // TODO(crbug.com/1425201): Remove BookmarkModel reference.
     private BookmarkModel mBookmarkModel;
     private BookmarkOpener mBookmarkOpener;
-    private SelectionDelegate mSelectionDelegate;
+    private SelectionDelegate<BookmarkId> mSelectionDelegate;
 
     // The current folder can be null before being set by the mediator.
     private @Nullable BookmarkItem mCurrentFolder;
@@ -59,8 +60,8 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
     private boolean mIsSelectionUiShowing;
     private boolean mSearchButtonVisible;
     private boolean mEditButtonVisible;
+    private boolean mNewFolderButtonVisible;
 
-    private Runnable mOpenSearchUiRunnable;
     private Callback<BookmarkId> mOpenFolderCallback;
     private Function<Integer, Boolean> mMenuIdClickedFunction;
 
@@ -128,10 +129,12 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
             showNormalView();
         }
 
-        if (mBookmarkUiMode == BookmarkUiMode.SEARCHING) {
-            showSearchView(mSoftKeyboardVisible);
-        } else {
-            hideSearchView(/*notify=*/false);
+        if (!BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
+            if (mBookmarkUiMode == BookmarkUiMode.SEARCHING) {
+                showSearchView(mSoftKeyboardVisible);
+            } else {
+                hideSearchView(/*notify=*/false);
+            }
         }
     }
 
@@ -167,6 +170,11 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         getMenu().findItem(R.id.edit_menu_id).setVisible(visible);
     }
 
+    void setNewFolderButtonVisible(boolean visible) {
+        mNewFolderButtonVisible = visible;
+        getMenu().findItem(R.id.create_new_folder_menu_id).setVisible(visible);
+    }
+
     void setNavigationButtonState(@NavigationButton int navigationButtonState) {
         setNavigationButton(navigationButtonState);
     }
@@ -183,16 +191,16 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         mCurrentFolder = mBookmarkModel.getBookmarkById(folder);
     }
 
-    void setOpenSearchUiRunnable(Runnable runnable) {
-        mOpenSearchUiRunnable = runnable;
-    }
-
     void setOpenFolderCallback(Callback<BookmarkId> openFolderCallback) {
         mOpenFolderCallback = openFolderCallback;
     }
 
     void setMenuIdClickedFunction(Function<Integer, Boolean> menuIdClickedFunction) {
         mMenuIdClickedFunction = menuIdClickedFunction;
+    }
+
+    void fakeSelectionStateChange() {
+        onSelectionStateChange(new ArrayList<>(mSelectionDelegate.getSelectedItems()));
     }
 
     // OnMenuItemClickListener implementation.

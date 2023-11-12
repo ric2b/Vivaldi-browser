@@ -594,6 +594,7 @@ var defaultTests = [
       chrome.test.assertEq('Running', item.status);
       chrome.test.assertTrue(item.showsTooltip);
       chrome.test.assertFalse(item.pinnedByPolicy);
+      chrome.test.assertFalse(item.pinStateForcedByType);
       chrome.test.assertFalse(item.hasNotification);
     }));
   },
@@ -1402,13 +1403,13 @@ var overviewDragTests = [
   }
 ];
 
-var splitviewLeftSnappedTests = [
-  function getSplitViewControllerStateLeftSnapped() {
+var splitviewPrimarySnappedTests = [
+  function getSplitViewControllerStatePrimarySnapped() {
     chrome.autotestPrivate.getAppWindowList(
         chrome.test.callbackPass(function(list) {
           var found = false;
           list.forEach(window => {
-            if (window.stateType == 'LeftSnapped')
+            if (window.stateType == 'PrimarySnapped')
               found = true;
           });
           chrome.test.assertTrue(found);
@@ -1516,6 +1517,27 @@ var shelfTests = [function fetchShelfUIInfo() {
       }));
 }];
 
+var isFeatureEnabledTests = [
+  function getEnabledFeature() {
+    chrome.autotestPrivate.isFeatureEnabled("EnabledFeatureForTest",
+      chrome.test.callbackPass(enabled => {
+        chrome.test.assertTrue(enabled);
+      }));
+  },
+  function getDisabledFeature() {
+    chrome.autotestPrivate.isFeatureEnabled("DisabledFeatureForTest",
+      chrome.test.callbackPass(enabled => {
+        chrome.test.assertFalse(enabled);
+      }));
+  },
+  function getUnknownFeature() {
+    chrome.autotestPrivate.isFeatureEnabled("UnknownFeature",
+      chrome.test.callbackFail(
+        "feature UnknownFeature is not on allowlist, see " +
+        "AutotestPrivateIsFeatureEnabledFunction::Run() to update the list"));
+  }
+];
+
 var launcherSearchBoxStateTests = [ function verifyGhostText(){
   chrome.autotestPrivate.getLauncherSearchBoxState(
       chrome.test.callbackPass(info => {
@@ -1590,9 +1612,9 @@ var systemWebAppsTests = [
         chrome.autotestPrivate.getLacrosInfo(
             chrome.test.callbackPass(function(lacrosInfo) {
               chrome.test.assertEq('Unavailable', lacrosInfo['state']);
-              chrome.test.assertTrue(!lacrosInfo['isKeepAlive']);
+              chrome.test.assertTrue(lacrosInfo['isKeepAlive']);
               chrome.test.assertEq('', lacrosInfo['lacrosPath']);
-              chrome.test.assertEq('SideBySide', lacrosInfo['mode']);
+              chrome.test.assertEq('Only', lacrosInfo['mode']);
             }));
       },
     ]
@@ -1606,9 +1628,10 @@ var systemWebAppsTests = [
       'arcPerformanceTracing': arcPerformanceTracingTests,
       'overviewDefault': overviewTests,
       'overviewDrag': overviewDragTests,
-      'splitviewLeftSnapped': splitviewLeftSnappedTests,
+      'splitviewPrimarySnapped': splitviewPrimarySnappedTests,
       'scrollableShelf': scrollableShelfTests,
       'shelf': shelfTests,
+      'isFeatureEnabled': isFeatureEnabledTests,
       'holdingSpace': holdingSpaceTests,
       'systemWebApps': systemWebAppsTests,
       'lacrosEnabled': lacrosEnabledTests,

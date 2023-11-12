@@ -8,6 +8,8 @@
 #include <string>
 
 #include "ash/ash_export.h"
+#include "base/callback_list.h"
+#include "base/functional/callback_forward.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "chromeos/crosapi/mojom/clipboard_history.mojom.h"
@@ -23,6 +25,9 @@ class ASH_EXPORT ClipboardHistoryItem {
   // Note: `data` must have at least one supported format, as determined by
   // `clipboard_history_util::IsSupported()`.
   explicit ClipboardHistoryItem(ui::ClipboardData data);
+
+  // TODO(b/279797913): Remove copy and move constructors once the clipboard
+  // history model starts storing and returning shared pointers to items.
   ClipboardHistoryItem(const ClipboardHistoryItem&);
   ClipboardHistoryItem(ClipboardHistoryItem&&);
 
@@ -37,6 +42,17 @@ class ASH_EXPORT ClipboardHistoryItem {
   // Returns the replaced `data_`.
   ui::ClipboardData ReplaceEquivalentData(ui::ClipboardData&& new_data);
 
+  // Sets `display_image_` to `display_image` and notifies
+  // `display_image_updated_callbacks_`.
+  void SetDisplayImage(const ui::ImageModel& display_image);
+
+  // Adds `callback` to be notified if `display_image_` is updated.
+  // Note: `callback` will only run if `display_image_` is updated on the item
+  // to which it was added; copy-constructed and move-constructed items do not
+  // retain callbacks added to the original.
+  base::CallbackListSubscription AddDisplayImageUpdatedCallback(
+      base::RepeatingClosure callback) const;
+
   const base::UnguessableToken& id() const { return id_; }
   const ui::ClipboardData& data() const { return data_; }
   const base::Time time_copied() const { return time_copied_; }
@@ -44,15 +60,12 @@ class ASH_EXPORT ClipboardHistoryItem {
   crosapi::mojom::ClipboardHistoryDisplayFormat display_format() const {
     return display_format_;
   }
-  void set_display_image(const ui::ImageModel& display_image) {
-    DCHECK(display_image.IsImage());
-    display_image_ = display_image;
-  }
   const absl::optional<ui::ImageModel>& display_image() const {
     return display_image_;
   }
   const std::u16string& display_text() const { return display_text_; }
   const absl::optional<ui::ImageModel>& icon() const { return icon_; }
+  size_t file_count() const { return file_count_; }
 
  private:
   // Unique identifier.
@@ -84,6 +97,12 @@ class ASH_EXPORT ClipboardHistoryItem {
   // Cached image model for the item's icon. Currently, there will be no value
   // for non-file items.
   const absl::optional<ui::ImageModel> icon_;
+
+  // Indicates the count of copied files in the underlying clipboard data.
+  const size_t file_count_;
+
+  // Mutable to allow const access from `AddDisplayImageUpdatedCallback()`.
+  mutable base::RepeatingClosureList display_image_updated_callbacks_;
 };
 
 }  // namespace ash

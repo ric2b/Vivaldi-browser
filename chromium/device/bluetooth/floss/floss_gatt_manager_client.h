@@ -247,7 +247,8 @@ class DEVICE_BLUETOOTH_EXPORT FlossGattClientObserver
                                      int32_t timeout,
                                      GattStatus status) {}
 
-  // Notification when there is an addition/removal/change of a GATT service.
+  // Notification from the peer that some records are updated, so a re-discovery
+  // is in order.
   virtual void GattServiceChanged(std::string address) {}
 };
 
@@ -650,7 +651,7 @@ class DEVICE_BLUETOOTH_EXPORT FlossGattManagerClient
                                GattStatus status) override;
 
   // Managed by FlossDBusManager - we keep local pointer to access object proxy.
-  base::raw_ptr<dbus::Bus> bus_ = nullptr;
+  raw_ptr<dbus::Bus> bus_ = nullptr;
 
   // Path used for gatt api calls by this class.
   dbus::ObjectPath gatt_adapter_path_;

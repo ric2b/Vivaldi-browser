@@ -215,7 +215,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
     args.Append(base::Value(kDefaultLanguageList[i]));
   }
   registry->RegisterListPref(vivaldiprefs::kVivaldiTranslateLanguageList,
-                             base::Value(std::move(args)));
+                             std::move(args));
 
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiClientHintsBrand,
                                 int(BrandSelection::kChromeBrand));
@@ -417,11 +417,11 @@ void RegisterPrefsFromDefinition(base::Value::Dict& definition,
                                    flags);
       break;
     case PrefKind::kList:
-      registry->RegisterListPref(current_path, std::move(default_value), flags);
+      registry->RegisterListPref(current_path, std::move(default_value.GetList()), flags);
 
       break;
     case PrefKind::kDictionary:
-      registry->RegisterDictionaryPref(current_path, std::move(default_value),
+      registry->RegisterDictionaryPref(current_path, std::move(default_value.GetDict()),
                                        flags);
       break;
     default:
@@ -577,7 +577,7 @@ void PatchPrefsJson(base::Value::Dict& prefs, base::Value& overrides) {
           error(verify_error);
           break;
         }
-        std::string* theme_id = elem.FindStringKey(vivaldi_theme_io::kIdKey);
+        std::string* theme_id = elem.GetDict().FindString(vivaldi_theme_io::kIdKey);
         if (base::StartsWith(*theme_id, vivaldi_theme_io::kVivaldiIdPrefix)) {
           error(std::string("id of an extra theme cannot start with ") +
                 vivaldi_theme_io::kVivaldiIdPrefix + ". Use " +
@@ -731,7 +731,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
   RegisterOldPrefs(registry);
 #else
-#if defined(OEM_MERCEDES_BUILD)
+#if defined(OEM_MERCEDES_BUILD) || defined(OEM_LYNKCO_BUILD)
   registry->RegisterBooleanPref(vivaldiprefs::kBackgroundMediaPlaybackAllowed,
                                 true);
 #else

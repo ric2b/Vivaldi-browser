@@ -97,7 +97,8 @@ H264Encoder::H264Encoder(
 H264Encoder::~H264Encoder() = default;
 
 void H264Encoder::EncodeFrame(scoped_refptr<media::VideoFrame> frame,
-                              base::TimeTicks capture_timestamp) {
+                              base::TimeTicks capture_timestamp,
+                              bool request_keyframe) {
   TRACE_EVENT0("media", "H264Encoder::EncodeFrame");
   using media::VideoFrame;
   DCHECK(frame->format() == media::VideoPixelFormat::PIXEL_FORMAT_NV12 ||
@@ -138,6 +139,11 @@ void H264Encoder::EncodeFrame(scoped_refptr<media::VideoFrame> frame,
       const_cast<uint8_t*>(frame->visible_data(VideoFrame::kVPlane));
 
   SFrameBSInfo info = {};
+
+  // ForceIntraFrame(false) should be nop, but actually logs, avoid this.
+  if (request_keyframe) {
+    openh264_encoder_->ForceIntraFrame(true);
+  }
   if (openh264_encoder_->EncodeFrame(&picture, &info) != cmResultSuccess) {
     NOTREACHED() << "OpenH264 encoding failed";
     return;
@@ -192,7 +198,6 @@ bool H264Encoder::ConfigureEncoder(const gfx::Size& size) {
   DCHECK_EQ(AUTO_REF_PIC_COUNT, init_params.iNumRefFrame);
   DCHECK(!init_params.bSimulcastAVC);
 
-  init_params.uiIntraPeriod = 100;  // Same as for VpxEncoder.
   init_params.iPicWidth = size.width();
   init_params.iPicHeight = size.height();
 

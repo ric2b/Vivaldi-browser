@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">Məzmununa görə</translation>
 <translation id="2129408066358825297">Yaşı</translation>
 <translation id="2148384276939959392">Seçiləni eyniləşdirin</translation>
+<translation id="21693288559538605">Reklam və izləyici əngəlləyicinin xülasəsi</translation>
 <translation id="2195713384412091023">Bu, sizin serverimizdə saxlanılan bütün verilənlərinizi siləcək, şifrələmə şifrələrinizi sıfırlayacaq və çıxış etməklə hesabınızı bağlayacaqdır.</translation>
 <translation id="2243210264130642074">Saxlanılmadı</translation>
 <translation id="2272338747456392228">Hesab kilidləndi</translation>
 <translation id="2273327106802955778">Daha çox menyu</translation>
 <translation id="2324160330092901720">Doğrulama kodu <ph name="EMAIL_ID" /> ünvanına göndərildi</translation>
+<translation id="2336309953058658733">Səbəti boşaldın</translation>
 <translation id="2359808026110333948">Davam edin</translation>
 <translation id="2386793615875593361">1 seçildi</translation>
 <translation id="2388224692799337242">Baxış tarixçəniz burada görünəcək</translation>
@@ -117,6 +119,7 @@
 <translation id="3699026013955941879">Kodun vaxtı bitib. Yeni aktivasiya kodu tələb edin.</translation>
 <translation id="3700829948786686853">Vivaldiyə Xoş Gəldiniz</translation>
 <translation id="3766350025418769949">Vivaldi şifrə menecerində saxlanılmış şifrələri iPad-ınızdakı başqa tətbiqlərdə istifadə edə bilərsiniz.</translation>
+<translation id="3845564230651302310">Yeni əngəlləyici ayarları tətbiq edilir...</translation>
 <translation id="3858860766373142691">Adı</translation>
 <translation id="3866249974567520381">Açıqlaması</translation>
 <translation id="3872195896030547485">Doğru e-poçt ünvanı seçməyiniz xahiş olunur.</translation>
@@ -225,6 +228,7 @@
 <translation id="6406506848690869874">Eyniləşdirin</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" />seçildi</translation>
 <translation id="6468130661190228905">Təəssüf edirik, cəmiyyətimizə qoşulmaq üçün bir az gözləməyiniz lazım gələcək. Cəmiyyətimizə üzv olmaq üçün ən az 16 yaşınız olmalıdır.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />idxal edin<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Ehtiyyat şifrələmə açarı</translation>
 <translation id="6527303717912515753">Paylaşın</translation>
 <translation id="6535988230515403205">Polyakca (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@
 <translation id="7461899062138731833">MƏNBƏLƏR</translation>
 <translation id="750493650310597496">0 seçilib</translation>
 <translation id="7525067979554623046">Yaradın</translation>
-<translation id="7541020606126512786">Reklam və İzləyici əngəlləyici statistikası</translation>
 <translation id="7573518470897278603">Saytın mobil versiyasını göstərmək</translation>
 <translation id="7574321014880720413">Yeni domen əlavə edin</translation>
 <translation id="7587132259180664054">Məktub uğurla göndərildi</translation>

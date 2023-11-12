@@ -16,6 +16,7 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/process/launch.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -28,6 +29,7 @@
 #include "chrome/updater/lock.h"
 #include "chrome/updater/persisted_data.h"
 #include "chrome/updater/prefs.h"
+#include "chrome/updater/updater_scope.h"
 #include "chrome/updater/updater_version.h"
 #include "chrome/updater/util/util.h"
 #include "components/update_client/update_client.h"
@@ -39,49 +41,85 @@
 #include "chrome/updater/posix/setup.h"
 #endif
 
-#if BUILDFLAG(IS_LINUX)
-// TODO(crbug.com/1431487): Remove these includes after investigation.
-#include "base/ranges/algorithm.h"
-#include "url/gurl.h"
-#endif
-
 namespace updater {
-namespace {
 
-// Uninstalls all versions not matching this version of the updater for the
-// given `scope`.
-void UninstallOtherVersions(UpdaterScope scope) {
+std::vector<base::FilePath> GetVersionExecutablePaths(UpdaterScope scope) {
   const absl::optional<base::FilePath> updater_folder_path =
       GetInstallDirectory(scope);
   if (!updater_folder_path) {
-    LOG(ERROR) << "Failed to get updater folder path.";
-    return;
+    LOG(ERROR) << __func__ << ": failed to get the updater install directory.";
+    return {};
   }
-  base::FileEnumerator file_enumerator(*updater_folder_path, true,
+  std::vector<base::FilePath> version_executable_paths;
+  base::FileEnumerator file_enumerator(*updater_folder_path, false,
                                        base::FileEnumerator::DIRECTORIES);
   for (base::FilePath version_folder_path = file_enumerator.Next();
-       !version_folder_path.empty() &&
-       version_folder_path != GetVersionedInstallDirectory(scope);
+       !version_folder_path.empty();
        version_folder_path = file_enumerator.Next()) {
+    // Skip the current version.
+    if (version_folder_path == GetVersionedInstallDirectory(scope)) {
+      VLOG(1) << __func__
+              << " : skipping the current version: " << version_folder_path;
+      continue;
+    }
+
+#if BUILDFLAG(IS_WIN)
+    const base::Version folder_version(
+        base::WideToASCII(version_folder_path.BaseName().value()));
+#else
+    const base::Version folder_version(version_folder_path.BaseName().value());
+#endif  // BUILDFLAG(IS_WIN)
+
+    // Skip if the folder is not named as a valid version. All updater version
+    // directories are named as valid versions.
+    if (!folder_version.IsValid()) {
+      continue;
+    }
+
     const base::FilePath version_executable_path =
         version_folder_path.Append(GetExecutableRelativePath());
 
     if (base::PathExists(version_executable_path)) {
-      base::CommandLine command_line(version_executable_path);
-      command_line.AppendSwitch(kUninstallSelfSwitch);
-      if (IsSystemInstall(scope)) {
-        command_line.AppendSwitch(kSystemSwitch);
-      }
-      command_line.AppendSwitch(kEnableLoggingSwitch);
-      command_line.AppendSwitchASCII(kLoggingModuleSwitch,
-                                     kLoggingModuleSwitchValue);
-      int exit_code = -1;
-      std::string output;
-      base::GetAppOutputWithExitCode(command_line, &output, &exit_code);
+      version_executable_paths.push_back(version_executable_path);
+      VLOG(1) << __func__ << " : added to version_executable_paths: "
+              << version_executable_path;
     } else {
-      VLOG(1) << base::CommandLine::ForCurrentProcess()->GetCommandLineString()
-              << " : Path doesn't exist: " << version_executable_path;
+      VLOG(1) << __func__
+              << " : File does not exist: " << version_executable_path;
     }
+  }
+
+  return version_executable_paths;
+}
+
+base::CommandLine GetUninstallSelfCommandLine(
+    UpdaterScope scope,
+    const base::FilePath& executable_path) {
+  base::CommandLine command_line(executable_path);
+  command_line.AppendSwitch(kUninstallSelfSwitch);
+  if (IsSystemInstall(scope)) {
+    command_line.AppendSwitch(kSystemSwitch);
+  }
+  command_line.AppendSwitch(kEnableLoggingSwitch);
+  command_line.AppendSwitchASCII(kLoggingModuleSwitch,
+                                 kLoggingModuleSwitchValue);
+  return command_line;
+}
+
+namespace {
+
+// Uninstalls all versions not matching the current version of the updater for
+// the given `scope`.
+void UninstallOtherVersions(UpdaterScope scope) {
+  for (const base::FilePath& version_executable_path :
+       GetVersionExecutablePaths(scope)) {
+    const base::CommandLine command_line(
+        GetUninstallSelfCommandLine(scope, version_executable_path));
+    int exit_code = -1;
+    std::string output;
+    base::GetAppOutputWithExitCode(command_line, &output, &exit_code);
+    VLOG(1) << __func__ << ": Ran: " << command_line.GetCommandLineString()
+            << ": " << output << ": " << exit_code;
   }
 }
 
@@ -140,12 +178,6 @@ void AppUninstall::UninstallAll(int reason) {
     // currently-running version of the updater.
     uninstall_data.version = base::Version(kUpdaterVersion);
   }
-// TODO(crbug.com/1431487): Remove this code after investigation.
-#if BUILDFLAG(IS_LINUX)
-  CHECK(base::ranges::none_of(config_->PingUrl(), [](const GURL& url) {
-    return url.DomainIs("update.googleapis.com");
-  })) << "Attempted to send an uninstall ping to non-local server";
-#endif
   update_client::UpdateClientFactory(config_)->SendUninstallPing(
       uninstall_data, reason,
       base::BindOnce(

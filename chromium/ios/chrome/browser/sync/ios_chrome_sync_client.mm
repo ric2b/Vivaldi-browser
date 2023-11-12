@@ -29,23 +29,25 @@
 #import "components/reading_list/core/reading_list_model.h"
 #import "components/sync/base/report_unrecoverable_error.h"
 #import "components/sync/base/sync_util.h"
-#import "components/sync/driver/sync_api_component_factory.h"
-#import "components/sync/driver/sync_service.h"
+#import "components/sync/service/sync_api_component_factory.h"
+#import "components/sync/service/sync_service.h"
 #import "components/sync_sessions/session_sync_service.h"
 #import "components/sync_user_events/user_event_service.h"
+#import "components/variations/service/google_groups_updater_service.h"
 #import "ios/chrome/browser/bookmarks/account_bookmark_sync_service_factory.h"
 #import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_sync_service_factory.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/consent_auditor/consent_auditor_factory.h"
 #import "ios/chrome/browser/dom_distiller/dom_distiller_service_factory.h"
 #import "ios/chrome/browser/favicon/favicon_service_factory.h"
 #import "ios/chrome/browser/history/history_service_factory.h"
 #import "ios/chrome/browser/invalidation/ios_chrome_profile_invalidation_provider_factory.h"
+#import "ios/chrome/browser/metrics/google_groups_updater_service_factory.h"
 #import "ios/chrome/browser/passwords/ios_chrome_account_password_store_factory.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #import "ios/chrome/browser/power_bookmarks/power_bookmark_service_factory.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/reading_list/reading_list_model_factory.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/signin/trusted_vault_client_backend_factory.h"
@@ -189,7 +191,8 @@ IOSChromeSyncClient::GetSyncInvalidationsService() {
   return SyncInvalidationsServiceFactory::GetForBrowserState(browser_state_);
 }
 
-syncer::TrustedVaultClient* IOSChromeSyncClient::GetTrustedVaultClient() {
+trusted_vault::TrustedVaultClient*
+IOSChromeSyncClient::GetTrustedVaultClient() {
   return trusted_vault_client_.get();
 }
 
@@ -241,4 +244,10 @@ IOSChromeSyncClient::GetPreferenceProvider() {
 void IOSChromeSyncClient::OnLocalSyncTransportDataCleared() {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   metrics::ClearDemographicsPrefs(browser_state_->GetPrefs());
+
+  GoogleGroupsUpdaterService* google_groups_updater =
+      GoogleGroupsUpdaterServiceFactory::GetForBrowserState(browser_state_);
+  if (google_groups_updater != nullptr) {
+    google_groups_updater->ClearSigninScopedState();
+  }
 }

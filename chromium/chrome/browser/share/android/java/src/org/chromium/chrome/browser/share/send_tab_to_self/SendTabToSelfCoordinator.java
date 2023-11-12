@@ -15,7 +15,8 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
-import org.chromium.chrome.browser.sync.SyncService;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
+import org.chromium.chrome.browser.ui.signin.DeviceLockActivityLauncher;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerBottomSheetCoordinator;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerBottomSheetCoordinator.EntryPoint;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerBottomSheetStrings;
@@ -25,6 +26,7 @@ import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.base.GoogleServiceAuthError;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
+import org.chromium.components.sync.SyncService;
 import org.chromium.ui.base.WindowAndroid;
 
 import java.util.List;
@@ -57,13 +59,13 @@ public class SendTabToSelfCoordinator {
             mGotDeviceListCallback = gotDeviceListCallback;
             mProfile = profile;
 
-            SyncService.get().addSyncStateChangedListener(this);
+            SyncServiceFactory.get().addSyncStateChangedListener(this);
             mBottomSheetController.addObserver(this);
             notifyAndDestroyIfDone();
         }
 
         private void destroy() {
-            SyncService.get().removeSyncStateChangedListener(this);
+            SyncServiceFactory.get().removeSyncStateChangedListener(this);
             mBottomSheetController.removeObserver(this);
         }
 
@@ -131,8 +133,7 @@ public class SendTabToSelfCoordinator {
         }
 
         @Override
-        @EntryPoint
-        public int getEntryPoint() {
+        public @EntryPoint int getEntryPoint() {
             return EntryPoint.SEND_TAB_TO_SELF;
         }
     }
@@ -143,15 +144,18 @@ public class SendTabToSelfCoordinator {
     private final String mTitle;
     private final BottomSheetController mController;
     private final Profile mProfile;
+    private final DeviceLockActivityLauncher mDeviceLockActivityLauncher;
 
     public SendTabToSelfCoordinator(Context context, WindowAndroid windowAndroid, String url,
-            String title, BottomSheetController controller, Profile profile) {
+            String title, BottomSheetController controller, Profile profile,
+            DeviceLockActivityLauncher deviceLockActivityLauncher) {
         mContext = context;
         mWindowAndroid = windowAndroid;
         mUrl = url;
         mTitle = title;
         mController = controller;
         mProfile = profile;
+        mDeviceLockActivityLauncher = deviceLockActivityLauncher;
     }
 
     public void show() {
@@ -187,7 +191,7 @@ public class SendTabToSelfCoordinator {
                 MetricsRecorder.recordSendingEvent(SendingEvent.SHOW_SIGNIN_PROMO);
                 new AccountPickerBottomSheetCoordinator(mWindowAndroid, mController,
                         new SendTabToSelfAccountPickerDelegate(this::onSignInComplete, mProfile),
-                        new BottomSheetStrings());
+                        new BottomSheetStrings(), mDeviceLockActivityLauncher);
                 return;
             }
         }

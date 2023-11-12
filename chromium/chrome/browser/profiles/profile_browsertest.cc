@@ -92,7 +92,6 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/value_builder.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -787,16 +786,8 @@ class ProfileBrowserTestWithoutDestroyProfile : public ProfileBrowserTest {
 
 // Verifies destroying regular profile will result in destruction of OTR
 // profiles.
-// TODO(crbug.com/1225252): Flakily fails on ASAN/LSAN builds
-// TODO(crbug.com/1304167): Failing on Mac.
-#if defined(ADDRESS_SANITIZER) || BUILDFLAG(IS_MAC)
-#define MAYBE_DestroyRegularProfileBeforeOTRs \
-  DISABLED_DestroyRegularProfileBeforeOTRs
-#else
-#define MAYBE_DestroyRegularProfileBeforeOTRs DestroyRegularProfileBeforeOTRs
-#endif
 IN_PROC_BROWSER_TEST_F(ProfileBrowserTestWithoutDestroyProfile,
-                       MAYBE_DestroyRegularProfileBeforeOTRs) {
+                       DestroyRegularProfileBeforeOTRs) {
   auto otr_profile_id1 = Profile::OTRProfileID::CreateUniqueForTesting();
   auto otr_profile_id2 = Profile::OTRProfileID::CreateUniqueForTesting();
 
@@ -824,7 +815,10 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTestWithoutDestroyProfile,
   ProfileDestroyer::DestroyOriginalProfileWhenAppropriate(
       std::move(regular_profile));
 
+  waiter1.Wait();
   EXPECT_TRUE(waiter1.destroyed());
+
+  waiter2.Wait();
   EXPECT_TRUE(waiter2.destroyed());
 }
 

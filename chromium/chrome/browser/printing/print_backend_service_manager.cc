@@ -680,8 +680,8 @@ PrintBackendServiceManager::RegisterClient(
                 /*printer_name=*/absl::get<std::string>(destination))
           : absl::get<RemoteId>(destination);
 
-  VLOG(1) << "Registering a client with ID " << client_id
-          << " for print backend service.";
+  VLOG(1) << "Registering a client with ID " << client_id << " (client type "
+          << ClientTypeToString(client_type) << ") for print backend service.";
   switch (client_type) {
     case ClientType::kQuery:
       query_clients_.insert(client_id);
@@ -1477,7 +1477,7 @@ template <class... T>
 void PrintBackendServiceManager::RunSavedCallbacks(
     RemoteSavedCallbacks<T...>& saved_callbacks,
     const RemoteId& remote_id,
-    std::remove_reference<T>::type... result) {
+    typename std::remove_reference<T>::type... result) {
   auto found_callbacks_map = saved_callbacks.find(remote_id);
   if (found_callbacks_map == saved_callbacks.end())
     return;  // No callbacks to run.

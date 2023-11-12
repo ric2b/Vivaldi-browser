@@ -209,7 +209,6 @@ using l10n_util::GetNSString;
 }
 
 - (UIAction*)actionToMoveFolderWithBlock:(ProceduralBlock)block {
-
   if (IsVivaldiRunning()) {
     return [self
         actionWithTitle:GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE)
@@ -218,9 +217,12 @@ using l10n_util::GetNSString;
                   block:block];
   } // End Vivaldi
 
+  // Use multi color to make sure the arrow is visible.
+  UIImage* image = MakeSymbolMulticolor(
+      CustomSymbolWithPointSize(kMoveFolderSymbol, kSymbolActionPointSize));
   return [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE)
-                image:[UIImage imageNamed:@"move_folder"]
+                image:image
                  type:MenuActionType::Move
                 block:block];
 }

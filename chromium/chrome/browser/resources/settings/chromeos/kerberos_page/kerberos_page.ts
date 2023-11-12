@@ -12,16 +12,16 @@ import 'chrome://resources/cr_elements/policy/cr_policy_indicator.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import '../os_settings_page/os_settings_animated_pages.js';
+import '../os_settings_page/os_settings_section.js';
 import '../os_settings_page/os_settings_subpage.js';
-import '../../settings_shared.css.js';
-import './kerberos_accounts.js';
+import '../settings_shared.css.js';
 
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {routes} from '../os_settings_routes.js';
-import {Router} from '../router.js';
+import {Section} from '../mojom-webui/routes.mojom-webui.js';
+import {Router, routes} from '../router.js';
 
 import {getTemplate} from './kerberos_page.html.js';
 
@@ -40,6 +40,12 @@ export class SettingsKerberosPageElement extends
 
   static get properties() {
     return {
+      section_: {
+        type: Number,
+        value: Section.kKerberos,
+        readOnly: true,
+      },
+
       focusConfig_: {
         type: Object,
         value() {
@@ -47,7 +53,7 @@ export class SettingsKerberosPageElement extends
           if (routes.KERBEROS_ACCOUNTS_V2) {
             map.set(
                 routes.KERBEROS_ACCOUNTS_V2.path,
-                '#kerberos-accounts-subpage-trigger');
+                '#kerberosAccountsSubpageTrigger');
           }
           return map;
         },
@@ -56,6 +62,7 @@ export class SettingsKerberosPageElement extends
   }
 
   private focusConfig_: Map<string, string>;
+  private section_: Section;
 
   private onKerberosAccountsClick_(): void {
     Router.getInstance().navigateTo(routes.KERBEROS_ACCOUNTS_V2);

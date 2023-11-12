@@ -7,10 +7,10 @@
  * time zone settings.
  */
 import 'chrome://resources/cr_components/settings_prefs/prefs.js';
-import '../../controls/controlled_radio_button.js';
+import '/shared/settings/controls/controlled_radio_button.js';
 import '/shared/settings/controls/settings_dropdown_menu.js';
-import '../../controls/settings_radio_group.js';
-import '../../settings_shared.css.js';
+import '/shared/settings/controls/settings_radio_group.js';
+import '../settings_shared.css.js';
 import './timezone_selector.js';
 
 import {SettingsDropdownMenuElement} from '/shared/settings/controls/settings_dropdown_menu.js';
@@ -21,9 +21,8 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route} from '../router.js';
+import {Route, routes} from '../router.js';
 
 import {TimeZoneAutoDetectMethod} from './date_time_types.js';
 import {TimeZoneBrowserProxy, TimeZoneBrowserProxyImpl} from './timezone_browser_proxy.js';
@@ -74,6 +73,7 @@ export class TimezoneSubpageElement extends TimezoneSubpageElementBase {
     };
   }
 
+  activeTimeZoneDisplayName: string;
   private browserProxy_: TimeZoneBrowserProxy;
   private showEnableSystemGeolocationDialog_: boolean;
 

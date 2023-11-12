@@ -16,6 +16,7 @@
 #include "base/numerics/checked_math.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/trace_event/traced_value.h"
+#include "cc/base/features.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/compositor_commit_data.h"
 #include "cc/trees/effect_node.h"
@@ -347,10 +348,10 @@ gfx::Vector2dF TransformTree::StickyPositionOffset(TransformNode* node) {
       property_trees()->scroll_tree().Node(sticky_data->scroll_ancestor);
   const TransformNode* transform_node = Node(scroll_node->transform_id);
   DCHECK(transform_node);
-  gfx::PointF scroll_offset =
-      property_trees()->scroll_tree().current_scroll_offset(
-          scroll_node->element_id);
-  gfx::PointF scroll_position(scroll_offset.x(), scroll_offset.y());
+  // We need the scroll offset from the transform tree, not the scroll tree.
+  // Tracking the scroll tree here would make sticky elements run "ahead" of a
+  // main-repainted scroll.
+  gfx::PointF scroll_position = transform_node->scroll_offset;
   if (transform_node->scrolls) {
     // The scroll position does not include snapping which shifts the scroll
     // offset to align to a pixel boundary, we need to manually include it here.
@@ -1598,14 +1599,23 @@ const gfx::PointF ScrollTree::current_scroll_offset(ElementId id) const {
   return gfx::PointF();
 }
 
-const gfx::PointF ScrollTree::GetPixelSnappedScrollOffset(
-    int scroll_node_id) const {
-  const ScrollNode* scroll_node = Node(scroll_node_id);
-  DCHECK(scroll_node);
-  gfx::PointF offset = current_scroll_offset(scroll_node->element_id);
+gfx::PointF ScrollTree::GetScrollOffsetForScrollTimeline(
+    const ScrollNode& scroll_node) const {
+  gfx::PointF offset = current_scroll_offset(scroll_node.element_id);
+  if (!property_trees()->is_main_thread() &&
+      base::FeatureList::IsEnabled(features::kScrollUnification) &&
+      !CanRealizeScrollsOnCompositor(scroll_node)) {
+    // Ignore impl-thread scroll delta if the scroll can't be realized on
+    // compositor because the main thread is the source of truth in the case.
+    if (const SyncedScrollOffset* synced_offset =
+            GetSyncedScrollOffset(scroll_node.element_id)) {
+      offset = property_trees()->is_active() ? synced_offset->ActiveBase()
+                                             : synced_offset->PendingBase();
+    }
+  }
 
   const TransformNode* transform_node =
-      property_trees()->transform_tree().Node(scroll_node->transform_id);
+      property_trees()->transform_tree().Node(scroll_node.transform_id);
 
   // TODO(crbug.com/1418689): current_scroll_offset can disagree with
   // transform_node->scroll_offset if the delta on a main frame update is
@@ -1628,7 +1638,7 @@ const gfx::PointF ScrollTree::GetPixelSnappedScrollOffset(
     // TODO(crbug.com/1076878): Remove the clamping when scroll timeline effects
     // always match the snapping.
     offset = ClampScrollOffsetToLimits(offset - transform_node->snap_amount,
-                                       *scroll_node);
+                                       scroll_node);
   }
 
   return offset;

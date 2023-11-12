@@ -7,8 +7,8 @@
 #import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
 #import "components/optimization_guide/core/optimization_guide_features.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/optimization_guide/optimization_guide_service.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/platform_test.h"
 
@@ -33,7 +33,8 @@ class OptimizationGuideServiceFactoryTest : public PlatformTest {
         OptimizationGuideServiceFactory::GetDefaultFactory());
     browser_state_ = builder.Build();
     OptimizationGuideServiceFactory::GetForBrowserState(browser_state_.get())
-        ->DoFinalInit();
+        ->DoFinalInit(BackgroundDownloadServiceFactory::GetForBrowserState(
+            browser_state_.get()));
 
     ChromeBrowserState* otr_browser_state =
         browser_state_->CreateOffTheRecordBrowserStateWithTestingFactories(

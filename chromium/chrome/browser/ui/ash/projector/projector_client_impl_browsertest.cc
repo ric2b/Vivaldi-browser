@@ -96,11 +96,13 @@ class DriveFsMountStatusWaiter : public ProjectorAppClient::Observer {
       const NewScreencastPrecondition& condition) override {
     std::move(quit_closure_).Run();
   }
-  MOCK_METHOD1(OnScreencastsPendingStatusChanged,
-               void(const PendingScreencastSet&));
-  MOCK_METHOD1(OnSodaProgress, void(int));
-  MOCK_METHOD0(OnSodaError, void());
-  MOCK_METHOD0(OnSodaInstalled, void());
+  MOCK_METHOD(void,
+              OnScreencastsPendingStatusChanged,
+              (const PendingScreencastContainerSet&),
+              (override));
+  MOCK_METHOD(void, OnSodaProgress, (int), (override));
+  MOCK_METHOD(void, OnSodaError, (), (override));
+  MOCK_METHOD(void, OnSodaInstalled, (), (override));
 
   void SetDriveEnabled(bool enabled_drive, base::OnceClosure quit_closure) {
     quit_closure_ = std::move(quit_closure);
@@ -180,7 +182,6 @@ class ProjectorClientTest : public InProcessBrowserTest {
 // This test verifies that the (un)trusted Projector app and annotator WebUI
 // URLs are valid.
 IN_PROC_BROWSER_TEST_F(ProjectorClientTest, AppUrlsValid) {
-  VerifyUrlValid(kChromeUITrustedProjectorUrl);
   VerifyUrlValid(kChromeUIUntrustedProjectorUrl);
   VerifyUrlValid(kChromeUIUntrustedAnnotatorUrl);
 }
@@ -456,9 +457,10 @@ IN_PROC_BROWSER_TEST_P(ProjectorClientManagedTest, DisableThenEnablePolicy) {
   // We can't uninstall the Projector SWA until the next session, but the icon
   // is greyed out and disabled.
   EXPECT_EQ(apps::Readiness::kDisabledByPolicy,
-            GetAppReadiness(kChromeUITrustedProjectorSwaAppId));
-  EXPECT_TRUE(apps::IconEffects::kBlocked &
-              GetAppIconKey(kChromeUITrustedProjectorSwaAppId)->icon_effects);
+            GetAppReadiness(ash::kChromeUIUntrustedProjectorSwaAppId));
+  EXPECT_TRUE(
+      apps::IconEffects::kBlocked &
+      GetAppIconKey(ash::kChromeUIUntrustedProjectorSwaAppId)->icon_effects);
 
   // The app can re-enable too if it's already installed and the policy flips to
   // true.
@@ -470,9 +472,10 @@ IN_PROC_BROWSER_TEST_P(ProjectorClientManagedTest, DisableThenEnablePolicy) {
   web_app_provider->command_manager().AwaitAllCommandsCompleteForTesting();
 
   EXPECT_EQ(apps::Readiness::kReady,
-            GetAppReadiness(kChromeUITrustedProjectorSwaAppId));
-  EXPECT_FALSE(apps::IconEffects::kBlocked &
-               GetAppIconKey(kChromeUITrustedProjectorSwaAppId)->icon_effects);
+            GetAppReadiness(ash::kChromeUIUntrustedProjectorSwaAppId));
+  EXPECT_FALSE(
+      apps::IconEffects::kBlocked &
+      GetAppIconKey(ash::kChromeUIUntrustedProjectorSwaAppId)->icon_effects);
 }
 
 INSTANTIATE_TEST_SUITE_P(,

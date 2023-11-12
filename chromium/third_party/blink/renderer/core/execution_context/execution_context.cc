@@ -105,39 +105,6 @@ ExecutionContext* ExecutionContext::From(v8::Local<v8::Context> context) {
 }
 
 // static
-ExecutionContext* ExecutionContext::ForCurrentRealm(
-    const v8::FunctionCallbackInfo<v8::Value>& info) {
-  return ToExecutionContext(info.GetIsolate()->GetCurrentContext());
-}
-
-// static
-ExecutionContext* ExecutionContext::ForCurrentRealm(
-    const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto ctx = info.GetIsolate()->GetCurrentContext();
-  if (ctx.IsEmpty())
-    return nullptr;
-  return ToExecutionContext(ctx);
-}
-
-// static
-ExecutionContext* ExecutionContext::ForRelevantRealm(
-    const v8::FunctionCallbackInfo<v8::Value>& info) {
-  v8::Local<v8::Context> context;
-  if (!info.Holder()->GetCreationContext().ToLocal(&context))
-    return nullptr;
-  return ToExecutionContext(context);
-}
-
-// static
-ExecutionContext* ExecutionContext::ForRelevantRealm(
-    const v8::PropertyCallbackInfo<v8::Value>& info) {
-  v8::Local<v8::Context> context;
-  if (!info.Holder()->GetCreationContext().ToLocal(&context))
-    return nullptr;
-  return ToExecutionContext(context);
-}
-
-// static
 CodeCacheHost* ExecutionContext::GetCodeCacheHostFromContext(
     ExecutionContext* execution_context) {
   DCHECK_NE(execution_context, nullptr);
@@ -306,9 +273,6 @@ void ExecutionContext::ReportNavigatorUserAgentAccess() {
     return;
   has_filed_navigator_user_agent_issue_ = true;
   AuditsIssue::ReportNavigatorUserAgentAccess(this, Url().GetString());
-  base::UmaHistogramBoolean(
-      "Blink.Navigator.ReducedUserAgent",
-      RuntimeEnabledFeatures::UserAgentReductionEnabled(this));
 }
 
 void ExecutionContext::AddConsoleMessageImpl(
@@ -581,7 +545,6 @@ void ExecutionContext::Trace(Visitor* visitor) const {
   visitor->Trace(public_url_manager_);
   visitor->Trace(pending_exceptions_);
   visitor->Trace(csp_delegate_);
-  visitor->Trace(timers_);
   visitor->Trace(origin_trial_context_);
   visitor->Trace(content_security_policy_);
   visitor->Trace(runtime_feature_state_override_context_);

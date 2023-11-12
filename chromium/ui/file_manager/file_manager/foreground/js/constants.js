@@ -131,7 +131,11 @@ constants.ICON_TYPES = {
   ARCHIVE: 'archive',
   AUDIO: 'audio',
   BRUSCHETTA: 'bruschetta',
+  BULK_PINNING_BATTERY_SAVER: 'bulk_pinning_battery_saver',
+  BULK_PINNING_DONE: 'bulk_pinning_done',
+  BULK_PINNING_OFFLINE: 'bulk_pinning_offline',
   CAMERA_FOLDER: 'camera-folder',
+  CANT_PIN: 'cant-pin',
   CHECK: 'check',
   CLOUD_DONE: 'cloud_done',
   CLOUD_ERROR: 'cloud_error',
@@ -142,6 +146,7 @@ constants.ICON_TYPES = {
   COMPUTERS_GRAND_ROOT: 'computers_grand_root',
   CROSTINI: 'crostini',
   DOWNLOADS: 'downloads',
+  DRIVE_BULK_PINNING: 'drive_bulk_pinning',
   DRIVE_LOGO: 'drive_logo',
   DRIVE_OFFLINE: 'drive_offline',
   DRIVE_RECENT: 'drive_recent',
@@ -149,6 +154,7 @@ constants.ICON_TYPES = {
   DRIVE: 'drive',
   ENCRYPTED: 'encrypted',
   ERROR: 'error',
+  ERROR_BANNER: 'error_banner',
   EXCEL: 'excel',
   EXTERNAL_MEDIA: 'external_media',
   FOLDER: 'folder',
@@ -191,3 +197,10 @@ constants.ICON_TYPES = {
   VIDEO: 'video',
   WORD: 'word',
 };
+
+/**
+ * Extension ID for OneDrive FSP, also used as ProviderId.
+ * @const
+ * @type {string}
+ */
+constants.ODFS_EXTENSION_ID = 'gnnndjlaomemikopnjhhnoombakkkkdg';

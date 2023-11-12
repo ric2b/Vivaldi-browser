@@ -31,9 +31,8 @@
 #import "components/password_manager/ios/ios_password_manager_driver.h"
 #import "components/password_manager/ios/ios_password_manager_driver_factory.h"
 #import "components/password_manager/ios/shared_password_controller.h"
-#import "components/sync/driver/sync_service.h"
+#import "components/sync/service/sync_service.h"
 #import "ios/web/public/js_messaging/web_frame.h"
-#import "ios/web/public/js_messaging/web_frame_util.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web_view/internal/app/application_context.h"
@@ -322,13 +321,14 @@ using UserDecision =
             popupDelegate:
                 (const base::WeakPtr<autofill::AutofillPopupDelegate>&)
                     delegate {
-  // frontend_id is > 0 for Autofill suggestions, == 0 for Autocomplete
-  // suggestions, and < 0 for special suggestions such as clear form.
   // We only want Autofill suggestions.
   std::vector<autofill::Suggestion> filtered_suggestions;
   base::ranges::copy_if(suggestions, std::back_inserter(filtered_suggestions),
                         [](const autofill::Suggestion& suggestion) {
-                          return suggestion.frontend_id > 0;
+                          return suggestion.popup_item_id ==
+                                     autofill::PopupItemId::kAddressEntry ||
+                                 suggestion.popup_item_id ==
+                                     autofill::PopupItemId::kCreditCardEntry;
                         });
   [_autofillAgent showAutofillPopup:filtered_suggestions
                       popupDelegate:delegate];
@@ -495,18 +495,20 @@ using UserDecision =
                     inFrame:(web::WebFrame*)frame {
   DCHECK_EQ(_webState, webState);
 
+  std::string frame_id = frame ? frame->GetFrameId() : "";
+
   NSString* nsFormName = base::SysUTF8ToNSString(params.form_name);
   _lastFormActivityUniqueFormID = params.unique_form_id;
   NSString* nsFieldIdentifier =
       base::SysUTF8ToNSString(params.field_identifier);
   _lastFormActivityUniqueFieldID = params.unique_field_id;
   NSString* nsFieldType = base::SysUTF8ToNSString(params.field_type);
-  NSString* nsFrameID = base::SysUTF8ToNSString(GetWebFrameId(frame));
+  NSString* nsFrameID = base::SysUTF8ToNSString(frame_id);
   NSString* nsValue = base::SysUTF8ToNSString(params.value);
   NSString* nsType = base::SysUTF8ToNSString(params.type);
   BOOL userInitiated = params.has_user_gesture;
 
-  _lastFormActivityWebFrameID = GetWebFrameId(frame);
+  _lastFormActivityWebFrameID = frame_id;
   _lastFormActivityTypedValue = nsValue;
   _lastFormActivityType = nsType;
   if (params.type == "focus") {
@@ -727,7 +729,11 @@ using UserDecision =
 
 - (void)attachListenersForBottomSheet:
             (const std::vector<autofill::FieldRendererId>&)rendererIds
-                              inFrame:(web::WebFrame*)frame {
+                           forFrameId:(const std::string&)frameId {
+  // No op.
+}
+
+- (void)detachListenersForBottomSheet:(const std::string&)frameId {
   // No op.
 }
 

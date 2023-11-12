@@ -28,11 +28,11 @@
 // Usage of BUILDFLAG(USE_DAWN) needs to be after the include for
 // ui/gl/buildflags.h
 #if BUILDFLAG(USE_DAWN)
-#include <dawn/native/D3D12Backend.h>
-using dawn::native::d3d12::ExternalImageDescriptorDXGISharedHandle;
-using dawn::native::d3d12::ExternalImageDXGI;
-using dawn::native::d3d12::ExternalImageDXGIBeginAccessDescriptor;
-using dawn::native::d3d12::ExternalImageDXGIFenceDescriptor;
+#include <dawn/native/D3DBackend.h>
+using dawn::native::d3d::ExternalImageDescriptorDXGISharedHandle;
+using dawn::native::d3d::ExternalImageDXGI;
+using dawn::native::d3d::ExternalImageDXGIBeginAccessDescriptor;
+using dawn::native::d3d::ExternalImageDXGIFenceDescriptor;
 #endif  // BUILDFLAG(USE_DAWN)
 
 namespace gfx {
@@ -78,19 +78,6 @@ class GPU_GLES2_EXPORT D3DImageBacking
       Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
       Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain,
       bool is_back_buffer);
-
-  // TODO(sunnyps): Remove this after migrating DXVA decoder to EGLImage.
-  static std::unique_ptr<D3DImageBacking> CreateFromGLTexture(
-      const Mailbox& mailbox,
-      viz::SharedImageFormat format,
-      const gfx::Size& size,
-      const gfx::ColorSpace& color_space,
-      GrSurfaceOrigin surface_origin,
-      SkAlphaType alpha_type,
-      uint32_t usage,
-      Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
-      scoped_refptr<gles2::TexturePassthrough> gl_texture,
-      size_t array_slice);
 
   // Helper used by D3D11VideoDecoder to create backings directly.
   static std::vector<std::unique_ptr<SharedImageBacking>>
@@ -203,6 +190,11 @@ class GPU_GLES2_EXPORT D3DImageBacking
       MemoryTypeTracker* tracker,
       scoped_refptr<SharedContextState> context_state) override;
 
+  std::unique_ptr<SkiaGraphiteImageRepresentation> ProduceSkiaGraphite(
+      SharedImageManager* manager,
+      MemoryTypeTracker* tracker,
+      scoped_refptr<SharedContextState> context_state) override;
+
   std::unique_ptr<VideoDecodeImageRepresentation> ProduceVideoDecode(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,
@@ -289,6 +281,9 @@ class GPU_GLES2_EXPORT D3DImageBacking
   // D3D11 device corresponding to the |d3d11_texture_| provided on creation.
   // TODO(sunnyps): Support multiple D3D11 devices.
   Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device_;
+
+  // D3D11 texture descriptor for |d3d11_texture_|.
+  D3D11_TEXTURE2D_DESC d3d11_texture_desc_;
 
   // Whether the backing is being used for exclusive read-write access.
   bool in_write_access_ = false;

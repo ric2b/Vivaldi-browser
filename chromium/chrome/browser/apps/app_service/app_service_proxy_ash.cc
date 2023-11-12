@@ -23,16 +23,17 @@
 #include "chrome/browser/apps/app_service/promise_apps/promise_app_registry_cache.h"
 #include "chrome/browser/apps/app_service/promise_apps/promise_app_service.h"
 #include "chrome/browser/apps/app_service/publishers/app_publisher.h"
+#include "chrome/browser/apps/app_service/publishers/shortcut_publisher.h"
 #include "chrome/browser/apps/app_service/uninstall_dialog.h"
 #include "chrome/browser/ash/app_restore/full_restore_service.h"
 #include "chrome/browser/ash/child_accounts/time_limits/app_time_limit_interface.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
-#include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
+#include "chrome/browser/ash/policy/dlp/dlp_files_controller_ash.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "components/account_id/account_id.h"
@@ -45,6 +46,7 @@
 #include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/cpp/preferred_apps_impl.h"
 #include "components/services/app_service/public/cpp/preferred_apps_list.h"
+#include "components/services/app_service/public/cpp/shortcut/shortcut_registry_cache.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -52,17 +54,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace apps {
-
-namespace {
-// Return DlpFilesController* if exists.
-policy::DlpFilesController* GetDlpFilesController() {
-  // Primary profile restrictions are enforced across all profiles.
-  policy::DlpRulesManager* rules_manager =
-      policy::DlpRulesManagerFactory::GetForPrimaryProfile();
-  return rules_manager ? rules_manager->GetDlpFilesController() : nullptr;
-}
-}  // namespace
-
 AppServiceProxyAsh::AppServiceProxyAsh(Profile* profile)
     : AppServiceProxyBase(profile),
       icon_reader_(profile),
@@ -158,6 +149,9 @@ void AppServiceProxyAsh::Initialize() {
   }
   if (ash::features::ArePromiseIconsEnabled()) {
     promise_app_service_ = std::make_unique<apps::PromiseAppService>(profile_);
+  }
+  if (base::FeatureList::IsEnabled(features::kCrosWebAppShortcutUiUpdate)) {
+    shortcut_registry_cache_ = std::make_unique<apps::ShortcutRegistryCache>();
   }
 }
 
@@ -334,7 +328,8 @@ void AppServiceProxyAsh::LaunchAppWithIntent(const std::string& app_id,
       weak_ptr_factory_.GetWeakPtr(), app_id, event_flags, std::move(intent),
       std::move(launch_source), std::move(window_info), std::move(callback));
 
-  policy::DlpFilesController* files_controller = GetDlpFilesController();
+  policy::DlpFilesControllerAsh* files_controller =
+      policy::DlpFilesControllerAsh::GetForPrimaryProfile();
   if (files_controller) {
     auto app_found = app_registry_cache_.ForOneApp(
         app_id, [&files_controller, &intent_copy,
@@ -401,11 +396,32 @@ apps::PromiseAppRegistryCache* AppServiceProxyAsh::PromiseAppRegistryCache() {
   return promise_app_service_->PromiseAppRegistryCache();
 }
 
+apps::PromiseAppService* AppServiceProxyAsh::PromiseAppService() {
+  if (!promise_app_service_) {
+    return nullptr;
+  }
+  return promise_app_service_.get();
+}
+
 void AppServiceProxyAsh::OnPromiseApp(PromiseAppPtr delta) {
-  if (!PromiseAppRegistryCache()) {
+  if (!promise_app_service_) {
     return;
   }
-  PromiseAppRegistryCache()->OnPromiseApp(std::move(delta));
+  PromiseAppService()->OnPromiseApp(std::move(delta));
+}
+
+void AppServiceProxyAsh::RegisterShortcutPublisher(
+    AppType app_type,
+    ShortcutPublisher* publisher) {
+  shortcut_publishers_[app_type] = publisher;
+}
+
+void AppServiceProxyAsh::UpdateShortcut(ShortcutPtr delta) {
+  ShortcutRegistryCache()->UpdateShortcut(std::move(delta));
+}
+
+apps::ShortcutRegistryCache* AppServiceProxyAsh::ShortcutRegistryCache() {
+  return shortcut_registry_cache_ ? shortcut_registry_cache_.get() : nullptr;
 }
 
 void AppServiceProxyAsh::Shutdown() {
@@ -580,7 +596,8 @@ void AppServiceProxyAsh::LoadIconForDialog(const apps::AppUpdate& update,
 
   // Load the family link kite logo icon for the app pause dialog or the app
   // block dialog for the child profile.
-  LoadIconFromResource(icon_type, kIconSize, IDR_SUPERVISED_USER_ICON,
+  LoadIconFromResource(/*profile=*/nullptr, /*app_id=*/absl::nullopt, icon_type,
+                       kIconSize, IDR_SUPERVISED_USER_ICON,
                        kAllowPlaceholderIcon, IconEffects::kNone,
                        std::move(callback));
 }
@@ -783,9 +800,9 @@ void AppServiceProxyAsh::OnIconRead(AppType app_type,
     auto* publisher = GetPublisher(app_type);
     if (!publisher) {
       LOG(WARNING) << "No publisher for requested icon";
-      LoadIconFromResource(icon_type, size_in_dip, IDR_APP_DEFAULT_ICON,
-                           /*is_placeholder_icon=*/false, icon_effects,
-                           std::move(callback));
+      LoadIconFromResource(
+          profile_, app_id, icon_type, size_in_dip, IDR_APP_DEFAULT_ICON,
+          /*is_placeholder_icon=*/false, icon_effects, std::move(callback));
       return;
     }
 
@@ -811,7 +828,7 @@ void AppServiceProxyAsh::OnIconInstalled(AppType app_type,
   if (!install_success) {
     int resource_id = app_type == AppType::kCrostini ? IDR_LOGO_CROSTINI_DEFAULT
                                                      : IDR_APP_DEFAULT_ICON;
-    LoadIconFromResource(icon_type, size_in_dip, resource_id,
+    LoadIconFromResource(profile_, app_id, icon_type, size_in_dip, resource_id,
                          /*is_placeholder_icon=*/false, icon_effects,
                          std::move(callback));
     return;
@@ -847,7 +864,8 @@ IntentLaunchInfo AppServiceProxyAsh::CreateIntentLaunchInfo(
     const apps::AppUpdate& update) {
   IntentLaunchInfo entry =
       AppServiceProxyBase::CreateIntentLaunchInfo(intent, filter, update);
-  if (policy::DlpFilesController* files_controller = GetDlpFilesController()) {
+  if (policy::DlpFilesControllerAsh* files_controller =
+          policy::DlpFilesControllerAsh::GetForPrimaryProfile()) {
     entry.is_dlp_blocked = files_controller->IsLaunchBlocked(update, intent);
   }
   return entry;

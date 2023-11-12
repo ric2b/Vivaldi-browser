@@ -48,6 +48,12 @@ if (is_win) {
     output = "$root_build_dir/$vivaldi_version_full.manifest"
   }
 
+  update_template_instance("//chrome/test:browser_tests") {
+    data_deps -= [
+      "//chrome/browser/extensions/api:native_messaging_test_echo_&_host"
+    ]
+  }
+
   _platform_suffix = ""
   if (target_cpu == "x64") {
     _platform_suffix = ".x64"
@@ -150,10 +156,10 @@ if (is_android) {
     not_needed(["lint_suppressions_dep"])
   }
 
-  update_template_instance("//chrome/android:chrome_modern_public_bundle") {
+  update_template_instance("//chrome/android:chrome_public_bundle") {
     bundle_name = "Vivaldi.${vivaldi_version_full}"
     if (!is_vivaldi_lynkco) {
-      enable_lint = true
+      # enable_lint = true
     }
     lint_baseline_file = "//chrome/android/expectations/lint-baseline.xml"
     lint_suppressions_file = "$root_gen_dir/vivaldi/android/merged_suppression.xml"

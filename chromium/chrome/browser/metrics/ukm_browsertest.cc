@@ -37,9 +37,9 @@
 #include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
-#include "components/sync/driver/sync_service.h"
-#include "components/sync/driver/sync_service_impl.h"
-#include "components/sync/driver/sync_token_status.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_service_impl.h"
+#include "components/sync/service/sync_token_status.h"
 #include "components/sync/test/fake_server_network_resources.h"
 #include "components/ukm/ukm_recorder_observer.h"
 #include "components/ukm/ukm_service.h"
@@ -916,11 +916,13 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, MultiDisableExtensionsSyncCheck) {
   }
 #endif
 
-  harness2->DisableSyncForType(syncer::UserSelectableType::kExtensions);
+  ASSERT_TRUE(
+      harness2->DisableSyncForType(syncer::UserSelectableType::kExtensions));
   EXPECT_TRUE(ukm_test_helper.IsRecordingEnabled());
   EXPECT_FALSE(ukm_test_helper.IsExtensionRecordingEnabled());
 
-  harness2->EnableSyncForType(syncer::UserSelectableType::kExtensions);
+  ASSERT_TRUE(
+      harness2->EnableSyncForType(syncer::UserSelectableType::kExtensions));
   EXPECT_TRUE(ukm_test_helper.IsRecordingEnabled());
   EXPECT_TRUE(ukm_test_helper.IsExtensionRecordingEnabled());
   EXPECT_EQ(original_client_id, ukm_test_helper.GetClientId());
@@ -990,7 +992,7 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, LogsPreviousSourceId) {
   GURL new_tab_url = embedded_test_server()->GetURL("/title3.html");
   content::TestNavigationObserver waiter(new_tab_url);
   waiter.StartWatchingNewWebContents();
-  EXPECT_TRUE(content::ExecuteScript(
+  EXPECT_TRUE(content::ExecJs(
       opener, content::JsReplace("window.open($1)", new_tab_url)));
   waiter.Wait();
   EXPECT_NE(opener, sync_browser->tab_strip_model()->GetActiveWebContents());
@@ -1037,7 +1039,7 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, LogsOpenerSource) {
   GURL new_tab_url = embedded_test_server()->GetURL("/title2.html");
   content::TestNavigationObserver waiter(new_tab_url);
   waiter.StartWatchingNewWebContents();
-  EXPECT_TRUE(content::ExecuteScript(
+  EXPECT_TRUE(content::ExecJs(
       opener, content::JsReplace("window.open($1)", new_tab_url)));
   waiter.Wait();
   EXPECT_NE(opener, sync_browser->tab_strip_model()->GetActiveWebContents());
@@ -1551,7 +1553,7 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, AllowedStateChanged) {
               base::FeatureList::IsEnabled(ukm::kAppMetricsOnlyRelyOnAppSync));
   observer.ExpectAllowedStateChanged(
       base::FeatureList::IsEnabled(ukm::kAppMetricsOnlyRelyOnAppSync)
-          ? ukm::UkmConsentState(ukm::APPS)
+          ? ukm::UkmConsentState({ukm::APPS})
           : ukm::UkmConsentState());
 #endif
 

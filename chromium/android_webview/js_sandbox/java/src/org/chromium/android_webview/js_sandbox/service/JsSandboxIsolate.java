@@ -63,10 +63,13 @@ public class JsSandboxIsolate extends IJsSandboxIsolate.Stub {
     public void evaluateJavascriptWithFd(
             AssetFileDescriptor afd, IJsSandboxIsolateSyncCallback callback) {
         synchronized (mLock) {
-            String code;
-            Utils.checkAssetFileDescriptor(afd, Integer.MAX_VALUE);
             if (mJsSandboxIsolate == 0) {
                 throw new IllegalStateException("evaluateJavascript() called after close()");
+            }
+            Utils.checkAssetFileDescriptor(afd);
+            if (afd.getLength() > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException("Evaluation code larger than "
+                        + Integer.MAX_VALUE + " bytes not supported");
             }
             JsSandboxIsolateJni.get().evaluateJavascriptWithFd(mJsSandboxIsolate, this,
                     afd.getParcelFileDescriptor().detachFd(), (int) afd.getLength(),
@@ -92,11 +95,30 @@ public class JsSandboxIsolate extends IJsSandboxIsolate.Stub {
                 throw new IllegalStateException(
                         "provideNamedData(String, AssetFileDescriptor) called after close()");
             }
-            Utils.checkAssetFileDescriptor(afd, Integer.MAX_VALUE);
+            Utils.checkAssetFileDescriptor(afd);
+            if (afd.getLength() > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException(
+                        "Named data larger than " + Integer.MAX_VALUE + " bytes not supported");
+            }
             boolean nativeReturn = JsSandboxIsolateJni.get().provideNamedData(mJsSandboxIsolate,
                     this, name, afd.getParcelFileDescriptor().detachFd(), (int) afd.getLength());
             return nativeReturn;
         }
+    }
+
+    // Roughly truncate a (Unicode) Java string, avoiding truncation in the middle of a surrogate
+    // pair. Note that this is fairly naive and doesn't deal with any additional complexities of
+    // Unicode, such as characters composed of multiple code points, modifiers, ...
+    //
+    // maxCodePoints must be > 0.
+    private static String truncateUnicodeString(String original, int maxLength) {
+        if (original == null || original.length() <= maxLength) {
+            return original;
+        }
+        if (Character.isHighSurrogate(original.charAt(maxLength - 1))) {
+            maxLength--;
+        }
+        return original.substring(0, maxLength);
     }
 
     // Called by isolate thread
@@ -107,18 +129,14 @@ public class JsSandboxIsolate extends IJsSandboxIsolate.Stub {
         if (callback == null) {
             return;
         }
+        // Note these are measured in chars (not bytes), so in the worst case the Binder parcel size
+        // may be a little larger than 2 * (32768 + 4069 + 16348) = 106496.
         final int messageLimit = 32768;
         final int sourceLimit = 4096;
         final int traceLimit = 16384;
-        if (message != null && message.length() > messageLimit) {
-            message = message.substring(0, messageLimit);
-        }
-        if (source != null && source.length() > sourceLimit) {
-            source = source.substring(0, sourceLimit);
-        }
-        if (trace != null && trace.length() > traceLimit) {
-            trace = trace.substring(0, traceLimit);
-        }
+        message = truncateUnicodeString(message, messageLimit);
+        source = truncateUnicodeString(source, sourceLimit);
+        trace = truncateUnicodeString(trace, traceLimit);
         try {
             callback.consoleMessage(contextGroupId, level, message, source, line, column, trace);
         } catch (RemoteException e) {

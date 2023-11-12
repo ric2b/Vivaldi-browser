@@ -78,15 +78,18 @@ suite('ShareAppTest', function() {
 
             sharedSetup(/*enabled=*/ true, /*isOnboardingComplete=*/ true);
 
-            const linkEl = document.querySelector(
+            const colorLink = document.querySelector(
                 'link[href*=\'chrome://theme/colors.css\']');
+            const fontLink = document.querySelector(
+                'link[href*=\'chrome://theme/typography.css\']');
             if (isJellyEnabled) {
-              assertTrue(!!linkEl);
+              assertTrue(!!colorLink);
+              assertTrue(!!fontLink);
               assertTrue(document.body.classList.contains('jelly-enabled'));
-            } else {
-              assertEquals(null, linkEl);
-              assertFalse(document.body.classList.contains('jelly-enabled'));
             }
+            // From b/287683464: We can't enforce the false case, as every Jelly
+            // component attempts to set these global values (and this
+            // loadTimeData only flips Jelly enablement for Nearby Share).
           });
     });
   });

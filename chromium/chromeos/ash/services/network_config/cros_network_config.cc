@@ -10,7 +10,6 @@
 #include "ash/constants/ash_features.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
-#include "base/guid.h"
 #include "base/i18n/time_formatting.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
@@ -67,6 +66,7 @@ using ::chromeos::network_config::CustomApnListToOnc;
 using ::chromeos::network_config::GetApnProperties;
 using ::chromeos::network_config::GetBoolean;
 using ::chromeos::network_config::GetDictionary;
+using ::chromeos::network_config::GetManagedApnList;
 using ::chromeos::network_config::GetManagedDictionary;
 using ::chromeos::network_config::GetManagedString;
 using ::chromeos::network_config::GetRequiredManagedString;
@@ -446,13 +446,6 @@ mojom::NetworkStatePropertiesPtr NetworkStateToMojo(
                 NetworkHandler::GetUiProxyConfigService()->ProxyModeForNetwork(
                     network))
           : mojom::ProxyMode::kDirect;
-  result->dns_queries_monitored =
-      NetworkHandler::IsInitialized() &&
-              NetworkHandler::Get()->network_metadata_store()
-          ? NetworkHandler::Get()
-                ->network_metadata_store()
-                ->secure_dns_templates_with_identifiers_active()
-          : false;
 
   switch (type) {
     case mojom::NetworkType::kCellular: {
@@ -468,7 +461,8 @@ mojom::NetworkStatePropertiesPtr NetworkStateToMojo(
       const DeviceState* cellular_device =
           network_state_handler->GetDeviceState(network->device_path());
       bool sim_is_primary =
-          cellular_device && IsSimPrimary(network->iccid(), cellular_device);
+          cellular_device &&
+          cellular_utils::IsSimPrimary(network->iccid(), cellular_device);
       cellular->sim_lock_enabled =
           sim_is_primary && cellular_device->sim_lock_enabled();
       cellular->sim_locked = sim_is_primary && cellular_device->IsSimLocked();
@@ -521,6 +515,7 @@ mojom::NetworkStatePropertiesPtr NetworkStateToMojo(
       wifi->signal_strength = network->signal_strength();
       wifi->ssid = network->name();
       wifi->hidden_ssid = network->hidden_ssid();
+      wifi->passpoint_id = network->passpoint_id();
       result->type_state =
           mojom::NetworkTypeStateProperties::NewWifi(std::move(wifi));
       break;
@@ -537,7 +532,8 @@ mojom::NetworkStatePropertiesPtr NetworkStateToMojo(
 std::vector<mojom::SIMInfoPtr> CellularSIMInfosToMojo(
     const DeviceState* device) {
   std::vector<mojom::SIMInfoPtr> sim_info_mojos;
-  for (const auto& sim_slot : GetSimSlotInfosWithUpdatedEid(device)) {
+  for (const auto& sim_slot :
+       cellular_utils::GetSimSlotInfosWithUpdatedEid(device)) {
     auto sim_info_mojo = mojom::SIMInfo::New();
     sim_info_mojo->slot_id = sim_slot.slot_id;
     sim_info_mojo->iccid = sim_slot.iccid;
@@ -591,6 +587,8 @@ mojom::InhibitReason GetInhibitReason(
       return mojom::InhibitReason::kResettingEuiccMemory;
     case CellularInhibitor::InhibitReason::kDisablingProfile:
       return mojom::InhibitReason::kDisablingProfile;
+    case CellularInhibitor::InhibitReason::kRequestingAvailableProfiles:
+      return mojom::InhibitReason::kRequestingAvailableProfiles;
   }
 }
 
@@ -1093,40 +1091,6 @@ std::vector<std::string> MojoApnTypesToOnc(
   return apn_types_result;
 }
 
-mojom::ManagedApnListPtr GetManagedApnList(const base::Value* value) {
-  if (!value)
-    return nullptr;
-  bool is_apn_revamp_enabled = features::IsApnRevampEnabled();
-  if (value->is_list()) {
-    auto result = mojom::ManagedApnList::New();
-    std::vector<mojom::ApnPropertiesPtr> active;
-    for (const base::Value& e : value->GetList())
-      active.push_back(GetApnProperties(e.GetDict(), is_apn_revamp_enabled));
-    result->active_value = std::move(active);
-    return result;
-  } else if (value->is_dict()) {
-    ManagedDictionary managed_dict = GetManagedDictionary(&value->GetDict());
-    if (!managed_dict.active_value.is_list()) {
-      NET_LOG(ERROR) << "No active or effective value for APNList";
-      return nullptr;
-    }
-    auto result = mojom::ManagedApnList::New();
-    for (const base::Value& e : managed_dict.active_value.GetList())
-      result->active_value.push_back(
-          GetApnProperties(e.GetDict(), is_apn_revamp_enabled));
-    result->policy_source = managed_dict.policy_source;
-    if (!managed_dict.policy_value.is_none()) {
-      result->policy_value = std::vector<mojom::ApnPropertiesPtr>();
-      for (const base::Value& e : managed_dict.policy_value.GetList())
-        result->policy_value->push_back(
-            GetApnProperties(e.GetDict(), is_apn_revamp_enabled));
-    }
-    return result;
-  }
-  NET_LOG(ERROR) << "Expected list or dictionary, found: " << *value;
-  return nullptr;
-}
-
 bool DoesDefaultApnExist(const base::Value::List& apns) {
   for (const base::Value& apn : apns) {
     mojom::ApnPropertiesPtr apn_ptr =
@@ -1589,7 +1553,8 @@ mojom::ManagedPropertiesPtr ManagedPropertiesToMojo(
           chromeos::network_config::GetManagedApnProperties(
               cellular_dict, ::onc::cellular::kAPN);
       cellular->apn_list =
-          GetManagedApnList(cellular_dict->Find(::onc::cellular::kAPNList));
+          GetManagedApnList(cellular_dict->Find(::onc::cellular::kAPNList),
+                            ash::features::IsApnRevampEnabled());
       cellular->allow_roaming =
           GetManagedBoolean(cellular_dict, ::onc::cellular::kAllowRoaming);
       cellular->esn = GetString(cellular_dict, ::onc::cellular::kESN);
@@ -2195,6 +2160,26 @@ mojom::TrafficCounterSource ConvertToTrafficCounterSourceEnum(
     return mojom::TrafficCounterSource::kSystem;
   NOTREACHED() << "Unknown traffic counter source: " << source;
   return mojom::TrafficCounterSource::kUnknown;
+}
+
+bool GetDnsQueriesMonitoredValue() {
+  if (!NetworkHandler::IsInitialized() ||
+      !NetworkHandler::Get()->network_metadata_store()) {
+    return false;
+  }
+
+  NetworkMetadataStore* store = NetworkHandler::Get()->network_metadata_store();
+  return store->secure_dns_templates_with_identifiers_active();
+}
+
+bool GetReportXdrEventsEnabledValue() {
+  if (!NetworkHandler::IsInitialized() ||
+      !NetworkHandler::Get()->network_metadata_store()) {
+    return false;
+  }
+
+  NetworkMetadataStore* store = NetworkHandler::Get()->network_metadata_store();
+  return store->report_xdr_events_enabled();
 }
 
 }  // namespace
@@ -2983,6 +2968,9 @@ void CrosNetworkConfig::GetGlobalPolicy(GetGlobalPolicyCallback callback) {
       ::onc::global_network_config::kAllowOnlyPolicyWiFiToConnectIfAvailable,
       /*value_if_key_missing_from_dict=*/
       result->allow_only_policy_wifi_networks_to_connect_if_available);
+  result->dns_queries_monitored = GetDnsQueriesMonitoredValue();
+  result->report_xdr_events_enabled = GetReportXdrEventsEnabledValue();
+
   absl::optional<std::vector<std::string>> blocked_hex_ssids = GetStringList(
       global_policy_dict, ::onc::global_network_config::kBlockedHexSSIDs);
   if (blocked_hex_ssids) {

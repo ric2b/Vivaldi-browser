@@ -36,7 +36,8 @@ DomDistillerContextKeyedService::DomDistillerContextKeyedService(
 
 // static
 DomDistillerServiceFactory* DomDistillerServiceFactory::GetInstance() {
-  return base::Singleton<DomDistillerServiceFactory>::get();
+  static base::NoDestructor<DomDistillerServiceFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -52,9 +53,14 @@ DomDistillerServiceFactory::DomDistillerServiceFactory()
           "DomDistillerService",
           // Makes normal profile and off-the-record profile use same service
           // instance.
-          ProfileSelections::BuildRedirectedInIncognito()) {}
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {}
 
-DomDistillerServiceFactory::~DomDistillerServiceFactory() {}
+DomDistillerServiceFactory::~DomDistillerServiceFactory() = default;
 
 KeyedService* DomDistillerServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {

@@ -24,6 +24,7 @@
 #include "third_party/skia/include/core/SkYUVAPixmaps.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/GrYUVABackendTextures.h"
+#include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 
 namespace media {
@@ -47,8 +48,7 @@ SkColorType GetCompatibleSurfaceColorType(GrGLenum format) {
     case GL_SRGB8_ALPHA8:
       return kRGBA_8888_SkColorType;
     default:
-      NOTREACHED();
-      return kUnknown_SkColorType;
+      NOTREACHED_NORETURN();
   }
 }
 
@@ -71,7 +71,8 @@ GrGLenum GetSurfaceColorFormat(GrGLenum format, GrGLenum type) {
 void DrawYUVImageToSkSurface(const VideoFrame* video_frame,
                              sk_sp<SkImage> image,
                              sk_sp<SkSurface> surface,
-                             bool use_visible_rect) {
+                             bool use_visible_rect,
+                             GrDirectContext* gr_context) {
   if (!use_visible_rect) {
     surface->getCanvas()->drawImage(image, 0, 0);
   } else {
@@ -88,7 +89,7 @@ void DrawYUVImageToSkSurface(const VideoFrame* video_frame,
                                         SkCanvas::kStrict_SrcRectConstraint);
   }
 
-  surface->flushAndSubmit();
+  gr_context->flushAndSubmit(surface);
 }
 
 }  // namespace
@@ -216,7 +217,7 @@ bool VideoFrameYUVConverter::ConvertFromVideoFrameYUVWithGrContext(
   auto source_and_dest_color_space = SkColorSpace::MakeSRGB();
 
   // Use dst texture as SkSurface back resource.
-  auto surface = SkSurface::MakeFromBackendTexture(
+  auto surface = SkSurfaces::WrapBackendTexture(
       gr_context, result_texture,
       gr_params.flip_y ? kBottomLeft_GrSurfaceOrigin : kTopLeft_GrSurfaceOrigin,
       1, GetCompatibleSurfaceColorType(result_gl_texture_info.fFormat),
@@ -230,7 +231,7 @@ bool VideoFrameYUVConverter::ConvertFromVideoFrameYUVWithGrContext(
     if (image) {
       result = true;
       DrawYUVImageToSkSurface(video_frame, image, surface,
-                              gr_params.use_visible_rect);
+                              gr_params.use_visible_rect, gr_context);
     } else {
       DLOG(ERROR) << "Failed to create YUV SkImage";
     }

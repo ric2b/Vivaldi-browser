@@ -19,3 +19,5 @@ NSString* const vVivaldiTermsOfServiceUrl =
     @"https://vivaldi.com/privacy/vivaldi-end-user-license-agreement/";
 NSString* const vVivaldiReleaseNotesUrl =
     @"https://vivaldi.com/ios/new/";
+NSString* const vVivaldiPrivacyAndSecurity =
+    @"https://vvld.in/privacy-and-security";

@@ -27,7 +27,6 @@ BASE_DECLARE_FEATURE(kIgnoreIntermediateResults);
 BASE_DECLARE_FEATURE(kOmniboxDemoteByType);
 BASE_DECLARE_FEATURE(kPreferNonShortcutMatchesWhenDeduping);
 BASE_DECLARE_FEATURE(kPreferTailOverHistoryClusterSuggestions);
-BASE_DECLARE_FEATURE(kPreserveDefault);
 BASE_DECLARE_FEATURE(kSingleSortAndCullPass);
 BASE_DECLARE_FEATURE(kUpdateResultDebounce);
 
@@ -67,19 +66,13 @@ BASE_DECLARE_FEATURE(kZeroSuggestPrefetchingOnWeb);
 // On Device Suggest.
 BASE_DECLARE_FEATURE(kOnDeviceHeadProviderIncognito);
 BASE_DECLARE_FEATURE(kOnDeviceHeadProviderNonIncognito);
+BASE_DECLARE_FEATURE(kOnDeviceHeadProviderKorean);
 BASE_DECLARE_FEATURE(kOnDeviceTailModel);
 
 // Provider-specific - These features change the behavior of specific providers.
-BASE_DECLARE_FEATURE(kOmniboxExperimentalSuggestScoring);
-BASE_DECLARE_FEATURE(kDisableCGIParamMatching);
-BASE_DECLARE_FEATURE(kShortBookmarkSuggestions);
-BASE_DECLARE_FEATURE(kShortBookmarkSuggestionsByTotalInputLength);
-BASE_DECLARE_FEATURE(kShortcutExpanding);
-BASE_DECLARE_FEATURE(kShortcutBoost);
 // TODO(crbug.com/1202964): Clean up feature flag used in staged roll-out of
 // various CLs related to the contents/description clean-up work.
 BASE_DECLARE_FEATURE(kStoreTitleInContentsAndUrlInDescription);
-BASE_DECLARE_FEATURE(kHistoryQuickProviderSpecificityScoreCountUniqueHosts);
 
 // Document provider and domain suggestions
 BASE_DECLARE_FEATURE(kDocumentProvider);
@@ -88,7 +81,9 @@ BASE_DECLARE_FEATURE(kDomainSuggestions);
 // Suggestions UI - these affect the UI or function of the suggestions popup.
 BASE_DECLARE_FEATURE(kAdaptiveSuggestionsCount);
 BASE_DECLARE_FEATURE(kClipboardSuggestionContentHidden);
+BASE_DECLARE_FEATURE(kSuppressClipboardSuggestionAfterFirstUsed);
 BASE_DECLARE_FEATURE(kCr2023ActionChips);
+BASE_DECLARE_FEATURE(kCr2023ActionChipsIcons);
 BASE_DECLARE_FEATURE(kSuggestionAnswersColorReverse);
 BASE_DECLARE_FEATURE(kMostVisitedTiles);
 BASE_DECLARE_FEATURE(kRichAutocompletion);
@@ -104,6 +99,8 @@ BASE_DECLARE_FEATURE(kExpandedStateHeight);
 BASE_DECLARE_FEATURE(kExpandedStateShape);
 BASE_DECLARE_FEATURE(kExpandedStateColors);
 BASE_DECLARE_FEATURE(kExpandedStateSuggestIcons);
+BASE_DECLARE_FEATURE(kExpandedLayout);
+BASE_DECLARE_FEATURE(kSuggestionHoverFillShape);
 
 // Omnibox UI - these affect the UI or function of the location bar (not the
 // popup).
@@ -137,11 +134,7 @@ BASE_DECLARE_FEATURE(kUseExistingAutocompleteClient);
 
 // Omnibox & Suggestions UI - these affect both the omnibox and the suggestions
 // popup.
-BASE_DECLARE_FEATURE(kClosePopupWithEscape);
-
-// Settings Page - these affect the appearance of the Search Engines settings
-// page
-BASE_DECLARE_FEATURE(kSiteSearchStarterPack);
+BASE_DECLARE_FEATURE(kOmniboxModernizeVisualUpdate);
 
 // Experiment to introduce new security indicators for HTTPS.
 BASE_DECLARE_FEATURE(kUpdatedConnectionSecurityIndicators);
@@ -165,6 +158,9 @@ BASE_DECLARE_FEATURE(kInspireMe);
 // Actions in Suggest - Action Chips for Entity Suggestions.
 // Data driven feature; flag helps tune behavior.
 BASE_DECLARE_FEATURE(kActionsInSuggest);
+
+// Adds support for categorical suggestion type.
+BASE_DECLARE_FEATURE(kCategoricalSuggestions);
 
 }  // namespace omnibox
 

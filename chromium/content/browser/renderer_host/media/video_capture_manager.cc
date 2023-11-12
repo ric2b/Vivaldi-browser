@@ -437,16 +437,13 @@ void VideoCaptureManager::DisconnectClient(
     VideoCaptureControllerID client_id,
     VideoCaptureControllerEventHandler* client_handler,
     media::VideoCaptureError error) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
+               "VideoCaptureManager::DisconnectClient");
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(controller);
   DCHECK(client_handler);
-  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
-               "VideoCaptureManager::DisconnectClient");
+  CHECK(IsControllerPointerValid(controller));
 
-  if (!IsControllerPointerValid(controller)) {
-    NOTREACHED();
-    return;
-  }
   if (error != media::VideoCaptureError::kNone) {
     LogVideoCaptureError(error);
     std::ostringstream string_stream;
@@ -759,7 +756,7 @@ void VideoCaptureManager::OnDeviceInfosReceived(
     EmitLogMessage(
         base::StringPrintf("VideoCaptureManager::OnDeviceInfosReceived: Failed "
                            "to list device infos with error_code %d",
-                           error_code),
+                           static_cast<int>(error_code)),
         0);
     std::move(client_callback).Run(error_code, {});
     return;

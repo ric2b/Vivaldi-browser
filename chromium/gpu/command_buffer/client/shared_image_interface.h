@@ -73,6 +73,9 @@ class GPU_EXPORT SharedImageInterface {
   // which is used to populate the SharedImage.  |pixel_data| should have the
   // same format which would be passed to glTexImage2D to populate a similarly
   // specified texture.
+  // TODO(crbug.com/1447106): Have the caller specify a row span for
+  // |pixel_data| explicitly. Some backings have different row alignment
+  // requirements which the caller has to match exactly or it won't work.
   virtual Mailbox CreateSharedImage(viz::SharedImageFormat format,
                                     const gfx::Size& size,
                                     const gfx::ColorSpace& color_space,
@@ -90,9 +93,6 @@ class GPU_EXPORT SharedImageInterface {
   // SharedImageInterface keeps ownership of the image until
   // `DestroySharedImage()` is called or the interface itself is destroyed (e.g.
   // the GPU channel is lost).
-  //
-  // NOTE: `format` must be a multi-planar format. This is temporary until
-  // support is added for single-planar formats here.
   virtual Mailbox CreateSharedImage(
       viz::SharedImageFormat format,
       const gfx::Size& size,
@@ -103,6 +103,10 @@ class GPU_EXPORT SharedImageInterface {
       base::StringPiece debug_label,
       gfx::GpuMemoryBufferHandle buffer_handle) = 0;
 
+  // NOTE: The below method is DEPRECATED for `gpu_memory_buffer` only with
+  // single planar eg. RGB BufferFormats. Please use the equivalent method above
+  // taking in single planar SharedImageFormat with GpuMemoryBufferHandle.
+  //
   // Creates a shared image out of a GpuMemoryBuffer, using |color_space|.
   // |usage| is a combination of |SharedImageUsage| bits that describes which
   // API(s) the image will be used with. Format and size are derived from the
@@ -130,6 +134,10 @@ class GPU_EXPORT SharedImageInterface {
       uint32_t usage,
       base::StringPiece debug_label) = 0;
 
+  // NOTE: The below method is DEPRECATED for `gpu_memory_buffer` only with
+  // single planar eg. RGB BufferFormats. Please use the equivalent method above
+  // taking in single planar SharedImageFormat with GpuMemoryBufferHandle.
+  //
   // Same as the above, but specifies gfx::BufferPlane::DEFAULT for |plane|.
   Mailbox CreateSharedImage(gfx::GpuMemoryBuffer* gpu_memory_buffer,
                             GpuMemoryBufferManager* gpu_memory_buffer_manager,

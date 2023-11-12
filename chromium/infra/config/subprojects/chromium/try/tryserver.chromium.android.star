@@ -65,6 +65,7 @@ try_.orchestrator_builder(
         ),
     ),
     compilator = "android-12-x64-rel-compilator",
+    coverage_test_types = ["unit", "overall"],
     experiments = {
         "chromium_rts.inverted_rts": 100,
     },
@@ -73,6 +74,7 @@ try_.orchestrator_builder(
     # TODO(crbug.com/1372179): Use orchestrator pool once overloaded test pools
     # are addressed
     # use_orchestrator_pool = True,
+    use_java_coverage = True,
 )
 
 try_.compilator_builder(
@@ -314,12 +316,14 @@ try_.orchestrator_builder(
             condition = builder_config.rts_condition.QUICK_RUN_ONLY,
         ),
     ),
-    check_for_flakiness = True,
+    # crbug/1434778 - disabling due to high flake rate. See crbug/1422481 for
+    # root cause.
+    # check_for_flakiness = True,
     compilator = "android-nougat-x86-rel-compilator",
     coverage_test_types = ["unit", "overall"],
     experiments = {
         "chromium_rts.inverted_rts": 100,
-        "chromium.add_one_test_shard": 5,
+        "chromium.add_one_test_shard": 10,
     },
     main_list_view = "try",
     tryjob = try_.job(),
@@ -372,8 +376,11 @@ try_.builder(
             "chrome/android/javatests/src/org/chromium/chrome/browser/vr/.+",
             "chrome/browser/android/vr/.+",
             "chrome/browser/vr/.+",
+            "components/webxr/.+",
             "content/browser/xr/.+",
-            "device/vr/android/.+",
+            "device/vr/.+",
+            "third_party/cardboard/.+",
+            "third_party/openxr/.+",
             "third_party/gvr-android-sdk/.+",
             "third_party/arcore-android-sdk/.+",
             "third_party/arcore-android-sdk-client/.+",
@@ -394,11 +401,6 @@ try_.builder(
         "ci/android-x86-rel",
         "ci/android-webview-10-x86-rel-tests",
     ],
-)
-
-try_.builder(
-    name = "android-pie-arm64-wpt-rel-non-cq",
-    mirrors = ["ci/android-pie-arm64-wpt-rel-non-cq"],
 )
 
 try_.builder(

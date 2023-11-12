@@ -15,9 +15,9 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
-#include "components/bookmarks/vivaldi_bookmark_kit.h"
+#import "app/vivaldi_apptools.h"
+#import "components/bookmarks/vivaldi_bookmark_kit.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 using vivaldi_bookmark_kit::GetSpeeddial;

@@ -44,8 +44,15 @@ class RustTool : public Tool {
 
   std::string_view GetSysroot() const;
 
+  const std::string& dynamic_link_switch() const { return dynamic_link_switch_; }
+  void set_dynamic_link_switch(std::string s) {
+    DCHECK(!complete_);
+    dynamic_link_switch_ = std::move(s);
+  }
+
  private:
   std::string rust_sysroot_;
+  std::string dynamic_link_switch_;
 
   bool SetOutputExtension(const Value* value, std::string* var, Err* err);
   bool ReadOutputsPatternList(Scope* scope,

@@ -11,7 +11,7 @@
 #import "components/ad_blocker/adblock_rule_service.h"
 #import "components/url_formatter/url_fixer.h"
 #import "ios/ad_blocker/adblock_rule_service_factory.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager_bridge.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager_helper.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_item.h"

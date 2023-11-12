@@ -23,11 +23,10 @@
 #include "chrome/browser/ash/game_mode/game_mode_controller.h"
 #include "chrome/browser/ash/geolocation/system_geolocation_source.h"
 #include "chrome/browser/ash/login/signin/signin_error_notifier_factory.h"
-#include "chrome/browser/ash/night_light/night_light_client.h"
+#include "chrome/browser/ash/night_light/night_light_client_impl.h"
 #include "chrome/browser/ash/policy/display/display_resolution_handler.h"
 #include "chrome/browser/ash/policy/display/display_rotation_default_handler.h"
 #include "chrome/browser/ash/policy/display/display_settings_handler.h"
-#include "chrome/browser/ash/policy/handlers/screensaver_images_policy_handler.h"
 #include "chrome/browser/ash/privacy_hub/privacy_hub_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/sync/sync_error_notifier_factory.h"
@@ -78,7 +77,6 @@
 #include "chromeos/ash/services/bluetooth_config/in_process_instance.h"
 #include "chromeos/components/quick_answers/public/cpp/controller/quick_answers_controller.h"
 #include "chromeos/components/quick_answers/quick_answers_client.h"
-#include "components/crash/core/common/crash_key.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/session_manager/core/session_manager_observer.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
@@ -150,7 +148,8 @@ void ChromeBrowserMainExtraPartsAsh::PreCreateMainMessageLoop() {
 }
 
 void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
-  if (base::FeatureList::IsEnabled(arc::kEnableArcIdleManager)) {
+  if (base::FeatureList::IsEnabled(arc::kEnableArcIdleManager) ||
+      base::FeatureList::IsEnabled(arc::kVmmSwapPolicy)) {
     // Early init so that later objects can rely on this one.
     arc_window_watcher_ = std::make_unique<ash::ArcWindowWatcher>();
   }
@@ -225,11 +224,6 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
           std::make_unique<wallpaper_handlers::WallpaperFetcherDelegateImpl>());
   wallpaper_controller_client_->Init();
 
-  if (ash::features::IsAmbientModeManagedScreensaverEnabled()) {
-    screensaver_images_policy_handler_ =
-        std::make_unique<policy::ScreensaverImagesPolicyHandler>();
-  }
-
   session_controller_client_ = std::make_unique<SessionControllerClientImpl>();
   session_controller_client_->Init();
   // By this point ash shell should have initialized its D-Bus signal
@@ -253,7 +247,8 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
   chrome_shelf_controller_initializer_ =
       std::make_unique<internal::ChromeShelfControllerInitializer>();
 
-  ui::SelectFileDialog::SetFactory(new SelectFileDialogExtensionFactory);
+  ui::SelectFileDialog::SetFactory(
+      std::make_unique<SelectFileDialogExtensionFactory>());
 
 #if BUILDFLAG(ENABLE_WAYLAND_SERVER)
   exo_parts_ = ExoParts::CreateIfNecessary();
@@ -263,7 +258,7 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
   }
 #endif
 
-  night_light_client_ = std::make_unique<ash::NightLightClient>(
+  night_light_client_ = std::make_unique<ash::NightLightClientImpl>(
       g_browser_process->platform_part()->GetTimezoneResolverManager(),
       g_browser_process->shared_url_loader_factory());
   night_light_client_->Start();
@@ -283,7 +278,7 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
   ash::bluetooth_config::Initialize(delegate);
 
   // Create geolocation manager
-  g_browser_process->SetGeolocationManager(
+  device::GeolocationManager::SetInstance(
       ash::SystemGeolocationSource::CreateGeolocationManagerOnAsh());
 }
 
@@ -307,12 +302,6 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit(Profile* profile,
   if (ash::features::IsMicMuteNotificationsEnabled()) {
     app_access_notifier_ = std::make_unique<AppAccessNotifier>();
   }
-
-  // Check if Lacros is enabled for crash reporting here to give the user
-  // manager a chance to be initialized first.
-  constexpr char kLacrosEnabledDataKey[] = "lacros-enabled";
-  static crash_reporter::CrashKeyString<4> key(kLacrosEnabledDataKey);
-  key.Set(crosapi::browser_util::IsLacrosEnabled() ? "yes" : "no");
 
   // Instantiate DisplaySettingsHandler after CrosSettings has been
   // initialized.
@@ -390,10 +379,9 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   }
 
   // Initialized in PreProfileInit (which may not get called in some tests).
-  g_browser_process->SetGeolocationManager(nullptr);
+  device::GeolocationManager::SetInstance(nullptr);
   system_tray_client_.reset();
   session_controller_client_.reset();
-  screensaver_images_policy_handler_.reset();
   ime_controller_client_.reset();
   in_session_auth_dialog_client_.reset();
   arc_open_url_delegate_impl_.reset();

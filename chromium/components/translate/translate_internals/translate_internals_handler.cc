@@ -219,6 +219,8 @@ void TranslateInternalsHandler::OnOverrideCountry(
 
 void TranslateInternalsHandler::OnRequestInfo(
     const base::Value::List& /*args*/) {
+  if (!GetTranslateClient())
+    return;
   SendPrefsToJs();
   SendSupportedLanguagesToJs();
   SendCountryToJs(false);

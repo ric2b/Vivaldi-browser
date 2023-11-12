@@ -109,6 +109,10 @@
 #include "ui/vivaldi_skia_utils.h"
 #include "ui/vivaldi_ui_utils.h"
 
+#if defined(ENABLE_RELAY_PROXY)
+#include "proxy/launcher.h"
+#endif
+
 #if BUILDFLAG(IS_WIN)
 
 #include <Windows.h>
@@ -163,12 +167,12 @@ ContentSetting vivContentSettingFromString(const std::string& name) {
 }  // namespace
 
 VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
-  : browser_context_(context) {
+    : browser_context_(context) {
   password_access_authenticator_.Init(
-    base::BindRepeating(&VivaldiUtilitiesAPI::OsReauthCall,
-      base::Unretained(this)),
-    base::BindRepeating(&VivaldiUtilitiesAPI::TimeoutCall,
-      base::Unretained(this)));
+      base::BindRepeating(&VivaldiUtilitiesAPI::OsReauthCall,
+                          base::Unretained(this)),
+      base::BindRepeating(&VivaldiUtilitiesAPI::TimeoutCall,
+                          base::Unretained(this)));
 
   EventRouter* event_router = EventRouter::Get(browser_context_);
   event_router->RegisterObserver(this,
@@ -589,10 +593,6 @@ void UtilitiesCanOpenUrlExternallyFunction::
   Respond(ArgumentList(Results::Create(can_open_with_browser)));
 }
 
-ExtensionFunction::ResponseAction UtilitiesGenerateGUIDFunction::Run() {
-  return RespondNow(Error("Unexpected call to the browser process"));
-}
-
 ExtensionFunction::ResponseAction UtilitiesGetUrlFragmentsFunction::Run() {
   return RespondNow(Error("Unexpected call to the browser process"));
 }
@@ -994,8 +994,8 @@ void UtilitiesTakeMutexFunction::OnMutexAcquired(std::string name,
                                                  int release_token) {
   namespace Results = vivaldi::utilities::TakeMutex::Results;
   base::Value mutex_handle(base::Value::Type::DICT);
-  mutex_handle.SetStringKey(kMutexNameKey, std::move(name));
-  mutex_handle.SetIntKey(kMutexReleaseTokenKey, release_token);
+  mutex_handle.GetDict().Set(kMutexNameKey, std::move(name));
+  mutex_handle.GetDict().Set(kMutexReleaseTokenKey, release_token);
   Respond(ArgumentList(Results::Create(std::move(mutex_handle))));
 }
 
@@ -1014,10 +1014,10 @@ ExtensionFunction::ResponseAction UtilitiesReleaseMutexFunction::Run() {
   auto is_valid_handle = [&name, &release_token](base::Value* handle) {
     if (!handle->is_dict())
       return false;
-    name = handle->FindStringKey(kMutexNameKey);
+    name = handle->GetDict().FindString(kMutexNameKey);
     if (!name)
       return false;
-    release_token = handle->FindIntKey(kMutexReleaseTokenKey);
+    release_token = handle->GetDict().FindInt(kMutexReleaseTokenKey);
     if (!release_token)
       return false;
     return true;
@@ -1739,8 +1739,7 @@ UtilitiesGetMediaAvailableStateFunction::Run() {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   if (!command_line.HasSwitch(switches::kAutoTestMode)) {
-
-  if (const absl::optional<OSVERSIONINFOEX> current_os_version =
+    if (const absl::optional<OSVERSIONINFOEX> current_os_version =
             updater::GetOSVersion();
         current_os_version) {
       DWORD os_type = 0;
@@ -1808,23 +1807,19 @@ ExtensionFunction::ResponseAction UtilitiesGenerateQRCodeFunction::Run() {
 
   dest_ = params->destination;
 
-  qr_code_service_remote_ = qrcode_generator::LaunchQRCodeGeneratorService();
-
   qrcode_generator::mojom::GenerateQRCodeRequestPtr request =
       qrcode_generator::mojom::GenerateQRCodeRequest::New();
   request->data = params->data;
-  request->should_render = true;
   request->render_module_style =
       qrcode_generator::mojom::ModuleStyle::DEFAULT_SQUARES;
   request->render_locator_style =
       qrcode_generator::mojom::LocatorStyle::DEFAULT_SQUARE;
 
-  qrcode_generator::mojom::QRCodeGeneratorService* generator =
-      qr_code_service_remote_.get();
-
   auto callback = base::BindOnce(
       &UtilitiesGenerateQRCodeFunction::OnCodeGeneratorResponse, this);
-  generator->GenerateQRCode(std::move(request), std::move(callback));
+  // qr_generator_ is preserved as used by another process.
+  qr_generator_ = std::make_unique<qrcode_generator::QRImageGenerator>();
+  qr_generator_->GenerateQRCode(std::move(request), std::move(callback));
 
   return RespondLater();
 }
@@ -1983,6 +1978,17 @@ UtilitiesGetVivaldiNetOAuthClientIdFunction::Run() {
 #else
   return RespondNow(Error("No Vivaldi.net client id defined"));
 #endif  // VIVALDI_NET_OAUTH_CLIENT_ID
+}
+
+ExtensionFunction::ResponseAction UtilitiesGetFOAuthClientIdFunction::Run() {
+  namespace Results = vivaldi::utilities::GetFOAuthClientId::Results;
+
+#ifdef VIVALDI_FASTMAIL_OAUTH_CLIENT_ID
+  return RespondNow(
+      ArgumentList(Results::Create(VIVALDI_FASTMAIL_OAUTH_CLIENT_ID)));
+#else
+  return RespondNow(Error("No Fastmail client id defined"));
+#endif  // VIVALDI_FASTMAIL_OAUTH_CLIENT_ID
 }
 
 UtilitiesGetCommandLineValueFunction::~UtilitiesGetCommandLineValueFunction() {}
@@ -2176,5 +2182,47 @@ ExtensionFunction::ResponseAction UtilitiesSetProtocolHandlingFunction::Run() {
   }
   return RespondNow(NoArguments());
 }
+
+ExtensionFunction::ResponseAction UtilitiesConnectProxyFunction::Run() {
+#if defined (ENABLE_RELAY_PROXY)
+  namespace Results = vivaldi::utilities::ConnectProxy::Results;
+  absl::optional<vivaldi::utilities::ConnectProxy::Params> params(
+      vivaldi::utilities::ConnectProxy::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  ::vivaldi::proxy::ConnectSettings settings;
+  settings.local_port = std::to_string(
+      static_cast<int>(params->options.local.port));
+  settings.remote_host = params->options.remote.host;
+  settings.remote_port = std::to_string(
+      static_cast<int>(params->options.remote.port));
+  settings.token = params->options.token;
+  ::vivaldi::proxy::ConnectState state;
+
+  vivaldi::utilities::ProxyConnectInfo info;
+  info.success = ::vivaldi::proxy::connect(settings, state);
+  info.pid = state.pid;
+  info.message = state.message;
+
+  return RespondNow(ArgumentList(Results::Create(info)));
+#else
+  return RespondNow(Error("Unexpected call to the browser process"));
+#endif // ENABLE_RELAY_PROXY
+}
+
+ExtensionFunction::ResponseAction UtilitiesDisconnectProxyFunction::Run() {
+#if defined (ENABLE_RELAY_PROXY)
+  namespace Results = vivaldi::utilities::DisconnectProxy::Results;
+  ::vivaldi::proxy::disconnect();
+  return RespondNow(ArgumentList(Results::Create(true)));
+#else
+  return RespondNow(Error("Unexpected call to the browser process"));
+#endif // ENABLE_RELAY_PROXY
+}
+
+ExtensionFunction::ResponseAction UtilitiesSupportsProxyFunction::Run() {
+  return RespondNow(Error("Unexpected call to the browser process"));
+}
+
 
 }  // namespace extensions

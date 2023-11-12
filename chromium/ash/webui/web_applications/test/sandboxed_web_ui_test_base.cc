@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "ash/webui/common/trusted_types_test_util.h"
 #include "ash/webui/web_applications/webui_test_prod_util.h"
 #include "base/base_paths.h"
 #include "base/containers/contains.h"
@@ -80,21 +81,19 @@ class SandboxedWebUiAppTestBase::TestCodeInjector
                    owner_->scripts_.end());
 
     for (const auto& script : scripts) {
-      // Use ExecuteScript(), not ExecJs(), because of Content Security Policy
-      // directive: "script-src chrome://resources 'self'"
-      ASSERT_TRUE(
-          content::ExecuteScript(guest_frame, LoadJsTestLibrary(script)));
+      ASSERT_TRUE(content::ExecJs(guest_frame, LoadJsTestLibrary(script)));
     }
     if (!owner_->test_module_.empty()) {
+      ASSERT_TRUE(ash::test_util::AddTestStaticUrlPolicy(guest_frame));
       constexpr char kScript[] = R"(
           (() => {
             const s = document.createElement('script');
             s.type = 'module';
-            s.src = '$1';
+            s.src = window.testStaticUrlPolicy.createScriptURL('$1');
             document.body.appendChild(s);
           })();
       )";
-      ASSERT_TRUE(content::ExecuteScript(
+      ASSERT_TRUE(content::ExecJs(
           guest_frame, base::ReplaceStringPlaceholders(
                            kScript, {owner_->test_module_}, nullptr)));
     }

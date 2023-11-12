@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/strings/strcat.h"
 #include "base/strings/stringize_macros.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -57,24 +58,18 @@ namespace internal {
 
 std::string FormatUserAgentForSync(const std::string& system,
                                    version_info::Channel channel) {
-  std::string product = STRINGIZE(SYNC_USER_AGENT_PRODUCT);
-  std::string user_agent;
-  user_agent = product + " ";
-  user_agent += system;
-  user_agent += version_info::GetVersionNumber();
-  user_agent += " (" + version_info::GetLastChange() + ")";
-  if (!version_info::IsOfficialBuild()) {
-    user_agent += "-devel";
-  } else {
-    user_agent += " channel(" + version_info::GetChannelString(channel) + ")";
-  }
-
-  if (vivaldi::IsVivaldiRunning()) {
-    user_agent += " Vivaldi ";
-    user_agent += vivaldi::GetVivaldiVersionString();
-  }
-
-  return user_agent;
+  constexpr base::StringPiece kProduct = STRINGIZE(SYNC_USER_AGENT_PRODUCT);
+  return base::StrCat(
+      {kProduct, " ", system, version_info::GetVersionNumber(), " (",
+       version_info::GetLastChange(), ")",
+       version_info::IsOfficialBuild()
+           ? base::StrCat(
+                 {" channel(", version_info::GetChannelString(channel), ")"})
+           : std::string("-devel"),
+       vivaldi::IsVivaldiRunning()
+           ? base::StrCat({" Vivaldi ", vivaldi::GetVivaldiVersionString()})
+           : ""
+           });
 }
 
 }  // namespace internal

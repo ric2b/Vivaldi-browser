@@ -38,6 +38,7 @@
 #include "ui/gfx/overlay_priority_hint.h"
 #include "ui/ozone/common/bitmap_cursor.h"
 #include "ui/ozone/platform/wayland/common/wayland_overlay_config.h"
+#include "ui/ozone/platform/wayland/host/dump_util.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_data_drag_controller.h"
 #include "ui/ozone/platform/wayland/host/wayland_event_source.h"
@@ -150,19 +151,23 @@ void WaylandWindow::UpdateWindowScale(bool update_bounds) {
   }
 }
 
+WaylandZAuraSurface* WaylandWindow::GetZAuraSurface() {
+  return root_surface_ ? root_surface_->zaura_surface() : nullptr;
+}
+
 gfx::AcceleratedWidget WaylandWindow::GetWidget() const {
   return accelerated_widget_;
 }
 
 void WaylandWindow::SetWindowScale(float new_scale) {
   DCHECK_GE(new_scale, 0.f);
-  if (applied_state_.window_scale == new_scale) {
+  auto state = in_flight_requests_.empty() ? applied_state_
+                                           : in_flight_requests_.back().state;
+  if (state.window_scale == new_scale) {
     return;
   }
 
-  auto state = applied_state_;
   state.window_scale = new_scale;
-
   RequestStateFromClient(state);
 }
 
@@ -329,19 +334,41 @@ void WaylandWindow::OnChannelDestroyed() {
                                      std::move(subsurfaces_to_overlays)));
 }
 
+void WaylandWindow::DumpState(std::ostream& out) const {
+  constexpr auto kWindowTypeToString =
+      base::MakeFixedFlatMap<PlatformWindowType, const char*>(
+          {{PlatformWindowType::kWindow, "window"},
+           {PlatformWindowType::kPopup, "popup"},
+           {PlatformWindowType::kMenu, "menu"},
+           {PlatformWindowType::kTooltip, "tooltip"},
+           {PlatformWindowType::kDrag, "drag"},
+           {PlatformWindowType::kBubble, "bubble"}});
+  out << "type=" << GetMapValueOrDefault(kWindowTypeToString, type_)
+      << ", bounds_in_dip=" << GetBoundsInDIP().ToString()
+      << ", bounds_in_pixels=" << GetBoundsInPixels().ToString()
+      << ", restore_bounds_dip=" << restored_bounds_dip_.ToString()
+      << ", overlay_delegation="
+      << (wayland_overlay_delegation_enabled_ ? "enabled" : "disabled");
+  if (frame_insets_px_) {
+    out << ", frame_insets=" << frame_insets_px_->ToString();
+  }
+  if (has_touch_focus_) {
+    out << ", has_touch_focus";
+  }
+  out << ", ui_scale=" << ui_scale_;
+  constexpr auto kOpacityToString =
+      base::MakeFixedFlatMap<PlatformWindowOpacity, const char*>(
+          {{PlatformWindowOpacity::kInferOpacity, "infer"},
+           {PlatformWindowOpacity::kOpaqueWindow, "opaque"},
+           {PlatformWindowOpacity::kTranslucentWindow, "translucent"}});
+  out << ", opacity=" << GetMapValueOrDefault(kOpacityToString, opacity_);
+  if (shutting_down_) {
+    out << ", shutting_down";
+  }
+}
+
 bool WaylandWindow::SupportsConfigureMinimizedState() const {
   return false;
-}
-
-void WaylandWindow::SetAuraSurface(zaura_surface* aura_surface) {
-  DCHECK(connection()->zaura_shell());
-  DCHECK_NE(aura_surface_.get(), aura_surface);
-  aura_surface_.reset(aura_surface);
-}
-
-bool WaylandWindow::IsSupportedOnAuraSurface(uint32_t version) const {
-  return aura_surface_ &&
-         zaura_surface_get_version(aura_surface_.get()) >= version;
 }
 
 void WaylandWindow::Close() {
@@ -377,6 +404,8 @@ gfx::Rect WaylandWindow::GetBoundsInPixels() const {
 }
 
 void WaylandWindow::SetBoundsInDIP(const gfx::Rect& bounds_dip) {
+  // TODO(crbug.com/1456338): Requesting state from the |applied_state_| needs
+  // to be reviewed, there could be throttled |in_flight_requests_|.
   auto state = applied_state_;
   state.bounds_dip = bounds_dip;
   RequestStateFromClient(state);
@@ -662,7 +691,11 @@ void WaylandWindow::OnDragLeave() {
 }
 
 void WaylandWindow::OnDragSessionClose(DragOperation operation) {
-  DCHECK(drag_finished_callback_);
+  if (!drag_finished_callback_) {
+    // WaylandWindow::PrepareForShutdown() is already called. This window
+    // is about to shut down. Do nothing and return.
+    return;
+  }
   std::move(drag_finished_callback_).Run(operation);
   connection()->event_source()->ResetPointerFlags();
   std::move(drag_loop_quit_closure_).Run();
@@ -734,6 +767,7 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
 
   std::vector<gfx::Rect> region{gfx::Rect{latched_state().size_px}};
   root_surface_->set_opaque_region(&region);
+  root_surface_->EnableTrustedDamageIfPossible();
   root_surface_->ApplyPendingState();
 
   connection_->Flush();
@@ -800,6 +834,10 @@ bool WaylandWindow::IsActive() const {
 }
 
 WaylandPopup* WaylandWindow::AsWaylandPopup() {
+  return nullptr;
+}
+
+WaylandToplevelWindow* WaylandWindow::AsWaylandToplevelWindow() {
   return nullptr;
 }
 

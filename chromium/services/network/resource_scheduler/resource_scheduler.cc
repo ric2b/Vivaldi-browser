@@ -24,10 +24,10 @@
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "base/trace_event/trace_event.h"
-#include "net/base/host_port_pair.h"
 #include "net/base/isolation_info.h"
 #include "net/base/load_flags.h"
 #include "net/base/request_priority.h"
+#include "net/base/tracing.h"
 #include "net/http/http_server_properties.h"
 #include "net/log/net_log.h"
 #include "net/nqe/effective_connection_type_observer.h"
@@ -90,6 +90,12 @@ const char* RequestStartTriggerString(RequestStartTrigger trigger) {
     case RequestStartTrigger::PEER_TO_PEER_CONNECTIONS_COUNT_CHANGED:
       return "PEER_TO_PEER_CONNECTIONS_COUNT_CHANGED";
   }
+}
+
+uint64_t CalculateTrackId(ResourceScheduler* scheduler) {
+  static uint32_t sNextId = 0;
+  CHECK(scheduler);
+  return (reinterpret_cast<uint64_t>(scheduler) << 32) | sNextId++;
 }
 
 }  // namespace
@@ -175,12 +181,7 @@ class ResourceScheduler::RequestQueue {
   void Insert(ScheduledResourceRequestImpl* request);
 
   // Removes |request| from the queue.
-  void Erase(ScheduledResourceRequestImpl* request) {
-    PointerMap::iterator it = pointers_.find(request);
-    CHECK(it != pointers_.end());
-    queue_.erase(it->second);
-    pointers_.erase(it);
-  }
+  void Erase(ScheduledResourceRequestImpl* request);
 
   NetQueue::iterator GetNextHighestIterator() { return queue_.begin(); }
 
@@ -229,6 +230,7 @@ class ResourceScheduler::ScheduledResourceRequestImpl
                                const RequestPriorityParams& priority,
                                bool is_async)
       : client_id_(client_id),
+        trace_track_(perfetto::Track(CalculateTrackId(scheduler))),
         request_(request),
         ready_(false),
         deferred_(false),
@@ -237,7 +239,10 @@ class ResourceScheduler::ScheduledResourceRequestImpl
         scheduler_(scheduler),
         priority_(priority),
         fifo_ordering_(0),
-        host_port_pair_(net::HostPortPair::FromURL(request->url())) {
+        scheme_host_port_(request->url()) {
+    TRACE_EVENT_BEGIN("network.scheduler", "ScheduledResourceRequest",
+                      trace_track_, "url", request->url(), "priority",
+                      priority_.priority);
     DCHECK(!request_->GetUserData(kUserDataKey));
     request_->SetUserData(kUserDataKey, std::make_unique<UnownedPointer>(this));
   }
@@ -247,6 +252,7 @@ class ResourceScheduler::ScheduledResourceRequestImpl
       delete;
 
   ~ScheduledResourceRequestImpl() override {
+    TRACE_EVENT_END("network.scheduler", trace_track_);
     request_->RemoveUserData(kUserDataKey);
     scheduler_->RemoveRequest(this);
   }
@@ -260,6 +266,8 @@ class ResourceScheduler::ScheduledResourceRequestImpl
   // Starts the request. If |start_mode| is START_ASYNC, the request will not
   // be started immediately.
   void Start(StartMode start_mode) {
+    TRACE_EVENT_INSTANT("network.scheduler", "RequestStart", trace_track_,
+                        "mode", start_mode == START_ASYNC ? "async" : "sync");
     DCHECK(!ready_);
 
     // If the request was deferred, need to start it.  Otherwise, will just not
@@ -282,13 +290,18 @@ class ResourceScheduler::ScheduledResourceRequestImpl
     ready_ = true;
   }
 
-  void set_request_priority_params(const RequestPriorityParams& priority) {
+  void Reprioritize(const RequestPriorityParams& priority) {
+    TRACE_EVENT_INSTANT("network.scheduler", "RequestReprioritize",
+                        trace_track_, "old_priority", priority_.priority,
+                        "new_priority", priority.priority);
     priority_ = priority;
   }
+
   const RequestPriorityParams& get_request_priority_params() const {
     return priority_;
   }
   ClientId client_id() const { return client_id_; }
+  perfetto::Track trace_track() const { return trace_track_; }
   net::URLRequest* url_request() { return request_; }
   const net::URLRequest* url_request() const { return request_; }
   bool is_async() const { return is_async_; }
@@ -304,7 +317,9 @@ class ResourceScheduler::ScheduledResourceRequestImpl
   void set_attributes(RequestAttributes attributes) {
     attributes_ = attributes;
   }
-  const net::HostPortPair& host_port_pair() const { return host_port_pair_; }
+  const url::SchemeHostPort& scheme_host_port() const {
+    return scheme_host_port_;
+  }
 
  private:
   class UnownedPointer : public base::SupportsUserData::Data {
@@ -324,9 +339,14 @@ class ResourceScheduler::ScheduledResourceRequestImpl
   static const void* const kUserDataKey;
 
   // ScheduledResourceRequest implemnetation
-  void WillStartRequest(bool* defer) override { deferred_ = *defer = !ready_; }
+  void WillStartRequest(bool* defer) override {
+    deferred_ = *defer = !ready_;
+    TRACE_EVENT_INSTANT("network.scheduler", "RequestWillStart", trace_track_,
+                        "defered", deferred_);
+  }
 
   const ClientId client_id_;
+  perfetto::Track trace_track_;
   raw_ptr<net::URLRequest> request_;
   bool ready_;
   bool deferred_;
@@ -337,7 +357,7 @@ class ResourceScheduler::ScheduledResourceRequestImpl
   uint32_t fifo_ordering_;
 
   // Cached to excessive recomputation in ReachedMaxRequestsPerHostPerClient().
-  const net::HostPortPair host_port_pair_;
+  const url::SchemeHostPort scheme_host_port_;
 
   base::WeakPtrFactory<ResourceScheduler::ScheduledResourceRequestImpl>
       weak_ptr_factory_{this};
@@ -366,8 +386,20 @@ bool ResourceScheduler::ScheduledResourceSorter::operator()(
 void ResourceScheduler::RequestQueue::Insert(
     ScheduledResourceRequestImpl* request) {
   DCHECK(!base::Contains(pointers_, request));
+  TRACE_EVENT_INSTANT("network.scheduler", "RequestEnqueue",
+                      request->trace_track());
   request->set_fifo_ordering(MakeFifoOrderingId());
   pointers_[request] = queue_.insert(request);
+}
+
+void ResourceScheduler::RequestQueue::Erase(
+    ScheduledResourceRequestImpl* request) {
+  TRACE_EVENT_INSTANT("network.scheduler", "RequestDequeue",
+                      request->trace_track());
+  PointerMap::iterator it = pointers_.find(request);
+  CHECK(it != pointers_.end());
+  queue_.erase(it->second);
+  pointers_.erase(it);
 }
 
 // Each client represents a tab.
@@ -471,7 +503,7 @@ class ResourceScheduler::Client
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     request->url_request()->SetPriority(new_priority_params.priority);
-    request->set_request_priority_params(new_priority_params);
+    request->Reprioritize(new_priority_params);
     SetRequestAttributes(request, DetermineRequestAttributes(request));
     if (!pending_requests_.IsQueued(request)) {
       DCHECK(base::Contains(in_flight_requests_, request));
@@ -673,13 +705,13 @@ class ResourceScheduler::Client
         // Resources below the delayable priority threshold that are being
         // requested from a server that does not support native prioritization
         // are considered delayable.
-        url::SchemeHostPort scheme_host_port(request->url_request()->url());
         net::HttpServerProperties& http_server_properties =
             *request->url_request()->context()->http_server_properties();
         if (!http_server_properties.SupportsRequestPriority(
-                scheme_host_port, request->url_request()
-                                      ->isolation_info()
-                                      .network_anonymization_key())) {
+                request->scheme_host_port(),
+                request->url_request()
+                    ->isolation_info()
+                    .network_anonymization_key())) {
           attributes |= kAttributeDelayable;
         }
       }
@@ -689,7 +721,7 @@ class ResourceScheduler::Client
   }
 
   bool ReachedMaxRequestsPerHostPerClient(
-      const net::HostPortPair& active_request_host,
+      const url::SchemeHostPort& active_request_host,
       bool supports_priority) const {
     // This method should not be called for requests to origins that support
     // prioritization (aka multiplexing) unless one of the experiments to
@@ -710,9 +742,8 @@ class ResourceScheduler::Client
     }
 
     size_t same_host_count = 0;
-    for (RequestSet::const_iterator it = in_flight_requests_.begin();
-         it != in_flight_requests_.end(); ++it) {
-      if (active_request_host.Equals((*it)->host_port_pair())) {
+    for (const auto* in_flight_request : in_flight_requests_) {
+      if (active_request_host == in_flight_request->scheme_host_port()) {
         same_host_count++;
         if (same_host_count >= kMaxNumDelayableRequestsPerHostPerClient)
           return true;
@@ -921,17 +952,14 @@ class ResourceScheduler::Client
       return START_REQUEST;
     }
 
-    const net::HostPortPair& host_port_pair = request->host_port_pair();
-
     bool priority_delayable =
         params_for_network_quality_.delay_requests_on_multiplexed_connections;
 
-    url::SchemeHostPort scheme_host_port(url_request.url());
     bool supports_priority =
         url_request.context()
             ->http_server_properties()
             ->SupportsRequestPriority(
-                scheme_host_port,
+                request->scheme_host_port(),
                 url_request.isolation_info().network_anonymization_key());
 
     // Requests on a connection that supports prioritization and multiplexing.
@@ -953,7 +981,8 @@ class ResourceScheduler::Client
     }
 
     // Delayable requests per host limit (6).
-    if (ReachedMaxRequestsPerHostPerClient(host_port_pair, supports_priority)) {
+    if (ReachedMaxRequestsPerHostPerClient(request->scheme_host_port(),
+                                           supports_priority)) {
       // There may be other requests for other hosts that may be allowed,
       // so keep checking.
       return DO_NOT_START_REQUEST_AND_KEEP_SEARCHING;
@@ -1326,8 +1355,7 @@ void ResourceScheduler::ReprioritizeRequest(net::URLRequest* request,
   if (client_it == client_map_.end()) {
     // The client was likely deleted shortly before we received this IPC.
     request->SetPriority(new_priority_params.priority);
-    scheduled_resource_request->set_request_priority_params(
-        new_priority_params);
+    scheduled_resource_request->Reprioritize(new_priority_params);
     return;
   }
 

@@ -6,13 +6,17 @@
 
 #include "base/observer_list.h"
 #include "base/test/scoped_feature_list.h"
-#include "components/sync/driver/sync_token_status.h"
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
+#include "components/sync/service/sync_token_status.h"
 #include "components/sync/test/test_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/unified_consent/pref_names.h"
 #include "components/unified_consent/unified_consent_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chromeos/components/kiosk/kiosk_test_utils.h"  // nogncheck
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace ukm {
 
@@ -38,7 +42,7 @@ class MockSyncService : public syncer::TestSyncService {
     GetUserSettings()->SetSelectedTypes(
         /*sync_everything=*/false,
         /*types=*/history_enabled ? syncer::UserSelectableTypeSet(
-                                        syncer::UserSelectableType::kHistory)
+                                        {syncer::UserSelectableType::kHistory})
                                   : syncer::UserSelectableTypeSet());
 
     // It doesn't matter what exactly we set here, it's only relevant that the
@@ -51,9 +55,9 @@ class MockSyncService : public syncer::TestSyncService {
 
     NotifyObserversOfStateChanged();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     SetAppSync(false);
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
   void Shutdown() override {
@@ -62,8 +66,9 @@ class MockSyncService : public syncer::TestSyncService {
     }
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   void SetAppSync(bool enabled) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     auto selected_os_types = GetUserSettings()->GetSelectedOsTypes();
 
     if (enabled)
@@ -72,10 +77,13 @@ class MockSyncService : public syncer::TestSyncService {
       selected_os_types.Remove(syncer::UserSelectableOsType::kOsApps);
 
     GetUserSettings()->SetSelectedOsTypes(false, selected_os_types);
+#else
+    GetUserSettings()->SetAppsSyncEnabledByOs(enabled);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
     NotifyObserversOfStateChanged();
   }
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
  private:
   // syncer::TestSyncService:
@@ -128,7 +136,7 @@ class TestUkmConsentStateObserver : public UkmConsentStateObserver {
   bool notified_ = false;
 };
 
-class UkmConsentStateObserverTest : public testing::Test {
+class UkmConsentStateObserverTest : public testing::TestWithParam<bool> {
  public:
   UkmConsentStateObserverTest() = default;
 
@@ -381,5 +389,44 @@ TEST_F(MsbbAppOptInUkmConsentStateObserverTest,
 }
 
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS)
+
+// Test consent state for kiosk.
+class KioskUkmConsentStateObserverTest : public UkmConsentStateObserverTest {
+ public:
+  bool is_ukm_collection_enabled() const { return GetParam(); }
+
+  void SetUp() override { chromeos::SetUpFakeKioskSession(); }
+
+  void TearDown() override { chromeos::TearDownFakeKioskSession(); }
+};
+
+TEST_P(KioskUkmConsentStateObserverTest, VerifyDefaultConsent) {
+  sync_preferences::TestingPrefServiceSyncable prefs;
+  RegisterUrlKeyedAnonymizedDataCollectionPref(prefs);
+  TestUkmConsentStateObserver observer;
+  MockSyncService sync;
+  // Disable app sync consent.
+  sync.SetAppSync(false);
+
+  // Enable MSBB consent.
+  SetUrlKeyedAnonymizedDataCollectionEnabled(&prefs,
+                                             is_ukm_collection_enabled());
+  observer.StartObserving(&sync, &prefs);
+
+  UkmConsentState state = observer.GetUkmConsentState();
+
+  EXPECT_EQ(is_ukm_collection_enabled(), observer.IsUkmAllowedForAllProfiles());
+  // MSBB and Extensions are enabled while App Sync is disabled.
+  EXPECT_EQ(is_ukm_collection_enabled(), state.Has(MSBB));
+  EXPECT_EQ(is_ukm_collection_enabled(), state.Has(APPS));
+}
+
+INSTANTIATE_TEST_SUITE_P(KioskUkmConsentStateObserverTest,
+                         KioskUkmConsentStateObserverTest,
+                         ::testing::Bool());
+
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace ukm

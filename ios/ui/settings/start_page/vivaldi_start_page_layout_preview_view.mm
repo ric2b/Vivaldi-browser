@@ -4,13 +4,13 @@
 
 #import "UIKit/UIKit.h"
 
-#import "ios/chrome/browser/ui/ntp/cells/vivaldi_speed_dial_list_cell.h"
-#import "ios/chrome/browser/ui/ntp/cells/vivaldi_speed_dial_regular_cell.h"
-#import "ios/chrome/browser/ui/ntp/cells/vivaldi_speed_dial_small_cell.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/ntp/cells/vivaldi_speed_dial_list_cell.h"
+#import "ios/ui/ntp/cells/vivaldi_speed_dial_regular_cell.h"
+#import "ios/ui/ntp/cells/vivaldi_speed_dial_small_cell.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_layout_style.h"
 #import "ui/base/device_form_factor.h"
 

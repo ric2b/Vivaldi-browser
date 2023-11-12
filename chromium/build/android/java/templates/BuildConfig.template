@@ -154,6 +154,12 @@ public class BuildConfig {
     public static MAYBE_FINAL boolean IS_OEM_PRELOADED_BUILD MAYBE_FALSE;
 #endif
 
+#if defined(_IS_OEM_GAS_BUILD)
+    public static MAYBE_FINAL boolean IS_OEM_GAS_BUILD = true;
+#else
+    public static MAYBE_FINAL boolean IS_OEM_GAS_BUILD MAYBE_FALSE;
+#endif
+
 #if defined(_IS_FINAL_BUILD)
     public static MAYBE_FINAL boolean IS_FINAL_BUILD = true;
 #else

@@ -30,7 +30,7 @@ const PrepopulatedEngine* const engines_be_BY[] = {
     &wolfram,
 };
 const PrepopulatedEngine* const engines_bg_BG[] = {
-    &yahoo,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -41,7 +41,7 @@ const PrepopulatedEngine* const engines_bg_BG[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_cs_CZ[] = {
-    &yahoo,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -98,7 +98,7 @@ const PrepopulatedEngine* const engines_de_CH[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_el_GR[] = {
-    &yahoo,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -146,7 +146,7 @@ const PrepopulatedEngine* const engines_en_IE[] = {
     &wikipedia,
 };
 const PrepopulatedEngine* const engines_en_IN[] = {
-    &yahoo_in,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo_in,
@@ -157,7 +157,7 @@ const PrepopulatedEngine* const engines_en_IN[] = {
     &wikipedia,
 };
 const PrepopulatedEngine* const engines_en_PH[] = {
-    &yahoo_ph,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &yahoo_ph,
     &bing,
@@ -168,7 +168,7 @@ const PrepopulatedEngine* const engines_en_PH[] = {
     &wikipedia,
 };
 const PrepopulatedEngine* const engines_en_SG[] = {
-    &yahoo_sg,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &yahoo_sg,
     &bing,
@@ -205,7 +205,7 @@ const PrepopulatedEngine* const engines_es_ES[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_es_AR[] = {
-    &yahoo_ar,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &yahoo_ar,
     &bing,
@@ -216,7 +216,7 @@ const PrepopulatedEngine* const engines_es_AR[] = {
     &wikipedia_es,
 };
 const PrepopulatedEngine* const engines_es_CL[] = {
-    &yahoo_cl,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &yahoo_cl,
     &bing,
@@ -227,7 +227,7 @@ const PrepopulatedEngine* const engines_es_CL[] = {
     &wikipedia_es,
 };
 const PrepopulatedEngine* const engines_es_CO[] = {
-    &yahoo_co,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &yahoo_co,
     &bing,
@@ -238,7 +238,7 @@ const PrepopulatedEngine* const engines_es_CO[] = {
     &wikipedia_es,
 };
 const PrepopulatedEngine* const engines_es_PE[] = {
-    &yahoo_pe,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &yahoo_pe,
     &bing,
@@ -249,7 +249,7 @@ const PrepopulatedEngine* const engines_es_PE[] = {
     &wikipedia_es,
 };
 const PrepopulatedEngine* const engines_es_MX[] = {
-    &yahoo_mx,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &yahoo_mx,
     &bing,
@@ -260,7 +260,7 @@ const PrepopulatedEngine* const engines_es_MX[] = {
     &wikipedia_es,
 };
 const PrepopulatedEngine* const engines_es_VE[] = {
-    &yahoo_ve,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &yahoo_ve,
     &bing,
@@ -294,7 +294,7 @@ const PrepopulatedEngine* const engines_fr_FR[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_hr_HR[] = {
-    &yahoo,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -305,7 +305,7 @@ const PrepopulatedEngine* const engines_hr_HR[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_hu_HU[] = {
-    &yahoo,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -316,7 +316,7 @@ const PrepopulatedEngine* const engines_hu_HU[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_id_ID[] = {
-    &yahoo_id,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo_id,
@@ -349,7 +349,7 @@ const PrepopulatedEngine* const engines_ja_JP[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_ko_KR[] = {
-    &yahoo,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -360,7 +360,7 @@ const PrepopulatedEngine* const engines_ko_KR[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_lt_LT[] = {
-    &yahoo,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -393,7 +393,7 @@ const PrepopulatedEngine* const engines_nn_NO[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_pl_PL[] = {
-    &yahoo,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -404,7 +404,7 @@ const PrepopulatedEngine* const engines_pl_PL[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_pt_BR[] = {
-    &yahoo_br,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo_br,
@@ -415,7 +415,7 @@ const PrepopulatedEngine* const engines_pt_BR[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_pt_PT[] = {
-    &yahoo,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -426,7 +426,7 @@ const PrepopulatedEngine* const engines_pt_PT[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_ro_RO[] = {
-    &yahoo,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -460,7 +460,7 @@ const PrepopulatedEngine* const engines_sv_SE[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_sk_SK[] = {
-    &yahoo,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -471,7 +471,7 @@ const PrepopulatedEngine* const engines_sk_SK[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_sr_RS[] = {
-    &yahoo,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -482,7 +482,7 @@ const PrepopulatedEngine* const engines_sr_RS[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_th_TH[] = {
-    &yahoo_th,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &yahoo_th,
     &bing,
@@ -518,7 +518,7 @@ const PrepopulatedEngine* const engines_uk_UA[] = {
     &wolfram,
 };
 const PrepopulatedEngine* const engines_vi_VN[] = {
-    &yahoo_vn,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo_vn,
@@ -529,7 +529,7 @@ const PrepopulatedEngine* const engines_vi_VN[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_zh_CN[] = {
-    &yahoo,  // default
+    &bing,  // default
     &yahoo,  // defaultPrivate
     &bing,
     &yahoo,
@@ -540,7 +540,7 @@ const PrepopulatedEngine* const engines_zh_CN[] = {
     &google,
 };
 const PrepopulatedEngine* const engines_zn_HK[] = {
-    &yahoo_hk,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &yahoo_hk,
     &bing,
@@ -551,7 +551,7 @@ const PrepopulatedEngine* const engines_zn_HK[] = {
     &wikipedia_zh,
 };
 const PrepopulatedEngine* const engines_zh_TW[] = {
-    &yahoo_tw,  // default
+    &bing,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo_tw,

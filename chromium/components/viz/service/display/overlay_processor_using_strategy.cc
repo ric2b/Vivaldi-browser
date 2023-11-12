@@ -625,11 +625,11 @@ void OverlayProcessorUsingStrategy::SortProposedOverlayCandidates(
     auto key = OverlayProposedCandidate::ToProposeKey(*it);
     // If no tracking exists we create a new one here.
     auto& track_data = tracked_candidates_[key];
-    DBG_DRAW_TEXT_OPT(
-        "candidate.surface.id", DBG_OPT_GREEN,
-        it->candidate.display_rect.origin(),
-        base::StringPrintf("%X , %d", key.tracking_id, key.strategy_id)
-            .c_str());
+    DBG_DRAW_TEXT_OPT("candidate.surface.id", DBG_OPT_GREEN,
+                      it->candidate.display_rect.origin(),
+                      base::StringPrintf("%X , %d", key.tracking_id,
+                                         static_cast<int>(key.strategy_id))
+                          .c_str());
     DBG_DRAW_TEXT_OPT(
         "candidate.mean.damage", DBG_OPT_GREEN,
         it->candidate.display_rect.origin(),
@@ -838,7 +838,7 @@ bool OverlayProcessorUsingStrategy::AttemptWithStrategies(
         if (scale_factor < 1.0f) {
           UpdateDownscalingCapabilities(scale_factor, /*success=*/true);
         }
-        LogWorkingScaleFactorCountUMA(scale_factor * 100);
+        LogWorkingScaleFactorCountUMA(scale_factor);
         LogFramesScalingRequiredCandidateBoolUMA(
             attempted_scaling_required_overlays);
       }

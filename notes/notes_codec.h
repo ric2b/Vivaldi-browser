@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "base/hash/md5.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
@@ -76,9 +76,9 @@ class NotesCodec {
   // false after encoding.
   bool ids_reassigned() const { return ids_reassigned_; }
 
-  // Returns whether the GUIDs were reassigned during decoding. Always returns
+  // Returns whether the UUIDs were reassigned during decoding. Always returns
   // false after encoding.
-  bool guids_reassigned() const { return guids_reassigned_; }
+  bool uuids_reassigned() const { return uuids_reassigned_; }
 
   // Returns whether attachments using the old, deprecated format were found
   // during decoding.
@@ -147,8 +147,8 @@ class NotesCodec {
   // Whether or not IDs were reassigned by the codec.
   bool ids_reassigned_;
 
-  // Whether or not GUIDs were reassigned by the codec.
-  bool guids_reassigned_;
+  // Whether or not UUIDs were reassigned by the codec.
+  bool uuids_reassigned_;
 
   // Whether or not IDs are valid. This is initially true, but set to false
   // if an id is missing or not unique.
@@ -161,9 +161,9 @@ class NotesCodec {
   // if we have duplicates.
   std::set<int64_t> ids_;
 
-  // Contains the GUID of each of the nodes found in the file. Used to determine
+  // Contains the UUID of each of the nodes found in the file. Used to determine
   // if we have duplicates.
-  std::set<base::GUID> guids_;
+  std::set<base::Uuid> uuids_;
 
   // MD5 context used to compute MD5 hash of all notes data.
   base::MD5Context md5_context_;

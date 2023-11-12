@@ -92,9 +92,6 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     private final ContextMenuParams mParams;
     private @Nullable UkmRecorder.Bridge mUkmRecorderBridge;
     private ContextMenuNativeDelegate mNativeDelegate;
-    private static final String LENS_SEARCH_MENU_ITEM_KEY = "searchWithGoogleLensMenuItem";
-    private static final String LENS_SHOP_MENU_ITEM_KEY = "shopWithGoogleLensMenuItem";
-    private static final String SEARCH_BY_IMAGE_MENU_ITEM_KEY = "searchByImageMenuItem";
     private static final String LENS_SUPPORT_STATUS_HISTOGRAM_NAME =
             "ContextMenu.LensSupportStatus";
 
@@ -248,12 +245,14 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                 if (mMode == ContextMenuMode.NORMAL) {
                     if (TabUiFeatureUtilities.ENABLE_TAB_GROUP_AUTO_CREATION.getValue()) {
                         linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB));
-                        // Note(david@vivaldi.com): Only add item when stacking is enabled.
-                        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext))
-                            linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB_IN_GROUP));
                     } else {
-                        // Note(david@vivaldi.com): Only add item when stacking is enabled.
-                        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext))
+                        // Note(david@vivaldi.com): Defining our "open new tab" order here.
+                        if (ChromeApplicationImpl.isVivaldi()) {
+                            linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB));
+                            linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB_BACKGROUND));
+                            if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext))
+                                linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB_IN_GROUP));
+                        } else {
                         if (TabUiFeatureUtilities.showContextMenuOpenNewTabInGroupItemFirst()) {
                             linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB_IN_GROUP));
                             linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB));
@@ -261,10 +260,8 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                             linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB));
                             linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB_IN_GROUP));
                         }
+                        } // Vivaldi
                     }
-
-                    // Vivaldi
-                    linkGroup.add(createListItem(Item.OPEN_IN_NEW_TAB_BACKGROUND));
 
                     if (!mItemDelegate.isIncognito() && mItemDelegate.isIncognitoSupported()) {
                         linkGroup.add(createListItem(Item.OPEN_IN_INCOGNITO_TAB));
@@ -486,8 +483,8 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                 mItemDelegate.onOpenInNewTabForeground(
                         mParams.getUrl().getSpec(), mParams.getReferrer());
             else
-            mItemDelegate.onOpenInNewTab(
-                    mParams.getUrl(), mParams.getReferrer(), /*navigateToTab=*/false);
+            mItemDelegate.onOpenInNewTab(mParams.getUrl(), mParams.getReferrer(),
+                    /*navigateToTab=*/false, mParams.getAdditionalNavigationParams());
         } else if (itemId == R.id.contextmenu_open_in_new_tab_in_group) {
             recordContextMenuSelection(ContextMenuUma.Action.OPEN_IN_NEW_TAB_IN_GROUP);
             mItemDelegate.onOpenInNewTabInGroup(mParams.getUrl(), mParams.getReferrer());
@@ -644,11 +641,13 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         } else if (itemId == R.id.contextmenu_learn_more) {
             recordContextMenuSelection(ContextMenuUma.Action.LEARN_MORE);
             mItemDelegate.onOpenInNewTab(new GURL(LinkToTextHelper.SHARED_HIGHLIGHTING_SUPPORT_URL),
-                    mParams.getReferrer(), /*navigateToTab=*/true);
+                    mParams.getReferrer(), /*navigateToTab=*/true,
+                    /*additionalNavigationParams=*/null);
         } else if (itemId == R.id.contextmenu_open_in_new_tab_background) { // Vivaldi
             recordContextMenuSelection(ContextMenuUma.Action.OPEN_IMAGE_IN_NEW_TAB);
             mItemDelegate.onOpenInNewTab(
-                    mParams.getUrl(), mParams.getReferrer(), /*navigateToTab=*/false);
+                    mParams.getUrl(), mParams.getReferrer(), /*navigateToTab=*/false,
+                    /*attributionSrcToken*/ null);
         } else {
             assert false;
         }

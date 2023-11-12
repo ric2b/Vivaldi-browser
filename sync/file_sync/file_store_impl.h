@@ -9,9 +9,9 @@
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
-#include "base/guid.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/uuid.h"
 #include "components/sync/base/model_type.h"
 #include "sync/file_sync/file_data.h"
 #include "sync/file_sync/file_store.h"
@@ -39,10 +39,10 @@ class SyncedFileStoreImpl : public SyncedFileStore {
   // Implementing SyncedFileStore
   bool IsLoaded() override;
   void AddOnLoadedCallback(base::OnceClosure on_loaded_callback) override;
-  void SetLocalFileRef(base::GUID owner_guid,
+  void SetLocalFileRef(base::Uuid owner_uuid,
                        syncer::ModelType sync_type,
                        std::string checksum) override;
-  std::string SetLocalFile(base::GUID owner_guid,
+  std::string SetLocalFile(base::Uuid owner_uuid,
                            syncer::ModelType sync_type,
                            std::vector<uint8_t> content) override;
   void SetSyncFileRef(std::string owner_sync_id,
@@ -50,7 +50,7 @@ class SyncedFileStoreImpl : public SyncedFileStore {
                       std::string checksum) override;
   void GetFile(std::string checksum, GetFileCallback callback) override;
   std::string GetMimeType(std::string checksum) override;
-  void RemoveLocalRef(base::GUID owner_guid,
+  void RemoveLocalRef(base::Uuid owner_uuid,
                       syncer::ModelType sync_type) override;
   void RemoveSyncRef(std::string owner_sync_id,
                      syncer::ModelType sync_type) override;
@@ -61,7 +61,7 @@ class SyncedFileStoreImpl : public SyncedFileStore {
  private:
   base::FilePath GetFilePath(const std::string& checksum) const;
 
-  void DoSetLocalFileRef(base::GUID owner_guid,
+  void DoSetLocalFileRef(base::Uuid owner_uuid,
                          syncer::ModelType sync_type,
                          std::string checksum);
 
@@ -80,7 +80,7 @@ class SyncedFileStoreImpl : public SyncedFileStore {
 
   std::vector<base::OnceClosure> on_loaded_callbacks_;
 
-  std::map<syncer::ModelType, std::map<base::GUID, std::string>>
+  std::map<syncer::ModelType, std::map<base::Uuid, std::string>>
       checksums_for_local_owners_;
   std::map<syncer::ModelType, std::map<std::string, std::string>>
       checksums_for_sync_owners_;

@@ -8,9 +8,9 @@ import static org.junit.Assert.assertEquals;
 
 import android.content.Context;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -369,10 +369,12 @@ public class WarmupManagerTest {
     }
 
     // Test to check the functionality of spare tab creation without initializing renderer.
+    // Disable CreateNewTabInitializeRenderer to test spare tab without renderer initialization.
     @Test
     @MediumTest
     @Feature({"SpareTab"})
     @EnableFeatures({ChromeFeatureList.SPARE_TAB})
+    @DisableFeatures(ChromeFeatureList.CREATE_NEW_TAB_INITIALIZE_RENDERER)
     public void testCreateAndTakeSpareTabWithoutInitializeRenderer() {
         WarmupManager.SPARE_TAB_INITIALIZE_RENDERER.setForTesting(false);
 

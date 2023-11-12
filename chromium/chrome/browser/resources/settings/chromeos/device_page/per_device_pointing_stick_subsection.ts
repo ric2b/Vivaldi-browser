@@ -8,15 +8,14 @@
  * per-device-pointing-stick subsection settings in system settings.
  */
 
-import '../../icons.html.js';
-import '../../settings_shared.css.js';
+import '../icons.html.js';
+import '../settings_shared.css.js';
 import 'chrome://resources/cr_components/localized_link/localized_link.js';
 import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-import '../../controls/settings_radio_group.js';
-import '../../controls/settings_slider.js';
-import '../../controls/settings_toggle_button.js';
-import '../../settings_shared.css.js';
+import '/shared/settings/controls/settings_radio_group.js';
+import '/shared/settings/controls/settings_slider.js';
+import '/shared/settings/controls/settings_toggle_button.js';
 import './input_device_settings_shared.css.js';
 import 'chrome://resources/cr_elements/cr_slider/cr_slider.js';
 
@@ -27,9 +26,8 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route} from '../router.js';
+import {Route, routes} from '../router.js';
 
 import {getInputDeviceSettingsProvider} from './input_device_mojo_interface_provider.js';
 import {InputDeviceSettingsProviderInterface, PointingStick, PointingStickSettings} from './input_device_settings_types.js';
@@ -129,6 +127,11 @@ export class SettingsPerDevicePointingStickSubsectionElement extends
       pointingStickIndex: {
         type: Number,
       },
+
+      isLastDevice: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
     };
   }
 
@@ -163,6 +166,7 @@ export class SettingsPerDevicePointingStickSubsectionElement extends
   private inputDeviceSettingsProvider: InputDeviceSettingsProviderInterface =
       getInputDeviceSettingsProvider();
   private pointingStickIndex: number;
+  private isLastDevice: boolean;
 
   private updateSettingsToCurrentPrefs(): void {
     // `updateSettingsToCurrentPrefs` gets called when the `keyboard` object

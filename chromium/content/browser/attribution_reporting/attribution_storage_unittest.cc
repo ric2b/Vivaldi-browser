@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/containers/enum_set.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback.h"
@@ -23,15 +24,17 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
-#include "components/aggregation_service/aggregation_service.mojom.h"
+#include "components/aggregation_service/features.h"
 #include "components/attribution_reporting/aggregatable_dedup_key.h"
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
 #include "components/attribution_reporting/event_trigger_data.h"
 #include "components/attribution_reporting/filters.h"
+#include "components/attribution_reporting/source_registration_time_config.mojom.h"
 #include "components/attribution_reporting/source_type.mojom.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/test_utils.h"
@@ -160,7 +163,7 @@ class AttributionStorageTest : public testing::Test {
                              .Build(),
                          source)
         .SetTriggerData(event_trigger->data)
-        .SetReportTime(source.common_info().source_time() + kReportDelay)
+        .SetReportTime(source.source_time() + kReportDelay)
         .SetPriority(event_trigger->priority)
         .Build();
   }
@@ -1102,13 +1105,15 @@ TEST_F(AttributionStorageTest, DeleteAllNullDeleteBegin) {
 }
 
 TEST_F(AttributionStorageTest, MaxAttributionsBetweenSites) {
-  delegate()->set_rate_limits({
-      .time_window = base::TimeDelta::Max(),
-      .max_source_registration_reporting_origins =
-          std::numeric_limits<int64_t>::max(),
-      .max_attribution_reporting_origins = std::numeric_limits<int64_t>::max(),
-      .max_attributions = 2,
-  });
+  delegate()->set_rate_limits(
+      RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+        r.time_window = base::TimeDelta::Max();
+        r.max_source_registration_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attribution_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attributions = 2;
+      }));
 
   SourceBuilder source_builder = TestAggregatableSourceProvider().GetBuilder();
   storage()->StoreSource(source_builder.Build());
@@ -1155,13 +1160,15 @@ TEST_F(AttributionStorageTest, MaxAttributionsBetweenSites) {
 
 TEST_F(AttributionStorageTest,
        MaxAttributionReportsBetweenSites_IgnoresSourceType) {
-  delegate()->set_rate_limits({
-      .time_window = base::TimeDelta::Max(),
-      .max_source_registration_reporting_origins =
-          std::numeric_limits<int64_t>::max(),
-      .max_attribution_reporting_origins = std::numeric_limits<int64_t>::max(),
-      .max_attributions = 1,
-  });
+  delegate()->set_rate_limits(
+      RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+        r.time_window = base::TimeDelta::Max();
+        r.max_source_registration_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attribution_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attributions = 1;
+      }));
 
   storage()->StoreSource(
       SourceBuilder().SetSourceType(SourceType::kNavigation).Build());
@@ -1202,13 +1209,15 @@ TEST_F(AttributionStorageTest,
 }
 
 TEST_F(AttributionStorageTest, NeverAttributeImpression_RateLimitsChanged) {
-  delegate()->set_rate_limits({
-      .time_window = base::TimeDelta::Max(),
-      .max_source_registration_reporting_origins =
-          std::numeric_limits<int64_t>::max(),
-      .max_attribution_reporting_origins = std::numeric_limits<int64_t>::max(),
-      .max_attributions = 1,
-  });
+  delegate()->set_rate_limits(
+      RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+        r.time_window = base::TimeDelta::Max();
+        r.max_source_registration_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attribution_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attributions = 1;
+      }));
 
   delegate()->set_randomized_response(
       std::vector<AttributionStorageDelegate::FakeReport>{});
@@ -1230,13 +1239,15 @@ TEST_F(AttributionStorageTest, NeverAttributeImpression_RateLimitsChanged) {
 
 TEST_F(AttributionStorageTest,
        NeverAttributeSource_AggregatableReportStoredAndRateLimitsChanged) {
-  delegate()->set_rate_limits({
-      .time_window = base::TimeDelta::Max(),
-      .max_source_registration_reporting_origins =
-          std::numeric_limits<int64_t>::max(),
-      .max_attribution_reporting_origins = std::numeric_limits<int64_t>::max(),
-      .max_attributions = 2,
-  });
+  delegate()->set_rate_limits(
+      RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+        r.time_window = base::TimeDelta::Max();
+        r.max_source_registration_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attribution_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attributions = 2;
+      }));
 
   SourceBuilder builder = TestAggregatableSourceProvider().GetBuilder();
 
@@ -1307,8 +1318,8 @@ TEST_F(AttributionStorageTest,
 }
 
 TEST_F(AttributionStorageTest,
-       MaxDestinationsPerSource_ScopedToSourceSiteAndReportingOrigin) {
-  delegate()->set_max_destinations_per_source_site_reporting_origin(3);
+       MaxDestinationsPerSource_ScopedToSourceSiteAndReportingSite) {
+  delegate()->set_max_destinations_per_source_site_reporting_site(3);
 
   const auto store_source = [&](const char* source_origin,
                                 const char* reporting_origin,
@@ -1346,13 +1357,17 @@ TEST_F(AttributionStorageTest,
   store_source("https://s2.test", "https://a.r.test", "https://d5.test");
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(5));
 
-  // This should succeed because the reporting origin is different.
+  // This should fail because the reporting site is already present.
   store_source("https://s1.test", "https://b.r.test", "https://d5.test");
+  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(5));
+
+  // This should succeed because the reporting site is different.
+  store_source("https://s1.test", "https://a.r1.test", "https://d5.test");
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(6));
 }
 
 TEST_F(AttributionStorageTest, DestinationLimit_ApplyLimit) {
-  delegate()->set_max_destinations_per_source_site_reporting_origin(1);
+  delegate()->set_max_destinations_per_source_site_reporting_site(1);
   delegate()->set_delete_expired_sources_frequency(base::Milliseconds(10));
 
   const base::TimeDelta expiry = base::Milliseconds(5);
@@ -1408,7 +1423,7 @@ TEST_F(AttributionStorageTest, DestinationLimit_ApplyLimit) {
 
 TEST_F(AttributionStorageTest,
        MaxAttributionDestinationsPerSource_AppliesToNavigationSources) {
-  delegate()->set_max_destinations_per_source_site_reporting_origin(1);
+  delegate()->set_max_destinations_per_source_site_reporting_site(1);
   storage()->StoreSource(
       SourceBuilder()
           .SetDestinationSites(
@@ -1425,7 +1440,7 @@ TEST_F(AttributionStorageTest,
 
 TEST_F(AttributionStorageTest,
        MaxAttributionDestinationsPerSource_CountsAllSourceTypes) {
-  delegate()->set_max_destinations_per_source_site_reporting_origin(1);
+  delegate()->set_max_destinations_per_source_site_reporting_site(1);
   storage()->StoreSource(
       SourceBuilder()
           .SetDestinationSites(
@@ -1440,14 +1455,14 @@ TEST_F(AttributionStorageTest,
           .Build());
   EXPECT_EQ(result.status,
             StorableSource::Result::kInsufficientUniqueDestinationCapacity);
-  EXPECT_EQ(result.max_destinations_per_source_site_reporting_origin, 1);
+  EXPECT_EQ(result.max_destinations_per_source_site_reporting_site, 1);
 
   EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
 }
 
 TEST_F(AttributionStorageTest,
        MaxAttributionDestinationsPerSource_CountsUnexpiredSources) {
-  delegate()->set_max_destinations_per_source_site_reporting_origin(1);
+  delegate()->set_max_destinations_per_source_site_reporting_site(1);
   delegate()->set_delete_expired_rate_limits_frequency(base::Milliseconds(10));
 
   const base::TimeDelta expiry = base::Milliseconds(5);
@@ -1483,7 +1498,7 @@ TEST_F(AttributionStorageTest,
 
 TEST_F(AttributionStorageTest,
        MaxAttributionDestinationsPerSource_SourceWithTooManyDestinations) {
-  delegate()->set_max_destinations_per_source_site_reporting_origin(1);
+  delegate()->set_max_destinations_per_source_site_reporting_site(1);
 
   storage()->StoreSource(
       SourceBuilder()
@@ -1564,13 +1579,15 @@ TEST_F(AttributionStorageTest, MultipleImpressions_CorrectDeactivation) {
 
 TEST_F(AttributionStorageTest, FalselyAttributeImpression_ReportStored) {
   delegate()->set_max_attributions_per_source(1);
-  delegate()->set_rate_limits({
-      .time_window = base::TimeDelta::Max(),
-      .max_source_registration_reporting_origins =
-          std::numeric_limits<int64_t>::max(),
-      .max_attribution_reporting_origins = std::numeric_limits<int64_t>::max(),
-      .max_attributions = 2,
-  });
+  delegate()->set_rate_limits(
+      RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+        r.time_window = base::TimeDelta::Max();
+        r.max_source_registration_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attribution_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attributions = 2;
+      }));
 
   const base::Time fake_report_time = base::Time::Now() + kReportDelay;
   const base::Time fake_trigger_time = fake_report_time - base::Microseconds(1);
@@ -2201,8 +2218,9 @@ TEST_F(AttributionStorageTest, AggregatableDedupKeysFiltering) {
               /*dedup_key=*/123, FilterPair())},
           /*event_triggers=*/{}, aggregatable_trigger_data, aggregatable_values,
           /*debug_reporting=*/false,
-          ::aggregation_service::mojom::AggregationCoordinator::kDefault),
-      /*destination_origin=*/origin, /*attestation=*/absl::nullopt,
+          /*aggregation_coordinator_origin=*/absl::nullopt,
+          attribution_reporting::mojom::SourceRegistrationTimeConfig::kInclude),
+      /*destination_origin=*/origin, /*verifications=*/{},
       /*is_within_fenced_frame=*/false);
 
   EXPECT_EQ(AttributionTrigger::AggregatableResult::kSuccess,
@@ -2271,8 +2289,10 @@ TEST_F(AttributionStorageTest, AggregatableDedupKeysFiltering) {
             /*event_triggers=*/{}, aggregatable_trigger_data,
             aggregatable_values,
             /*debug_reporting=*/false,
-            ::aggregation_service::mojom::AggregationCoordinator::kDefault),
-        /*destination_origin=*/origin, /*attestation=*/absl::nullopt,
+            /*aggregation_coordinator_origin=*/absl::nullopt,
+            attribution_reporting::mojom::SourceRegistrationTimeConfig::
+                kInclude),
+        /*destination_origin=*/origin, /*verifications=*/{},
         /*is_within_fenced_frame=*/false);
 
     EXPECT_EQ(MaybeCreateAndStoreAggregatableReport(trigger2),
@@ -2688,12 +2708,14 @@ TEST_F(AttributionStorageTest, MaybeCreateAndStoreReport_ReturnsNewReport) {
 // This is tested more thoroughly by the `RateLimitTable` unit tests. Here just
 // ensure that the rate limits are consulted at all.
 TEST_F(AttributionStorageTest, MaxReportingOriginsPerSource) {
-  delegate()->set_rate_limits({
-      .time_window = base::TimeDelta::Max(),
-      .max_source_registration_reporting_origins = 2,
-      .max_attribution_reporting_origins = std::numeric_limits<int64_t>::max(),
-      .max_attributions = std::numeric_limits<int64_t>::max(),
-  });
+  delegate()->set_rate_limits(
+      RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+        r.time_window = base::TimeDelta::Max();
+        r.max_source_registration_reporting_origins = 2;
+        r.max_attribution_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attributions = std::numeric_limits<int64_t>::max();
+      }));
 
   auto result = storage()->StoreSource(
       SourceBuilder()
@@ -2723,13 +2745,14 @@ TEST_F(AttributionStorageTest, MaxReportingOriginsPerSource) {
 // This is tested more thoroughly by the `RateLimitTable` unit tests. Here just
 // ensure that the rate limits are consulted at all.
 TEST_F(AttributionStorageTest, MaxReportingOriginsPerAttribution) {
-  delegate()->set_rate_limits({
-      .time_window = base::TimeDelta::Max(),
-      .max_source_registration_reporting_origins =
-          std::numeric_limits<int64_t>::max(),
-      .max_attribution_reporting_origins = 2,
-      .max_attributions = std::numeric_limits<int64_t>::max(),
-  });
+  delegate()->set_rate_limits(
+      RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+        r.time_window = base::TimeDelta::Max();
+        r.max_source_registration_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attribution_reporting_origins = 2;
+        r.max_attributions = std::numeric_limits<int64_t>::max();
+      }));
 
   const auto origin1 = *SuitableOrigin::Deserialize("https://r1.test");
   const auto origin2 = *SuitableOrigin::Deserialize("https://r2.test");
@@ -3012,9 +3035,11 @@ TEST_F(AttributionStorageTest, NoMatchingTriggerData_ReturnsError) {
               /*aggregatable_values=*/
               attribution_reporting::AggregatableValues(),
               /*debug_reporting=*/false,
-              ::aggregation_service::mojom::AggregationCoordinator::kDefault),
+              /*aggregation_coordinator_origin=*/absl::nullopt,
+              attribution_reporting::mojom::SourceRegistrationTimeConfig::
+                  kInclude),
           /*destination_origin=*/origin,
-          /*attestation=*/absl::nullopt,
+          /*verifications=*/{},
           /*is_within_fenced_frame=*/false)));
 
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()), IsEmpty());
@@ -3081,22 +3106,23 @@ TEST_F(AttributionStorageTest, MatchingTriggerData_UsesCorrectData) {
                      }})),
   };
 
-  EXPECT_EQ(
-      AttributionTrigger::EventLevelResult::kSuccess,
-      MaybeCreateAndStoreEventLevelReport(AttributionTrigger(
-          /*reporting_origin=*/origin,
-          attribution_reporting::TriggerRegistration(
-              FilterPair(),
-              /*debug_key=*/absl::nullopt,
-              /*aggregatable_dedup_keys=*/{}, event_triggers,
-              /*aggregatable_trigger_data=*/{},
-              /*aggregatable_values=*/
-              attribution_reporting::AggregatableValues(),
-              /*debug_reporting=*/false,
-              ::aggregation_service::mojom::AggregationCoordinator::kDefault),
-          /*destination_origin=*/origin,
-          /*attestation=*/absl::nullopt,
-          /*is_within_fenced_frame=*/false)));
+  EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
+            MaybeCreateAndStoreEventLevelReport(AttributionTrigger(
+                /*reporting_origin=*/origin,
+                attribution_reporting::TriggerRegistration(
+                    FilterPair(),
+                    /*debug_key=*/absl::nullopt,
+                    /*aggregatable_dedup_keys=*/{}, event_triggers,
+                    /*aggregatable_trigger_data=*/{},
+                    /*aggregatable_values=*/
+                    attribution_reporting::AggregatableValues(),
+                    /*debug_reporting=*/false,
+                    /*aggregation_coordinator_origin=*/absl::nullopt,
+                    attribution_reporting::mojom::SourceRegistrationTimeConfig::
+                        kInclude),
+                /*destination_origin=*/origin,
+                /*verifications=*/{},
+                /*is_within_fenced_frame=*/false)));
 
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()),
               ElementsAre(EventLevelDataIs(
@@ -3144,8 +3170,9 @@ TEST_F(AttributionStorageTest, TopLevelTriggerFiltering) {
           /*aggregatable_dedup_keys=*/{}, event_triggers,
           aggregatable_trigger_data, aggregatable_values,
           /*debug_reporting=*/false,
-          ::aggregation_service::mojom::AggregationCoordinator::kDefault),
-      /*destination_origin=*/origin, /*attestation=*/absl::nullopt,
+          /*aggregation_coordinator_origin=*/absl::nullopt,
+          attribution_reporting::mojom::SourceRegistrationTimeConfig::kInclude),
+      /*destination_origin=*/origin, /*verifications=*/{},
       /*is_within_fenced_frame=*/false);
 
   AttributionTrigger trigger2(
@@ -3159,8 +3186,9 @@ TEST_F(AttributionStorageTest, TopLevelTriggerFiltering) {
           /*aggregatable_dedup_keys=*/{}, event_triggers,
           aggregatable_trigger_data, aggregatable_values,
           /*debug_reporting=*/false,
-          ::aggregation_service::mojom::AggregationCoordinator::kDefault),
-      /*destination_origin=*/origin, /*attestation=*/absl::nullopt,
+          /*aggregation_coordinator_origin=*/absl::nullopt,
+          attribution_reporting::mojom::SourceRegistrationTimeConfig::kInclude),
+      /*destination_origin=*/origin, /*verifications=*/{},
       /*is_within_fenced_frame=*/false);
 
   AttributionTrigger trigger3(
@@ -3173,9 +3201,10 @@ TEST_F(AttributionStorageTest, TopLevelTriggerFiltering) {
           /*aggregatable_dedup_keys=*/{}, event_triggers,
           aggregatable_trigger_data, aggregatable_values,
           /*debug_reporting=*/false,
-          ::aggregation_service::mojom::AggregationCoordinator::kDefault),
+          /*aggregation_coordinator_origin=*/absl::nullopt,
+          attribution_reporting::mojom::SourceRegistrationTimeConfig::kInclude),
       /*destination_origin=*/origin,
-      /*attestation=*/absl::nullopt,
+      /*verifications=*/{},
       /*is_within_fenced_frame=*/false);
 
   EXPECT_THAT(storage()->MaybeCreateAndStoreReport(trigger1),
@@ -3391,40 +3420,39 @@ TEST_F(AttributionStorageTest,
 }
 
 TEST_F(AttributionStorageTest, AggregationCoordinator_RoundTrip) {
-  for (auto aggregation_coordinator :
-       {::aggregation_service::mojom::AggregationCoordinator::kAwsCloud}) {
-    storage()->StoreSource(
-        TestAggregatableSourceProvider().GetBuilder().Build());
+  base::test::ScopedFeatureList scoped_feature_list(
+      ::aggregation_service::kAggregationServiceMultipleCloudProviders);
 
-    EXPECT_THAT(
-        storage()->MaybeCreateAndStoreReport(
-            DefaultAggregatableTriggerBuilder()
-                .SetAggregationCoordinator(aggregation_coordinator)
-                .Build(/*generate_event_trigger_data=*/false)),
-        AllOf(CreateReportAggregatableStatusIs(
-                  AttributionTrigger::AggregatableResult::kSuccess),
-              NewAggregatableReportIs(Optional(AggregatableAttributionDataIs(
-                  AggregationCoordinatorIs(aggregation_coordinator))))));
-    EXPECT_THAT(
-        storage()->GetAttributionReports(/*max_report_time=*/base::Time::Max()),
-        ElementsAre(AggregatableAttributionDataIs(
-            AggregationCoordinatorIs(aggregation_coordinator))));
+  auto coordinator_origin = SuitableOrigin::Deserialize("https://a.test");
 
-    storage()->ClearData(/*delete_begin=*/base::Time::Min(),
-                         /*delete_end=*/base::Time::Max(),
-                         /*filter=*/base::NullCallback());
-  }
+  storage()->StoreSource(TestAggregatableSourceProvider().GetBuilder().Build());
+
+  EXPECT_THAT(
+      storage()->MaybeCreateAndStoreReport(
+          DefaultAggregatableTriggerBuilder()
+              .SetAggregationCoordinatorOrigin(*coordinator_origin)
+              .Build(/*generate_event_trigger_data=*/false)),
+      AllOf(CreateReportAggregatableStatusIs(
+                AttributionTrigger::AggregatableResult::kSuccess),
+            NewAggregatableReportIs(Optional(AggregatableAttributionDataIs(
+                AggregationCoordinatorOriginIs(coordinator_origin))))));
+  EXPECT_THAT(
+      storage()->GetAttributionReports(/*max_report_time=*/base::Time::Max()),
+      ElementsAre(AggregatableAttributionDataIs(
+          AggregationCoordinatorOriginIs(coordinator_origin))));
 }
 
 TEST_F(AttributionStorageTest, MaxAttributions_BoundedBySourceTimeWindow) {
   constexpr base::TimeDelta kTimeWindow = base::Days(1);
-  delegate()->set_rate_limits({
-      .time_window = kTimeWindow,
-      .max_source_registration_reporting_origins =
-          std::numeric_limits<int64_t>::max(),
-      .max_attribution_reporting_origins = std::numeric_limits<int64_t>::max(),
-      .max_attributions = 1,
-  });
+  delegate()->set_rate_limits(
+      RateLimitWith([kTimeWindow](AttributionConfig::RateLimitConfig& r) {
+        r.time_window = kTimeWindow;
+        r.max_source_registration_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attribution_reporting_origins =
+            std::numeric_limits<int64_t>::max();
+        r.max_attributions = 1;
+      }));
 
   storage()->StoreSource(SourceBuilder().SetExpiry(base::Days(7)).Build());
 
@@ -3533,6 +3561,92 @@ TEST_F(AttributionStorageTest, BothRealAndNullAggregatableReports) {
   EXPECT_THAT(
       storage()->GetAttributionReports(base::Time::Max()),
       UnorderedElementsAre(expected_aggregatable_report, expected_null_report));
+}
+
+TEST_F(AttributionStorageTest, SourceRegistrationTimeConfig_RoundTrip) {
+  delegate()->set_null_aggregatable_reports(
+      {AttributionStorageDelegate::NullAggregatableReport{
+          .fake_source_time = base::Time::Now(),
+      }});
+  for (auto config :
+       base::EnumSet<attribution_reporting::mojom::SourceRegistrationTimeConfig,
+                     attribution_reporting::mojom::
+                         SourceRegistrationTimeConfig::kMinValue,
+                     attribution_reporting::mojom::
+                         SourceRegistrationTimeConfig::kMaxValue>::All()) {
+    storage()->StoreSource(
+        TestAggregatableSourceProvider().GetBuilder().Build());
+    EXPECT_THAT(
+        storage()->MaybeCreateAndStoreReport(
+            DefaultAggregatableTriggerBuilder()
+                .SetSourceRegistrationTimeConfig(config)
+                .Build(/*generate_event_trigger_data=*/false)),
+        AllOf(CreateReportAggregatableStatusIs(
+                  AttributionTrigger::AggregatableResult::kSuccess),
+              NewAggregatableReportIs(Optional(AggregatableAttributionDataIs(
+                  SourceRegistrationTimeConfigIs(config))))));
+    EXPECT_THAT(
+        storage()->GetAttributionReports(/*max_report_time=*/base::Time::Max()),
+        UnorderedElementsAre(
+            AggregatableAttributionDataIs(
+                SourceRegistrationTimeConfigIs(config)),
+            NullAggregatableDataIs(SourceRegistrationTimeConfigIs(config))));
+
+    storage()->ClearData(/*delete_begin=*/base::Time::Min(),
+                         /*delete_end=*/base::Time::Max(),
+                         /*filter=*/base::NullCallback());
+  }
+  delegate()->set_null_aggregatable_reports({});
+}
+
+TEST_F(AttributionStorageTest, MaximumAggregatableReportsPerSource) {
+  auto source = TestAggregatableSourceProvider().GetBuilder().Build();
+  storage()->StoreSource(source);
+  AttributionTrigger trigger = DefaultAggregatableTriggerBuilder().Build();
+  for (int i = 0; i < 20; i++) {
+    EXPECT_EQ(AttributionTrigger::AggregatableResult::kSuccess,
+              MaybeCreateAndStoreAggregatableReport(trigger));
+  }
+  EXPECT_EQ(AttributionTrigger::AggregatableResult::kExcessiveReports,
+            MaybeCreateAndStoreAggregatableReport(trigger));
+}
+
+TEST_F(AttributionStorageTest, MaxSourceReportingOriginsPerSite) {
+  delegate()->set_rate_limits(
+      RateLimitWith([](AttributionConfig::RateLimitConfig& r) {
+        r.max_reporting_origins_per_source_reporting_site = 1;
+      }));
+
+  auto store_source = [&](std::string source, std::string reporting) {
+    storage()->StoreSource(
+        SourceBuilder()
+            .SetSourceOrigin(*SuitableOrigin::Deserialize(source))
+            .SetReportingOrigin(*SuitableOrigin::Deserialize(reporting))
+            .SetExpiry(base::Days(2))
+            .Build());
+  };
+  store_source("https://a.test", "https://reporter.test");
+  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
+
+  store_source("https://a.test", "https://a.reporter.test");
+  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
+
+  store_source("https://b.test", "https://a.reporter.test");
+  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(2));
+
+  store_source("https://b.test", "https://otherreporter.test");
+  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(3));
+
+  task_environment_.FastForwardBy(base::Days(1));
+
+  // After 1 day a new origin can be used.
+  store_source("https://a.test", "https://a.reporter.test");
+  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(4));
+
+  // The reporter used on the first day can't be used even though it is
+  // repeated.
+  store_source("https://a.test", "https://reporter.test");
+  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(4));
 }
 
 }  // namespace content

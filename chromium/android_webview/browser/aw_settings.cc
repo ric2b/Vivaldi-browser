@@ -7,6 +7,8 @@
 #include <memory>
 
 #include "android_webview/browser/aw_browser_context.h"
+#include "android_webview/browser/aw_browser_process.h"
+#include "android_webview/browser/aw_client_hints_controller_delegate.h"
 #include "android_webview/browser/aw_content_browser_client.h"
 #include "android_webview/browser/aw_contents.h"
 #include "android_webview/browser/aw_contents_origin_matcher.h"
@@ -19,7 +21,9 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/memory/raw_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/supports_user_data.h"
+#include "components/embedder_support/user_agent_utils.h"
 #include "components/viz/common/features.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -29,6 +33,7 @@
 #include "content/public/browser/web_contents.h"
 #include "net/http/http_util.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom.h"
 #include "url/gurl.h"
@@ -200,9 +205,36 @@ void AwSettings::UpdateUserAgentLocked(JNIEnv* env,
   bool ua_overidden = !!str;
 
   if (ua_overidden) {
-    std::string override = base::android::ConvertJavaStringToUTF8(str);
-    web_contents()->SetUserAgentOverride(
-        blink::UserAgentOverride::UserAgentOnly(override), true);
+    std::string ua_string_override =
+        base::android::ConvertJavaStringToUTF8(str);
+    std::string ua_default = GetUserAgent();
+    blink::UserAgentOverride override_ua_with_metadata;
+    override_ua_with_metadata.ua_string_override = ua_string_override;
+
+    // If kUACHOverrideBlank is enabled, set user-agent metadata with the
+    // default blank value.
+    if (!ua_string_override.empty() &&
+        base::FeatureList::IsEnabled(blink::features::kUACHOverrideBlank)) {
+      override_ua_with_metadata.ua_metadata_override =
+          blink::UserAgentMetadata();
+    }
+
+    // If the override user-agent is not empty and contains the default
+    // user-agent, then we propagate the default user-agent client hints.
+    const bool propagate_uach_metadata =
+        base::FeatureList::IsEnabled(blink::features::kUserAgentClientHint) &&
+        !ua_string_override.empty() &&
+        ua_string_override.find(ua_default) != std::string::npos;
+    if (propagate_uach_metadata) {
+      override_ua_with_metadata.ua_metadata_override =
+          AwClientHintsControllerDelegate::GetUserAgentMetadataOverrideBrand();
+    }
+    base::UmaHistogramBoolean(
+        "Android.WebView.UserAgentClientHintsMetadata.Available",
+        propagate_uach_metadata);
+
+    // Set overridden user-agent and default client hints metadata if applied.
+    web_contents()->SetUserAgentOverride(override_ua_with_metadata, true);
   }
 
   content::NavigationController& controller = web_contents()->GetController();
@@ -610,17 +642,6 @@ AwSettings::UpdateXRequestedWithAllowListOriginMatcher(
   std::vector<std::string> bad_rules =
       xrw_allowlist_matcher_->UpdateRuleList(rules);
   return base::android::ToJavaArrayOfStrings(env, bad_rules);
-}
-
-void AwSettings::SetRestrictSensitiveWebContentEnabled(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    jboolean enabled) {
-  restrict_sensitive_web_content_enabled_ = enabled;
-}
-
-bool AwSettings::GetRestrictSensitiveWebContentEnabled() {
-  return restrict_sensitive_web_content_enabled();
 }
 
 scoped_refptr<AwContentsOriginMatcher> AwSettings::xrw_allowlist_matcher() {

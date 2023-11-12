@@ -34,8 +34,6 @@ const CGFloat kTitleHorizontalMargin = 19;
 // Trailing/leading margins for header buttons. Its used to align with the card
 // margins.
 const CGFloat kButtonHorizontalMargin = 14;
-// Font size for label text in header.
-const CGFloat kDiscoverFeedTitleFontSize = 16;
 // Font size for the custom search engine label.
 const CGFloat kCustomSearchEngineLabelFontSize = 13;
 // Font size for the hidden feed label.
@@ -54,9 +52,9 @@ const CGFloat kCustomSearchEngineLabelHeight = 18;
 const CGFloat kButtonSize = 28;
 // The radius of the dot indicating that there is new content in the Following
 // feed.
-const CGFloat kFollowingSegmentDotRadius = 3;
+const CGFloat kFollowingDotRadius = 3;
 // The distance between the Following segment dot and the Following label.
-const CGFloat kFollowingSegmentDotMargin = 8;
+const CGFloat kFollowingDotMargin = 8;
 // Duration of the fade animation for elements that toggle when switching feeds.
 const CGFloat kSegmentAnimationDuration = 0.3;
 
@@ -85,7 +83,7 @@ NSInteger kFeedSymbolPointSize = 17;
 
 // The dot in the Following segment indicating new content in the Following
 // feed.
-@property(nonatomic, strong) UIView* followingSegmentDot;
+@property(nonatomic, strong) UIView* followingDot;
 
 // The blurred background of the feed header.
 @property(nonatomic, strong) UIVisualEffectView* blurBackgroundView;
@@ -102,19 +100,16 @@ NSInteger kFeedSymbolPointSize = 17;
     NSMutableArray<NSLayoutConstraint*>* feedHeaderConstraints;
 
 // Whether the Following segment dot should currently be visible.
-@property(nonatomic, assign) BOOL followingSegmentDotVisible;
+@property(nonatomic, assign) BOOL followingDotVisible;
 
 @end
 
 @implementation FeedHeaderViewController
 
-- (instancetype)initWithFollowingFeedSortType:
-                    (FollowingFeedSortType)followingFeedSortType
-                   followingSegmentDotVisible:(BOOL)followingSegmentDotVisible {
+- (instancetype)initWithFollowingDotVisible:(BOOL)followingDotVisible {
   self = [super initWithNibName:nil bundle:nil];
   if (self) {
-    _followingFeedSortType = followingFeedSortType;
-    _followingSegmentDotVisible = followingSegmentDotVisible;
+    _followingDotVisible = followingDotVisible;
 
     // The menu button is created early so that it can be assigned a tap action
     // before the view loads.
@@ -128,8 +123,12 @@ NSInteger kFeedSymbolPointSize = 17;
 
   // Applies an opacity to the background. If ReduceTransparency is enabled,
   // then this replaces the blur effect.
-  self.view.backgroundColor =
-      [[UIColor colorNamed:kBackgroundColor] colorWithAlphaComponent:0.95];
+  // With the Magic Stack enabled, the background color will
+  // be clear for continuity with the overall NTP gradient view.
+  self.view.backgroundColor = IsMagicStackEnabled()
+                                  ? [UIColor clearColor]
+                                  : [[UIColor colorNamed:kBackgroundColor]
+                                        colorWithAlphaComponent:0.95];
 
   self.container = [[UIView alloc] init];
 
@@ -144,6 +143,21 @@ NSInteger kFeedSymbolPointSize = 17;
   [self applyHeaderConstraints];
 }
 
+#pragma mark - UITraitEnvironment
+
+- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  [super traitCollectionDidChange:previousTraitCollection];
+  if (previousTraitCollection.preferredContentSizeCategory !=
+      self.traitCollection.preferredContentSizeCategory) {
+    UIFont* font = [self fontForTitle];
+    self.titleLabel.font = font;
+    NSDictionary* attributes =
+        [NSDictionary dictionaryWithObject:font forKey:NSFontAttributeName];
+    [self.segmentedControl setTitleTextAttributes:attributes
+                                         forState:UIControlStateNormal];
+  }
+}
+
 #pragma mark - Public
 
 - (void)toggleBackgroundBlur:(BOOL)blurred animated:(BOOL)animated {
@@ -153,15 +167,10 @@ NSInteger kFeedSymbolPointSize = 17;
     return;
   }
 
-  // Applies blur to header background. Also reduces opacity when blur is
-  // applied so that the blur is still transluscent.
-  // With ContentSuggestionsUIModuleRefresh enabled, the background color will
-  // be clear for continuity with the overall NTP gradient view when not
-  // blurred.
+  // Applies blur to header background.
   if (!animated) {
     self.blurBackgroundView.hidden = !blurred;
-    self.view.backgroundColor = [[UIColor colorNamed:kBackgroundColor]
-        colorWithAlphaComponent:(blurred ? 0.1 : 0.95)];
+    self.view.backgroundColor = [self backgroundColorForBlurredState:blurred];
     return;
   }
   [UIView transitionWithView:self.blurBackgroundView
@@ -173,8 +182,8 @@ NSInteger kFeedSymbolPointSize = 17;
       completion:^(BOOL finished) {
         // Only reduce opacity after the animation is complete to avoid showing
         // content suggestions tiles momentarily.
-        self.view.backgroundColor = [[UIColor colorNamed:kBackgroundColor]
-            colorWithAlphaComponent:(blurred ? 0.1 : 0.95)];
+        self.view.backgroundColor =
+            [self backgroundColorForBlurredState:blurred];
       }];
 }
 
@@ -191,20 +200,20 @@ NSInteger kFeedSymbolPointSize = 17;
              : kCustomSearchEngineLabelHeight;
 }
 
-- (void)updateFollowingSegmentDotForUnseenContent:(BOOL)hasUnseenContent {
+- (void)updateFollowingDotForUnseenContent:(BOOL)hasUnseenContent {
   DCHECK([self.feedControlDelegate isFollowingFeedAvailable]);
 
   // Don't show the dot if the user is already on the Following feed.
   if ([self.feedControlDelegate selectedFeed] == FeedTypeFollowing) {
-    self.followingSegmentDotVisible = NO;
+    self.followingDotVisible = NO;
     return;
   }
 
-  self.followingSegmentDotVisible = hasUnseenContent;
+  self.followingDotVisible = hasUnseenContent;
 
   [UIView animateWithDuration:kSegmentAnimationDuration
                    animations:^{
-                     self.followingSegmentDot.alpha = hasUnseenContent ? 1 : 0;
+                     self.followingDot.alpha = hasUnseenContent ? 1 : 0;
                    }];
 }
 
@@ -381,10 +390,8 @@ NSInteger kFeedSymbolPointSize = 17;
 - (UILabel*)createTitleLabel {
   UILabel* titleLabel = [[UILabel alloc] init];
   titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-  titleLabel.font = [UIFont systemFontOfSize:kDiscoverFeedTitleFontSize
-                                      weight:UIFontWeightMedium];
-  titleLabel.textColor = [UIColor colorNamed:kGrey700Color];
-  titleLabel.adjustsFontForContentSizeCategory = YES;
+  titleLabel.font = [self fontForTitle];
+  titleLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
   titleLabel.accessibilityIdentifier =
       ntp_home::DiscoverHeaderTitleAccessibilityID();
   titleLabel.text = [self feedHeaderTitleText];
@@ -404,8 +411,7 @@ NSInteger kFeedSymbolPointSize = 17;
   [segmentedControl setApportionsSegmentWidthsByContent:NO];
 
   // Set text font and color.
-  UIFont* font = [UIFont systemFontOfSize:kDiscoverFeedTitleFontSize
-                                   weight:UIFontWeightMedium];
+  UIFont* font = [self fontForTitle];
   NSDictionary* attributes =
       [NSDictionary dictionaryWithObject:font forKey:NSFontAttributeName];
   [segmentedControl setTitleTextAttributes:attributes
@@ -424,14 +430,18 @@ NSInteger kFeedSymbolPointSize = 17;
   return segmentedControl;
 }
 
+- (UIFont*)fontForTitle {
+  return CreateDynamicFont(UIFontTextStyleSubheadline, UIFontWeightMedium);
+}
+
 // Configures and returns the dot indicating that there is new content in the
 // Following feed.
-- (UIView*)createFollowingSegmentDot {
-  UIView* followingSegmentDot = [[UIView alloc] init];
-  followingSegmentDot.layer.cornerRadius = kFollowingSegmentDotRadius;
-  followingSegmentDot.backgroundColor = [UIColor colorNamed:kBlue500Color];
-  followingSegmentDot.translatesAutoresizingMaskIntoConstraints = NO;
-  return followingSegmentDot;
+- (UIView*)createFollowingDot {
+  UIView* followingDot = [[UIView alloc] init];
+  followingDot.layer.cornerRadius = kFollowingDotRadius;
+  followingDot.backgroundColor = [UIColor colorNamed:kBlue500Color];
+  followingDot.translatesAutoresizingMaskIntoConstraints = NO;
+  return followingDot;
 }
 
 // Configures and returns the blurred background of the feed header.
@@ -600,10 +610,10 @@ NSInteger kFeedSymbolPointSize = 17;
 
   // Set Following segment dot size.
   [self.feedHeaderConstraints addObjectsFromArray:@[
-    [self.followingSegmentDot.heightAnchor
-        constraintEqualToConstant:kFollowingSegmentDotRadius * 2],
-    [self.followingSegmentDot.widthAnchor
-        constraintEqualToConstant:kFollowingSegmentDotRadius * 2],
+    [self.followingDot.heightAnchor
+        constraintEqualToConstant:kFollowingDotRadius * 2],
+    [self.followingDot.widthAnchor
+        constraintEqualToConstant:kFollowingDotRadius * 2],
   ]];
 
   // Find the "Following" label within the segmented control, since it is not
@@ -630,22 +640,22 @@ NSInteger kFeedSymbolPointSize = 17;
   if (followingLabel) {
     [self.feedHeaderConstraints addObjectsFromArray:@[
       // Anchor Following segment dot to label text.
-      [self.followingSegmentDot.leftAnchor
+      [self.followingDot.leftAnchor
           constraintEqualToAnchor:followingLabel.rightAnchor
-                         constant:kFollowingSegmentDotMargin],
-      [self.followingSegmentDot.bottomAnchor
+                         constant:kFollowingDotMargin],
+      [self.followingDot.bottomAnchor
           constraintEqualToAnchor:followingLabel.topAnchor
-                         constant:kFollowingSegmentDotMargin],
+                         constant:kFollowingDotMargin],
     ]];
   } else {
     [self.feedHeaderConstraints addObjectsFromArray:@[
       // Anchor Following segment dot to top corner.
-      [self.followingSegmentDot.rightAnchor
+      [self.followingDot.rightAnchor
           constraintEqualToAnchor:self.segmentedControl.rightAnchor
-                         constant:-kFollowingSegmentDotMargin],
-      [self.followingSegmentDot.topAnchor
+                         constant:-kFollowingDotMargin],
+      [self.followingDot.topAnchor
           constraintEqualToAnchor:self.segmentedControl.topAnchor
-                         constant:kFollowingSegmentDotMargin],
+                         constant:kFollowingDotMargin],
     ]];
   }
 }
@@ -655,9 +665,9 @@ NSInteger kFeedSymbolPointSize = 17;
   self.segmentedControl = [self createSegmentedControl];
   [self.container addSubview:self.segmentedControl];
 
-  self.followingSegmentDot = [self createFollowingSegmentDot];
-  self.followingSegmentDot.alpha = self.followingSegmentDotVisible ? 1 : 0;
-  [self.segmentedControl addSubview:self.followingSegmentDot];
+  self.followingDot = [self createFollowingDot];
+  self.followingDot.alpha = self.followingDotVisible ? 1 : 0;
+  [self.segmentedControl addSubview:self.followingDot];
 
   self.sortButton = [self createSortButton];
   self.sortButton.menu = [self createSortMenu];
@@ -687,9 +697,9 @@ NSInteger kFeedSymbolPointSize = 17;
 
 // Removes views that only appear when the feed visibility is enabled.
 - (void)removeViewsForVisibleFeed {
-  if (self.followingSegmentDot) {
-    [self.followingSegmentDot removeFromSuperview];
-    self.followingSegmentDot = nil;
+  if (self.followingDot) {
+    [self.followingDot removeFromSuperview];
+    self.followingDot = nil;
   }
 
   if (self.segmentedControl) {
@@ -765,6 +775,21 @@ NSInteger kFeedSymbolPointSize = 17;
   }
 
   return feedHeaderTitleText;
+}
+
+// Returns the background color for this view.
+// Applies an opacity to the background. If ReduceTransparency is enabled,
+// then this replaces the blur effect.
+// With the Magic Stack enabled, the background color will
+// be clear for continuity with the overall NTP gradient view.
+- (UIColor*)backgroundColorForBlurredState:(BOOL)blurred {
+  if (blurred) {
+    return [[UIColor colorNamed:kBackgroundColor] colorWithAlphaComponent:0.1];
+  } else if (IsMagicStackEnabled()) {
+    return [UIColor clearColor];
+  } else {
+    return [[UIColor colorNamed:kBackgroundColor] colorWithAlphaComponent:0.95];
+  }
 }
 
 @end

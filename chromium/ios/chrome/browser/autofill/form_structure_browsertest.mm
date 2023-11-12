@@ -35,11 +35,11 @@
 #import "components/sync_user_events/fake_user_event_service.h"
 #import "ios/chrome/browser/autofill/address_normalizer_factory.h"
 #import "ios/chrome/browser/autofill/form_suggestion_controller.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #import "ios/chrome/browser/passwords/password_controller.h"
-#import "ios/chrome/browser/paths/paths.h"
+#import "ios/chrome/browser/shared/model/paths/paths.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/sync/ios_user_event_service_factory.h"
 #import "ios/chrome/browser/ui/autofill/chrome_autofill_client_ios.h"
 #import "ios/chrome/browser/web/chrome_web_client.h"
@@ -217,7 +217,9 @@ FormStructureBrowserTest::FormStructureBrowserTest()
        features::kAutofillEnableSupportForPhoneNumberTrunkTypes,
        features::kAutofillInferCountryCallingCode,
        // TODO(crbug.com/1355264): Remove once launched.
-       features::kAutofillLabelAffixRemoval},
+       features::kAutofillLabelAffixRemoval,
+       // TODO(crbug.com/1441057): Remove once launched.
+       features::kAutofillEnableExpirationDateImprovements},
       // Disabled
       {// TODO(crbug.com/1311937): Remove once launched.
        // This feature is part of the AutofillRefinedPhoneNumberTypes rollout.

@@ -18,11 +18,13 @@
 #include "chrome/browser/media/webrtc/desktop_capture_devices_util.h"
 #include "chrome/browser/media/webrtc/desktop_media_list.h"
 #include "chrome/browser/media/webrtc/desktop_media_picker_manager.h"
+#include "chrome/browser/media/webrtc/desktop_media_picker_utils.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/extensions_container.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/desktop_capture/desktop_media_source_view.h"
+#include "chrome/browser/ui/views/desktop_capture/share_this_tab_dialog_views.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -37,6 +39,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "media/base/media_switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -83,19 +86,6 @@ BASE_FEATURE(kWarnUserOfSystemWideLocalAudioSuppression,
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
-enum class GDMPreferCurrentTabResult {
-  kDialogDismissed = 0,                  // Tab/window closed, navigation, etc.
-  kUserCancelled = 1,                    // User explicitly cancelled.
-  kUserSelectedScreen = 2,               // Screen selected.
-  kUserSelectedWindow = 3,               // Window selected.
-  kUserSelectedOtherTab = 4,             // Other tab selected from tab-list.
-  kUserSelectedThisTabAsGenericTab = 5,  // Current tab selected from tab-list.
-  kUserSelectedThisTab = 6,  // Current tab selected from current-tab menu.
-  kMaxValue = kUserSelectedThisTab
-};
-
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
 enum class GDMResult {
   kDialogDismissed = 0,       // Tab/window closed, navigation, etc.
   kUserCancelled = 1,         // User explicitly cancelled.
@@ -106,29 +96,24 @@ enum class GDMResult {
   kMaxValue = kUserSelectedThisTab
 };
 
-void RecordUma(GDMPreferCurrentTabResult result) {
-  base::UmaHistogramEnumeration(
-      "Media.Ui.GetDisplayMedia.PreferCurrentTabFlow.UserInteraction", result);
-}
-
-void RecordUma(GDMResult result) {
+void RecordUma(GDMResult result, base::TimeTicks dialog_open_time) {
   base::UmaHistogramEnumeration(
       "Media.Ui.GetDisplayMedia.BasicFlow.UserInteraction", result);
+
+  const base::TimeDelta elapsed = base::TimeTicks::Now() - dialog_open_time;
+  base::HistogramBase* histogram = base::LinearHistogram::FactoryTimeGet(
+      "Media.Ui.GetDisplayMedia.BasicFlow.DialogDuration",
+      /*minimum=*/base::Milliseconds(500), /*maximum=*/base::Seconds(45),
+      /*bucket_count=*/91, base::HistogramBase::kUmaTargetedHistogramFlag);
+  histogram->AddTime(elapsed);
 }
 
-void RecordUmaDismissal(DialogType dialog_type) {
+void RecordUmaCancellation(DialogType dialog_type,
+                           base::TimeTicks dialog_open_time) {
   if (dialog_type == DialogType::kPreferCurrentTab) {
-    RecordUma(GDMPreferCurrentTabResult::kDialogDismissed);
+    RecordUma(GDMPreferCurrentTabResult::kUserCancelled, dialog_open_time);
   } else {
-    RecordUma(GDMResult::kDialogDismissed);
-  }
-}
-
-void RecordUmaCancellation(DialogType dialog_type) {
-  if (dialog_type == DialogType::kPreferCurrentTab) {
-    RecordUma(GDMPreferCurrentTabResult::kUserCancelled);
-  } else {
-    RecordUma(GDMResult::kUserCancelled);
+    RecordUma(GDMResult::kUserCancelled, dialog_open_time);
   }
 }
 
@@ -138,7 +123,8 @@ void RecordUmaCancellation(DialogType dialog_type) {
 void RecordUmaSelection(DialogType dialog_type,
                         content::GlobalRenderFrameHostId capturer_global_id,
                         const DesktopMediaID& selected_media,
-                        DesktopMediaList::Type source_type) {
+                        DesktopMediaList::Type source_type,
+                        base::TimeTicks dialog_open_time) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   switch (source_type) {
@@ -147,17 +133,19 @@ void RecordUmaSelection(DialogType dialog_type,
 
     case DesktopMediaList::Type::kScreen:
       if (dialog_type == DialogType::kPreferCurrentTab) {
-        RecordUma(GDMPreferCurrentTabResult::kUserSelectedScreen);
+        RecordUma(GDMPreferCurrentTabResult::kUserSelectedScreen,
+                  dialog_open_time);
       } else {
-        RecordUma(GDMResult::kUserSelectedScreen);
+        RecordUma(GDMResult::kUserSelectedScreen, dialog_open_time);
       }
       break;
 
     case DesktopMediaList::Type::kWindow:
       if (dialog_type == DialogType::kPreferCurrentTab) {
-        RecordUma(GDMPreferCurrentTabResult::kUserSelectedWindow);
+        RecordUma(GDMPreferCurrentTabResult::kUserSelectedWindow,
+                  dialog_open_time);
       } else {
-        RecordUma(GDMResult::kUserSelectedWindow);
+        RecordUma(GDMResult::kUserSelectedWindow, dialog_open_time);
       }
       break;
 
@@ -175,16 +163,19 @@ void RecordUmaSelection(DialogType dialog_type,
         RecordUma(
             current_tab_selected
                 ? GDMPreferCurrentTabResult::kUserSelectedThisTabAsGenericTab
-                : GDMPreferCurrentTabResult::kUserSelectedOtherTab);
+                : GDMPreferCurrentTabResult::kUserSelectedOtherTab,
+            dialog_open_time);
       } else {
         RecordUma(current_tab_selected ? GDMResult::kUserSelectedThisTab
-                                       : GDMResult::kUserSelectedOtherTab);
+                                       : GDMResult::kUserSelectedOtherTab,
+                  dialog_open_time);
       }
       break;
     }
 
     case DesktopMediaList::Type::kCurrentTab:
-      RecordUma(GDMPreferCurrentTabResult::kUserSelectedThisTab);
+      RecordUma(GDMPreferCurrentTabResult::kUserSelectedThisTab,
+                dialog_open_time);
       break;
   }
 }
@@ -294,6 +285,12 @@ bool ShouldSelectTab(DesktopMediaList::Type type,
 
 }  // namespace
 
+// Enable an updated dialog UI for the getDisplayMedia picker dialog under the
+// preferCurrentTab constraint.
+BASE_FEATURE(kShareThisTabDialog,
+             "ShareThisTabDialog",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(DesktopMediaPickerDialogView,
                                       kDesktopMediaPickerDialogViewIdentifier);
 
@@ -348,7 +345,8 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
           params.web_contents
               ? params.web_contents->GetPrimaryMainFrame()->GetGlobalId()
               : content::GlobalRenderFrameHostId()),
-      parent_(parent) {
+      parent_(parent),
+      dialog_open_time_(base::TimeTicks::Now()) {
   DCHECK(!params.force_audio_checkboxes_to_default_checked ||
          !params.exclude_system_audio);
 
@@ -398,22 +396,22 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
         NOTREACHED_NORETURN();
       case DesktopMediaList::Type::kScreen: {
         const DesktopMediaSourceViewStyle kSingleScreenStyle(
-            1,                                       // columns
-            gfx::Size(360, 280),                     // item_size
-            gfx::Rect(),                             // icon_rect
-            gfx::Rect(),                             // label_rect
-            gfx::HorizontalAlignment::ALIGN_CENTER,  // text_alignment
-            gfx::Rect(20, 20, 320, 240),             // image_rect
-            5);                                      // focus_rectangle_inset
+            /*columns=*/1,
+            /*item_size=*/gfx::Size(360, 280),
+            /*icon_rect=*/gfx::Rect(),
+            /*label_rect=*/gfx::Rect(),
+            /*text_alignment=*/gfx::HorizontalAlignment::ALIGN_CENTER,
+            /*image_rect=*/gfx::Rect(20, 20, 320, 240),
+            /*focus_rectangle_inset=*/5);
 
         const DesktopMediaSourceViewStyle kGenericScreenStyle(
-            2,                                       // columns
-            gfx::Size(270, 220),                     // item_size
-            gfx::Rect(),                             // icon_rect
-            gfx::Rect(15, 165, 240, 40),             // label_rect
-            gfx::HorizontalAlignment::ALIGN_CENTER,  // text_alignment
-            gfx::Rect(15, 15, 240, 150),             // image_rect
-            5);                                      // focus_rectangle_inset
+            /*columns=*/2,
+            /*item_size=*/gfx::Size(270, 220),
+            /*icon_rect=*/gfx::Rect(),
+            /*label_rect=*/gfx::Rect(15, 165, 240, 40),
+            /*text_alignment=*/gfx::HorizontalAlignment::ALIGN_CENTER,
+            /*image_rect=*/gfx::Rect(15, 15, 240, 150),
+            /*focus_rectangle_inset=*/5);
 
         std::unique_ptr<views::ScrollView> screen_scroll_view =
             views::ScrollView::CreateScrollViewWithBorder();
@@ -448,13 +446,13 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
       }
       case DesktopMediaList::Type::kWindow: {
         const DesktopMediaSourceViewStyle kWindowStyle(
-            3,                                     // columns
-            gfx::Size(180, 160),                   // item_size
-            gfx::Rect(10, 120, 20, 20),            // icon_rect
-            gfx::Rect(32, 110, 138, 40),           // label_rect
-            gfx::HorizontalAlignment::ALIGN_LEFT,  // text_alignment
-            gfx::Rect(8, 8, 164, 104),             // image_rect
-            5);                                    // focus_rectangle_inset
+            /*columns=*/3,
+            /*item_size=*/gfx::Size(180, 160),
+            /*icon_rect=*/gfx::Rect(10, 120, 20, 20),
+            /*label_rect=*/gfx::Rect(32, 110, 138, 40),
+            /*text_alignment=*/gfx::HorizontalAlignment::ALIGN_LEFT,
+            /*image_rect=*/gfx::Rect(8, 8, 164, 104),
+            /*focus_rectangle_inset=*/5);
 
         std::unique_ptr<views::ScrollView> window_scroll_view =
             views::ScrollView::CreateScrollViewWithBorder();
@@ -506,13 +504,13 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
       }
       case DesktopMediaList::Type::kCurrentTab: {
         const DesktopMediaSourceViewStyle kCurrentTabStyle(
-            1,                                       // columns
-            gfx::Size(360, 280),                     // item_size
-            gfx::Rect(),                             // icon_rect
-            gfx::Rect(),                             // label_rect
-            gfx::HorizontalAlignment::ALIGN_CENTER,  // text_alignment
-            gfx::Rect(20, 20, 320, 240),             // image_rect
-            5);                                      // focus_rectangle_inset
+            /*columns=*/1,
+            /*item_size=*/gfx::Size(360, 280),
+            /*icon_rect=*/gfx::Rect(),
+            /*label_rect=*/gfx::Rect(),
+            /*text_alignment=*/gfx::HorizontalAlignment::ALIGN_CENTER,
+            /*image_rect=*/gfx::Rect(20, 20, 320, 240),
+            /*focus_rectangle_inset=*/5);
         std::unique_ptr<views::ScrollView> window_scroll_view =
             views::ScrollView::CreateScrollViewWithBorder();
         const std::u16string title = l10n_util::GetStringUTF16(
@@ -643,8 +641,12 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
 
 DesktopMediaPickerDialogView::~DesktopMediaPickerDialogView() = default;
 
-DialogType DesktopMediaPickerDialogView::GetDialogType() const {
-  return dialog_type_;
+void DesktopMediaPickerDialogView::RecordUmaDismissal() const {
+  if (dialog_type_ == DialogType::kPreferCurrentTab) {
+    RecordUma(GDMPreferCurrentTabResult::kDialogDismissed, dialog_open_time_);
+  } else {
+    RecordUma(GDMResult::kDialogDismissed, dialog_open_time_);
+  }
 }
 
 void DesktopMediaPickerDialogView::TabSelectedAt(int index) {
@@ -846,7 +848,7 @@ bool DesktopMediaPickerDialogView::Accept() {
                        audio_share_checkbox_->GetChecked();
   if (is_get_display_media_call_) {
     RecordUmaSelection(dialog_type_, capturer_global_id_, source,
-                       GetSelectedSourceListType());
+                       GetSelectedSourceListType(), dialog_open_time_);
   }
 
   if (parent_)
@@ -858,7 +860,7 @@ bool DesktopMediaPickerDialogView::Accept() {
 
 bool DesktopMediaPickerDialogView::Cancel() {
   if (is_get_display_media_call_) {
-    RecordUmaCancellation(dialog_type_);
+    RecordUmaCancellation(dialog_type_, dialog_open_time_);
   }
   return views::DialogDelegateView::Cancel();
 }
@@ -881,7 +883,8 @@ void DesktopMediaPickerDialogView::AcceptSource() {
   AcceptDialog();
 }
 
-void DesktopMediaPickerDialogView::AcceptSpecificSource(DesktopMediaID source) {
+void DesktopMediaPickerDialogView::AcceptSpecificSource(
+    const DesktopMediaID& source) {
   accepted_source_ = absl::optional<DesktopMediaID>(source);
   AcceptSource();
 }
@@ -957,7 +960,7 @@ DesktopMediaPickerViews::DesktopMediaPickerViews() : dialog_(nullptr) {}
 DesktopMediaPickerViews::~DesktopMediaPickerViews() {
   if (dialog_) {
     if (is_get_display_media_call_) {
-      RecordUmaDismissal(dialog_->GetDialogType());
+      dialog_->RecordUmaDismissal();
     }
     dialog_->DetachParent();
     dialog_->GetWidget()->Close();
@@ -976,7 +979,7 @@ void DesktopMediaPickerViews::Show(
       new DesktopMediaPickerDialogView(params, this, std::move(source_lists));
 }
 
-void DesktopMediaPickerViews::NotifyDialogResult(DesktopMediaID source) {
+void DesktopMediaPickerViews::NotifyDialogResult(const DesktopMediaID& source) {
   // Once this method is called the |dialog_| will close and destroy itself.
   dialog_->DetachParent();
   dialog_ = nullptr;
@@ -995,5 +998,11 @@ void DesktopMediaPickerViews::NotifyDialogResult(DesktopMediaID source) {
 // static
 std::unique_ptr<DesktopMediaPicker> DesktopMediaPicker::Create(
     const content::MediaStreamRequest* request) {
-  return std::make_unique<DesktopMediaPickerViews>();
+  if (base::FeatureList::IsEnabled(kShareThisTabDialog) && request &&
+      request->video_type ==
+          blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB) {
+    return std::make_unique<ShareThisTabDialogViews>();
+  } else {
+    return std::make_unique<DesktopMediaPickerViews>();
+  }
 }

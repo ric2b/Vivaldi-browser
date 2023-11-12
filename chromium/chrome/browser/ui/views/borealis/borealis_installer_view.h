@@ -17,6 +17,7 @@
 #include "ui/views/window/dialog_delegate.h"
 
 namespace views {
+class BorealisBetaBadge;
 class BoxLayout;
 class ImageView;
 class Label;
@@ -54,7 +55,6 @@ class BorealisInstallerView : public views::DialogDelegateView,
   bool ShouldShowWindowTitle() const override;
   bool Accept() override;
   bool Cancel() override;
-  gfx::Size CalculatePreferredSize() const override;
 
   // borealis::BorealisInstaller::Observer implementation.
   void OnStateUpdated(
@@ -67,7 +67,6 @@ class BorealisInstallerView : public views::DialogDelegateView,
   // Public for testing purposes.
   std::u16string GetPrimaryMessage() const;
   std::u16string GetSecondaryMessage() const;
-  std::u16string GetProgressMessage() const;
 
   void SetInstallingStateForTesting(InstallingState new_state);
 
@@ -107,16 +106,21 @@ class BorealisInstallerView : public views::DialogDelegateView,
 
   void StartInstallation();
 
-  std::u16string app_name_;
   raw_ptr<Profile, ExperimentalAsh> profile_ = nullptr;
   raw_ptr<views::Label, ExperimentalAsh> primary_message_label_ = nullptr;
   raw_ptr<views::Label, ExperimentalAsh> secondary_message_label_ = nullptr;
+  raw_ptr<views::BorealisBetaBadge, ExperimentalAsh> beta_badge_ = nullptr;
   raw_ptr<views::ProgressBar, ExperimentalAsh> progress_bar_ = nullptr;
-  raw_ptr<views::Label, ExperimentalAsh> installation_progress_message_label_ =
+  raw_ptr<views::Label, ExperimentalAsh>
+      installation_progress_percentage_label_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> installation_progress_separator_ =
       nullptr;
-  raw_ptr<views::BoxLayout, ExperimentalAsh> lower_container_layout_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> installation_progress_eta_label_ =
+      nullptr;
+  raw_ptr<views::BoxLayout, ExperimentalAsh> right_container_layout_ = nullptr;
   raw_ptr<views::ImageView, ExperimentalAsh> big_image_ = nullptr;
 
+  base::Time install_start_time_;
   State state_ = State::kConfirmInstall;
   InstallingState installing_state_ = InstallingState::kInactive;
   absl::optional<borealis::BorealisInstallResult> result_;

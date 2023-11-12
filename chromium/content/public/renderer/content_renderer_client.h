@@ -213,6 +213,11 @@ class CONTENT_EXPORT ContentRendererClient {
   // Returns true if a popup window should be allowed.
   virtual bool AllowPopup();
 
+  // Service worker may react on the activity. For example, reset the idle
+  // timer.
+  virtual bool ShouldNotifyServiceWorkerOnWebSocketActivity(
+      v8::Local<v8::Context> context);
+
   // Returns the security level to use for Navigator.RegisterProtocolHandler().
   virtual blink::ProtocolHandlerSecurityLevel GetProtocolHandlerSecurityLevel();
 
@@ -294,9 +299,7 @@ class CONTENT_EXPORT ContentRendererClient {
 #if !BUILDFLAG(IS_ANDROID)
   // Creates a speech recognition client used to transcribe audio into captions.
   virtual std::unique_ptr<media::SpeechRecognitionClient>
-  CreateSpeechRecognitionClient(
-      RenderFrame* render_frame,
-      media::SpeechRecognitionClient::OnReadyCallback callback);
+  CreateSpeechRecognitionClient(RenderFrame* render_frame);
 #endif
 
   // Returns true if the page at |url| can use Pepper CameraDevice APIs.

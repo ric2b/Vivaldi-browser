@@ -14,6 +14,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 
+import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
@@ -90,6 +91,16 @@ class BookmarkBridge {
     }
 
     /**
+     * Gets the url for an image representing the given url.
+     * @param url The url to fetch the image for.
+     * @param callback The callback which will receive the image url.
+     */
+    public void getImageUrlForBookmark(GURL url, Callback<GURL> callback) {
+        BookmarkBridgeJni.get().getImageUrlForBookmark(
+                mNativeBookmarkBridge, BookmarkBridge.this, url, callback);
+    }
+
+    /**
      * @param tab Tab whose current URL is checked against.
      * @return {@code true} if the current Tab URL has a bookmark associated with it. If the
      *         bookmark backend is not loaded, return {@code false}.
@@ -104,8 +115,7 @@ class BookmarkBridge {
      * @param tab Tab whose current URL is checked against.
      * @return BookmarkId or {@link null} if bookmark backend is not loaded or the tab is frozen.
      */
-    @Nullable
-    public BookmarkId getUserBookmarkIdForTab(@Nullable Tab tab) {
+    public @Nullable BookmarkId getUserBookmarkIdForTab(@Nullable Tab tab) {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return null;
         if (tab == null || tab.isFrozen() || mNativeBookmarkBridge == 0) return null;
@@ -194,8 +204,7 @@ class BookmarkBridge {
      * @return A BookmarkItem instance for the given BookmarkId.
      *         <code>null</code> if it doesn't exist.
      */
-    @Nullable
-    public BookmarkItem getBookmarkById(@Nullable BookmarkId id) {
+    public @Nullable BookmarkItem getBookmarkById(@Nullable BookmarkId id) {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return null;
         assert mIsNativeBookmarkModelLoaded;
@@ -380,11 +389,6 @@ class BookmarkBridge {
         assert mIsNativeBookmarkModelLoaded;
         return BookmarkBridgeJni.get().getChildCount(
                 mNativeBookmarkBridge, BookmarkBridge.this, id.getId(), id.getType());
-    }
-
-    /** TODO(https://crbug.com/1435552): Delete this method. */
-    public List<BookmarkId> getChildIDs(BookmarkId id) {
-        return getChildIds(id);
     }
 
     /**
@@ -941,6 +945,8 @@ class BookmarkBridge {
     @NativeMethods
     public interface Natives {
         BookmarkModel getForProfile(Profile profile);
+        void getImageUrlForBookmark(long nativeBookmarkBridge, BookmarkBridge caller, GURL url,
+                Callback<GURL> callback);
         BookmarkId getBookmarkIdForWebContents(long nativeBookmarkBridge, BookmarkBridge caller,
                 WebContents webContents, boolean onlyEditable);
         BookmarkItem getBookmarkById(

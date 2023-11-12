@@ -624,6 +624,35 @@ class AutofillMetrics {
     kMaxValue = kLeftEmpty
   };
 
+  enum class AutocompleteState {
+    kNone = 0,
+    kValid = 1,
+    kGarbage = 2,
+    kOff = 3,
+    kMaxValue = kOff
+  };
+
+  // The autofill statuses of a field that are recorded into UKM to help us
+  // understand the autofill performance and user behaviors.
+  enum class AutofillStatus {
+    kIsFocusable = 0,
+    kWasFocused = 1,
+    kWasAutofillTriggered = 2,
+    // kWasAutofilled is only set when kWasAutofillTriggered is set.
+    kWasAutofilled = 3,
+    kWasRefill = 4,
+    // The below suggestion statuses are set only when kWasFocused is set.
+    kSuggestionWasAvailable = 5,
+    kSuggestionWasShown = 6,
+    kSuggestionWasAccepted = 7,
+    kUserTypedIntoField = 8,
+    kFilledValueWasModified = 9,
+    kHadValueBeforeFilling = 10,
+    kHadTypedOrFilledValueAtSubmission = 11,
+    kIsInSubFrame = 12,
+    kMaxValue = kIsInSubFrame
+  };
+
   using FormEventSet =
       DenseSet<autofill_metrics::FormEvent, autofill_metrics::NUM_FORM_EVENTS>;
 
@@ -721,8 +750,10 @@ class AutofillMetrics {
                       QualityMetricType metric_type,
                       ServerFieldType predicted_type,
                       ServerFieldType actual_type);
-    void LogAutofillFieldInfoAtFormRemove(const FormStructure& form,
-                                          const AutofillField& field);
+    void LogAutofillFieldInfoAtFormRemove(
+        const FormStructure& form,
+        const AutofillField& field,
+        AutofillMetrics::AutocompleteState autocomplete_state);
     void LogAutofillFormSummaryAtFormRemove(
         const FormStructure& form_structure,
         FormEventSet form_events,
@@ -803,14 +834,6 @@ class AutofillMetrics {
     kHeuristics = 2,
     kBoth = 3,
     kMaxValue = kBoth
-  };
-
-  enum class AutocompleteState {
-    kNone = 0,
-    kValid = 1,
-    kGarbage = 2,
-    kOff = 3,
-    kMaxValue = kOff
   };
 
   AutofillMetrics() = delete;

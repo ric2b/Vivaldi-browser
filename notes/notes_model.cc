@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/base64.h"
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "base/i18n/string_compare.h"
 #include "base/i18n/string_search.h"
 #include "base/memory/ptr_util.h"
@@ -76,7 +76,7 @@ NotesModel::NotesModel(sync_notes::NoteSyncService* sync_service,
                        file_sync::SyncedFileStore* synced_file_store)
     : root_(std::make_unique<NoteNode>(
           0,
-          base::GUID::ParseLowercase(NoteNode::kRootNodeGuid),
+          base::Uuid::ParseLowercase(NoteNode::kRootNodeUuid),
           NoteNode::FOLDER)),
       sync_service_(sync_service),
       synced_file_store_(synced_file_store) {}
@@ -112,7 +112,7 @@ void NotesModel::DoneLoading(std::unique_ptr<NoteLoadDetails> details) {
 
   next_node_id_ = details->max_id();
   if (details->computed_checksum() != details->stored_checksum() ||
-      details->ids_reassigned() || details->guids_reassigned()) {
+      details->ids_reassigned() || details->uuids_reassigned()) {
     // If notes file changed externally, the IDs may have changed
     // externally. In that case, the decoder may have reassigned IDs to make
     // them unique. So when the file has changed externally, we should save the
@@ -240,15 +240,15 @@ const NoteNode* NotesModel::AddNote(const NoteNode* parent,
                                     const GURL& url,
                                     const std::u16string& content,
                                     absl::optional<base::Time> creation_time,
-                                    absl::optional<base::GUID> guid) {
+                                    absl::optional<base::Uuid> uuid) {
   DCHECK(loaded_);
-  DCHECK(!guid || guid->is_valid());
+  DCHECK(!uuid || uuid->is_valid());
 
   if (!creation_time)
     creation_time = Time::Now();
 
   std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
-      generate_next_node_id(), guid ? *guid : base::GUID::GenerateRandomV4(),
+      generate_next_node_id(), uuid ? *uuid : base::Uuid::GenerateRandomV4(),
       NoteNode::NOTE);
   new_node->SetTitle(title);
   new_node->SetCreationTime(*creation_time);
@@ -273,7 +273,7 @@ const NoteNode* NotesModel::ImportNote(const NoteNode* parent,
   int64_t id = generate_next_node_id();
 
   std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
-      id, base::GUID::GenerateRandomV4(),
+      id, base::Uuid::GenerateRandomV4(),
       note.is_folder ? NoteNode::FOLDER : NoteNode::NOTE);
   new_node->SetTitle(note.title);
   new_node->SetCreationTime(note.creation_time);
@@ -289,15 +289,15 @@ const NoteNode* NotesModel::AddFolder(const NoteNode* parent,
                                       size_t index,
                                       const std::u16string& name,
                                       absl::optional<base::Time> creation_time,
-                                      absl::optional<base::GUID> guid) {
+                                      absl::optional<base::Uuid> uuid) {
   DCHECK(loaded_);
-  DCHECK(!guid || guid->is_valid());
+  DCHECK(!uuid || uuid->is_valid());
 
   const base::Time provided_creation_time_or_now =
       creation_time.value_or(Time::Now());
 
   std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
-      generate_next_node_id(), guid.value_or(base::GUID::GenerateRandomV4()),
+      generate_next_node_id(), uuid.value_or(base::Uuid::GenerateRandomV4()),
       NoteNode::FOLDER);
   new_node->SetCreationTime(provided_creation_time_or_now);
 
@@ -313,15 +313,15 @@ const NoteNode* NotesModel::AddSeparator(
     size_t index,
     absl::optional<std::u16string> name,
     absl::optional<base::Time> creation_time,
-    absl::optional<base::GUID> guid) {
+    absl::optional<base::Uuid> uuid) {
   DCHECK(loaded_);
-  DCHECK(!guid || guid->is_valid());
+  DCHECK(!uuid || uuid->is_valid());
 
   if (!creation_time)
     creation_time = Time::Now();
 
   std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
-      generate_next_node_id(), guid ? *guid : base::GUID::GenerateRandomV4(),
+      generate_next_node_id(), uuid ? *uuid : base::Uuid::GenerateRandomV4(),
       NoteNode::SEPARATOR);
   new_node->SetCreationTime(*creation_time);
   if (name) {
@@ -341,18 +341,18 @@ const NoteNode* NotesModel::AddAttachmentFromChecksum(
     const GURL& url,
     const std::string& checksum,
     absl::optional<base::Time> creation_time,
-    absl::optional<base::GUID> guid) {
+    absl::optional<base::Uuid> uuid) {
   DCHECK(loaded_);
   DCHECK(parent);
   DCHECK(parent->is_note());
-  DCHECK(!guid || guid->is_valid());
+  DCHECK(!uuid || uuid->is_valid());
   DCHECK(synced_file_store_);
 
   if (!creation_time)
     creation_time = Time::Now();
 
   std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
-      generate_next_node_id(), guid ? *guid : base::GUID::GenerateRandomV4(),
+      generate_next_node_id(), uuid ? *uuid : base::Uuid::GenerateRandomV4(),
       NoteNode::ATTACHMENT);
   new_node->SetTitle(title);
   new_node->SetCreationTime(*creation_time);
@@ -365,7 +365,7 @@ const NoteNode* NotesModel::AddAttachmentFromChecksum(
     nodes_ordered_by_url_set_.insert(new_node.get());
   }
 
-  synced_file_store_->SetLocalFileRef(new_node->guid(), syncer::NOTES,
+  synced_file_store_->SetLocalFileRef(new_node->uuid(), syncer::NOTES,
                                       checksum);
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
@@ -377,18 +377,18 @@ const NoteNode* NotesModel::AddAttachment(
     const GURL& url,
     std::vector<uint8_t> content,
     absl::optional<base::Time> creation_time,
-    absl::optional<base::GUID> guid) {
+    absl::optional<base::Uuid> uuid) {
   DCHECK(loaded_);
   DCHECK(parent);
   DCHECK(parent->is_note());
-  DCHECK(!guid || guid->is_valid());
+  DCHECK(!uuid || uuid->is_valid());
   DCHECK(synced_file_store_);
 
   if (!creation_time)
     creation_time = Time::Now();
 
   std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
-      generate_next_node_id(), guid ? *guid : base::GUID::GenerateRandomV4(),
+      generate_next_node_id(), uuid ? *uuid : base::Uuid::GenerateRandomV4(),
       NoteNode::ATTACHMENT);
   new_node->SetTitle(title);
   new_node->SetCreationTime(*creation_time);
@@ -401,7 +401,7 @@ const NoteNode* NotesModel::AddAttachment(
   }
 
   std::string checksum = synced_file_store_->SetLocalFile(
-      new_node->guid(), syncer::NOTES, std::move(content));
+      new_node->uuid(), syncer::NOTES, std::move(content));
   new_node->SetContent(base::ASCIIToUTF16(checksum));
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
@@ -515,7 +515,7 @@ bool NotesModel::IsValidIndex(const NoteNode* parent,
 void NotesModel::GetNodesByURL(const GURL& url,
                                std::vector<const NoteNode*>* nodes) {
   base::AutoLock url_lock(url_lock_);
-  NoteNode tmp_node(0, base::GUID::GenerateRandomV4(), NoteNode::NOTE);
+  NoteNode tmp_node(0, base::Uuid::GenerateRandomV4(), NoteNode::NOTE);
   tmp_node.SetURL(url);
   NodesOrderedByURLSet::iterator i = nodes_ordered_by_url_set_.find(&tmp_node);
   while (i != nodes_ordered_by_url_set_.end() && (*i)->GetURL() == url) {
@@ -580,7 +580,7 @@ void NotesModel::RemoveAllUserNotes() {
 }
 
 bool NotesModel::IsNotesNoLock(const GURL& url) {
-  NoteNode tmp_node(0, base::GUID::GenerateRandomV4(), NoteNode::NOTE);
+  NoteNode tmp_node(0, base::Uuid::GenerateRandomV4(), NoteNode::NOTE);
   tmp_node.SetURL(url);
   return (nodes_ordered_by_url_set_.find(&tmp_node) !=
           nodes_ordered_by_url_set_.end());
@@ -620,7 +620,7 @@ void NotesModel::RemoveAttachmentsRecursive(NoteNode* node) {
     return;
 
   if (node->is_attachment())
-    synced_file_store_->RemoveLocalRef(node->guid(), syncer::NOTES);
+    synced_file_store_->RemoveLocalRef(node->uuid(), syncer::NOTES);
 
   for (size_t i = node->children().size(); i > 0; --i)
     RemoveAttachmentsRecursive(node->children()[i - 1].get());
@@ -756,6 +756,33 @@ void NotesModel::GetNotesMatching(
         match = base::i18n::StringSearchIgnoringCaseAndAccents(
             text, base::UTF8ToUTF16(value), NULL, NULL);
       }
+      if (match) {
+        matches->push_back(
+            std::pair<int, NoteNode::Type>(node->id(), node->type()));
+      }
+    }
+  }
+}
+
+void NotesModel::GetNotesFoldersMatching(
+    const std::u16string& text,
+    size_t max_count,
+    std::vector<std::pair<int, NoteNode::Type>>* matches) {
+  if (!loaded_)
+    return;
+
+  std::vector<vivaldi::NoteNode> search_result;
+  if (text.length() > 0) {
+    ui::TreeNodeIterator<NoteNode> iterator(root_.get());
+
+    while (iterator.has_next()) {
+      NoteNode* node = iterator.Next();
+      if (!node->is_folder()) {
+        continue;
+      }
+      bool match = false;
+      match = base::i18n::StringSearchIgnoringCaseAndAccents(
+          text, node->GetTitle(), NULL, NULL);
       if (match) {
         matches->push_back(
             std::pair<int, NoteNode::Type>(node->id(), node->type()));

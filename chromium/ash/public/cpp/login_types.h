@@ -85,6 +85,12 @@ enum class OobeDialogState {
   // Closing the login screen extension UI created by a Chrome extension using
   // chrome.loginScreenUi API.
   EXTENSION_LOGIN_CLOSED = 20,
+
+  // Showing Gaia Info screen.
+  GAIA_INFO = 21,
+
+  // CHOOBE and Optional Screens.
+  CHOOBE = 22,
 };
 
 // Modes of the managed device, which is used to update the visibility of

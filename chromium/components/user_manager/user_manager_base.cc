@@ -10,6 +10,7 @@
 #include <set>
 #include <utility>
 
+#include "ash/constants/ash_switches.h"
 #include "base/check_is_test.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
@@ -23,6 +24,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
 #include "components/crash/core/common/crash_key.h"
@@ -194,7 +196,19 @@ const UserList& UserManagerBase::GetLRULoggedInUsers() const {
 }
 
 const AccountId& UserManagerBase::GetOwnerAccountId() const {
-  return owner_account_id_;
+  if (!owner_account_id_.has_value()) {
+    return EmptyAccountId();
+  }
+  return *owner_account_id_;
+}
+
+void UserManagerBase::GetOwnerAccountIdAsync(
+    base::OnceCallback<void(const AccountId&)> callback) const {
+  if (owner_account_id_.has_value()) {
+    std::move(callback).Run(*owner_account_id_);
+    return;
+  }
+  pending_owner_callbacks_.AddUnsafe(std::move(callback));
 }
 
 const AccountId& UserManagerBase::GetLastSessionActiveAccountId() const {
@@ -645,8 +659,8 @@ void UserManagerBase::ParseUserList(const base::Value::List& users_list,
 
 bool UserManagerBase::IsOwnerUser(const User* user) const {
   DCHECK(!task_runner_ || task_runner_->RunsTasksInCurrentSequence());
-  return user && !owner_account_id_.empty() &&
-         user->GetAccountId() == owner_account_id_;
+  return user && owner_account_id_.has_value() &&
+         user->GetAccountId() == *owner_account_id_;
 }
 
 bool UserManagerBase::IsPrimaryUser(const User* user) const {
@@ -660,29 +674,22 @@ bool UserManagerBase::IsEphemeralUser(const User* user) const {
     return false;
   }
 
-  // Owner user is always persistent.
-  if (IsOwnerUser(user)) {
-    return false;
-  }
-
-  // Guest and public account is ephemeral.
-  if (auto user_type = user->GetType();
-      user_type == USER_TYPE_GUEST || user_type == USER_TYPE_PUBLIC_ACCOUNT) {
-    return true;
-  }
-
-  // Otherwise, check ephemeral policies.
   return IsEphemeralAccountId(user->GetAccountId());
 }
 
 bool UserManagerBase::IsCurrentUserOwner() const {
   DCHECK(!task_runner_ || task_runner_->RunsTasksInCurrentSequence());
-  return !owner_account_id_.empty() && active_user_ &&
-         active_user_->GetAccountId() == owner_account_id_;
+  return owner_account_id_.has_value() && active_user_ &&
+         active_user_->GetAccountId() == *owner_account_id_;
 }
 
 bool UserManagerBase::IsCurrentUserNew() const {
   DCHECK(!task_runner_ || task_runner_->RunsTasksInCurrentSequence());
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ash::switches::kForceFirstRunUI)) {
+    return true;
+  }
+
   return is_current_user_new_;
 }
 
@@ -767,6 +774,13 @@ bool UserManagerBase::IsUserNonCryptohomeDataEphemeral(
     return false;
   }
 
+  // Even though device-local accounts might be ephemeral (e.g. kiosk accounts),
+  // non-cryptohome data of device-local accounts should be non-ephemeral.
+  if (const User* user = FindUser(account_id);
+      user && user->IsDeviceLocalAccount()) {
+    return false;
+  }
+
   // Data belonging to the currently logged-in user is ephemeral when:
   // a) The user logged into a regular gaia account while the ephemeral users
   //    policy was enabled.
@@ -788,27 +802,33 @@ bool UserManagerBase::IsUserNonCryptohomeDataEphemeral(
 
 bool UserManagerBase::IsUserCryptohomeDataEphemeral(
     const AccountId& account_id) const {
-  // Don't consider stub users data as ephemeral.
-  if (IsStubAccountId(account_id))
+  return IsEphemeralAccountId(account_id);
+}
+
+bool UserManagerBase::IsEphemeralAccountId(const AccountId& account_id) const {
+  // Data belonging to the device owner is never ephemeral.
+  if (account_id == GetOwnerAccountId()) {
     return false;
+  }
 
-  // Data belonging to the guest users is always ephemeral.
-  if (IsGuestAccountId(account_id))
-    return true;
+  // Data belonging to the stub users is never ephemeral.
+  if (IsStubAccountId(account_id)) {
+    return false;
+  }
 
-  // Data belonging to the public accounts is always ephemeral.
-  const User* user = FindUser(account_id);
-  if (user && user->GetType() == USER_TYPE_PUBLIC_ACCOUNT)
-    return true;
-
-  // Ephemeral users.
-  if (IsEphemeralAccountId(account_id) && user &&
-      user->GetType() == USER_TYPE_REGULAR &&
-      FindUserInList(account_id) == nullptr) {
+  // Data belonging to the guest user is always ephemeral.
+  if (IsGuestAccountId(account_id)) {
     return true;
   }
 
-  return false;
+  // Data belonging to the public accounts (e.g. managed guest sessions) is
+  // always ephemeral.
+  if (const User* user = FindUser(account_id);
+      user && user->GetType() == USER_TYPE_PUBLIC_ACCOUNT) {
+    return true;
+  }
+
+  return IsEphemeralAccountIdByPolicy(account_id);
 }
 
 void UserManagerBase::AddObserver(UserManager::Observer* obs) {
@@ -933,8 +953,13 @@ void UserManagerBase::SetIsCurrentUserNew(bool is_new) {
   is_current_user_new_ = is_new;
 }
 
+void UserManagerBase::ResetOwnerId() {
+  owner_account_id_ = absl::nullopt;
+}
+
 void UserManagerBase::SetOwnerId(const AccountId& owner_account_id) {
   owner_account_id_ = owner_account_id;
+  pending_owner_callbacks_.Notify(owner_account_id);
   CallUpdateLoginState();
 }
 
@@ -1026,7 +1051,9 @@ void UserManagerBase::EnsureUsersLoaded() {
   }
   user_loading_stage_ = STAGE_LOADED;
 
-  PerformPostUserListLoadingActions();
+  for (auto& observer : observer_list_) {
+    observer.OnUserListLoaded();
+  }
 }
 
 UserList& UserManagerBase::GetUsersAndModify() {
@@ -1129,6 +1156,9 @@ void UserManagerBase::NotifyActiveUserChanged(User* active_user) {
 
 void UserManagerBase::NotifyOnLogin() {
   DCHECK(!task_runner_ || task_runner_->RunsTasksInCurrentSequence());
+  DCHECK(active_user_);
+
+  // TODO(b/278643115): Call Observer::OnUserLoggedIn() from here.
 
   NotifyActiveUserChanged(active_user_);
   CallUpdateLoginState();
@@ -1217,6 +1247,17 @@ void UserManagerBase::NotifyUserAddedToSession(const User* added_user,
 
 PrefService* UserManagerBase::GetLocalState() const {
   return local_state_.get();
+}
+
+bool UserManagerBase::IsFirstExecAfterBoot() const {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      ash::switches::kFirstExecAfterBoot);
+}
+
+bool UserManagerBase::HasBrowserRestarted() const {
+  return base::SysInfo::IsRunningOnChromeOS() &&
+         base::CommandLine::ForCurrentProcess()->HasSwitch(
+             ash::switches::kLoginUser);
 }
 
 void UserManagerBase::Initialize() {

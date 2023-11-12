@@ -4,13 +4,13 @@
 // found in the LICENSE file.
 
 #include "notes/note_load_details.h"
-#include "base/guid.h"
+#include "base/uuid.h"
 
 namespace vivaldi {
 
 NoteLoadDetails::NoteLoadDetails() {
   root_node_ = std::make_unique<NoteNode>(
-      0, base::GUID::ParseLowercase(NoteNode::kRootNodeGuid), NoteNode::FOLDER);
+      0, base::Uuid::ParseLowercase(NoteNode::kRootNodeUuid), NoteNode::FOLDER);
 
   // WARNING: order is important here, various places assume the order is
   // constant (but can vary between embedders with the initial visibility

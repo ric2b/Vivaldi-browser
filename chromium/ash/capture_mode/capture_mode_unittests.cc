@@ -10,6 +10,7 @@
 #include "ash/accessibility/magnifier/magnifier_glass.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/capture_mode/capture_mode_bar_view.h"
+#include "ash/capture_mode/capture_mode_behavior.h"
 #include "ash/capture_mode/capture_mode_constants.h"
 #include "ash/capture_mode/capture_mode_controller.h"
 #include "ash/capture_mode/capture_mode_menu_group.h"
@@ -57,12 +58,12 @@
 #include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/files/safe_base_name.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
@@ -115,7 +116,6 @@
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_delegate.h"
 #include "ui/views/accessibility/view_accessibility.h"
-#include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -130,7 +130,6 @@ using ::ui::mojom::CursorType;
 
 constexpr char kEndRecordingReasonInClamshellHistogramName[] =
     "Ash.CaptureModeController.EndRecordingReason.ClamshellMode";
-constexpr char kScreenCaptureNotificationId[] = "capture_mode_notification";
 
 // Returns true if the software-composited cursor is enabled.
 bool IsCursorCompositingEnabled() {
@@ -138,23 +137,6 @@ bool IsCursorCompositingEnabled() {
       ->window_tree_host_manager()
       ->cursor_window_controller()
       ->is_cursor_compositing_enabled();
-}
-
-const message_center::Notification* GetPreviewNotification() {
-  const message_center::NotificationList::Notifications notifications =
-      message_center::MessageCenter::Get()->GetVisibleNotifications();
-  for (const auto* notification : notifications) {
-    if (notification->id() == kScreenCaptureNotificationId) {
-      return notification;
-    }
-  }
-  return nullptr;
-}
-
-void ClickNotification(absl::optional<int> button_index) {
-  const message_center::Notification* notification = GetPreviewNotification();
-  DCHECK(notification);
-  notification->delegate()->Click(button_index, absl::nullopt);
 }
 
 // Sets up a callback that will be triggered when a capture file (image or
@@ -170,11 +152,6 @@ void SetUpFileDeletionVerifier(base::RunLoop* loop) {
             EXPECT_FALSE(base::PathExists(path));
             loop->Quit();
           }));
-}
-
-void LeaveTabletMode() {
-  TabletModeControllerTestApi test_api;
-  test_api.LeaveTabletMode();
 }
 
 // Defines a capture client observer, that sets the input capture to the window
@@ -234,12 +211,6 @@ class CaptureModeTest : public AshTestBase {
     demo_tools_enabled_ = features::AreCaptureModeDemoToolsEnabled();
   }
 
-  views::Widget* GetCaptureModeBarWidget() const {
-    auto* session = CaptureModeController::Get()->capture_mode_session();
-    DCHECK(session);
-    return session->capture_mode_bar_widget();
-  }
-
   views::Widget* GetCaptureModeLabelWidget() const {
     auto* session = CaptureModeController::Get()->capture_mode_session();
     DCHECK(session);
@@ -268,38 +239,6 @@ class CaptureModeTest : public AshTestBase {
     auto* session = CaptureModeController::Get()->capture_mode_session();
     DCHECK(session);
     return CaptureModeSessionTestApi(session).IsAllUisVisible();
-  }
-
-  IconButton* GetImageToggleButton() const {
-    auto* controller = CaptureModeController::Get();
-    DCHECK(controller->IsActive());
-    return GetCaptureModeBarView()->capture_type_view()->image_toggle_button();
-  }
-
-  IconButton* GetVideoToggleButton() const {
-    auto* controller = CaptureModeController::Get();
-    DCHECK(controller->IsActive());
-    return GetCaptureModeBarView()->capture_type_view()->video_toggle_button();
-  }
-
-  IconButton* GetWindowToggleButton() const {
-    auto* controller = CaptureModeController::Get();
-    DCHECK(controller->IsActive());
-    return GetCaptureModeBarView()
-        ->capture_source_view()
-        ->window_toggle_button();
-  }
-
-  IconButton* GetSettingsButton() const {
-    auto* controller = CaptureModeController::Get();
-    DCHECK(controller->IsActive());
-    return GetCaptureModeBarView()->settings_button();
-  }
-
-  IconButton* GetCloseButton() const {
-    auto* controller = CaptureModeController::Get();
-    DCHECK(controller->IsActive());
-    return GetCaptureModeBarView()->close_button();
   }
 
   aura::Window* GetDimensionsLabelWindow() const {
@@ -393,18 +332,6 @@ class CaptureModeTest : public AshTestBase {
     session_controller->SwitchActiveUser(AccountId::FromUserEmail(kUserEmail));
   }
 
-  base::FilePath CreateFolderOnDriveFS(const std::string& custom_folder_name) {
-    auto* test_delegate = CaptureModeController::Get()->delegate_for_testing();
-    base::FilePath mount_point_path;
-    EXPECT_TRUE(test_delegate->GetDriveFsMountPointPath(&mount_point_path));
-    base::FilePath folder_on_drive_fs =
-        mount_point_path.Append("root").Append(custom_folder_name);
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    const bool result = base::CreateDirectory(folder_on_drive_fs);
-    EXPECT_TRUE(result);
-    return folder_on_drive_fs;
-  }
-
   void OpenSettingsView() {
     CaptureModeSession* session =
         CaptureModeController::Get()->capture_mode_session();
@@ -446,28 +373,6 @@ class CaptureSessionWidgetClosed {
 
  private:
   base::WeakPtr<views::Widget> widget_;
-};
-
-class CaptureNotificationWaiter : public message_center::MessageCenterObserver {
- public:
-  CaptureNotificationWaiter() {
-    message_center::MessageCenter::Get()->AddObserver(this);
-  }
-  ~CaptureNotificationWaiter() override {
-    message_center::MessageCenter::Get()->RemoveObserver(this);
-  }
-
-  void Wait() { run_loop_.Run(); }
-
-  // message_center::MessageCenterObserver:
-  void OnNotificationAdded(const std::string& notification_id) override {
-    if (notification_id == kScreenCaptureNotificationId) {
-      run_loop_.Quit();
-    }
-  }
-
- private:
-  base::RunLoop run_loop_;
 };
 
 TEST_F(CaptureModeTest, StartStop) {
@@ -2262,7 +2167,9 @@ TEST_F(CaptureModeTest, CornerRegionWithScreenRotation) {
 // valid (i.e. they have the correct size, and suffer from no letterboxing, even
 // when the window gets resized).
 // This is a regression test for https://crbug.com/1214023.
-TEST_F(CaptureModeTest, VerifyWindowRecordingVideoFrames) {
+//
+// TODO(crbug.com/1439950): This test is flaky.
+TEST_F(CaptureModeTest, DISABLED_VerifyWindowRecordingVideoFrames) {
   auto window = CreateTestWindow(gfx::Rect(100, 50, 200, 200));
   StartCaptureSession(CaptureModeSource::kWindow, CaptureModeType::kVideo);
 
@@ -2584,6 +2491,69 @@ TEST_F(CaptureModeTest, IgnoreFullyOccludedWindowWhileTabbingInKWindow) {
   EXPECT_EQ(FocusGroup::kSettingsClose, test_api.GetCurrentFocusGroup());
 }
 
+// Tests that only Tab and Shift + Tab events advance/reverse focus and stop
+// event propagation. Other events like Alt + Tab should still behave as
+// intended.
+TEST_F(CaptureModeTest, OnlyAdvanceFocusWhenTabShiftPressed) {
+  auto window1 = CreateTestWindow();
+  auto window2 = CreateTestWindow();
+
+  auto* controller =
+      StartCaptureSession(CaptureModeSource::kWindow, CaptureModeType::kVideo);
+  CaptureModeSession* capture_mode_session = controller->capture_mode_session();
+  CaptureModeSessionTestApi test_api(capture_mode_session);
+  using FocusGroup = CaptureModeSessionFocusCycler::FocusGroup;
+  auto* event_generator = GetEventGenerator();
+
+  EXPECT_EQ(FocusGroup::kNone, test_api.GetCurrentFocusGroup());
+  EXPECT_EQ(0u, test_api.GetCurrentFocusIndex());
+
+  // Tab should advance focus forward.
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NONE, /*count=*/6);
+  EXPECT_EQ(window2.get(), capture_mode_session->GetSelectedWindow());
+
+  // Shift + Tab should advance focus backwards (reverse focus).
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_SHIFT_DOWN, /*count=*/5);
+  EXPECT_EQ(FocusGroup::kTypeSource, test_api.GetCurrentFocusGroup());
+
+  // Non-shortcut modifiers like Caps Lock should not count towards the flags we
+  // are concerned with, so Tab and Shift + Tab should still work normally.
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_CAPS_LOCK_ON, /*count=*/5);
+  EXPECT_EQ(window2.get(), capture_mode_session->GetSelectedWindow());
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NUM_LOCK_ON | ui::EF_SHIFT_DOWN,
+          /*count=*/5);
+  EXPECT_EQ(FocusGroup::kTypeSource, test_api.GetCurrentFocusGroup());
+
+  // Alt + Tab should cycle the active window, and the focus should not change.
+  ASSERT_EQ(window_util::GetActiveWindow(), window2.get());
+  // We need to wait synchronously until the event has been fully processed to
+  // check if the activation has been changed.
+  ui::test::EmulateFullKeyPressReleaseSequence(event_generator, ui::VKEY_TAB,
+                                               false, false, true, false);
+  EXPECT_EQ(window_util::GetActiveWindow(), window1.get());
+  EXPECT_EQ(FocusGroup::kTypeSource, test_api.GetCurrentFocusGroup());
+  ui::test::EmulateFullKeyPressReleaseSequence(event_generator, ui::VKEY_TAB,
+                                               false, false, true, false);
+  EXPECT_EQ(window_util::GetActiveWindow(), window2.get());
+  EXPECT_EQ(FocusGroup::kTypeSource, test_api.GetCurrentFocusGroup());
+
+  // Alt + Shift + Tab should also cycle the active window in the reverse
+  // direction.
+  ui::test::EmulateFullKeyPressReleaseSequence(event_generator, ui::VKEY_TAB,
+                                               false, true, true, false);
+  EXPECT_EQ(window_util::GetActiveWindow(), window1.get());
+  EXPECT_EQ(FocusGroup::kTypeSource, test_api.GetCurrentFocusGroup());
+
+  // Ctrl + Tab and Ctrl + Shift + Tab should not do anything.
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_CONTROL_DOWN);
+  EXPECT_EQ(window_util::GetActiveWindow(), window1.get());
+  EXPECT_EQ(FocusGroup::kTypeSource, test_api.GetCurrentFocusGroup());
+  SendKey(ui::VKEY_TAB, event_generator,
+          ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  EXPECT_EQ(window_util::GetActiveWindow(), window1.get());
+  EXPECT_EQ(FocusGroup::kTypeSource, test_api.GetCurrentFocusGroup());
+}
+
 class CaptureModeSaveFileTest
     : public CaptureModeTest,
       public testing::WithParamInterface<CaptureModeType> {
@@ -2651,7 +2621,9 @@ TEST_P(CaptureModeSaveFileTest, SaveCapturedFileWithCustomFolder) {
 }
 
 TEST_P(CaptureModeSaveFileTest, CaptureModeSaveToLocationMetric) {
-  constexpr char kHistogramBase[] = "Ash.CaptureModeController.SaveLocation";
+  constexpr char kHistogramBase[] = "SaveLocation";
+  const std::string histogram_name = BuildHistogramName(
+      kHistogramBase, /*behavior=*/nullptr, /*append_ui_mode_suffix=*/true);
   base::HistogramTester histogram_tester;
   auto* controller = CaptureModeController::Get();
   auto* test_delegate = controller->delegate_for_testing();
@@ -2676,9 +2648,8 @@ TEST_P(CaptureModeSaveFileTest, CaptureModeSaveToLocationMetric) {
       {non_root_drive_folder, CaptureModeSaveToLocation::kDriveFolder},
   };
   for (auto test_case : kTestCases) {
-    histogram_tester.ExpectBucketCount(
-        GetCaptureModeHistogramName(kHistogramBase), test_case.save_location,
-        0);
+    histogram_tester.ExpectBucketCount(histogram_name, test_case.save_location,
+                                       0);
   }
   // Set four different save-to locations in clamshell mode and check the
   // histogram results.
@@ -2687,9 +2658,8 @@ TEST_P(CaptureModeSaveFileTest, CaptureModeSaveToLocationMetric) {
     StartCaptureSessionWithParam();
     controller->SetCustomCaptureFolder(test_case.set_save_file_folder);
     auto file_saved_path = PerformCapture();
-    histogram_tester.ExpectBucketCount(
-        GetCaptureModeHistogramName(kHistogramBase), test_case.save_location,
-        1);
+    histogram_tester.ExpectBucketCount(histogram_name, test_case.save_location,
+                                       1);
   }
 
   // Set four different save-to locations in tablet mode and check the histogram
@@ -2700,9 +2670,8 @@ TEST_P(CaptureModeSaveFileTest, CaptureModeSaveToLocationMetric) {
     StartCaptureSessionWithParam();
     controller->SetCustomCaptureFolder(test_case.set_save_file_folder);
     auto file_saved_path = PerformCapture();
-    histogram_tester.ExpectBucketCount(
-        GetCaptureModeHistogramName(kHistogramBase), test_case.save_location,
-        1);
+    histogram_tester.ExpectBucketCount(histogram_name, test_case.save_location,
+                                       1);
   }
 }
 
@@ -4261,7 +4230,7 @@ TEST_F(CaptureModeTest, QuickActionHistograms) {
   base::RunLoop loop;
   SetUpFileDeletionVerifier(&loop);
   const int delete_button = 1;
-  ClickNotification(delete_button);
+  ClickOnNotification(delete_button);
   loop.Run();
   EXPECT_FALSE(GetPreviewNotification());
   histogram_tester.ExpectBucketCount(kQuickActionHistogramName,
@@ -4275,7 +4244,7 @@ TEST_F(CaptureModeTest, QuickActionHistograms) {
     waiter.Wait();
   }
   // Click on the notification body. This should take us to the files app.
-  ClickNotification(absl::nullopt);
+  ClickOnNotification(absl::nullopt);
   EXPECT_FALSE(GetPreviewNotification());
   histogram_tester.ExpectBucketCount(kQuickActionHistogramName,
                                      CaptureQuickAction::kFiles, 1);
@@ -4290,10 +4259,31 @@ TEST_F(CaptureModeTest, QuickActionHistograms) {
   }
   const int edit_button = 0;
   // Verify clicking edit on screenshot notification.
-  ClickNotification(edit_button);
+  ClickOnNotification(edit_button);
   EXPECT_FALSE(GetPreviewNotification());
   histogram_tester.ExpectBucketCount(kQuickActionHistogramName,
                                      CaptureQuickAction::kBacklight, 1);
+}
+
+TEST_F(CaptureModeTest, NotificationButtonOfVideoRecording) {
+  auto* controller = StartCaptureSession(CaptureModeSource::kFullscreen,
+                                         CaptureModeType::kVideo);
+  StartVideoRecordingImmediately();
+  EXPECT_TRUE(controller->is_recording_in_progress());
+
+  CaptureModeTestApi test_api;
+  test_api.FlushRecordingServiceForTesting();
+  test_api.StopVideoRecording();
+  CaptureNotificationWaiter().Wait();
+  EXPECT_TRUE(GetPreviewNotification());
+
+  // Verify clicking delete on video recording notification.
+  base::RunLoop loop;
+  SetUpFileDeletionVerifier(&loop);
+  const int delete_button = 0;
+  ClickOnNotification(delete_button);
+  loop.Run();
+  EXPECT_FALSE(GetPreviewNotification());
 }
 
 TEST_F(CaptureModeTest, CannotDoMultipleRecordings) {
@@ -4632,7 +4622,7 @@ TEST_F(CaptureModeTest, CaptureModeDefaultBehavior) {
       CaptureModeSource::kFullscreen, CaptureModeType::kVideo);
   ASSERT_TRUE(controller->IsActive());
   CaptureModeSession* session = controller->capture_mode_session();
-  CaptureModeBehavior* active_behavior = session->active_behavior();
+  const CaptureModeBehavior* active_behavior = session->active_behavior();
   ASSERT_TRUE(active_behavior);
 
   auto expected_behavior = [&]() {
@@ -4641,7 +4631,10 @@ TEST_F(CaptureModeTest, CaptureModeDefaultBehavior) {
     EXPECT_TRUE(active_behavior->ShouldFulscreenCaptureSourceBeAllowed());
     EXPECT_TRUE(active_behavior->ShouldRegionCaptureSourceBeAllowed());
     EXPECT_TRUE(active_behavior->ShouldWindowCaptureSourceBeAllowed());
-    EXPECT_TRUE(active_behavior->ShouldAudioInputSettingsBeIncluded());
+    EXPECT_TRUE(
+        active_behavior->SupportsAudioRecordingMode(AudioRecordingMode::kOff));
+    EXPECT_TRUE(active_behavior->SupportsAudioRecordingMode(
+        AudioRecordingMode::kMicrophone));
     EXPECT_TRUE(active_behavior->ShouldCameraSelectionSettingsBeIncluded());
     EXPECT_TRUE(active_behavior->ShouldDemoToolsSettingsBeIncluded());
     EXPECT_TRUE(active_behavior->ShouldSaveToSettingsBeIncluded());
@@ -4662,11 +4655,43 @@ TEST_F(CaptureModeTest, CaptureModeDefaultBehavior) {
   EXPECT_TRUE(GetFullscreenToggleButton());
   EXPECT_TRUE(GetRegionToggleButton());
   EXPECT_TRUE(GetWindowToggleButton());
+  EXPECT_FALSE(GetStartRecordingButton());
   EXPECT_TRUE(GetSettingsButton());
   EXPECT_TRUE(GetCloseButton());
 
   StartVideoRecordingImmediately();
   expected_behavior();
+}
+
+// Tests that the capture mode session can be started with the keyboard shortcut
+// 'Ctrl + Shift + Overview' with `kImage` as the default type and `kRegion` as
+// the default source. And the screen recording can be ended with the keyboard
+// shortcut 'Search + Shift + X'.
+TEST_F(CaptureModeTest, KeyboardShortcutTest) {
+  base::HistogramTester histogram_tester;
+  histogram_tester.ExpectBucketCount(
+      kEndRecordingReasonInClamshellHistogramName,
+      EndRecordingReason::kKeyboardShortcut, 0);
+
+  auto* event_generator = GetEventGenerator();
+  event_generator->PressAndReleaseKey(ui::VKEY_MEDIA_LAUNCH_APP1,
+                                      ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN);
+  auto* controller = CaptureModeController::Get();
+  EXPECT_TRUE(controller->IsActive());
+  EXPECT_EQ(controller->type(), CaptureModeType::kImage);
+  EXPECT_EQ(controller->source(), CaptureModeSource::kRegion);
+  controller->SetType(CaptureModeType::kVideo);
+  controller->SetSource(CaptureModeSource::kFullscreen);
+
+  StartVideoRecordingImmediately();
+  EXPECT_TRUE(controller->is_recording_in_progress());
+
+  event_generator->PressAndReleaseKey(ui::VKEY_X,
+                                      ui::EF_SHIFT_DOWN | ui::EF_COMMAND_DOWN);
+  EXPECT_FALSE(controller->is_recording_in_progress());
+  histogram_tester.ExpectBucketCount(
+      kEndRecordingReasonInClamshellHistogramName,
+      EndRecordingReason::kKeyboardShortcut, 1);
 }
 
 namespace {
@@ -5043,7 +5068,8 @@ TEST_F(CaptureModeCursorOverlayTest, OverlayBoundsAccountForCursorScaleFactor) {
         std::move(cursor_image), gfx::Point(), cursor_image_scale_factor);
     cursor.SetPlatformCursor(
         ui::CursorFactory::GetInstance()->CreateImageCursor(
-            cursor.type(), cursor.custom_bitmap(), cursor.custom_hotspot()));
+            cursor.type(), cursor.custom_bitmap(), cursor.custom_hotspot(),
+            cursor.image_scale_factor()));
     cursor_manager->SetCursor(std::move(cursor));
   };
 
@@ -5226,13 +5252,19 @@ TEST_F(ProjectorCaptureModeIntegrationTests, EntryPoint) {
   controller->SetType(CaptureModeType::kImage);
   // Also, audio recording is initially disabled. However, the projector flow
   // forces it enabled.
-  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
+  EXPECT_EQ(AudioRecordingMode::kOff,
+            controller->GetEffectiveAudioRecordingMode());
 
   StartProjectorModeSession();
   EXPECT_TRUE(controller->IsActive());
   auto* session = controller->capture_mode_session();
-  EXPECT_TRUE(session->is_in_projector_mode());
-  EXPECT_TRUE(controller->GetAudioRecordingEnabled());
+  ASSERT_TRUE(session);
+  const CaptureModeBehavior* behavior = session->active_behavior();
+  ASSERT_TRUE(behavior);
+  EXPECT_TRUE(
+      behavior->SupportsAudioRecordingMode(AudioRecordingMode::kMicrophone));
+  EXPECT_EQ(AudioRecordingMode::kMicrophone,
+            controller->GetEffectiveAudioRecordingMode());
 
   constexpr char kEntryPointHistogram[] =
       "Ash.CaptureModeController.EntryPoint.ClamshellMode";
@@ -5260,7 +5292,8 @@ TEST_F(ProjectorCaptureModeIntegrationTests, CaptureModeSettings) {
   CaptureModeMenuGroup* audio_input_menu_group =
       test_api.GetAudioInputMenuGroup();
   EXPECT_TRUE(audio_input_menu_group->IsOptionChecked(kAudioMicrophone));
-  EXPECT_TRUE(controller->GetAudioRecordingEnabled());
+  EXPECT_EQ(AudioRecordingMode::kMicrophone,
+            controller->GetEffectiveAudioRecordingMode());
 }
 
 TEST_F(ProjectorCaptureModeIntegrationTests, AudioCaptureDisabledByPolicy) {
@@ -5268,7 +5301,8 @@ TEST_F(ProjectorCaptureModeIntegrationTests, AudioCaptureDisabledByPolicy) {
   auto* delegate =
       static_cast<TestCaptureModeDelegate*>(controller->delegate_for_testing());
   delegate->set_is_audio_capture_disabled_by_policy(true);
-  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
+  EXPECT_EQ(AudioRecordingMode::kOff,
+            controller->GetEffectiveAudioRecordingMode());
 
   // A projector session is not allowed to start when audio recording is
   // disabled by policy.
@@ -5280,7 +5314,8 @@ TEST_F(ProjectorCaptureModeIntegrationTests,
   auto* controller = CaptureModeController::Get();
   auto* delegate =
       static_cast<TestCaptureModeDelegate*>(controller->delegate_for_testing());
-  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
+  EXPECT_EQ(AudioRecordingMode::kOff,
+            controller->GetEffectiveAudioRecordingMode());
 
   // At this point, a Projector session is allowed to begin.
   EXPECT_TRUE(projector_helper_.CanStartProjectorSession());
@@ -5355,7 +5390,7 @@ TEST_F(ProjectorCaptureModeIntegrationTests, StartEndRecording) {
   EXPECT_TRUE(controller->IsActive());
   histogram_tester_.ExpectUniqueSample(kProjectorCreationFlowHistogramName,
                                        ProjectorCreationFlow::kSessionStarted,
-                                       /*count=*/1);
+                                       /*expected_bucket_count=*/1);
 
   // Hit Enter to begin recording. The recording session should be marked for
   // projector.
@@ -5364,12 +5399,14 @@ TEST_F(ProjectorCaptureModeIntegrationTests, StartEndRecording) {
   WaitForRecordingToStart();
   histogram_tester_.ExpectBucketCount(kProjectorCreationFlowHistogramName,
                                       ProjectorCreationFlow::kRecordingStarted,
-                                      /*count=*/1);
+                                      /*expected_count=*/1);
 
   EXPECT_FALSE(controller->IsActive());
   EXPECT_TRUE(controller->is_recording_in_progress());
-  EXPECT_TRUE(controller->video_recording_watcher_for_testing()
-                  ->is_in_projector_mode());
+  const CaptureModeBehavior* active_behavior =
+      controller->video_recording_watcher_for_testing()->active_behavior();
+  ASSERT_TRUE(active_behavior);
+  EXPECT_TRUE(active_behavior->ShouldCreateRecordingOverlayController());
 
   EXPECT_CALL(*projector_client(), StopSpeechRecognition());
   controller->EndVideoRecording(EndRecordingReason::kStopRecordingButton);
@@ -5377,12 +5414,12 @@ TEST_F(ProjectorCaptureModeIntegrationTests, StartEndRecording) {
 
   histogram_tester_.ExpectBucketCount(kProjectorCreationFlowHistogramName,
                                       ProjectorCreationFlow::kRecordingEnded,
-                                      /*count=*/1);
+                                      /*expected_count=*/1);
   histogram_tester_.ExpectBucketCount(kProjectorCreationFlowHistogramName,
                                       ProjectorCreationFlow::kSessionStopped,
-                                      /*count=*/1);
+                                      /*expected_count=*/1);
   histogram_tester_.ExpectTotalCount(kProjectorCreationFlowHistogramName,
-                                     /*count=*/4);
+                                     /*expected_count=*/4);
 }
 
 TEST_F(ProjectorCaptureModeIntegrationTests,
@@ -5393,7 +5430,8 @@ TEST_F(ProjectorCaptureModeIntegrationTests,
   auto* test_delegate =
       static_cast<TestCaptureModeDelegate*>(controller->delegate_for_testing());
   test_delegate->set_is_allowed_by_policy(false);
-  ProjectorController::Get()->StartProjectorSession("projector_data");
+  ProjectorController::Get()->StartProjectorSession(
+      base::SafeBaseName::Create("projector_data").value());
 
   // Both sessions will never start.
   EXPECT_FALSE(controller->IsActive());
@@ -5442,14 +5480,16 @@ TEST_F(ProjectorCaptureModeIntegrationTests,
   EXPECT_TRUE(controller->IsActive());
   EXPECT_EQ(controller->type(), CaptureModeType::kVideo);
   EXPECT_EQ(controller->source(), CaptureModeSource::kFullscreen);
-  EXPECT_TRUE(controller->GetAudioRecordingEnabled());
+  EXPECT_EQ(AudioRecordingMode::kMicrophone,
+            controller->GetEffectiveAudioRecordingMode());
 
   // Stop the projector-initiated capture mode session and the original capture
   // mode configurations will be restored.
   controller->Stop();
   EXPECT_EQ(controller->type(), CaptureModeType::kImage);
   EXPECT_EQ(controller->source(), CaptureModeSource::kWindow);
-  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
+  EXPECT_EQ(AudioRecordingMode::kOff,
+            controller->GetEffectiveAudioRecordingMode());
 
   // Start a new projector-initiated capture mode session and start the region
   // recording.
@@ -5471,7 +5511,8 @@ TEST_F(ProjectorCaptureModeIntegrationTests,
   // session, the capture mode configurations will be restored as what has been
   // set before the projector-initiated capture mode session.
   EXPECT_EQ(controller->type(), CaptureModeType::kImage);
-  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
+  EXPECT_EQ(AudioRecordingMode::kOff,
+            controller->GetEffectiveAudioRecordingMode());
 }
 
 namespace {
@@ -5528,15 +5569,15 @@ TEST_F(ProjectorCaptureModeIntegrationTests,
   }
   histogram_tester_.ExpectBucketCount(kProjectorCreationFlowHistogramName,
                                       ProjectorCreationFlow::kSessionStarted,
-                                      /*count=*/3);
+                                      /*expected_count=*/3);
   histogram_tester_.ExpectBucketCount(kProjectorCreationFlowHistogramName,
                                       ProjectorCreationFlow::kRecordingAborted,
-                                      /*count=*/3);
+                                      /*expected_count=*/3);
   histogram_tester_.ExpectBucketCount(kProjectorCreationFlowHistogramName,
                                       ProjectorCreationFlow::kSessionStopped,
-                                      /*count=*/3);
+                                      /*expected_count=*/3);
   histogram_tester_.ExpectTotalCount(kProjectorCreationFlowHistogramName,
-                                     /*count=*/9);
+                                     /*expected_count=*/9);
 }
 
 TEST_F(ProjectorCaptureModeIntegrationTests,
@@ -5575,15 +5616,15 @@ TEST_F(ProjectorCaptureModeIntegrationTests,
 
   histogram_tester_.ExpectBucketCount(kProjectorCreationFlowHistogramName,
                                       ProjectorCreationFlow::kSessionStarted,
-                                      /*count=*/3);
+                                      /*expected_count=*/3);
   histogram_tester_.ExpectBucketCount(kProjectorCreationFlowHistogramName,
                                       ProjectorCreationFlow::kRecordingAborted,
-                                      /*count=*/3);
+                                      /*expected_count=*/3);
   histogram_tester_.ExpectBucketCount(kProjectorCreationFlowHistogramName,
                                       ProjectorCreationFlow::kSessionStopped,
-                                      /*count=*/3);
+                                      /*expected_count=*/3);
   histogram_tester_.ExpectTotalCount(kProjectorCreationFlowHistogramName,
-                                     /*count=*/9);
+                                     /*expected_count=*/9);
 }
 
 TEST_F(ProjectorCaptureModeIntegrationTests, RecordingOverlayWidget) {
@@ -5688,13 +5729,15 @@ TEST_P(ProjectorCaptureModeIntegrationTests,
 // and during video recording.
 TEST_P(ProjectorCaptureModeIntegrationTests, ProjectorBehavior) {
   CaptureModeController* controller = CaptureModeController::Get();
-  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
+  EXPECT_EQ(AudioRecordingMode::kOff,
+            controller->GetEffectiveAudioRecordingMode());
   EXPECT_TRUE(projector_helper_.CanStartProjectorSession());
   StartProjectorModeSession();
   ASSERT_TRUE(controller->IsActive());
   CaptureModeSession* session = controller->capture_mode_session();
-  ASSERT_TRUE(session->is_in_projector_mode());
-  CaptureModeBehavior* projector_active_behavior = session->active_behavior();
+  ASSERT_TRUE(session);
+  const CaptureModeBehavior* projector_active_behavior =
+      session->active_behavior();
   ASSERT_TRUE(projector_active_behavior);
 
   auto expected_behavior = [&]() {
@@ -5706,8 +5749,10 @@ TEST_P(ProjectorCaptureModeIntegrationTests, ProjectorBehavior) {
         projector_active_behavior->ShouldRegionCaptureSourceBeAllowed());
     EXPECT_TRUE(
         projector_active_behavior->ShouldWindowCaptureSourceBeAllowed());
-    EXPECT_TRUE(
-        projector_active_behavior->ShouldAudioInputSettingsBeIncluded());
+    EXPECT_FALSE(projector_active_behavior->SupportsAudioRecordingMode(
+        AudioRecordingMode::kOff));
+    EXPECT_TRUE(projector_active_behavior->SupportsAudioRecordingMode(
+        AudioRecordingMode::kMicrophone));
     EXPECT_TRUE(
         projector_active_behavior->ShouldCameraSelectionSettingsBeIncluded());
     EXPECT_TRUE(projector_active_behavior->ShouldDemoToolsSettingsBeIncluded());
@@ -5731,6 +5776,7 @@ TEST_P(ProjectorCaptureModeIntegrationTests, ProjectorBehavior) {
   EXPECT_TRUE(GetFullscreenToggleButton());
   EXPECT_TRUE(GetRegionToggleButton());
   EXPECT_TRUE(GetWindowToggleButton());
+  EXPECT_FALSE(GetStartRecordingButton());
   EXPECT_TRUE(GetSettingsButton());
   EXPECT_TRUE(GetCloseButton());
 
@@ -5919,7 +5965,7 @@ TEST_P(ProjectorCaptureModeIntegrationTests,
        ProjectorCaptureConfigurationMetrics) {
   const auto capture_source = GetParam();
   constexpr char kProjectorCaptureConfigurationHistogramBase[] =
-      "Ash.CaptureModeController.Projector.CaptureConfiguration";
+      "CaptureConfiguration";
   ash::CaptureModeTestApi test_api;
 
   const bool kTabletEnabledStates[]{false, true};
@@ -5932,9 +5978,12 @@ TEST_P(ProjectorCaptureModeIntegrationTests,
       EXPECT_FALSE(Shell::Get()->IsInTabletMode());
     }
 
+    const std::string histogram_name =
+        BuildHistogramName(kProjectorCaptureConfigurationHistogramBase,
+                           test_api.GetBehavior(BehaviorType::kProjector),
+                           /*append_ui_mode_suffix=*/true);
     histogram_tester_.ExpectBucketCount(
-        GetCaptureModeHistogramName(
-            kProjectorCaptureConfigurationHistogramBase),
+        histogram_name,
         GetConfiguration(CaptureModeType::kVideo, capture_source,
                          RecordingType::kWebM),
         0);
@@ -5945,8 +5994,7 @@ TEST_P(ProjectorCaptureModeIntegrationTests,
     EXPECT_FALSE(CaptureModeController::Get()->is_recording_in_progress());
 
     histogram_tester_.ExpectUniqueSample(
-        GetCaptureModeHistogramName(
-            kProjectorCaptureConfigurationHistogramBase),
+        histogram_name,
         GetConfiguration(CaptureModeType::kVideo, capture_source,
                          RecordingType::kWebM),
         1);
@@ -5960,8 +6008,7 @@ TEST_P(ProjectorCaptureModeIntegrationTests,
 TEST_P(ProjectorCaptureModeIntegrationTests,
        ProjectorScreenRecordingLengthMetrics) {
   const auto capture_source = GetParam();
-  constexpr char kProjectorRecordTimeHistogramBase[] =
-      "Ash.CaptureModeController.Projector.ScreenRecordingLength";
+  constexpr char kProjectorRecordTimeHistogramBase[] = "ScreenRecordingLength";
   ash::CaptureModeTestApi test_api;
 
   const bool kTabletEnabledStates[]{false, true};
@@ -5982,8 +6029,10 @@ TEST_P(ProjectorCaptureModeIntegrationTests,
     WaitForCaptureFileToBeSaved();
 
     histogram_tester_.ExpectUniqueSample(
-        GetCaptureModeHistogramName(kProjectorRecordTimeHistogramBase),
-        /*seconds=*/1, /*count=*/1);
+        BuildHistogramName(kProjectorRecordTimeHistogramBase,
+                           test_api.GetBehavior(BehaviorType::kProjector),
+                           /*append_ui_mode_suffix=*/true),
+        /*sample=*/1, /*expected_bucket_count=*/1);
   }
 }
 
@@ -5992,13 +6041,7 @@ TEST_P(ProjectorCaptureModeIntegrationTests,
 TEST_F(ProjectorCaptureModeIntegrationTests,
        ProjectorCaptureRegionAdjustmentTest) {
   constexpr char kProjectorCaptureRegionAdjustmentHistogramBase[] =
-      "Ash.CaptureModeController.Projector.CaptureRegionAdjusted";
-  auto histogram_name = GetCaptureModeHistogramName(
-      kProjectorCaptureRegionAdjustmentHistogramBase);
-  histogram_tester_.ExpectBucketCount(
-      GetCaptureModeHistogramName(
-          kProjectorCaptureRegionAdjustmentHistogramBase),
-      0, 0);
+      "CaptureRegionAdjusted";
 
   auto resize_and_reset_region = [](ui::test::EventGenerator* event_generator,
                                     const gfx::Point& top_right) {
@@ -6017,6 +6060,11 @@ TEST_F(ProjectorCaptureModeIntegrationTests,
   };
 
   ash::CaptureModeTestApi test_api;
+  const std::string histogram_name =
+      BuildHistogramName(kProjectorCaptureRegionAdjustmentHistogramBase,
+                         test_api.GetBehavior(BehaviorType::kProjector),
+                         /*append_ui_mode_suffix=*/true);
+  histogram_tester_.ExpectBucketCount(histogram_name, 0, 0);
   auto* event_generator = GetEventGenerator();
   const gfx::Rect target_region(gfx::Rect(100, 100, 200, 200));
   auto top_right = target_region.top_right();
@@ -6048,10 +6096,7 @@ TEST_F(ProjectorCaptureModeIntegrationTests,
     test_api.StopVideoRecording();
     EXPECT_FALSE(controller->is_recording_in_progress());
 
-    histogram_tester_.ExpectBucketCount(
-        GetCaptureModeHistogramName(
-            kProjectorCaptureRegionAdjustmentHistogramBase),
-        4, 1);
+    histogram_tester_.ExpectBucketCount(histogram_name, 4, 1);
 
     WaitForCaptureFileToBeSaved();
   }
@@ -6290,7 +6335,8 @@ TEST_F(CaptureModeSettingsTest, AudioInputSettingsMenu) {
 
   // Test that the audio recording preference is defaulted to off.
   ClickOnView(GetSettingsButton(), event_generator);
-  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
+  EXPECT_EQ(AudioRecordingMode::kOff,
+            controller->GetEffectiveAudioRecordingMode());
 
   CaptureModeSettingsTestApi test_api;
   CaptureModeMenuGroup* audio_input_menu_group =
@@ -6304,13 +6350,15 @@ TEST_F(CaptureModeSettingsTest, AudioInputSettingsMenu) {
   ClickOnView(microphone_option, event_generator);
   EXPECT_TRUE(audio_input_menu_group->IsOptionChecked(kAudioMicrophone));
   EXPECT_FALSE(audio_input_menu_group->IsOptionChecked(kAudioOff));
-  EXPECT_TRUE(controller->GetAudioRecordingEnabled());
+  EXPECT_EQ(AudioRecordingMode::kMicrophone,
+            controller->GetEffectiveAudioRecordingMode());
 
   // Test that the user selected audio preference for audio recording is
   // remembered between sessions.
   SendKey(ui::VKEY_ESCAPE, event_generator);
   StartImageRegionCapture();
-  EXPECT_TRUE(controller->GetAudioRecordingEnabled());
+  EXPECT_EQ(AudioRecordingMode::kMicrophone,
+            controller->GetEffectiveAudioRecordingMode());
 }
 
 TEST_F(CaptureModeSettingsTest, AudioCaptureDisabledByPolicy) {
@@ -6318,11 +6366,12 @@ TEST_F(CaptureModeSettingsTest, AudioCaptureDisabledByPolicy) {
 
   // Even if audio recording is set to enabled, the policy setting will
   // overwrite it.
-  controller->EnableAudioRecording(true);
+  controller->SetAudioRecordingMode(AudioRecordingMode::kMicrophone);
   auto* delegate =
       static_cast<TestCaptureModeDelegate*>(controller->delegate_for_testing());
   delegate->set_is_audio_capture_disabled_by_policy(true);
-  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
+  EXPECT_EQ(AudioRecordingMode::kOff,
+            controller->GetEffectiveAudioRecordingMode());
 
   StartImageRegionCapture();
 
@@ -6700,6 +6749,43 @@ TEST_F(CaptureModeSettingsTest, CaptureLabelViewOverlapsWithSettingsView) {
   controller->Stop();
 }
 
+TEST_F(CaptureModeSettingsTest, PressingEnterSelectsFocusedItem) {
+  auto* controller =
+      StartCaptureSession(CaptureModeSource::kRegion, CaptureModeType::kImage);
+
+  using FocusGroup = CaptureModeSessionFocusCycler::FocusGroup;
+  CaptureModeSessionTestApi session_test_api(
+      controller->capture_mode_session());
+
+  // Tab six times to focus on the settings button.
+  auto* event_generator = GetEventGenerator();
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NONE, /*count=*/6);
+  EXPECT_EQ(FocusGroup::kSettingsClose,
+            session_test_api.GetCurrentFocusGroup());
+  EXPECT_EQ(0u, session_test_api.GetCurrentFocusIndex());
+
+  // Press the enter key to open the settings menu. The current focus group
+  // should be `kPendingSettings`.
+  SendKey(ui::VKEY_RETURN, event_generator);
+  ASSERT_TRUE(GetCaptureModeSettingsView());
+  EXPECT_EQ(FocusGroup::kPendingSettings,
+            session_test_api.GetCurrentFocusGroup());
+
+  CaptureModeSettingsTestApi settings_test_api;
+  CaptureModeMenuGroup* audio_input_menu_group =
+      settings_test_api.GetAudioInputMenuGroup();
+
+  // Tab 3 times to reach the `kAudioMicrophone` option.
+  SendKey(ui::VKEY_TAB, event_generator, ui::EF_NONE, /*count=*/3);
+  EXPECT_TRUE(audio_input_menu_group->IsOptionChecked(kAudioOff));
+  EXPECT_FALSE(audio_input_menu_group->IsOptionChecked(kAudioMicrophone));
+
+  // Press the enter key, and now microphone should be on.
+  SendKey(ui::VKEY_RETURN, event_generator);
+  EXPECT_FALSE(audio_input_menu_group->IsOptionChecked(kAudioOff));
+  EXPECT_TRUE(audio_input_menu_group->IsOptionChecked(kAudioMicrophone));
+}
+
 // Tests the basic keyboard navigation functions for the settings menu.
 TEST_F(CaptureModeSettingsTest, KeyboardNavigationForSettingsMenu) {
   auto* controller =
@@ -6746,9 +6832,9 @@ TEST_F(CaptureModeSettingsTest, KeyboardNavigationForSettingsMenu) {
   EXPECT_FALSE(audio_input_menu_group->IsOptionChecked(kAudioOff));
   EXPECT_TRUE(audio_input_menu_group->IsOptionChecked(kAudioMicrophone));
 
-  views::ToggleButton* toggle_button = CaptureModeSettingsTestApi()
-                                           .GetDemoToolsMenuToggleButton()
-                                           ->toggle_button();
+  Switch* toggle_button = CaptureModeSettingsTestApi()
+                              .GetDemoToolsMenuToggleButton()
+                              ->toggle_button();
 
   if (demo_tools_enabled()) {
     // The demo tools toggle button will be disabled by default.
@@ -6984,33 +7070,31 @@ class CaptureModeHistogramTest : public CaptureModeSettingsTest,
 // Tests that metrics are recorded properly for various capture mode entry
 // points.
 TEST_P(CaptureModeHistogramTest, CaptureModeEntryPointHistograms) {
-  constexpr char kHistogramNameBase[] = "Ash.CaptureModeController.EntryPoint";
+  constexpr char kHistogramNameBase[] = "EntryPoint";
+  const std::string histogram_name = BuildHistogramName(
+      kHistogramNameBase, /*behavior=*/nullptr, /*append_ui_mode_suffix=*/true);
   base::HistogramTester histogram_tester;
 
   auto* controller = CaptureModeController::Get();
 
   controller->Start(CaptureModeEntryType::kAccelTakeWindowScreenshot);
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
-      CaptureModeEntryType::kAccelTakeWindowScreenshot, 1);
+      histogram_name, CaptureModeEntryType::kAccelTakeWindowScreenshot, 1);
   controller->Stop();
 
   controller->Start(CaptureModeEntryType::kAccelTakePartialScreenshot);
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
-      CaptureModeEntryType::kAccelTakePartialScreenshot, 1);
+      histogram_name, CaptureModeEntryType::kAccelTakePartialScreenshot, 1);
   controller->Stop();
 
   controller->Start(CaptureModeEntryType::kQuickSettings);
-  histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
-      CaptureModeEntryType::kQuickSettings, 1);
+  histogram_tester.ExpectBucketCount(histogram_name,
+                                     CaptureModeEntryType::kQuickSettings, 1);
   controller->Stop();
 
   controller->Start(CaptureModeEntryType::kStylusPalette);
-  histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
-      CaptureModeEntryType::kStylusPalette, 1);
+  histogram_tester.ExpectBucketCount(histogram_name,
+                                     CaptureModeEntryType::kStylusPalette, 1);
   controller->Stop();
 
   std::unique_ptr<aura::Window> window(
@@ -7018,22 +7102,20 @@ TEST_P(CaptureModeHistogramTest, CaptureModeEntryPointHistograms) {
   controller->CaptureScreenshotOfGivenWindow(window.get());
   WaitForCaptureFileToBeSaved();
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
-      CaptureModeEntryType::kCaptureGivenWindow, 1);
+      histogram_name, CaptureModeEntryType::kCaptureGivenWindow, 1);
 
   // Check total counts for each histogram to ensure calls aren't counted in
   // multiple buckets.
-  histogram_tester.ExpectTotalCount(
-      GetCaptureModeHistogramName(kHistogramNameBase), 5);
-  histogram_tester.ExpectTotalCount(
-      GetCaptureModeHistogramName(kHistogramNameBase), 5);
+  histogram_tester.ExpectTotalCount(histogram_name, 5);
+  histogram_tester.ExpectTotalCount(histogram_name, 5);
 }
 
 // Tests that metrics are recorded properly for capture mode configurations when
 // taking a screenshot.
 TEST_P(CaptureModeHistogramTest, ScreenshotConfigurationHistogram) {
-  constexpr char kHistogramNameBase[] =
-      "Ash.CaptureModeController.CaptureConfiguration";
+  constexpr char kHistogramNameBase[] = "CaptureConfiguration";
+  const std::string histogram_name = BuildHistogramName(
+      kHistogramNameBase, /*behavior=*/nullptr, /*append_ui_mode_suffix=*/true);
   base::HistogramTester histogram_tester;
   // Use a set display size as we will be choosing points in this test.
   UpdateDisplay("800x700");
@@ -7047,8 +7129,7 @@ TEST_P(CaptureModeHistogramTest, ScreenshotConfigurationHistogram) {
                                          CaptureModeType::kImage);
   controller->PerformCapture();
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
-      CaptureModeConfiguration::kFullscreenScreenshot, 1);
+      histogram_name, CaptureModeConfiguration::kFullscreenScreenshot, 1);
 
   // Perform a region screenshot.
   controller =
@@ -7057,8 +7138,7 @@ TEST_P(CaptureModeHistogramTest, ScreenshotConfigurationHistogram) {
   SelectRegion(capture_region);
   controller->PerformCapture();
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
-      CaptureModeConfiguration::kRegionScreenshot, 1);
+      histogram_name, CaptureModeConfiguration::kRegionScreenshot, 1);
 
   // Perform a window screenshot.
   controller =
@@ -7069,34 +7149,41 @@ TEST_P(CaptureModeHistogramTest, ScreenshotConfigurationHistogram) {
             controller->capture_mode_session()->GetSelectedWindow());
   controller->PerformCapture();
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
-      CaptureModeConfiguration::kWindowScreenshot, 1);
+      histogram_name, CaptureModeConfiguration::kWindowScreenshot, 1);
 
   // Perform an instant window capture with `CaptureScreenshotOfGivenWindow`
   // API.
   controller->CaptureScreenshotOfGivenWindow(window.get());
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
-      CaptureModeConfiguration::kWindowScreenshot, 2);
+      histogram_name, CaptureModeConfiguration::kWindowScreenshot, 2);
 }
 
 TEST_P(CaptureModeHistogramTest, VideoRecordingAudioVideoMetrics) {
-  constexpr char kHistogramNameBase[] =
-      "Ash.CaptureModeController.CaptureAudioOnMetric";
+  constexpr char kHistogramNameBase[] = "AudioRecordingMode";
+  const std::string histogram_name = BuildHistogramName(
+      kHistogramNameBase, /*behavior=*/nullptr, /*append_ui_mode_suffix=*/true);
   base::HistogramTester histogram_tester;
+  histogram_tester.ExpectBucketCount(histogram_name, AudioRecordingMode::kOff,
+                                     0);
+  histogram_tester.ExpectBucketCount(histogram_name,
+                                     AudioRecordingMode::kMicrophone, 0);
+  histogram_tester.ExpectBucketCount(histogram_name,
+                                     AudioRecordingMode::kSystem, 0);
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase), false, 0);
-  histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase), true, 0);
+      histogram_name, AudioRecordingMode::kSystemAndMicrophone, 0);
 
-  // Perform a video recording with audio off. A false should be recorded.
+  // Perform a video recording with audio off. `kOff` should be recorded.
   StartSessionForVideo();
-  CaptureModeTestApi().SetAudioRecordingEnabled(false);
+  CaptureModeTestApi().SetAudioRecordingMode(AudioRecordingMode::kOff);
   StartRecording();
+  histogram_tester.ExpectBucketCount(histogram_name, AudioRecordingMode::kOff,
+                                     1);
+  histogram_tester.ExpectBucketCount(histogram_name,
+                                     AudioRecordingMode::kMicrophone, 0);
+  histogram_tester.ExpectBucketCount(histogram_name,
+                                     AudioRecordingMode::kSystem, 0);
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase), false, 1);
-  histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase), true, 0);
+      histogram_name, AudioRecordingMode::kSystemAndMicrophone, 0);
   WaitForSeconds(1);
   StopRecording();
   WaitForCaptureFileToBeSaved();
@@ -7105,24 +7192,30 @@ TEST_P(CaptureModeHistogramTest, VideoRecordingAudioVideoMetrics) {
   // until the task that records the file size is done.
   base::RunLoop().RunUntilIdle();
   histogram_tester.ExpectTotalCount(
-      GetCaptureModeHistogramName(
-          "Ash.CaptureModeController.ScreenRecordingFileSize"),
+      BuildHistogramName("ScreenRecordingFileSize", /*behavior=*/nullptr,
+                         /*append_ui_mode_suffix=*/true),
       /*expected_count=*/1);
 
-  // Perform a video recording with audio on. A true should be recorded.
+  // Perform a video recording with microphone audio recording on. `kMicrophone`
+  // should be recorded.
   StartSessionForVideo();
-  CaptureModeTestApi().SetAudioRecordingEnabled(true);
+  CaptureModeTestApi().SetAudioRecordingMode(AudioRecordingMode::kMicrophone);
   StartRecording();
+  histogram_tester.ExpectBucketCount(histogram_name, AudioRecordingMode::kOff,
+                                     1);
+  histogram_tester.ExpectBucketCount(histogram_name,
+                                     AudioRecordingMode::kMicrophone, 1);
+  histogram_tester.ExpectBucketCount(histogram_name,
+                                     AudioRecordingMode::kSystem, 0);
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase), false, 1);
-  histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase), true, 1);
+      histogram_name, AudioRecordingMode::kSystemAndMicrophone, 0);
   StopRecording();
 }
 
 TEST_P(CaptureModeHistogramTest, CaptureModeSwitchToDefaultReasonMetric) {
-  constexpr char kHistogramNameBase[] =
-      "Ash.CaptureModeController.SwitchToDefaultReason";
+  constexpr char kHistogramNameBase[] = "SwitchToDefaultReason";
+  const std::string histogram_name = BuildHistogramName(
+      kHistogramNameBase, /*behavior=*/nullptr, /*append_ui_mode_suffix=*/true);
   base::HistogramTester histogram_tester;
   auto* controller = CaptureModeController::Get();
   const auto downloads_folder =
@@ -7133,20 +7226,19 @@ TEST_P(CaptureModeHistogramTest, CaptureModeSwitchToDefaultReasonMetric) {
       CreateCustomFolderInUserDownloadsPath("test");
 
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
-      CaptureModeSwitchToDefaultReason::kFolderUnavailable, 0);
+      histogram_name, CaptureModeSwitchToDefaultReason::kFolderUnavailable, 0);
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
+      histogram_name,
       CaptureModeSwitchToDefaultReason::kUserSelectedFromFolderSelectionDialog,
       0);
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
+      histogram_name,
       CaptureModeSwitchToDefaultReason::kUserSelectedFromSettingsMenu, 0);
 
   StartImageRegionCapture();
 
   // Set the custom folder to an unavailable folder the switch to default
-  // reason should be recorded as kFolderUnavailable.
+  // reason should be recorded as `kFolderUnavailable`.
   controller->SetCustomCaptureFolder(non_available_custom_folder);
   EXPECT_EQ(controller->GetCurrentCaptureFolder().path,
             non_available_custom_folder);
@@ -7157,8 +7249,7 @@ TEST_P(CaptureModeHistogramTest, CaptureModeSwitchToDefaultReasonMetric) {
   CaptureModeMenuGroup* save_to_menu_group = test_api.GetSaveToMenuGroup();
   EXPECT_TRUE(save_to_menu_group->IsOptionChecked(kDownloadsFolder));
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
-      CaptureModeSwitchToDefaultReason::kFolderUnavailable, 1);
+      histogram_name, CaptureModeSwitchToDefaultReason::kFolderUnavailable, 1);
 
   // Select the save-to location to default downloads folder from folder
   // selection dialog and the switch to default reason should be recorded as
@@ -7172,20 +7263,20 @@ TEST_P(CaptureModeHistogramTest, CaptureModeSwitchToDefaultReasonMetric) {
   dialog_factory->AcceptPath(downloads_folder);
   EXPECT_TRUE(save_to_menu_group->IsOptionChecked(kDownloadsFolder));
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
+      histogram_name,
       CaptureModeSwitchToDefaultReason::kUserSelectedFromFolderSelectionDialog,
       1);
 
   // Select the save-to location to default downloads folder from settings
   // menu and the switch to default reason should be recorded as
-  // kUserSelectedFromFolderSelectionDialog.
+  // `kUserSelectedFromFolderSelectionDialog`.
   controller->SetCustomCaptureFolder(available_custom_folder);
   EXPECT_EQ(controller->GetCurrentCaptureFolder().path,
             available_custom_folder);
   OpenView(test_api.GetDefaultDownloadsOption(), event_generator);
   EXPECT_TRUE(save_to_menu_group->IsOptionChecked(kDownloadsFolder));
   histogram_tester.ExpectBucketCount(
-      GetCaptureModeHistogramName(kHistogramNameBase),
+      histogram_name,
       CaptureModeSwitchToDefaultReason::kUserSelectedFromSettingsMenu, 1);
 }
 

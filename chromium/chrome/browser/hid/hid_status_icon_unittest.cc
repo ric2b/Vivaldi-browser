@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/hid/hid_status_icon.h"
+
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/hid/hid_system_tray_icon_unittest.h"
 
@@ -13,6 +15,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/hid/hid_connection_tracker.h"
 #include "chrome/browser/hid/hid_connection_tracker_factory.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/status_icons/status_icon.h"
 #include "chrome/browser/status_icons/status_icon_menu_model.h"
 #include "chrome/browser/status_icons/status_tray.h"
@@ -270,5 +273,80 @@ TEST_F(HidStatusIconTest, NumCommandIdOverLimitExtensionOrigin) {
 
 TEST_F(HidStatusIconTest, ExtensionRemoval) {
   TestExtensionRemoval();
+}
+
+TEST_F(HidStatusIconTest, ProfileUserName) {
+  std::vector<HidSystemTrayIconTestBase::ProfileItem> profile_connection_counts;
+  // std::get<1>(profiles[i]) is the old profile name.
+  // std::get<2>(profiles[i]) is the new profile name.
+  std::vector<std::tuple<Profile*, std::string, std::string>> profiles;
+  for (size_t idx = 0; idx < 2; idx++) {
+    std::string profile_name = base::StringPrintf("user%zu", idx);
+    std::string new_profile_name = base::StringPrintf("user%zu-newname", idx);
+    auto* profile = CreateTestingProfile(profile_name);
+    auto extension = CreateExtensionWithName("Test Extension");
+    AddExtensionToProfile(profile, extension.get());
+    auto* connection_tracker =
+        HidConnectionTrackerFactory::GetForProfile(profile,
+                                                   /*create=*/true);
+    connection_tracker->IncrementConnectionCount(extension->origin());
+    profile_connection_counts.push_back(
+        {profile, {{extension->origin(), 1, extension->name()}}});
+    profiles.emplace_back(profile, profile_name, new_profile_name);
+  }
+  CheckIcon(profile_connection_counts);
+
+  const auto* status_tray = static_cast<MockStatusTray*>(
+      TestingBrowserProcess::GetGlobal()->status_tray());
+  ASSERT_TRUE(status_tray);
+  EXPECT_EQ(status_tray->GetStatusIconsForTest().size(), 1u);
+  const auto* status_icon = static_cast<MockStatusIcon*>(
+      status_tray->GetStatusIconsForTest().back().get());
+
+  // Sort the |profiles| by the address of the profile
+  // pointer. This is necessary because the menu items are created by
+  // iterating through a structure of flat_map<Profile*, bool>.
+  base::ranges::sort(profiles);
+
+  // Check the current profile names.
+  {
+    auto* menu_item = status_icon->menu_item();
+    CheckMenuItemLabel(
+        menu_item, 3,
+        base::UTF8ToUTF16(std::get<0>(profiles[0])->GetProfileUserName()));
+    CheckMenuItemLabel(
+        menu_item, 7,
+        base::UTF8ToUTF16(std::get<0>(profiles[1])->GetProfileUserName()));
+  }
+
+  // Change the first profile name.
+  {
+    profile_manager()
+        ->profile_attributes_storage()
+        ->GetProfileAttributesWithPath(std::get<0>(profiles[0])->GetPath())
+        ->SetLocalProfileName(base::UTF8ToUTF16(std::get<2>(profiles[0])),
+                              /*is_default_name*/ false);
+
+    auto* menu_item = status_icon->menu_item();
+    CheckMenuItemLabel(menu_item, 3,
+                       base::UTF8ToUTF16(std::get<2>(profiles[0])));
+    CheckMenuItemLabel(menu_item, 7,
+                       base::UTF8ToUTF16(std::get<1>(profiles[1])));
+  }
+
+  // Change the second profile name.
+  {
+    profile_manager()
+        ->profile_attributes_storage()
+        ->GetProfileAttributesWithPath(std::get<0>(profiles[1])->GetPath())
+        ->SetLocalProfileName(base::UTF8ToUTF16(std::get<2>(profiles[1])),
+                              /*is_default_name*/ false);
+
+    auto* menu_item = status_icon->menu_item();
+    CheckMenuItemLabel(menu_item, 3,
+                       base::UTF8ToUTF16(std::get<2>(profiles[0])));
+    CheckMenuItemLabel(menu_item, 7,
+                       base::UTF8ToUTF16(std::get<2>(profiles[1])));
+  }
 }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)

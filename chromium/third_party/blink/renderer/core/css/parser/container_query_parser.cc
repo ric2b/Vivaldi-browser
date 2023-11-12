@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/css/parser/css_variable_parser.h"
 #include "third_party/blink/renderer/core/css/properties/css_parsing_utils.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
+#include "third_party/blink/renderer/core/frame/web_feature.h"
 
 namespace blink {
 
@@ -103,6 +104,21 @@ class StyleFeatureSet : public MediaQueryParser::FeatureSet {
   bool SupportsRange() const override { return false; }
 };
 
+class StateFeatureSet : public MediaQueryParser::FeatureSet {
+  STACK_ALLOCATED();
+
+ public:
+  bool IsAllowed(const String& feature) const override {
+    return feature == media_feature_names::kStuckMediaFeature;
+  }
+  bool IsAllowedWithoutValue(const String& feature,
+                             const ExecutionContext*) const override {
+    return true;
+  }
+  bool IsCaseSensitive(const String& feature) const override { return false; }
+  bool SupportsRange() const override { return false; }
+};
+
 }  // namespace
 
 ContainerQueryParser::ContainerQueryParser(const CSSParserContext& context)
@@ -170,7 +186,20 @@ const MediaQueryExpNode* ContainerQueryParser::ConsumeQueryInParens(
 
     if (const MediaQueryExpNode* query =
             ConsumeFeatureQuery(block, offsets, StyleFeatureSet())) {
-      return MediaQueryExpNode::Function(query, "style");
+      context_.Count(WebFeature::kCSSStyleContainerQuery);
+      return MediaQueryExpNode::Function(query, AtomicString("style"));
+    }
+  } else if (RuntimeEnabledFeatures::CSSStickyContainerQueriesEnabled() &&
+             range.Peek().GetType() == kFunctionToken &&
+             range.Peek().FunctionId() == CSSValueID::kState) {
+    // state(stuck: [top | left | right | bottom | inset-* ] )
+    CSSParserTokenRange block = range.ConsumeBlock();
+    block.ConsumeWhitespace();
+    range.ConsumeWhitespace();
+
+    if (const MediaQueryExpNode* query =
+            ConsumeFeatureQuery(block, offsets, StateFeatureSet())) {
+      return MediaQueryExpNode::Function(query, AtomicString("state"));
     }
   }
   range = original_range;

@@ -146,6 +146,9 @@ class ChromeDownloadManagerDelegate
       download::DownloadItem* download_item,
       base::flat_map<base::FilePath, base::FilePath> save_package_files,
       content::SavePackageAllowedCallback callback) override;
+#if !BUILDFLAG(IS_ANDROID)
+  void AttachExtraInfo(download::DownloadItem* item) override;
+#endif  // !BUILDFLAG(IS_ANRDOID)
 
   // Opens a download using the platform handler. DownloadItem::OpenDownload,
   // which ends up being handled by OpenDownload(), will open a download in the
@@ -335,7 +338,7 @@ class ChromeDownloadManagerDelegate
       const base::FilePath& target_path);
 #endif
 
-  raw_ptr<Profile> profile_;
+  raw_ptr<Profile, DanglingUntriaged> profile_;
 
 #if BUILDFLAG(IS_ANDROID)
   std::unique_ptr<DownloadDialogBridge> download_dialog_bridge_;

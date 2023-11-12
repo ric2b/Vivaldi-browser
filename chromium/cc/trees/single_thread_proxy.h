@@ -108,7 +108,6 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void ScheduledActionBeginMainFrameNotExpectedUntil(
       base::TimeTicks time) override;
   void FrameIntervalUpdated(base::TimeDelta interval) override;
-  bool HasInvalidationAnimation() const override;
 
   // LayerTreeHostImplClient implementation
   void DidLoseLayerTreeFrameSinkOnImplThread() override;
@@ -162,6 +161,8 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   LayerTreeHostImpl* LayerTreeHostImplForTesting() const {
     return host_impl_.get();
   }
+
+  viz::BeginFrameArgs BeginImplFrameForTest(base::TimeTicks frame_begin_time);
 
  protected:
   SingleThreadProxy(LayerTreeHost* layer_tree_host,

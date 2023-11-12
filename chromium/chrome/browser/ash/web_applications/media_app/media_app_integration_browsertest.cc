@@ -211,8 +211,8 @@ class MediaAppIntegrationTest : public ash::SystemWebAppIntegrationTest {
 
 class MediaAppIntegrationWithFilesAppTest : public MediaAppIntegrationTest {
   void SetUpOnMainThread() override {
-    file_manager::test::AddDefaultComponentExtensionsOnMainThread(profile());
     MediaAppIntegrationTest::SetUpOnMainThread();
+    file_manager::test::AddDefaultComponentExtensionsOnMainThread(profile());
   }
 };
 
@@ -891,7 +891,7 @@ startxref
   content::RenderFrameHost* app = MediaAppUiBrowserTest::GetAppFrame(web_ui);
 
   WaitForBrowserCount(2);
-  EXPECT_EQ(true, ExecuteScript(app, kOpenPdfInViewer));
+  EXPECT_EQ(true, ExecJs(app, kOpenPdfInViewer));
 
   WaitForBrowserCount(3);
   Browser* popup_browser = chrome::FindBrowserWithActiveWindow();
@@ -974,10 +974,10 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest, HandleRawFiles) {
     })();
   )";
   content::RenderFrameHost* app = MediaAppUiBrowserTest::GetAppFrame(web_ui);
-  EXPECT_EQ(true, ExecuteScript(app, kAdd270DegreeRotation));
+  EXPECT_EQ(true, ExecJs(app, kAdd270DegreeRotation));
 
   // Navigate to the next file in the directory.
-  EXPECT_EQ(true, ExecuteScript(web_ui, "advance(1)"));
+  EXPECT_EQ(true, ExecJs(web_ui, "advance(1)"));
 
   // Width and height should be swapped now.
   EXPECT_EQ("272x378", WaitForImageAlt(web_ui, kRaw378x272));
@@ -1036,7 +1036,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   // and captured in the error message correctly.
   constexpr char kConsoleError[] =
       "console.error('YIKES', {data: 'something'}, new Error('deep error'));";
-  EXPECT_EQ(true, ExecuteScript(web_ui, kConsoleError));
+  EXPECT_EQ(true, ExecJs(web_ui, kConsoleError));
   auto report = endpoint.WaitForReport();
   EXPECT_NE(std::string::npos,
             report.query.find(
@@ -1053,7 +1053,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
 
   content::WebContents* web_ui = LaunchWithNoFiles();
 
-  EXPECT_EQ(true, ExecuteScript(web_ui, kDomExceptionScript));
+  EXPECT_EQ(true, ExecJs(web_ui, kDomExceptionScript));
   auto report = endpoint.WaitForReport();
   EXPECT_NE(std::string::npos,
             report.query.find("error_message=Unhandled%20rejection%3A"
@@ -1085,7 +1085,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
 
   content::WebContents* web_ui = LaunchWithNoFiles();
 
-  EXPECT_EQ(true, ExecuteScript(web_ui, kUnhandledRejectionScript));
+  EXPECT_EQ(true, ExecJs(web_ui, kUnhandledRejectionScript));
   auto report = endpoint.WaitForReport();
   EXPECT_NE(std::string::npos,
             report.query.find("error_message=Unhandled%20rejection%3A%20%5B"
@@ -1116,7 +1116,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
 
   content::WebContents* web_ui = LaunchWithNoFiles();
 
-  EXPECT_EQ(true, ExecuteScript(web_ui, kTypeErrorScript));
+  EXPECT_EQ(true, ExecJs(web_ui, kTypeErrorScript));
   auto report = endpoint.WaitForReport();
   EXPECT_NE(std::string::npos,
             report.query.find(
@@ -1270,14 +1270,17 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, Autoplay) {
 
   constexpr char kWaitForPlayedLength[] = R"(
       (async function waitForPlayedLength() {
-        const audioElement = await waitForNode('audio');
+        const audioElement = await waitForNode('audio[src^="blob:"]');
+        console.log(`<audio> has played.length=${audioElement.played.length}.`);
         if (audioElement.played.length > 0) {
           return audioElement.played.length;
         }
+        console.log(`Wait: timeupdate on <audio src="${audioElement.src}">...`);
         // Wait for a timeupdate. If autoplay malfunctions, this will timeout.
         await new Promise(resolve => {
           audioElement.addEventListener('timeupdate', resolve, {once: true});
         });
+        console.log(`Returning. played.length=${audioElement.played.length}.`);
         return audioElement.played.length;
       })();
   )";
@@ -1369,22 +1372,22 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
   WaitForNavigable(web_ui);
 
   // Navigate to the next file in the directory.
-  EXPECT_EQ(true, ExecuteScript(web_ui, "advance(1)"));
+  EXPECT_EQ(true, ExecJs(web_ui, "advance(1)"));
   EXPECT_EQ("800x600", WaitForImageAlt(web_ui, kFilePng800x600));
 
   // Navigating again should wraparound.
-  EXPECT_EQ(true, ExecuteScript(web_ui, "advance(1)"));
+  EXPECT_EQ(true, ExecJs(web_ui, "advance(1)"));
   EXPECT_EQ("640x480", WaitForImageAlt(web_ui, kFileJpeg640x480));
 
   // Navigate backwards.
-  EXPECT_EQ(true, ExecuteScript(web_ui, "advance(-1)"));
+  EXPECT_EQ(true, ExecJs(web_ui, "advance(-1)"));
   EXPECT_EQ("800x600", WaitForImageAlt(web_ui, kFilePng800x600));
 
   // Update the Jpeg, which invalidates open DOM File objects.
   TouchFileSync(copied_jpeg_640x480, base::Time::Now());
 
   // We should still be able to open the updated file.
-  EXPECT_EQ(true, ExecuteScript(web_ui, "advance(1)"));
+  EXPECT_EQ(true, ExecJs(web_ui, "advance(1)"));
   EXPECT_EQ("640x480", WaitForImageAlt(web_ui, kFileJpeg640x480));
 
   // TODO(tapted): Test mixed file types. We used to test here with a file of a
@@ -1518,12 +1521,9 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest, CheckArcWritable) {
 
   EXPECT_EQ("640x480", WaitForImageAlt(web_ui, kFileJpeg640x480));
 
-  bool result;
   constexpr char kScript[] =
-      "lastLoadedReceivedFileList().item(0).isArcWritable()"
-      ".then(result => domAutomationController.send(result));";
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(app, kScript, &result));
-  EXPECT_FALSE(result);
+      "lastLoadedReceivedFileList().item(0).isArcWritable()";
+  EXPECT_EQ(false, content::EvalJs(app, kScript));
 }
 
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
@@ -1556,18 +1556,14 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
             .ExtractInt();
   } while (received_file_length != 2);
 
-  bool result;
   constexpr char kScript[] =
-      "lastLoadedReceivedFileList().item($1).isBrowserWritable()"
-      ".then(result => domAutomationController.send(result));";
+      "lastLoadedReceivedFileList().item($1).isBrowserWritable()";
   // The first file should be writable.
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      app, base::ReplaceStringPlaceholders(kScript, {"0"}, nullptr), &result));
-  EXPECT_TRUE(result);
+  EXPECT_EQ(true, content::EvalJs(app, base::ReplaceStringPlaceholders(
+                                           kScript, {"0"}, nullptr)));
   // The second file should not be writable.
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      app, base::ReplaceStringPlaceholders(kScript, {"1"}, nullptr), &result));
-  EXPECT_FALSE(result);
+  EXPECT_EQ(false, content::EvalJs(app, base::ReplaceStringPlaceholders(
+                                            kScript, {"1"}, nullptr)));
 }
 
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, OpenVideoFile) {

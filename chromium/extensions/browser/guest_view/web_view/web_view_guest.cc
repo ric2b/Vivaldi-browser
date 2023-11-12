@@ -17,6 +17,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
@@ -353,7 +354,8 @@ void WebViewGuest::CreateWebContents(std::unique_ptr<GuestViewBase> owned_this,
   // changes here. Go look in
   // ./extensions/api/guest_view/vivaldi_web_view_guest.cpp
   if (IsVivaldiRunning()) {
-    return VivaldiCreateWebContents(std::move(owned_this), create_params, std::move(callback));
+    return VivaldiCreateWebContents(std::move(owned_this), create_params,
+                                    std::move(callback));
   }
 
   RenderFrameHost* owner_render_frame_host =
@@ -376,10 +378,23 @@ void WebViewGuest::CreateWebContents(std::unique_ptr<GuestViewBase> owned_this,
     return;
   }
 
-  content::StoragePartitionConfig partition_config =
-      ExtensionsBrowserClient::Get()->GetWebViewStoragePartitionConfig(
-          browser_context(), owner_render_frame_host->GetSiteInstance(),
-          storage_partition_id, /*in_memory=*/!persist_storage);
+  ExtensionsBrowserClient::Get()->GetWebViewStoragePartitionConfig(
+      browser_context(), owner_render_frame_host->GetSiteInstance(),
+      storage_partition_id, /*in_memory=*/!persist_storage,
+      base::BindOnce(&WebViewGuest::CreateWebContentsWithStoragePartition,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(owned_this),
+                     create_params.Clone(), std::move(callback)));
+}
+
+void WebViewGuest::CreateWebContentsWithStoragePartition(
+    std::unique_ptr<GuestViewBase> owned_this,
+    const base::Value::Dict& create_params,
+    WebContentsCreatedCallback callback,
+    absl::optional<content::StoragePartitionConfig> partition_config) {
+  if (!partition_config.has_value()) {
+    std::move(callback).Run(std::move(owned_this), nullptr);
+    return;
+  }
 
   // If we already have a webview tag in the same app using the same storage
   // partition, we should use the same SiteInstance so the existing tag and
@@ -387,13 +402,13 @@ void WebViewGuest::CreateWebContents(std::unique_ptr<GuestViewBase> owned_this,
   auto* guest_view_manager =
       GuestViewManager::FromBrowserContext(browser_context());
   scoped_refptr<content::SiteInstance> guest_site_instance =
-      guest_view_manager->GetGuestSiteInstance(partition_config);
+      guest_view_manager->GetGuestSiteInstance(*partition_config);
   if (!guest_site_instance) {
     // Create the SiteInstance in a new BrowsingInstance, which will ensure
     // that webview tags are also not allowed to send messages across
     // different partitions.
     guest_site_instance = content::SiteInstance::CreateForGuest(
-        browser_context(), partition_config);
+        browser_context(), *partition_config);
   }
   WebContents::CreateParams params(browser_context(),
                                    std::move(guest_site_instance));
@@ -422,6 +437,12 @@ void WebViewGuest::DidAttachToEmbedder() {
 
   }
 
+  // Vivaldi addition for VB-51077.
+  if (last_set_bounds_) {
+    SetContentsBounds(web_contents(), *last_set_bounds_.get());
+    last_set_bounds_.reset(nullptr);
+  }
+
   LoadTabContentsIfNecessary();
 
   web_contents()->ResumeLoadingCreatedWebContents();
@@ -443,7 +464,6 @@ void WebViewGuest::DidInitialize(const base::Value::Dict& create_params) {
     web_modal::WebContentsModalDialogManager* owner_manager =
         web_modal::WebContentsModalDialogManager::FromWebContents(
             owner_web_contents());
-    DCHECK(owner_manager);
     if (owner_manager) {
       DCHECK(owner_manager->delegate());
       web_modal::WebContentsModalDialogManager::FromWebContents(web_contents())
@@ -613,44 +633,18 @@ int WebViewGuest::GetTaskPrefix() const {
 }
 
 void WebViewGuest::WebContentsDestroyed() {
-  if (IsVivaldiRunning()) {
-    if (web_contents() == nullptr) {
-      // Skip the call to RemoveGuest.
-      return;
-    }
-  }
-
+  // NOTE(andre@vivaldi.com) : We call this outside of the regular
+  // webcontentsobserver paths. Need to check for observed webcontents.
+  if (web_contents()) {
   // Note that this is not always redundant with guest removal in
   // RenderFrameDeleted(), such as when destroying unattached guests that never
   // had a RenderFrame created.
   WebViewRendererState::GetInstance()->RemoveGuest(
       web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
       web_contents()->GetPrimaryMainFrame()->GetRoutingID());
+  }
   // The following call may destroy `this`.
   GuestViewBase::WebContentsDestroyed();
-}
-
-void WebViewGuest::GuestReady() {
-  // The guest RenderView should always live in an isolated guest process.
-#ifndef VIVALDI_BUILD
-  CHECK(web_contents()->GetPrimaryMainFrame()->GetProcess()->IsForGuestsOnly());
-#endif // VIVALDI_BUILD
-  ExtensionWebContentsObserver::GetForWebContents(web_contents())
-      ->GetLocalFrame(web_contents()->GetPrimaryMainFrame())
-      ->SetFrameName(name_);
-
-  if (IsVivaldiRunning() &&
-      !web_contents()->GetRenderViewHost()->GetWidget()->GetView()) {
-    // While running as Vivaldi we use a WebViewGuest as owner for the
-    // background host contents to make them guests.
-    return;
-  }
-
-  // We don't want to accidentally set the opacity of an interstitial page.
-  // WebContents::GetRenderWidgetHostView will return the RWHV of an
-  // interstitial page if one is showing at this time. We only want opacity
-  // to apply to web pages.
-  SetTransparency();
 }
 
 void WebViewGuest::GuestSizeChangedDueToAutoSize(const gfx::Size& old_size,
@@ -1078,16 +1072,23 @@ void WebViewGuest::UserAgentOverrideSet(
 
 void WebViewGuest::FrameNameChanged(RenderFrameHost* render_frame_host,
                                     const std::string& name) {
-  // WebViewGuest does not support back/forward cache or prerendering so
-  // |render_frame_host| should be either active or pending deletion.
-  DCHECK(render_frame_host->IsActive() ||
-         render_frame_host->IsInLifecycleState(
-             RenderFrameHost::LifecycleState::kPendingDeletion));
   if (render_frame_host->GetParentOrOuterDocument())
     return;
 
   if (name_ == name)
     return;
+
+  // WebViewGuest does not support back/forward cache or prerendering so
+  // `render_frame_host` should be either active or pending deletion.
+  //
+  // Note that the name change could also happen from WebViewGuest itself
+  // before a navigation commits (see WebViewGuest::RenderFrameCreated). In
+  // that case, `render_frame_host` could also be pending commit, but `name`
+  // should already match `name_` and we should early return above. Hence it is
+  // important to order this check after that redundant name check.
+  DCHECK(render_frame_host->IsActive() ||
+         render_frame_host->IsInLifecycleState(
+             RenderFrameHost::LifecycleState::kPendingDeletion));
 
   ReportFrameNameChange(name);
 }
@@ -1118,8 +1119,21 @@ void WebViewGuest::OnDidAddMessageToConsole(
 
 void WebViewGuest::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
-  if (render_frame_host->GetSiteInstance()->IsGuest())
-    PushWebViewStateToIOThread(render_frame_host);
+  CHECK_EQ(render_frame_host->GetProcess()->IsForGuestsOnly(),
+           render_frame_host->GetSiteInstance()->IsGuest());
+
+  if (!render_frame_host->GetSiteInstance()->IsGuest()) {
+    return;
+  }
+
+  PushWebViewStateToIOThread(render_frame_host);
+
+  if (!render_frame_host->GetParentOrOuterDocument()) {
+    ExtensionWebContentsObserver::GetForWebContents(web_contents())
+        ->GetLocalFrame(render_frame_host)
+        ->SetFrameName(name_);
+    SetTransparency(render_frame_host);
+  }
 }
 
 void WebViewGuest::RenderFrameDeleted(
@@ -1251,7 +1265,8 @@ void WebViewGuest::WillAttachToEmbedder() {
 }
 
 bool WebViewGuest::RequiresSslInterstitials() const {
-  return !AreWebviewMPArchBehaviorsEnabled(browser_context());
+  // Some enterprise workflows rely on clicking through self-signed cert errors.
+  return true;
 }
 
 content::JavaScriptDialogManager* WebViewGuest::GetJavaScriptDialogManager(
@@ -1439,11 +1454,12 @@ void WebViewGuest::SetName(const std::string& name) {
   name_ = name;
 
   // Return early if this method is called before RenderFrameCreated().
-  // In that case, we still have a chance to update the name at GuestReady().
-  if (!web_contents()->GetPrimaryMainFrame()->IsRenderFrameLive())
+  // In that case, we still update the name in RenderFrameCreated().
+  if (!GetGuestMainFrame()->IsRenderFrameLive()) {
     return;
+  }
   ExtensionWebContentsObserver::GetForWebContents(web_contents())
-      ->GetLocalFrame(web_contents()->GetPrimaryMainFrame())
+      ->GetLocalFrame(GetGuestMainFrame())
       ->SetFrameName(name_);
 }
 
@@ -1488,22 +1504,17 @@ void WebViewGuest::SetAllowTransparency(bool allow) {
     return;
 
   allow_transparency_ = allow;
-  if (!web_contents()
-           ->GetPrimaryMainFrame()
-           ->GetRenderViewHost()
-           ->GetWidget()
-           ->GetView())
-    return;
 
-  SetTransparency();
+  SetTransparency(GetGuestMainFrame());
 }
 
-void WebViewGuest::SetTransparency() {
-  auto* view = web_contents()
-                   ->GetPrimaryMainFrame()
-                   ->GetRenderViewHost()
-                   ->GetWidget()
-                   ->GetView();
+void WebViewGuest::SetTransparency(
+    content::RenderFrameHost* render_frame_host) {
+  auto* view = render_frame_host->GetView();
+  if (!view) {
+    return;
+  }
+
   if (allow_transparency_)
     view->SetBackgroundColor(SK_ColorTRANSPARENT);
   else
@@ -1565,6 +1576,25 @@ void WebViewGuest::AddNewContents(
     const blink::mojom::WindowFeatures& window_features,
     bool user_gesture,
     bool* was_blocked) {
+
+    if (disposition == WindowOpenDisposition::NEW_PICTURE_IN_PICTURE) {
+    Browser* browser = chrome::FindBrowserWithWebContents(source);
+    if (browser) {
+
+      content::WebContentsImpl* webcontensimpl =
+          static_cast<content::WebContentsImpl*>(new_contents.get());
+
+      webcontensimpl->SetResumePending(true);
+      if (browser->ShouldResumeRequestsForCreatedWindow())
+        webcontensimpl->ResumeLoadingCreatedWebContents();
+
+      browser->AddNewContentsVivaldi(source, std::move(new_contents), target_url,
+                              disposition, window_features, user_gesture,
+                              was_blocked);
+      return;
+    }
+  }
+
   if (was_blocked)
     *was_blocked = false;
 
@@ -1598,7 +1628,7 @@ WebContents* WebViewGuest::OpenURLFromTab(
   // These can be passed to the embedder's WebContentsDelegate so that the
   // browser performs the action for the <webview>. Navigations to a new
   // tab, etc., are also handled by the WebContentsDelegate.
-  if (!IsVivaldiRunning()) {
+  if (params.url.scheme() == "devtools" || !IsVivaldiRunning()) {
   if (!params.is_renderer_initiated &&
       (!content::ChildProcessSecurityPolicy::GetInstance()->IsWebSafeScheme(
            params.url.scheme()) ||
@@ -1952,8 +1982,17 @@ void WebViewGuest::OnWebViewNewWindowResponse(int new_window_instance_id,
   auto* guest = WebViewGuest::FromInstanceID(
       owner_web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
       new_window_instance_id);
-  if (!guest)
+  // We might get here in Vivaldi when opening protocol-urls and the webcontents
+  // has been destroyed. Bail in that case. See
+  // LaunchUrlWithoutSecurityCheckWithDelegate , was VB-97676.
+  if (!guest || !guest->web_contents()) {
+    // We need to destroy the guest created for the protocol-handling.
+    std::unique_ptr<GuestViewBase> owned_guest =
+        GuestViewManager::FromBrowserContext(browser_context())
+            ->TransferOwnership(guest);
+    owned_guest.reset();
     return;
+  }
 
   if (allow) {
     if (IsVivaldiRunning()) {

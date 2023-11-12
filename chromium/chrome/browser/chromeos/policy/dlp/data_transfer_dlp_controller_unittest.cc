@@ -14,7 +14,6 @@
 #include "base/test/mock_callback.h"
 #include "base/types/optional_util.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_histogram_helper.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_policy_event.pb.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_reporting_manager.h"
@@ -40,6 +39,10 @@
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/lacros/lacros_service.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/policy/dlp/dlp_files_controller_ash.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace policy {
 
@@ -114,16 +117,16 @@ std::unique_ptr<content::WebContents> CreateTestWebContents(
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-DlpRulesManager::Component GetComponent(ui::EndpointType endpoint_type) {
+data_controls::Component GetComponent(ui::EndpointType endpoint_type) {
   switch (endpoint_type) {
     case ui::EndpointType::kArc:
-      return DlpRulesManager::Component::kArc;
+      return data_controls::Component::kArc;
     case ui::EndpointType::kCrostini:
-      return DlpRulesManager::Component::kCrostini;
+      return data_controls::Component::kCrostini;
     case ui::EndpointType::kPluginVm:
-      return DlpRulesManager::Component::kPluginVm;
+      return data_controls::Component::kPluginVm;
     default:
-      return DlpRulesManager::Component::kUnknownComponent;
+      return data_controls::Component::kUnknownComponent;
   }
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -310,10 +313,10 @@ TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_CancelDst) {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 
-class MockFilesController : public policy::DlpFilesController {
+class MockFilesController : public policy::DlpFilesControllerAsh {
  public:
   explicit MockFilesController(const policy::DlpRulesManager& rules_manager)
-      : DlpFilesController(rules_manager) {}
+      : DlpFilesControllerAsh(rules_manager) {}
   ~MockFilesController() override = default;
 
   MOCK_METHOD(void,

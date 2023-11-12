@@ -1,4 +1,4 @@
-<style>
+<style include="shortcut-customization-shared">
   .flex-row {
     display: flex;
     flex-direction: row;
@@ -20,21 +20,14 @@
     padding-inline-end: 5px;
   }
 
-  #lockIconContainer {
-    align-items: center;
-    display: flex;
-  }
-
-  #lockIconContainer[hidden] {
-    display: none;  /* Required for flexbox hidden. */
-  }
-
-  iron-icon {
+  iron-icon[icon='shortcut-customization:lock'] {
+    --iron-icon-height: 16px;
     --iron-icon-width: 16px;
   }
+
 </style>
 
-<div id="container" class="flex-row" tabindex$="[[getTabIndex()]]">
+<div id="container" class="flex-row" tabindex="-1">
   <template is="dom-if" if="[[!showEditView(viewState)]]">
     <div id="accelerator-keys">
       <template is="dom-repeat" items="[[modifiers]]">
@@ -45,10 +38,15 @@
           key-state="alpha-numeric-selected">
       </input-key>
     </div>
-    <div 
-      id="lockIconContainer" 
-      hidden="[[!shouldShowLockIcon(acceleratorInfo.locked, sourceIsLocked)]]">
+    <div class="lock-icon-container"
+        hidden="[[!shouldShowLockIcon(acceleratorInfo.locked, sourceIsLocked)]]">
       <iron-icon icon="shortcut-customization:lock"></iron-icon>
+    </div>
+    <div class="edit-icon-container" part="edit-icon" on-click="onEditIconClicked"
+        hidden="[[!shouldShowEditIcon(acceleratorInfo.locked, sourceIsLocked)]]">
+      <cr-icon-button class="edit-button" class="clickable-button"
+          iron-icon="shortcut-customization:edit">
+      </cr-icon-button>
     </div>
   </template>
   <template is="dom-if" if="[[showEditView(viewState)]]">
@@ -68,7 +66,7 @@
             pendingAcceleratorInfo.layoutProperties.standardAccelerator.*
             )]]">
       </input-key>
-      <input-key id="searchKey" key="search"
+      <input-key id="searchKey" key="meta"
           key-state="[[getSearchState(
             pendingAcceleratorInfo.layoutProperties.standardAccelerator.*
             )]]"

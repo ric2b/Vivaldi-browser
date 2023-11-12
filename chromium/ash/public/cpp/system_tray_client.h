@@ -61,6 +61,9 @@ class ASH_PUBLIC_EXPORT SystemTrayClient {
   // Shows OS settings page for Privacy Hub.
   virtual void ShowPrivacyHubSettings() = 0;
 
+  // Shows OS settings page for speak-on-mute detection setting in Privacy Hub.
+  virtual void ShowSpeakOnMuteDetectionSettings() = 0;
+
   // Show OS smart privacy settings.
   virtual void ShowSmartPrivacySettings() = 0;
 
@@ -91,6 +94,9 @@ class ASH_PUBLIC_EXPORT SystemTrayClient {
 
   // Shows the settings related to accessibility.
   virtual void ShowAccessibilitySettings() = 0;
+
+  // Shows the settings related to color correction.
+  virtual void ShowColorCorrectionSettings() = 0;
 
   // Shows gesture education help.
   virtual void ShowGestureEducationHelp() = 0;
@@ -132,6 +138,9 @@ class ASH_PUBLIC_EXPORT SystemTrayClient {
   // On devices |network_id| is a GUID, but on Linux desktop and in tests it can
   // be any string.
   virtual void ShowNetworkSettings(const std::string& network_id) = 0;
+
+  // Shows the Hotspot subpage.
+  virtual void ShowHotspotSubpage() = 0;
 
   // Shows the MultiDevice setup flow dialog.
   virtual void ShowMultiDeviceSetup() = 0;

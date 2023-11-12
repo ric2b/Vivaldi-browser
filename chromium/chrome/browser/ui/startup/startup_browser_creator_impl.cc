@@ -58,7 +58,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/welcome/helpers.h"
 #include "chrome/browser/ui/webui/whats_new/whats_new_util.h"
-#include "chrome/browser/web_applications/isolated_web_apps/install_isolated_web_app_from_command_line.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_provider_factory.h"
 #include "chrome/common/chrome_switches.h"
@@ -139,7 +138,7 @@ bool ShouldRestoreApps(bool is_post_restart, Profile* profile) {
   return is_post_restart ||
          (primary_user_profile &&
           BrowserLauncher::GetForProfile(primary_user_profile)
-              ->is_launching_for_full_restore());
+              ->is_launching_for_last_opened_profiles());
 #else
   return is_post_restart;
 #endif
@@ -219,8 +218,6 @@ void StartupBrowserCreatorImpl::Launch(
         command_line_->GetSwitchValueASCII(switches::kInstallChromeApp));
   }
 
-  web_app::MaybeInstallAppFromCommandLine(*command_line_, *profile);
-
 #if BUILDFLAG(IS_MAC) && BUILDFLAG(ENABLE_UPDATER)
   if (process_startup == chrome::startup::IsProcessStartup::kYes) {
     // Check whether the auto-update system needs to be promoted from user
@@ -278,16 +275,13 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
     params.startup_id =
         command_line_->GetSwitchValueASCII("desktop-startup-id");
 #endif
+    if (command_line_->HasSwitch(switches::kWindowName)) {
+      params.user_title =
+          command_line_->GetSwitchValueASCII(switches::kWindowName);
+    }
+
     browser = Browser::Create(params);
   }
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  auto* init_params = chromeos::BrowserParamsProxy::Get();
-  bool from_arc =
-      init_params->InitialBrowserAction() ==
-          crosapi::mojom::InitialBrowserAction::kOpenWindowWithUrls &&
-      init_params->StartupUrlsFrom() == crosapi::mojom::OpenUrlFrom::kArc;
-#endif
 
   bool first_tab = true;
   custom_handlers::ProtocolHandlerRegistry* registry =
@@ -343,7 +337,7 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
               content::NavigationControllerImpl::CreateNavigationEntry(
                   restore_url, content::Referrer(),
                   initiator_origin, initiator_base_url,
-                  nullptr /* source_site_instance */, ui::PAGE_TRANSITION_LINK,
+                  absl::nullopt /* source_site_instance */, ui::PAGE_TRANSITION_LINK,
                   false /* is_renderer_initiated */, std::string(),
                   controller->GetBrowserContext(),
                   nullptr /* blob_url_loader_factory */, false));
@@ -377,18 +371,6 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
     Navigate(&params);
 
     } // is_vivaldi
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-    if (from_arc) {
-      auto* contents = params.navigated_or_inserted_contents;
-      if (contents) {
-        // Add a flag to remember this tab originated in the ARC context.
-        contents->SetUserData(
-            &arc::ArcWebContentsData::kArcTransitionFlag,
-            std::make_unique<arc::ArcWebContentsData>(contents));
-      }
-    }
-#endif
 
     first_tab = false;
   }
@@ -588,15 +570,6 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
     bool welcome_enabled,
     bool whats_new_enabled,
     bool privacy_sandbox_dialog_required) {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  {
-    // If URLs are passed via crosapi, forcibly opens those tabs.
-    StartupTabs crosapi_tabs = provider.GetCrosapiTabs();
-    if (!crosapi_tabs.empty())
-      return {std::move(crosapi_tabs), LaunchResult::kWithGivenUrls};
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-
   StartupTabs tabs =
       provider.GetCommandLineTabs(*command_line_, cur_dir_, profile_);
   LaunchResult launch_result =

@@ -30,6 +30,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
+#include "chrome/browser/webauthn/android/webauthn_request_delegate_android.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/browser/ui/accessory_sheet_data.h"
 #include "components/autofill/core/browser/ui/accessory_sheet_enums.h"
@@ -46,9 +47,11 @@
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
+#include "components/password_manager/core/browser/webauthn_credentials_delegate.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
+#include "components/webauthn/android/webauthn_cred_man_delegate.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -66,6 +69,7 @@ using BlocklistedStatus =
     password_manager::OriginCredentialStore::BlocklistedStatus;
 using FillingSource = ManualFillingController::FillingSource;
 using IsExactMatch = autofill::UserInfo::IsExactMatch;
+using ShouldShowAction = ManualFillingController::ShouldShowAction;
 
 namespace {
 
@@ -75,8 +79,8 @@ autofill::UserInfo TranslateCredentials(bool current_field_is_password,
   DCHECK(!credential.origin().opaque());
   UserInfo user_info(
       credential.origin().Serialize(),
-      IsExactMatch(!credential.is_public_suffix_match().value() &&
-                   !credential.is_affiliation_based_match().value()));
+      IsExactMatch(credential.match_type() ==
+                   password_manager_util::GetLoginMatchType::kExact));
 
   std::u16string username = GetDisplayUsername(credential);
   user_info.add_field(AccessorySheetField(
@@ -114,6 +118,27 @@ password_manager::PasswordManagerDriver* GetPasswordManagerDriver(
       password_manager::ContentPasswordManagerDriverFactory::FromWebContents(
           web_contents);
   return factory->GetDriverForFrame(web_contents->GetFocusedFrame());
+}
+
+ShouldShowAction ShouldShowCredManReentryAction(
+    autofill::mojom::FocusedFieldType focused_field_type,
+    bool has_pending_credman_flow) {
+  if (!has_pending_credman_flow) {
+    return ShouldShowAction(false);
+  }
+  switch (focused_field_type) {
+    case autofill::mojom::FocusedFieldType::kFillablePasswordField:
+    case autofill::mojom::FocusedFieldType::kFillableUsernameField:
+    case autofill::mojom::FocusedFieldType::kFillableWebauthnTaggedField:
+      return ShouldShowAction(true);
+    case autofill::mojom::FocusedFieldType::kFillableNonSearchField:
+    case autofill::mojom::FocusedFieldType::kFillableSearchField:
+    case autofill::mojom::FocusedFieldType::kFillableTextArea:
+    case autofill::mojom::FocusedFieldType::kUnfillableElement:
+    case autofill::mojom::FocusedFieldType::kUnknown:
+      return ShouldShowAction(false);
+  }
+  NOTREACHED_NORETURN() << "Showing undefined for " << focused_field_type;
 }
 
 }  // namespace
@@ -155,7 +180,8 @@ PasswordAccessoryControllerImpl::GetSheetData() const {
         credential_cache_->GetCredentialStore(origin).GetCredentials();
     info_to_add.reserve(suggestions.size());
     for (const auto& credential : suggestions) {
-      if (credential.is_public_suffix_match() &&
+      if (credential.match_type() ==
+              password_manager_util::GetLoginMatchType::kPSL &&
           !base::FeatureList::IsEnabled(
               autofill::features::kAutofillKeyboardAccessory)) {
         continue;  // PSL origins have no representation in V1. Don't show them!
@@ -187,6 +213,20 @@ PasswordAccessoryControllerImpl::GetSheetData() const {
       IDS_PASSWORD_MANAGER_ACCESSORY_ALL_PASSWORDS_LINK);
   footer_commands_to_add.push_back(FooterCommand(
       manage_passwords_title, autofill::AccessoryAction::MANAGE_PASSWORDS));
+
+  if (password_manager::PasswordManagerDriver* driver =
+          driver_supplier_.Run((&GetWebContents()))) {
+    if (password_manager::WebAuthnCredentialsDelegate* credentials_delegate =
+            password_client_->GetWebAuthnCredentialsDelegateForDriver(driver)) {
+      if (credentials_delegate->IsAndroidHybridAvailable()) {
+        std::u16string passkey_other_device_title = l10n_util::GetStringUTF16(
+            IDS_PASSWORD_MANAGER_ACCESSORY_USE_DEVICE_PASSKEY);
+        footer_commands_to_add.emplace_back(
+            passkey_other_device_title,
+            autofill::AccessoryAction::CROSS_DEVICE_PASSKEY);
+      }
+    }
+  }
 
   bool has_suggestions = !info_to_add.empty();
   AccessorySheetData data = autofill::CreateAccessorySheetData(
@@ -255,7 +295,8 @@ void PasswordAccessoryControllerImpl::CreateForWebContents(
         base::WrapUnique(new PasswordAccessoryControllerImpl(
             web_contents, credential_cache, nullptr,
             ChromePasswordManagerClient::FromWebContents(web_contents),
-            base::BindRepeating(GetPasswordManagerDriver))));
+            base::BindRepeating(GetPasswordManagerDriver),
+            base::BindRepeating(&local_password_migration::ShowWarning))));
   }
 }
 
@@ -263,72 +304,70 @@ void PasswordAccessoryControllerImpl::CreateForWebContents(
 void PasswordAccessoryControllerImpl::CreateForWebContentsForTesting(
     content::WebContents* web_contents,
     password_manager::CredentialCache* credential_cache,
-    base::WeakPtr<ManualFillingController> mf_controller,
+    base::WeakPtr<ManualFillingController> manual_filling_controller,
     password_manager::PasswordManagerClient* password_client,
-    PasswordDriverSupplierForFocusedFrame driver_supplier) {
+    PasswordDriverSupplierForFocusedFrame driver_supplier,
+    ShowMigrationWarningCallback show_migration_warning_callback) {
   DCHECK(web_contents) << "Need valid WebContents to attach controller to!";
   DCHECK(!FromWebContents(web_contents)) << "Controller already attached!";
-  DCHECK(mf_controller);
+  DCHECK(manual_filling_controller);
   DCHECK(password_client);
 
   web_contents->SetUserData(
       UserDataKey(),
       base::WrapUnique(new PasswordAccessoryControllerImpl(
-          web_contents, credential_cache, std::move(mf_controller),
-          password_client, std::move(driver_supplier))));
-}
-
-// static
-bool PasswordAccessoryControllerImpl::ShouldAcceptFocusEvent(
-    content::WebContents* web_contents,
-    password_manager::ContentPasswordManagerDriver* driver,
-    FocusedFieldType focused_field_type) {
-  // Only react to focus events that are sent for the current focused frame.
-  // This is used to make sure that obsolette events that come in an unexpected
-  // order are not processed. Example: (Frame1, focus) -> (Frame2, focus) ->
-  // (Frame1, unfocus) would otherwise unset all the data set for Frame2, which
-  // would be wrong.
-  if (web_contents->GetFocusedFrame() &&
-      driver->render_frame_host() == web_contents->GetFocusedFrame())
-    return true;
-
-  // The one event that is accepted even if there is no focused frame is an
-  // "unfocus" event that resulted in all frames being unfocused. This can be
-  // used to reset the state of the accessory.
-  if (!web_contents->GetFocusedFrame() &&
-      focused_field_type == FocusedFieldType::kUnknown)
-    return true;
-  return false;
+          web_contents, credential_cache, std::move(manual_filling_controller),
+          password_client, std::move(driver_supplier),
+          std::move(show_migration_warning_callback))));
 }
 
 void PasswordAccessoryControllerImpl::OnOptionSelected(
     autofill::AccessoryAction selected_action) {
-  if (selected_action == autofill::AccessoryAction::USE_OTHER_PASSWORD) {
-    ShowAllPasswords();
-    return;
+  switch (selected_action) {
+    case autofill::AccessoryAction::USE_OTHER_PASSWORD:
+      ShowAllPasswords();
+      return;
+    case autofill::AccessoryAction::MANAGE_PASSWORDS:
+      password_manager_launcher::ShowPasswordSettings(
+          &GetWebContents(),
+          password_manager::ManagePasswordsReferrer::kPasswordsAccessorySheet,
+          /*manage_passkeys=*/false);
+      return;
+    case autofill::AccessoryAction::GENERATE_PASSWORD_MANUAL:
+      OnGenerationRequested(
+          autofill::password_generation::PasswordGenerationType::kManual);
+      GetManualFillingController()->Hide();
+      return;
+    case autofill::AccessoryAction::GENERATE_PASSWORD_AUTOMATIC:
+      OnGenerationRequested(
+          autofill::password_generation::PasswordGenerationType::kAutomatic);
+      GetManualFillingController()->Hide();
+      return;
+    case autofill::AccessoryAction::CREDMAN_CONDITIONAL_UI_REENTRY:
+      if (password_manager::PasswordManagerDriver* driver =
+              driver_supplier_.Run(&GetWebContents())) {
+        if (webauthn::WebAuthnCredManDelegate* delegate =
+                password_client_->GetWebAuthnCredManDelegateForDriver(driver)) {
+          delegate->TriggerFullRequest();
+        }
+      }
+      return;
+    case autofill::AccessoryAction::CROSS_DEVICE_PASSKEY:
+      if (password_manager::PasswordManagerDriver* driver =
+              driver_supplier_.Run(&GetWebContents())) {
+        if (password_manager::
+                WebAuthnCredentialsDelegate* credentials_delegate =
+                    password_client_->GetWebAuthnCredentialsDelegateForDriver(
+                        driver)) {
+          CHECK(credentials_delegate->IsAndroidHybridAvailable());
+          credentials_delegate->ShowAndroidHybridSignIn();
+        }
+      }
+      return;
+    default:
+      NOTREACHED() << "Unhandled selected action: "
+                   << static_cast<int>(selected_action);
   }
-  if (selected_action == autofill::AccessoryAction::MANAGE_PASSWORDS) {
-    password_manager_launcher::ShowPasswordSettings(
-        &GetWebContents(),
-        password_manager::ManagePasswordsReferrer::kPasswordsAccessorySheet,
-        /*manage_passkeys=*/false);
-    return;
-  }
-  if (selected_action == autofill::AccessoryAction::GENERATE_PASSWORD_MANUAL) {
-    OnGenerationRequested(
-        autofill::password_generation::PasswordGenerationType::kManual);
-    GetManualFillingController()->Hide();
-    return;
-  }
-  if (selected_action ==
-      autofill::AccessoryAction::GENERATE_PASSWORD_AUTOMATIC) {
-    OnGenerationRequested(
-        autofill::password_generation::PasswordGenerationType::kAutomatic);
-    GetManualFillingController()->Hide();
-    return;
-  }
-  NOTREACHED() << "Unhandled selected action: "
-               << static_cast<int>(selected_action);
 }
 
 void PasswordAccessoryControllerImpl::OnToggleChanged(
@@ -412,6 +451,23 @@ void PasswordAccessoryControllerImpl::OnGenerationRequested(
   pwd_generation_controller->OnGenerationRequested(type);
 }
 
+void PasswordAccessoryControllerImpl::UpdateCredManReentryUi(
+    autofill::mojom::FocusedFieldType focused_field_type) {
+  if (!webauthn::WebAuthnCredManDelegate::IsCredManEnabled()) {
+    return;  // No updates required.
+  }
+  if (password_manager::PasswordManagerDriver* driver =
+          driver_supplier_.Run(&GetWebContents())) {
+    if (webauthn::WebAuthnCredManDelegate* delegate =
+            password_client_->GetWebAuthnCredManDelegateForDriver(driver)) {
+      GetManualFillingController()->OnAccessoryActionAvailabilityChanged(
+          ShouldShowCredManReentryAction(focused_field_type,
+                                         delegate->HasResults()),
+          autofill::AccessoryAction::CREDMAN_CONDITIONAL_UI_REENTRY);
+    }
+  }
+}
+
 PasswordAccessoryControllerImpl::LastFocusedFieldInfo::LastFocusedFieldInfo(
     url::Origin focused_origin,
     autofill::mojom::FocusedFieldType focused_field,
@@ -423,15 +479,18 @@ PasswordAccessoryControllerImpl::LastFocusedFieldInfo::LastFocusedFieldInfo(
 PasswordAccessoryControllerImpl::PasswordAccessoryControllerImpl(
     content::WebContents* web_contents,
     password_manager::CredentialCache* credential_cache,
-    base::WeakPtr<ManualFillingController> mf_controller,
+    base::WeakPtr<ManualFillingController> manual_filling_controller,
     password_manager::PasswordManagerClient* password_client,
-    PasswordDriverSupplierForFocusedFrame driver_supplier)
+    PasswordDriverSupplierForFocusedFrame driver_supplier,
+    ShowMigrationWarningCallback show_migration_warning_callback)
     : content::WebContentsUserData<PasswordAccessoryControllerImpl>(
           *web_contents),
       credential_cache_(credential_cache),
-      mf_controller_(std::move(mf_controller)),
+      manual_filling_controller_(std::move(manual_filling_controller)),
       password_client_(password_client),
-      driver_supplier_(std::move(driver_supplier)) {}
+      driver_supplier_(std::move(driver_supplier)),
+      show_migration_warning_callback_(
+          std::move(show_migration_warning_callback)) {}
 
 void PasswordAccessoryControllerImpl::ChangeCurrentOriginSavePasswordsStatus(
     bool saving_enabled) {
@@ -486,10 +545,12 @@ bool PasswordAccessoryControllerImpl::ShouldShowRecoveryToggle(
 
 base::WeakPtr<ManualFillingController>
 PasswordAccessoryControllerImpl::GetManualFillingController() {
-  if (!mf_controller_)
-    mf_controller_ = ManualFillingController::GetOrCreate(&GetWebContents());
-  DCHECK(mf_controller_);
-  return mf_controller_;
+  if (!manual_filling_controller_) {
+    manual_filling_controller_ =
+        ManualFillingController::GetOrCreate(&GetWebContents());
+  }
+  DCHECK(manual_filling_controller_);
+  return manual_filling_controller_;
 }
 
 url::Origin PasswordAccessoryControllerImpl::GetFocusedFrameOrigin() const {
@@ -564,6 +625,15 @@ void PasswordAccessoryControllerImpl::FillSelection(
     return;
   driver->FillIntoFocusedField(selection.is_obfuscated(),
                                selection.display_text());
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::
+              kUnifiedPasswordManagerLocalPasswordsMigrationWarning)) {
+    show_migration_warning_callback_.Run(
+        GetWebContents().GetTopLevelNativeWindow(),
+        Profile::FromBrowserContext(GetWebContents().GetBrowserContext()),
+        password_manager::metrics_util::PasswordMigrationWarningTriggers::
+            kKeyboardAcessorySheet);
+  }
 }
 
 void PasswordAccessoryControllerImpl::AllPasswordsSheetDismissed() {

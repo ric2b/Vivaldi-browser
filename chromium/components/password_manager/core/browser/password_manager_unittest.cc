@@ -647,7 +647,7 @@ class PasswordManagerTest : public testing::Test {
   testing::NiceMock<MockAffiliationService> mock_affiliation_service_;
   scoped_refptr<TestPasswordStore> store_;
   scoped_refptr<TestPasswordStore> account_store_;
-  raw_ptr<MockAffiliatedMatchHelper> mock_match_helper_;
+  raw_ptr<MockAffiliatedMatchHelper, DanglingUntriaged> mock_match_helper_;
   MockPasswordReuseManager reuse_manager_;
   testing::NiceMock<MockPasswordManagerClient> client_;
   MockPasswordManagerDriver driver_;
@@ -2295,7 +2295,7 @@ TEST_F(PasswordManagerTest, AutofillingOfAffiliatedCredentials) {
   EXPECT_CALL(driver_, SetPasswordFillData)
       .WillRepeatedly(SaveArg<0>(&form_data));
   store_->AddLogin(android_form);
-  mock_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(
+  mock_match_helper_->ExpectCallToGetAffiliatedAndGrouped(
       PasswordFormDigest(observed_form), {android_form.signon_realm});
   manager()->OnPasswordFormsParsed(&driver_, observed_forms);
   manager()->OnPasswordFormsRendered(&driver_, observed_forms);
@@ -2352,7 +2352,7 @@ TEST_F(PasswordManagerTest, UpdatePasswordOfAffiliatedCredential) {
 
   EXPECT_CALL(driver_, SetPasswordFillData);
   store_->AddLogin(android_form);
-  mock_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(
+  mock_match_helper_->ExpectCallToGetAffiliatedAndGrouped(
       PasswordFormDigest(observed_form), {android_form.signon_realm});
   manager()->OnPasswordFormsParsed(&driver_, observed_forms);
   manager()->OnPasswordFormsRendered(&driver_, observed_forms);
@@ -3106,7 +3106,7 @@ TEST_F(PasswordManagerTest, ProvisionallySaveFailure) {
   manager()->OnPasswordFormSubmitted(nullptr, unobserved_form_data);
 
   histogram_tester.ExpectUniqueSample(
-      "PasswordManager.ProvisionalSaveFailure",
+      "PasswordManager.ProvisionalSaveFailure2",
       PasswordManagerMetricsRecorder::NO_MATCHING_FORM, 1);
   // Flush the UKM reports.
   EXPECT_CALL(client_, GetMetricsRecorder()).WillRepeatedly(Return(nullptr));
@@ -4024,7 +4024,7 @@ TEST_F(PasswordManagerTest, SubmissionDetectedOnClearedForm) {
   PasswordForm saved_match(MakeSavedForm());
   store_->AddLogin(saved_match);
 
-  // Create FormData for a form with 1 password field and process it.
+  // Create FormData for a form with 3 password fields and process it.
   FormData form_data;
   form_data.unique_renderer_id = FormRendererId(0);
   form_data.url = test_form_url_;
@@ -4068,6 +4068,37 @@ TEST_F(PasswordManagerTest, SubmissionDetectedOnClearedForm) {
 
   // Check that suggested username was properly recorded in VotesUploader.
   EXPECT_EQ(saved_match.username_value, votes_uploader.suggested_username());
+}
+
+TEST_F(PasswordManagerTest,
+       SubmissionDetectedOnClearedForm_OnlySavingFallback) {
+  base::test::ScopedFeatureList feature_list;
+  EXPECT_CALL(client_, IsSavingAndFillingEnabled).WillRepeatedly(Return(true));
+  PasswordForm saved_match(MakeSavedForm());
+  store_->AddLogin(saved_match);
+
+  // Create FormData for a form with 1 password field and process it.
+  FormData form_data;
+  form_data.unique_renderer_id = FormRendererId(0);
+  form_data.url = test_form_url_;
+
+  FormFieldData password_field;
+  password_field.form_control_type = "password";
+  password_field.unique_renderer_id = FieldRendererId(1);
+  password_field.name = u"one-time-code";
+  password_field.value = u"123456";
+  form_data.fields.push_back(password_field);
+
+  manager()->OnPasswordFormsParsed(&driver_, {form_data});
+  task_environment_.RunUntilIdle();
+  ASSERT_TRUE(manager()->form_managers().front());
+
+  manager()->OnInformAboutUserInput(&driver_, form_data);
+
+  // Don't expect an automatic prompt. Only the manual fallback for saving is
+  // available.
+  EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr).Times(0);
+  manager()->OnPasswordFormCleared(&driver_, form_data);
 }
 
 // Similar test as above with fields that have empty names.
@@ -4254,8 +4285,8 @@ TEST_F(PasswordManagerTest, IsFormManagerPendingPasswordUpdate) {
   EXPECT_TRUE(manager()->IsFormManagerPendingPasswordUpdate());
 }
 
-// Test submission of "PasswordManager.FormVisited.PerProfileType" and
-// "PasswordManager.FormSubmission.PerProfileType" for Incognito mode.
+// Test submission of "PasswordManager.FormVisited.PerProfileType" for
+// Incognito mode.
 TEST_F(PasswordManagerTest, IncognitoProfileTypeMetricSubmission) {
   base::HistogramTester histogram_tester;
 
@@ -4272,27 +4303,18 @@ TEST_F(PasswordManagerTest, IncognitoProfileTypeMetricSubmission) {
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.FormVisited.PerProfileType",
       profile_metrics::BrowserProfileType::kIncognito, 1);
-  histogram_tester.ExpectTotalCount(
-      "PasswordManager.FormSubmission.PerProfileType", 0);
 
   EXPECT_CALL(client_, IsSavingAndFillingEnabled(form.url))
       .WillRepeatedly(Return(true));
   OnPasswordFormSubmitted(form.form_data);
 
-  // Test if submission is properly recorded.
-  histogram_tester.ExpectUniqueSample(
-      "PasswordManager.FormSubmission.PerProfileType",
-      profile_metrics::BrowserProfileType::kIncognito, 1);
-
   // And nothing in other buckets.
   histogram_tester.ExpectTotalCount(
       "PasswordManager.FormVisited.PerProfileType", 1);
-  histogram_tester.ExpectTotalCount(
-      "PasswordManager.FormSubmission.PerProfileType", 1);
 }
 
-// Test submission of "PasswordManager.FormVisited.PerProfileType" and
-// "PasswordManager.FormSubmission.PerProfileType" for Guest mode.
+// Test submission of "PasswordManager.FormVisited.PerProfileType" for Guest
+// mode.
 TEST_F(PasswordManagerTest, GuestProfileTypeMetricSubmission) {
   base::HistogramTester histogram_tester;
 
@@ -4309,23 +4331,14 @@ TEST_F(PasswordManagerTest, GuestProfileTypeMetricSubmission) {
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.FormVisited.PerProfileType",
       profile_metrics::BrowserProfileType::kGuest, 1);
-  histogram_tester.ExpectTotalCount(
-      "PasswordManager.FormSubmission.PerProfileType", 0);
 
   EXPECT_CALL(client_, IsSavingAndFillingEnabled(form.url))
       .WillRepeatedly(Return(true));
   OnPasswordFormSubmitted(form.form_data);
 
-  // Test if submission is properly recorded.
-  histogram_tester.ExpectUniqueSample(
-      "PasswordManager.FormSubmission.PerProfileType",
-      profile_metrics::BrowserProfileType::kGuest, 1);
-
   // And nothing in other buckets.
   histogram_tester.ExpectTotalCount(
       "PasswordManager.FormVisited.PerProfileType", 1);
-  histogram_tester.ExpectTotalCount(
-      "PasswordManager.FormSubmission.PerProfileType", 1);
 }
 
 // Tests that the login is not detected twice.
@@ -4560,25 +4573,30 @@ TEST_P(PasswordManagerWithOtpVariationsTest,
 
   EXPECT_CALL(client_, IsSavingAndFillingEnabled(_))
       .WillRepeatedly(Return(true));
-  PasswordForm saved_form;
+  absl::optional<PasswordForm> saved_form;
+  absl::optional<PasswordForm> another_saved_form;
   // No saved password means no saved credential.
-  const bool has_saved_login = saved_form_password.has_value();
-  if (has_saved_login) {
-    saved_form.url = test_form_url_;
-    saved_form.signon_realm = test_signon_realm_;
-    saved_form.username_value = saved_form_username;
-    saved_form.password_value = saved_form_password.value();
-    store_->AddLogin(saved_form);
-  }
-  const bool has_saved_login_of_another_form =
-      another_saved_form_password.has_value();
-  PasswordForm another_saved_form;
-  if (has_saved_login_of_another_form) {
-    another_saved_form.url = test_form_url_;
-    another_saved_form.signon_realm = test_signon_realm_;
-    another_saved_form.username_value = u"another_username";
-    another_saved_form.password_value = another_saved_form_password.value();
-    store_->AddLogin(another_saved_form);
+  if (saved_form_password.has_value()) {
+    saved_form = PasswordForm();
+    saved_form.value().url = test_form_url_;
+    saved_form.value().signon_realm = test_signon_realm_;
+    saved_form.value().username_value = saved_form_username;
+    saved_form.value().password_value = saved_form_password.value();
+    store_->AddLogin(saved_form.value());
+
+    // To avoid complex logic in tests (go/unit-testing-practices#logic),
+    // only add the second credential if the first is added.
+    if (another_saved_form_password.has_value()) {
+      another_saved_form = PasswordForm();
+      another_saved_form.value().url = test_form_url_;
+      another_saved_form.value().signon_realm = test_signon_realm_;
+      another_saved_form.value().username_value = u"another_username";
+      another_saved_form.value().password_value =
+          another_saved_form_password.value();
+      store_->AddLogin(another_saved_form.value());
+    } else {
+      another_saved_form = absl::nullopt;
+    }
   }
 
   PasswordForm one_time_code_form;
@@ -4635,15 +4653,23 @@ TEST_P(PasswordManagerWithOtpVariationsTest,
   task_environment_.RunUntilIdle();
 
   // Check that manual filling fallback available.
-  if (has_saved_login) {
-    EXPECT_EQ(saved_form.username_value,
+  if (another_saved_form.has_value()) {
+    // Two credentials are present, one of them is picked.
+    if (saved_form.value().username_value ==
+        form_data.preferred_login.username_value) {
+      EXPECT_TRUE(saved_form.value().password_value ==
+                  form_data.preferred_login.password_value);
+    } else if (another_saved_form.value().username_value ==
+               form_data.preferred_login.username_value) {
+      EXPECT_TRUE(another_saved_form.value().password_value ==
+                  form_data.preferred_login.password_value);
+    } else {
+      ADD_FAILURE() << "No manual filling fallback available";
+    }
+  } else if (saved_form.has_value()) {
+    EXPECT_EQ(saved_form.value().username_value,
               form_data.preferred_login.username_value);
-    EXPECT_EQ(saved_form.password_value,
-              form_data.preferred_login.password_value);
-  } else if (has_saved_login_of_another_form) {
-    EXPECT_EQ(another_saved_form.username_value,
-              form_data.preferred_login.username_value);
-    EXPECT_EQ(another_saved_form.password_value,
+    EXPECT_EQ(saved_form.value().password_value,
               form_data.preferred_login.password_value);
   } else {
     EXPECT_EQ(form_data.preferred_login.username_value, u"");
@@ -4660,18 +4686,14 @@ TEST_P(PasswordManagerWithOtpVariationsTest,
   ASSERT_TRUE(form_manager_to_save);
 
   PasswordForm expected_pending_form;
-  if ((!otp_form_has_username && has_saved_login) ||
-      (otp_form_has_username && has_saved_login &&
-       one_time_code_form_username_value == saved_form_username)) {
+  if (otp_form_has_username
+          ? (saved_form.has_value() &&
+             one_time_code_form_username_value == saved_form_username)
+          : saved_form.has_value()) {
     // If there is no username or the username matches existing credential,
     // password manager tries to update the existing credential. If a user
     // clicks a manual fallback for updating, update password bubble is shown.
-    expected_pending_form = saved_form;
-  } else if (!otp_form_has_username && has_saved_login_of_another_form) {
-    // If there is no username, password manager tries to update the existing
-    // credential. If a user clicks a manual fallback for updating, update
-    // password bubble is shown.
-    expected_pending_form = another_saved_form;
+    expected_pending_form = saved_form.value();
   } else {
     // No matching credential in password manager. If a user clicks a manual
     // fallback for saving, save password bubble is shown.
@@ -4685,14 +4707,14 @@ TEST_P(PasswordManagerWithOtpVariationsTest,
       expected_pending_form.username_element = test_form_username_element_;
     }
   }
-  // Just in case a user uses the manual for saving, the otp value will be saved
-  // as password.
+  // Just in case a user uses the manual fallback for saving, the otp value will
+  // be saved as password.
   expected_pending_form.password_value = test_form_otp_value_;
   expected_pending_form.only_for_fallback = true;
   EXPECT_THAT(form_manager_to_save->GetPendingCredentials(),
               FormMatches(expected_pending_form));
 
-  // Check that neither save or update prompt is shown automatically;
+  // Check that neither save or update prompt is shown automatically.
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_)).Times(0);
   OnPasswordFormSubmitted(one_time_code_form.form_data);
   manager()->DidNavigateMainFrame(true);
@@ -4700,9 +4722,6 @@ TEST_P(PasswordManagerWithOtpVariationsTest,
   task_environment_.RunUntilIdle();
 }
 
-// TODO(crbug.com/1428906): Add cases for
-// |PendingCredentialsState::EQUAL_TO_SAVED_MATCH| and
-// |PendingCredentialsState::AUTOMATIC_SAVE|.
 INSTANTIATE_TEST_SUITE_P(
     All,
     PasswordManagerWithOtpVariationsTest,

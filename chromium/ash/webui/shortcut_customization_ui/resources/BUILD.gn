@@ -44,6 +44,7 @@ web_component_files = [
   "js/accelerator_row.ts",
   "js/accelerator_subsection.ts",
   "js/accelerator_view.ts",
+  "js/bottom_nav_content.ts",
   "js/input_key.ts",
   "js/search/search_box.ts",
   "js/search/search_result_row.ts",
@@ -242,7 +243,7 @@ generate_grd("build_grd") {
     ":build_ts",
   ]
   manifest_files =
-      filter_include(get_target_outputs(":build_ts"), [ "*.manifest" ])
+      filter_include(get_target_outputs(":build_ts"), [ "*_manifest.json" ])
   grd_prefix = "ash_shortcut_customization_app"
   out_grd = "$target_gen_dir/${grd_prefix}_resources.grd"
 }

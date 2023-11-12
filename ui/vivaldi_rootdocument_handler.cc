@@ -2,6 +2,7 @@
 
 #include "ui/vivaldi_rootdocument_handler.h"
 
+#include "chrome/browser/browser_process.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "extensions/browser/extension_registry_factory.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -61,6 +62,11 @@ VivaldiRootDocumentHandler::VivaldiRootDocumentHandler(
     : profile_(Profile::FromBrowserContext(context)) {
   profile_->AddObserver(this);
   ExtensionRegistry::Get(profile_)->AddObserver(this);
+
+  // The ProfileManager may be null in unit tests.
+  if (g_browser_process->profile_manager())
+    profile_manager_observation_.Observe(g_browser_process->profile_manager());
+
 }
 
 VivaldiRootDocumentHandler::~VivaldiRootDocumentHandler() {
@@ -89,6 +95,13 @@ void VivaldiRootDocumentHandler::OnProfileWillBeDestroyed(Profile* profile) {
     vivaldi_document_loader_off_the_record_ = nullptr;
   } else if (profile == profile_) {
     // this will be destroyed by KeyedServiceFactory::ContextShutdown
+  }
+}
+
+void VivaldiRootDocumentHandler::OnProfileMarkedForPermanentDeletion(
+    Profile* profile) {
+  if (profile_ == profile) {
+    Shutdown();
   }
 }
 

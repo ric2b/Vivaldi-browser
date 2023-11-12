@@ -8,6 +8,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_dialog.h"
 #include "chrome/browser/ui/webui/ash/smb_shares/smb_handler.h"
@@ -28,6 +29,7 @@ using ::chromeos::settings::mojom::kFilesSectionPath;
 using ::chromeos::settings::mojom::kGoogleDriveSubpagePath;
 using ::chromeos::settings::mojom::kNetworkFileSharesSubpagePath;
 using ::chromeos::settings::mojom::kOfficeFilesSubpagePath;
+using ::chromeos::settings::mojom::kOneDriveSubpagePath;
 using ::chromeos::settings::mojom::Section;
 using ::chromeos::settings::mojom::Setting;
 using ::chromeos::settings::mojom::Subpage;
@@ -76,7 +78,7 @@ const std::vector<SearchConcept>& GetFilesGoogleDriveSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags(
       {{IDS_OS_SETTINGS_TAG_FILES_GOOGLE_DRIVE,
         mojom::kGoogleDriveSubpagePath,
-        mojom::SearchResultIcon::kFolder,
+        mojom::SearchResultIcon::kDrive,
         mojom::SearchResultDefaultRank::kMedium,
         mojom::SearchResultType::kSubpage,
         {.subpage = mojom::Subpage::kGoogleDrive}}});
@@ -90,10 +92,10 @@ FilesSection::FilesSection(Profile* profile,
     : OsSettingsSection(profile, search_tag_registry) {
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
   updater.AddSearchTags(GetFilesSearchConcepts());
-  if (cloud_upload::IsEligibleAndEnabledUploadOfficeToCloud()) {
+  if (cloud_upload::IsEligibleAndEnabledUploadOfficeToCloud(profile)) {
     updater.AddSearchTags(GetFilesOfficeSearchConcepts());
   }
-  if (ash::features::IsDriveFsBulkPinningEnabled()) {
+  if (drive::util::IsDriveFsBulkPinningEnabled(profile)) {
     updater.AddSearchTags(GetFilesGoogleDriveSearchConcepts());
   }
 }
@@ -104,7 +106,6 @@ void FilesSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"disconnectGoogleDriveAccount", IDS_SETTINGS_DISCONNECT_GOOGLE_DRIVE},
       {"googleDriveLabel", IDS_SETTINGS_GOOGLE_DRIVE},
-      {"googleDriveEnabledLabel", IDS_SETTINGS_GOOGLE_DRIVE_ENABLED},
       {"googleDriveDisabledLabel", IDS_SETTINGS_GOOGLE_DRIVE_DISABLED},
       {"googleDriveDisconnectLabel", IDS_SETTINGS_GOOGLE_DRIVE_DISCONNECT},
       {"googleDriveConnectLabel", IDS_SETTINGS_GOOGLE_DRIVE_CONNECT},
@@ -125,6 +126,8 @@ void FilesSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAR_DIALOG_TITLE},
       {"googleDriveOfflineClearDialogBody",
        IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAR_DIALOG_BODY},
+      {"googleDriveClearStorageDisabledTooltip",
+       IDS_SETTINGS_GOOGLE_DRIVE_OFFLINE_CLEAR_DISABLED_TOOLTIP},
       {"googleDriveTurnOffLabel",
        IDS_SETTINGS_GOOGLE_DRIVE_TURN_OFF_BUTTON_LABEL},
       {"googleDriveTurnOffTitle",
@@ -161,7 +164,14 @@ void FilesSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_DOWNLOADS_SHARE_ADDED_MOUNT_INVALID_URL_MESSAGE},
       {"smbShareAddedInvalidSSOURLMessage",
        IDS_SETTINGS_DOWNLOADS_SHARE_ADDED_MOUNT_INVALID_SSO_URL_MESSAGE},
+      {"oneDriveLabel", IDS_SETTINGS_ONE_DRIVE_LABEL},
+      {"oneDriveSignedInAs", IDS_SETTINGS_ONE_DRIVE_SIGNED_IN_AS},
+      {"oneDriveDisconnected", IDS_SETTINGS_ONE_DRIVE_DISCONNECTED},
+      {"oneDriveConnect", IDS_SETTINGS_ONE_DRIVE_CONNECT},
+      {"oneDriveDisconnect", IDS_SETTINGS_ONE_DRIVE_DISCONNECT},
+      {"openOneDriveFolder", IDS_SETTINGS_OPEN_ONE_DRIVE_FOLDER},
       {"officeLabel", IDS_SETTINGS_OFFICE_LABEL},
+      {"officeSublabel", IDS_SETTINGS_OFFICE_SUBLABEL},
       {"officeSubpageTitle", IDS_SETTINGS_OFFICE_SUBPAGE_TITLE},
       {"alwaysMoveToDrivePreferenceLabel",
        IDS_SETTINGS_ALWAYS_MOVE_OFFICE_TO_DRIVE_PREFERENCE_LABEL},
@@ -177,7 +187,7 @@ void FilesSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 
   html_source->AddBoolean(
       "showOfficeSettings",
-      cloud_upload::IsEligibleAndEnabledUploadOfficeToCloud());
+      cloud_upload::IsEligibleAndEnabledUploadOfficeToCloud(profile()));
 
   const user_manager::User* user =
       ProfileHelper::Get()->GetUserByProfile(profile());
@@ -198,7 +208,7 @@ void FilesSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   }
 
   html_source->AddBoolean("enableDriveFsBulkPinning",
-                          features::IsDriveFsBulkPinningEnabled());
+                          drive::util::IsDriveFsBulkPinningEnabled(profile()));
 }
 
 void FilesSection::AddHandlers(content::WebUI* web_ui) {
@@ -237,9 +247,8 @@ void FilesSection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::kNetworkFileSharesSubpagePath);
 
   // Office.
-  // TODO(b:264314789): Correct string (not smb).
   generator->RegisterTopLevelSubpage(
-      IDS_SETTINGS_DOWNLOADS_SMB_SHARES, mojom::Subpage::kOfficeFiles,
+      IDS_SETTINGS_OFFICE_LABEL, mojom::Subpage::kOfficeFiles,
       mojom::SearchResultIcon::kFolder, mojom::SearchResultDefaultRank::kMedium,
       mojom::kNetworkFileSharesSubpagePath);
 
@@ -247,6 +256,11 @@ void FilesSection::RegisterHierarchy(HierarchyGenerator* generator) const {
       IDS_SETTINGS_GOOGLE_DRIVE, mojom::Subpage::kGoogleDrive,
       mojom::SearchResultIcon::kFolder, mojom::SearchResultDefaultRank::kMedium,
       mojom::kGoogleDriveSubpagePath);
+
+  generator->RegisterTopLevelSubpage(
+      IDS_SETTINGS_ONE_DRIVE_LABEL, mojom::Subpage::kOneDrive,
+      mojom::SearchResultIcon::kFolder, mojom::SearchResultDefaultRank::kMedium,
+      mojom::kOneDriveSubpagePath);
 }
 
 }  // namespace ash::settings

@@ -7,11 +7,11 @@
 #include <memory>
 #include <vector>
 
-#include "base/guid.h"
 #include "base/json/values_util.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "translate_history/th_node.h"
 
@@ -26,13 +26,13 @@ bool TH_Codec::Decode(NodeList& list, const base::Value& value) {
     return false;
   }
 
-  const std::string* format = value.FindStringPath("format");
+  auto* format = value.GetDict().FindString("format");
   if (!format) {
     LOG(ERROR) << "Translate History Codec: No format specifier";
     return false;
   }
 
-  const base::Value* children = value.FindPath("children");
+  const base::Value* children = value.GetDict().Find("children");
   if (!children || !children->is_list()) {
     LOG(ERROR) << "Translate History Codec: No children";
     return false;
@@ -49,22 +49,23 @@ bool TH_Codec::Decode(NodeList& list, const base::Value& value) {
 }
 
 bool TH_Codec::DecodeNode(NodeList& list, const base::Value& value) {
-  const std::string* id = value.FindStringPath("id");
-  bool guid_valid = id && !id->empty() && base::IsValidGUID(*id);
+  auto* id = value.GetDict().FindString("id");
+  bool guid_valid = id && !id->empty() &&
+      base::Uuid::ParseCaseInsensitive(*id).is_valid();
   if (!guid_valid) {
     LOG(ERROR) << "Translate History Codec: Id missing or not valid";
     return false;
   }
 
   absl::optional<base::Time> date_added =
-      ValueToTime(value.FindPath("date_added"));
+      ValueToTime(value.GetDict().Find("date_added"));
   if (!date_added) {
     LOG(ERROR) << "Translate History Codec: Date added missing or not valid";
     return false;
   }
 
-  const base::Value* src = value.FindPath("src");
-  const base::Value* translated = value.FindPath("translated");
+  const base::Value* src = value.GetDict().Find("src");
+  const base::Value* translated = value.GetDict().Find("translated");
   if (!src || !translated) {
     LOG(ERROR) << "Translate History Codec: Content missing for " << *id;
     return false;
@@ -85,8 +86,8 @@ bool TH_Codec::DecodeNode(NodeList& list, const base::Value& value) {
 
 bool TH_Codec::DecodeTextEntry(TH_Node::TextEntry& entry,
                                const base::Value& value) {
-  const std::string* code = value.FindStringPath("code");
-  const std::string* text = value.FindStringPath("text");
+  auto* code = value.GetDict().FindString("code");
+  auto* text = value.GetDict().FindString("text");
   if (!code || !text) {
     return false;
   }
@@ -102,24 +103,24 @@ base::Value TH_Codec::Encode(NodeList& nodes) {
     children.Append(base::Value(std::move(child)));
   }
   base::Value dict(base::Value::Type::DICT);
-  dict.SetKey("format", base::Value("1"));
-  dict.SetKey("children", base::Value(std::move(children)));
+  dict.GetDict().Set("format", base::Value("1"));
+  dict.GetDict().Set("children", base::Value(std::move(children)));
   return dict;
 }
 
 base::Value TH_Codec::EncodeNode(const TH_Node& node) {
   base::Value src(base::Value::Type::DICT);
-  src.SetKey("code", base::Value(node.src().code));
-  src.SetKey("text", base::Value(node.src().text));
+  src.GetDict().Set("code", base::Value(node.src().code));
+  src.GetDict().Set("text", base::Value(node.src().text));
   base::Value translated(base::Value::Type::DICT);
-  translated.SetKey("code", base::Value(node.translated().code));
-  translated.SetKey("text", base::Value(node.translated().text));
+  translated.GetDict().Set("code", base::Value(node.translated().code));
+  translated.GetDict().Set("text", base::Value(node.translated().text));
 
   base::Value dict(base::Value::Type::DICT);
-  dict.SetKey("id", base::Value(node.id()));
-  dict.SetKey("src", base::Value(std::move(src)));
-  dict.SetKey("translated", base::Value(std::move(translated)));
-  dict.SetStringKey(
+  dict.GetDict().Set("id", base::Value(node.id()));
+  dict.GetDict().Set("src", base::Value(std::move(src)));
+  dict.GetDict().Set("translated", base::Value(std::move(translated)));
+  dict.GetDict().Set(
       "date_added",
       base::NumberToString(
           node.date_added().ToDeltaSinceWindowsEpoch().InMicroseconds()));

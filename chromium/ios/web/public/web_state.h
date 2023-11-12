@@ -5,7 +5,7 @@
 #ifndef IOS_WEB_PUBLIC_WEB_STATE_H_
 #define IOS_WEB_PUBLIC_WEB_STATE_H_
 
-#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 #include <stdint.h>
 
@@ -20,8 +20,8 @@
 #include "base/strings/string_piece.h"
 #include "base/supports_user_data.h"
 #include "base/time/time.h"
+#include "build/blink_buildflags.h"
 #include "components/sessions/core/session_id.h"
-#include "ios/web/public/deprecated/url_verification_constants.h"
 #include "ios/web/public/js_messaging/content_world.h"
 #include "ios/web/public/navigation/referrer.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
@@ -81,6 +81,11 @@ class WebState : public base::SupportsUserData {
     // clicking a link with a blank target.  Used to determine whether the
     // WebState is allowed to be closed via window.close().
     bool created_with_opener;
+
+#if BUILDFLAG(USE_BLINK)
+    // If `created_with_opener`, a pointer to the opener WebState.
+    WebState* opener_web_state;
+#endif
 
     // Value used to set the last time the WebState was made active; this
     // is the value that will be returned by GetLastActiveTime(). If this
@@ -387,12 +392,9 @@ class WebState : public base::SupportsUserData {
   // displayed in this WebState. It represents the current security context.
   virtual const GURL& GetLastCommittedURL() const = 0;
 
-  // Returns the WebState view of the current URL. Moreover, this method
-  // will set the trustLevel enum to the appropriate level from a security point
-  // of view. The caller has to handle the case where `trust_level` is not
-  // appropriate.  Passing `null` will skip the trust check.
-  // TODO(crbug.com/457679): Figure out a clean API for this.
-  virtual GURL GetCurrentURL(URLVerificationTrustLevel* trust_level) const = 0;
+  // Returns the last committed URL if the correctness of this URL's origin is
+  // trusted, and absl::nullopt otherwise.
+  virtual absl::optional<GURL> GetLastCommittedURLIfTrusted() const = 0;
 
   // Returns the current CRWWebViewProxy object.
   virtual CRWWebViewProxyType GetWebViewProxy() const = 0;
@@ -494,6 +496,9 @@ class WebState : public base::SupportsUserData {
   // Get an opaque activity item that can be passed to a
   // UIActivityViewController to share the current URL.
   virtual id GetActivityItem() API_AVAILABLE(ios(16.4)) = 0;
+
+  // Returns the page theme color.
+  virtual UIColor* GetThemeColor() = 0;
 
  protected:
   friend class WebStatePolicyDecider;

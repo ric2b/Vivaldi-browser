@@ -6,6 +6,7 @@ import './extension_permission.js';
 
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {ParentAccessEvent} from '../parent_access_app.js';
 import {getParentAccessParams} from '../parent_access_ui_handler.js';
 import {decodeMojoString16, getBase64EncodedSrcForPng} from '../utils.js';
 
@@ -20,12 +21,11 @@ export class ExtensionApprovalsTemplate extends PolymerElement {
 
   static get properties() {
     return {
-      title: {type: String},
-      subtitle: {type: String},
+      screenTitle: {type: String},
+      screenSubtitle: {type: String},
       extensionIconSrc: {type: String},
       extensionName: {type: String},
       extensionPermissions: {type: Array},
-      extensionPermissionDetails: {type: Array},
     };
   }
 
@@ -44,15 +44,9 @@ export class ExtensionApprovalsTemplate extends PolymerElement {
     this.extensionName = '';
     /**
      * Localized permission strings.
-     * @protected {Array<string>}
+     * @protected {Array<Object>}
      */
     this.extensionPermissions = [];
-    /**
-     * Localized permission details. Each detail corresponds to a permission at
-     * the same index in the extensionPermissions array.
-     * @protected {Array<string>}
-     */
-    this.extensionPermissionDetails = [];
   }
 
   /** @override */
@@ -68,33 +62,24 @@ export class ExtensionApprovalsTemplate extends PolymerElement {
     if (params) {
       this.renderDetails_(params);
     } else {
-      this.dispatchEvent(new CustomEvent('show-error', {
+      this.dispatchEvent(new CustomEvent(ParentAccessEvent.SHOW_ERROR, {
         bubbles: true,
         composed: true,
       }));
     }
   }
 
-  /**
-   * @param {number} index
-   * @protected
-   */
-  getPermissionDetail(index) {
-    return this.extensionPermissionDetails[index];
-  }
 
   /** @private */
   renderDetails_(params) {
     this.extensionIconSrc = getBase64EncodedSrcForPng(params.iconPngBytes);
     this.extensionName = decodeMojoString16(params.extensionName);
-    this.extensionPermissions =
-        params.permissions.permissions.map((permission) => {
-          return decodeMojoString16(permission);
-        });
-    this.extensionPermissionDetails =
-        params.permissions.details.map((detail) => {
-          return decodeMojoString16(detail);
-        });
+    this.extensionPermissions = params.permissions.map((permission) => {
+      return {
+        permission: decodeMojoString16(permission.permission),
+        details: decodeMojoString16(permission.details),
+      };
+    });
   }
 }
 

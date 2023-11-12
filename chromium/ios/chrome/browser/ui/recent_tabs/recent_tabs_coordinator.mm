@@ -8,13 +8,19 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller_constants.h"
+#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/sync/session_sync_service_factory.h"
+#import "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/synced_sessions/distant_session.h"
 #import "ios/chrome/browser/synced_sessions/synced_sessions_util.h"
 #import "ios/chrome/browser/ui/menu/action_factory.h"
@@ -29,6 +35,12 @@
 #import "ios/chrome/browser/ui/sharing/sharing_params.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -90,9 +102,36 @@
   // OriginalChromeBrowserState since the mediator services need a SignIn
   // manager which is not present in an OffTheRecord BrowserState.
   DCHECK(!self.mediator);
-  self.mediator = [[RecentTabsMediator alloc] init];
-  self.mediator.browserState =
-      self.browser->GetBrowserState()->GetOriginalChromeBrowserState();
+  ChromeBrowserState* browserState = self.browser->GetBrowserState();
+
+  // Vivaldi
+  // Note: (prio@vivaldi.com) - Use original chrome browser state here otherwise
+  // recent tabs presentation crashes due to not having SignIn manager in an
+  // OffTheRecord BrowserState. Important to note that Chromium doesn't show
+  // recent tabs button from private tabs, but we do.
+  if (IsVivaldiRunning())
+    browserState = browserState->GetOriginalChromeBrowserState(); // End Vivaldi
+
+  sync_sessions::SessionSyncService* syncService =
+      SessionSyncServiceFactory::GetForBrowserState(browserState);
+  signin::IdentityManager* identityManager =
+      IdentityManagerFactory::GetForBrowserState(browserState);
+  sessions::TabRestoreService* restoreService =
+      IOSChromeTabRestoreServiceFactory::GetForBrowserState(browserState);
+  FaviconLoader* faviconLoader =
+      IOSChromeFaviconLoaderFactory::GetForBrowserState(browserState);
+  SyncSetupService* service =
+      SyncSetupServiceFactory::GetForBrowserState(browserState);
+  BrowserList* browserList =
+      BrowserListFactory::GetForBrowserState(browserState);
+  self.mediator =
+      [[RecentTabsMediator alloc] initWithSessionSyncService:syncService
+                                             identityManager:identityManager
+                                              restoreService:restoreService
+                                               faviconLoader:faviconLoader
+                                            syncSetupService:service
+                                                 browserList:browserList];
+
   // Set the consumer first before calling [self.mediator initObservers] and
   // then [self.mediator configureConsumer].
   self.mediator.consumer = self.recentTabsTableViewController;
@@ -121,7 +160,10 @@
 
 - (void)stop {
   [self.recentTabsTableViewController dismissModals];
+  self.recentTabsTableViewController.imageDataSource = nil;
   self.recentTabsTableViewController.browser = nil;
+  self.recentTabsTableViewController.delegate = nil;
+  self.recentTabsTableViewController = nil;
   [self.recentTabsNavigationController
       dismissViewControllerAnimated:YES
                          completion:self.completion];

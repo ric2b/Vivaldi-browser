@@ -44,9 +44,9 @@ std::unique_ptr<base::Value> MenuUpgrade::Run(
     return nullptr;
   }
   // Set new version
-  profile_control->SetStringKey("version", version);
+  profile_control->GetDict().Set("version", version);
   // Get all deleted nodes to prevent adding them once more.
-  const base::Value* deleted = profile_control->FindPath("deleted");
+  const base::Value* deleted = profile_control->GetDict().Find("deleted");
   if (deleted && deleted->is_list()) {
     const auto& list = deleted->GetList();
     for (int i = list.size() - 1; i >= 0; i--) {
@@ -83,8 +83,8 @@ std::unique_ptr<base::Value> MenuUpgrade::Run(
   if (needs_fixup_) {
     for (auto& top_node : profile_list) {
       if (top_node.is_dict()) {
-        const std::string* type = top_node.FindStringPath("type");
-        const std::string* action = top_node.FindStringPath("action");
+        const std::string* type = top_node.GetDict().FindString("type");
+        const std::string* action = top_node.GetDict().FindString("action");
         if (type && *type == "menu" && action) {
           if (!FixupProfile(top_node.GetDict(), "", bundled_root->GetList(),
                             profile_root->GetList(), *action)) {
@@ -371,7 +371,7 @@ bool MenuUpgrade::Remove(const base::Value::Dict& profile_dict,
       --i;
       // Not all toplevel items have a guid so test it exists before matching.
       const auto& item = profile_list[i];
-      const std::string* item_guid = item.FindStringPath("guid");
+      const std::string* item_guid = item.GetDict().FindString("guid");
       if (item_guid && *item_guid == *guid) {
         // We used to return true when excatly one element was removed, but
         // due to some duplicate ids that got added to a bundled file, some

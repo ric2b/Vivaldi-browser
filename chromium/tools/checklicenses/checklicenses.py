@@ -210,7 +210,7 @@ PATH_SPECIFIC_ALLOWLISTED_LICENSES = {
     ],
 
     # http://crbug.com/333508
-    'buildtools/clang_format/script': [
+    'third_party/clang-format/script': [
         'UNKNOWN',
     ],
     'third_party/devscripts': [
@@ -474,7 +474,6 @@ PATH_SPECIFIC_ALLOWLISTED_LICENSES = {
     'third_party/sqlite': [
         'UNKNOWN',
     ],
-
     'third_party/minizip': [
         'UNKNOWN',
     ],

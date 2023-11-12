@@ -103,6 +103,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   virtual void Remove(AccessibleNode*) = 0;
   virtual void Remove(LayoutObject*) = 0;
   virtual void Remove(Node*) = 0;
+  virtual void RemoveSubtreeWhenSafe(Node*) = 0;
   virtual void Remove(Document*) = 0;
   virtual void Remove(NGAbstractInlineTextBox*) = 0;
 
@@ -121,6 +122,8 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   // A DOM node was inserted , but does not necessarily have a layout tree.
   virtual void DidInsertChildrenOfNode(Node*) = 0;
 
+  // Called to process queued subtree removals when flat tree traversal is safe.
+  virtual void ProcessSubtreeRemovals() = 0;
   // Returns true if the AXObjectCache cares about this attribute
   virtual void HandleAttributeChanged(const QualifiedName& attr_name,
                                       Element*) = 0;
@@ -211,7 +214,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   static bool IsInsideFocusableElementOrARIAWidget(const Node&);
 
   // Returns true if there are any pending updates that need processing.
-  virtual bool IsDirty() const = 0;
+  virtual bool IsDirty() = 0;
 
   virtual void SerializeLocationChanges() = 0;
 

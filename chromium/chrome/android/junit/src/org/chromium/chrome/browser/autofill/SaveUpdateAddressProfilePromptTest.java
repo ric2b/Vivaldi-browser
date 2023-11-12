@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import android.app.Activity;
 import android.view.View;
@@ -16,6 +17,7 @@ import android.widget.TextView;
 
 import androidx.test.filters.SmallTest;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -33,15 +35,16 @@ import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
-import org.chromium.chrome.browser.autofill.settings.AddressEditor;
-import org.chromium.chrome.browser.autofill.settings.AutofillProfileBridge;
-import org.chromium.chrome.browser.autofill.settings.AutofillProfileBridgeJni;
+import org.chromium.chrome.browser.autofill.editors.AddressEditorCoordinator;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.payments.AutofillAddress;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.sync.SyncService;
 import org.chromium.ui.base.TestActivity;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
@@ -51,7 +54,8 @@ import org.chromium.ui.test.util.modaldialog.FakeModalDialogManager;
 /** Unit tests for {@link SaveUpdateAddressProfilePrompt}. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
-@EnableFeatures({ChromeFeatureList.AUTOFILL_ADDRESS_PROFILE_SAVE_PROMPT_NICKNAME_SUPPORT})
+@EnableFeatures({ChromeFeatureList.AUTOFILL_ADDRESS_PROFILE_SAVE_PROMPT_NICKNAME_SUPPORT,
+        ChromeFeatureList.AUTOFILL_ENABLE_SUPPORT_FOR_HONORIFIC_PREFIXES})
 public class SaveUpdateAddressProfilePromptTest {
     private static final long NATIVE_SAVE_UPDATE_ADDRESS_PROFILE_PROMPT_CONTROLLER = 100L;
     private static final boolean NO_MIGRATION = false;
@@ -65,9 +69,17 @@ public class SaveUpdateAddressProfilePromptTest {
     @Mock
     private AutofillProfileBridge.Natives mAutofillProfileBridgeJni;
     @Mock
+    private PersonalDataManager mPersonalDataManager;
+    @Mock
     private Profile mProfile;
     @Mock
-    private AddressEditor mAddressEditor;
+    private AddressEditorCoordinator mAddressEditor;
+    @Mock
+    private IdentityServicesProvider mIdentityServicesProvider;
+    @Mock
+    private IdentityManager mIdentityManager;
+    @Mock
+    private SyncService mSyncService;
 
     @Captor
     private ArgumentCaptor<Callback<AutofillAddress>> mCallbackCaptor;
@@ -80,6 +92,10 @@ public class SaveUpdateAddressProfilePromptTest {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
+        PersonalDataManager.setInstanceForTesting(mPersonalDataManager);
+        SyncServiceFactory.overrideForTests(mSyncService);
+        IdentityServicesProvider.setInstanceForTests(mIdentityServicesProvider);
+        when(mIdentityServicesProvider.getIdentityManager(any())).thenReturn(mIdentityManager);
 
         mActivity = Robolectric.setupActivity(TestActivity.class);
 
@@ -90,12 +106,17 @@ public class SaveUpdateAddressProfilePromptTest {
         mJniMocker.mock(AutofillProfileBridgeJni.TEST_HOOKS, mAutofillProfileBridgeJni);
     }
 
+    @After
+    public void tearDown() {
+        PersonalDataManager.setInstanceForTesting(null);
+    }
+
     private void createAndShowPrompt(boolean isUpdate) {
         createAndShowPrompt(isUpdate, NO_MIGRATION);
     }
 
     private void createAndShowPrompt(boolean isUpdate, boolean isMigrationToAccount) {
-        AutofillProfile dummyProfile = new AutofillProfile();
+        AutofillProfile dummyProfile = AutofillProfile.builder().build();
         mModalDialogManager = new FakeModalDialogManager(ModalDialogType.APP);
         mPrompt = new SaveUpdateAddressProfilePrompt(mPromptController, mModalDialogManager,
                 mActivity, mProfile, dummyProfile, isUpdate, isMigrationToAccount);
@@ -293,12 +314,6 @@ public class SaveUpdateAddressProfilePromptTest {
         View dialog = mPrompt.getDialogViewForTesting();
         ImageButton editButton = dialog.findViewById(R.id.edit_button);
         editButton.performClick();
-        verify(mAddressEditor).edit(any(), mCallbackCaptor.capture(), any());
-
-        AutofillAddress autofillAddress = new AutofillAddress(mActivity, new AutofillProfile());
-        mCallbackCaptor.getValue().onResult(autofillAddress);
-        Assert.assertNull(mModalDialogManager.getShownDialogModel());
-        verify(mPromptControllerJni, times(1))
-                .onPromptDismissed(eq(NATIVE_SAVE_UPDATE_ADDRESS_PROFILE_PROMPT_CONTROLLER), any());
+        verify(mAddressEditor).showEditorDialog();
     }
 }

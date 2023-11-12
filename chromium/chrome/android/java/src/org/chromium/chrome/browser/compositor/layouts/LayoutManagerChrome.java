@@ -17,7 +17,6 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.accessibility_tab_switcher.OverviewListLayout;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
@@ -404,37 +403,24 @@ public class LayoutManagerChrome
     }
 
     @Override
-    protected boolean shouldDelayHideAnimation(Layout layoutBeingHidden) {
-        return mEnableAnimations
-                && (layoutBeingHidden == mOverviewLayout || layoutBeingHidden == mTabSwitcherLayout)
-                && mCreatingNtp
-                && !TabUiFeatureUtilities.isGridTabSwitcherEnabled(mHost.getContext());
-    }
-
-    @Override
-    protected boolean shouldShowToolbarAnimationOnShow(boolean isAnimate) {
-        return isAnimate
-                && (!mEnableAnimations || getTabModelSelector().getCurrentModel().getCount() <= 0);
-    }
-
-    @Override
-    protected boolean shouldShowToolbarAnimationOnHide(Layout layoutBeingHidden, int nextTabId) {
-        boolean showAnimation = true;
-        if (mEnableAnimations
-                && (layoutBeingHidden == mOverviewLayout
-                        || layoutBeingHidden == mTabSwitcherLayout)) {
-            final LayoutTab tab = layoutBeingHidden.getLayoutTab(nextTabId);
-            showAnimation = tab == null || !tab.showToolbar();
-        }
-        return showAnimation;
-    }
-
-    @Override
     protected void tabCreated(int id, int sourceId, @TabLaunchType int launchType,
             boolean incognito, boolean willBeSelected, float originX, float originY) {
         Tab newTab = TabModelUtils.getTabById(getTabModelSelector().getModel(incognito), id);
         mCreatingNtp = newTab != null && newTab.isNativePage();
         super.tabCreated(id, sourceId, launchType, incognito, willBeSelected, originX, originY);
+    }
+
+    @Override
+    protected void tabClosed(int id, int nextId, boolean incognito, boolean tabRemoved) {
+        boolean showOverview = nextId == Tab.INVALID_TAB_ID;
+        boolean animate = !tabRemoved && animationsEnabled();
+        if (getActiveLayoutType() != LayoutType.TAB_SWITCHER
+                && getActiveLayoutType() != LayoutType.START_SURFACE && showOverview) {
+            // Vivaldi
+            if (!BuildConfig.IS_VIVALDI)
+            showLayout(LayoutType.TAB_SWITCHER, animate);
+        }
+        super.tabClosed(id, nextId, incognito, tabRemoved);
     }
 
     @Override

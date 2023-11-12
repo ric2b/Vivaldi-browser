@@ -79,6 +79,7 @@ test("device_unittests") {
       "bluetooth/test/mock_bluetooth_central_manager_mac.h",
       "bluetooth/test/mock_bluetooth_central_manager_mac.mm",
     ]
+    configs += [ "//build/config/compiler:enable_arc" ]
   }
 
   if (is_mac) {
@@ -212,9 +213,11 @@ test("device_unittests") {
       "fido/mac/credential_metadata_unittest.cc",
       "fido/mac/credential_store_unittest.mm",
       "fido/mac/get_assertion_operation_unittest_mac.mm",
+      "fido/mac/icloud_keychain_unittest.mm",
       "fido/mac/make_credential_operation_unittest_mac.mm",
       "fido/mac/util_unittest.cc",
     ]
+    deps += [ "//device/fido:icloud_keychain_test_support" ]
   }
 
   if (is_win) {
@@ -353,6 +356,7 @@ test("device_unittests") {
     frameworks += [
       "IOBluetooth.framework",
       "Security.framework",
+      "AuthenticationServices.framework",
     ]
   }
 
@@ -469,7 +473,7 @@ if (is_android) {
 
   android_library("bluetooth_test_java") {
     testonly = true
-    annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+
     sources = bluetooth_java_sources_needing_jni
     deps = [
       "//base:base_java",
@@ -480,7 +484,10 @@ if (is_android) {
       "//third_party/androidx:androidx_annotation_annotation_java",
     ]
 
-    srcjar_deps = [ ":bluetooth_test_javagen" ]
+    srcjar_deps = [
+      ":bluetooth_test_javagen",
+      ":bluetooth_test_jni_headers",
+    ]
   }
 
   robolectric_binary("device_junit_tests") {

@@ -1,6 +1,8 @@
-# Copyright 2023 The Chromium Authors. All rights reserved.
+# Copyright 2023 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
+
+import("//mojo/public/tools/fuzzers/mojolpm.gni")
 
 source_set("webnn") {
   sources = [
@@ -14,8 +16,23 @@ source_set("webnn") {
     "webnn_service.h",
   ]
 
+  if (is_win) {
+    sources += [
+      "dml/adapter.cc",
+      "dml/adapter.h",
+      "dml/command_queue.cc",
+      "dml/command_queue.h",
+      "dml/command_recorder.cc",
+      "dml/command_recorder.h",
+      "dml/error.h",
+      "dml/platform_functions.cc",
+      "dml/platform_functions.h",
+    ]
+  }
+
   deps = [
     "//base",
+    "//components/ml/webnn",
     "//mojo/public/cpp/bindings",
     "//services/webnn/public/mojom",
   ]
@@ -24,7 +41,21 @@ source_set("webnn") {
 source_set("tests") {
   testonly = true
 
-  sources = [ "webnn_context_impl_unittest.cc" ]
+  sources = [
+    "webnn_context_impl_unittest.cc",
+    "webnn_graph_impl_unittest.cc",
+  ]
+
+  if (is_win) {
+    sources += [
+      "dml/adapter_test.cc",
+      "dml/command_queue_test.cc",
+      "dml/command_recorder_test.cc",
+      "dml/platform_functions_test.cc",
+      "dml/test_base.cc",
+      "dml/test_base.h",
+    ]
+  }
 
   deps = [
     ":webnn",
@@ -34,5 +65,29 @@ source_set("tests") {
     "//mojo/public/cpp/test_support:test_utils",
     "//services/webnn/public/mojom",
     "//testing/gtest",
+  ]
+
+  if (is_win) {
+    deps += [
+      "//ui/gl",
+      "//ui/gl/init",
+    ]
+  }
+}
+
+mojolpm_fuzzer_test("webnn_graph_mojolpm_fuzzer") {
+  sources = [ "webnn_graph_mojolpm_fuzzer.cc" ]
+
+  proto_source = "webnn_graph_mojolpm_fuzzer.proto"
+
+  proto_deps = [ "//services/webnn/public/mojom:mojom_mojolpm" ]
+
+  deps = [
+    ":webnn",
+    "//base",
+    "//base/test:test_support",
+    "//content/test/fuzzer:mojolpm_fuzzer_support",
+    "//services/webnn/public/mojom",
+    "//third_party/libprotobuf-mutator",
   ]
 }

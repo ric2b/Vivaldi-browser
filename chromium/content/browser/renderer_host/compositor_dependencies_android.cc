@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/features.h"
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/system/sys_info.h"
@@ -40,7 +41,7 @@ void BrowserGpuChannelHostFactorySetApplicationVisible(bool is_visible) {
 
 // These functions are called based on application visibility status.
 void SendOnBackgroundedToGpuService() {
-  content::GpuProcessHost::CallOnIO(
+  content::GpuProcessHost::CallOnUI(
       FROM_HERE, content::GPU_PROCESS_KIND_SANDBOXED, false /* force_create */,
       base::BindOnce([](content::GpuProcessHost* host) {
         if (host) {
@@ -50,7 +51,7 @@ void SendOnBackgroundedToGpuService() {
 }
 
 void SendOnForegroundedToGpuService() {
-  content::GpuProcessHost::CallOnIO(
+  content::GpuProcessHost::CallOnUI(
       FROM_HERE, content::GPU_PROCESS_KIND_SANDBOXED, false /* force_create */,
       base::BindOnce([](content::GpuProcessHost* host) {
         if (host) {
@@ -151,7 +152,8 @@ void CompositorDependenciesAndroid::ConnectVizFrameSinkManagerOnMainThread(
 }
 
 void CompositorDependenciesAndroid::EnqueueLowEndBackgroundCleanup() {
-  if (base::SysInfo::IsLowEndDeviceOrPartialLowEndModeEnabled()) {
+  if (base::SysInfo::IsLowEndDeviceOrPartialLowEndModeEnabled() &&
+      !base::features::kPartialLowEndModeExcludeLowEndBackgroundCleanup.Get()) {
     low_end_background_cleanup_task_.Reset(base::BindOnce(
         &CompositorDependenciesAndroid::DoLowEndBackgroundCleanup,
         base::Unretained(this)));
@@ -169,7 +171,7 @@ void CompositorDependenciesAndroid::DoLowEndBackgroundCleanup() {
 
   // Next, notify the GPU process to do background processing, which will
   // lose all renderer contexts.
-  content::GpuProcessHost::CallOnIO(
+  content::GpuProcessHost::CallOnUI(
       FROM_HERE, content::GPU_PROCESS_KIND_SANDBOXED, false /* force_create */,
       base::BindOnce([](content::GpuProcessHost* host) {
         if (host) {

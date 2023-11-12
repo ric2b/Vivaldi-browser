@@ -405,6 +405,8 @@ component("net") {
     "cert/symantec_certs.h",
     "cert/test_root_certs.cc",
     "cert/test_root_certs.h",
+    "cert/time_conversions.cc",
+    "cert/time_conversions.h",
     "cert/trial_comparison_cert_verifier_util.cc",
     "cert/trial_comparison_cert_verifier_util.h",
     "cert/x509_cert_types.cc",
@@ -693,8 +695,6 @@ component("net") {
     "http/transport_security_state_source.h",
     "http/url_security_manager.cc",
     "http/url_security_manager.h",
-    "http/webfonts_histogram.cc",
-    "http/webfonts_histogram.h",
     "log/file_net_log_observer.cc",
     "log/file_net_log_observer.h",
     "log/net_log.cc",
@@ -997,7 +997,6 @@ component("net") {
     "ssl/ssl_cipher_suite_names.h",
     "ssl/ssl_client_auth_cache.cc",
     "ssl/ssl_client_auth_cache.h",
-    "ssl/ssl_client_cert_type.h",
     "ssl/ssl_client_session_cache.cc",
     "ssl/ssl_client_session_cache.h",
     "ssl/ssl_config.cc",
@@ -1075,6 +1074,9 @@ component("net") {
   defines = []
   if (disable_brotli_filter) {
     defines += [ "NET_DISABLE_BROTLI" ]
+  }
+  if (disable_zstd_filter) {
+    defines += [ "NET_DISABLE_ZSTD" ]
   }
 
   deps = [
@@ -1267,6 +1269,11 @@ component("net") {
       "proxy_resolution/proxy_resolver_mac.cc",
       "proxy_resolution/proxy_resolver_mac.h",
     ]
+    configs += [ "//build/config/compiler:enable_arc" ]
+  }
+
+  if (is_ios) {
+    deps += [ "//base/ios" ]
   }
 
   if (is_win) {
@@ -1625,6 +1632,19 @@ component("net") {
     sources += [ "filter/brotli_source_stream_disabled.cc" ]
   }
 
+  # Zstd support.
+  if (!disable_zstd_filter) {
+    sources += [
+      "filter/zstd_source_stream.cc",
+      "filter/zstd_source_stream.h",
+    ]
+  } else {
+    sources += [
+      "filter/zstd_source_stream.h",
+      "filter/zstd_source_stream_disabled.cc",
+    ]
+  }
+
   if (!is_debug && !optimize_for_size) {
     configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_max" ]
@@ -1732,6 +1752,10 @@ source_set("net_public_deps") {
     "//third_party/boringssl",
     "//url",
   ]
+
+  if (chrome_root_store_supported) {
+    public_deps += [ "//net/cert:root_store_proto_lite" ]
+  }
 }
 
 if (is_android) {
@@ -1782,9 +1806,15 @@ proto_library("isolation_info_proto") {
 
 component("extras") {
   sources = [
+    "extras/shared_dictionary/shared_dictionary_info.cc",
+    "extras/shared_dictionary/shared_dictionary_info.h",
+    "extras/shared_dictionary/shared_dictionary_isolation_key.cc",
+    "extras/shared_dictionary/shared_dictionary_isolation_key.h",
     "extras/sqlite/cookie_crypto_delegate.h",
     "extras/sqlite/sqlite_persistent_cookie_store.cc",
     "extras/sqlite/sqlite_persistent_cookie_store.h",
+    "extras/sqlite/sqlite_persistent_shared_dictionary_store.cc",
+    "extras/sqlite/sqlite_persistent_shared_dictionary_store.h",
     "extras/sqlite/sqlite_persistent_store_backend_base.cc",
     "extras/sqlite/sqlite_persistent_store_backend_base.h",
   ]
@@ -2048,7 +2078,10 @@ static_library("test_support") {
   }
 
   if (is_ios) {
-    deps += [ ":test_support_bundle_data" ]
+    deps += [
+      ":test_support_bundle_data",
+      "//base/ios",
+    ]
   }
 
   if (use_nss_certs) {
@@ -2313,16 +2346,6 @@ if (is_android) {
       "android/java/src/org/chromium/net/X509Util.java",
     ]
   }
-  generate_jni("net_test_jni_headers") {
-    testonly = true
-    sources = [
-      "android/javatests/src/org/chromium/net/AndroidKeyStoreTestUtil.java",
-      "android/javatests/src/org/chromium/net/AndroidProxyConfigServiceTestUtil.java",
-      "test/android/javatests/src/org/chromium/net/AndroidNetworkLibraryTestUtil.java",
-      "test/android/javatests/src/org/chromium/net/test/DummySpnegoAuthenticator.java",
-      "test/android/javatests/src/org/chromium/net/test/EmbeddedTestServerImpl.java",
-    ]
-  }
 }
 
 if (is_android || is_linux || is_chromeos) {
@@ -2519,6 +2542,7 @@ test("net_unittests") {
     "base/url_util_unittest.cc",
     "cert/caching_cert_verifier_unittest.cc",
     "cert/cert_and_ct_verifier_unittest.cc",
+    "cert/cert_database_unittest.cc",
     "cert/cert_verifier_unittest.cc",
     "cert/cert_verify_proc_builtin_unittest.cc",
     "cert/cert_verify_proc_unittest.cc",
@@ -2571,6 +2595,7 @@ test("net_unittests") {
     "cert/signed_certificate_timestamp_unittest.cc",
     "cert/symantec_certs_unittest.cc",
     "cert/test_root_certs_unittest.cc",
+    "cert/time_conversions_unittest.cc",
     "cert/x509_cert_types_unittest.cc",
     "cert/x509_certificate_unittest.cc",
     "cert/x509_util_unittest.cc",
@@ -2667,7 +2692,6 @@ test("net_unittests") {
     "http/transport_security_persister_unittest.cc",
     "http/transport_security_state_unittest.cc",
     "http/url_security_manager_unittest.cc",
-    "http/webfonts_histogram_unittest.cc",
     "log/file_net_log_observer_unittest.cc",
     "log/net_log_capture_mode_unittest.cc",
     "log/net_log_unittest.cc",
@@ -2814,7 +2838,9 @@ test("net_unittests") {
 
   if (!is_cronet_build) {
     sources += [
+      "extras/shared_dictionary/shared_dictionary_isolation_key_unittest.cc",
       "extras/sqlite/sqlite_persistent_cookie_store_unittest.cc",
+      "extras/sqlite/sqlite_persistent_shared_dictionary_store_unittest.cc",
       "log/trace_net_log_observer_unittest.cc",
     ]
   }
@@ -2926,7 +2952,12 @@ test("net_unittests") {
       ":extras",
       "//components/sqlite_proto",
       "//sql",
+      "//sql:test_support",
     ]
+  }
+
+  if (is_ios) {
+    deps += [ "//base/ios" ]
   }
 
   if (is_posix) {
@@ -3002,6 +3033,7 @@ test("net_unittests") {
 
   if (is_apple) {
     sources += [ "base/mac/url_conversions_unittest.mm" ]
+    configs += [ "//build/config/compiler:enable_arc" ]
   }
 
   if (is_mac) {
@@ -3172,12 +3204,15 @@ test("net_unittests") {
   if (is_android) {
     data_deps += [ "//net/tools/testserver:testserver_py" ]
     deps += [
-      ":net_test_jni_headers",
+      ":net_jni_headers",
       "//base:base_java_unittest_support",
       "//net/android:net_java",
       "//net/android:net_java_test_support",
-      "//net/android:net_java_test_support_provider",
-      "//net/android:net_javatests",
+      "//net/android:net_test_support_jni",
+      "//net/android:net_test_support_provider_java",
+      "//net/android:net_test_support_provider_jni",
+      "//net/android:net_tests_java",
+      "//net/android:net_tests_jni",
       "//net/android:net_unittests_apk_resources",
 
       # TODO(mmenke):  This depends on test_support_base, which depends on

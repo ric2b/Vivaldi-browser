@@ -234,7 +234,7 @@ class PreinstalledWebAppMigrationBrowserTest
           run_loop.Quit();
         });
 
-    std::vector<base::Value> app_configs;
+    base::Value::List app_configs;
     if (pass_config) {
       std::string app_config_string = base::ReplaceStringPlaceholders(
           R"({
@@ -246,7 +246,7 @@ class PreinstalledWebAppMigrationBrowserTest
           })",
           {GetWebAppUrl().spec(), kMigrationFlag, uninstall_and_replace_},
           nullptr);
-      app_configs.push_back(*base::JSONReader::Read(app_config_string));
+      app_configs.Append(*base::JSONReader::Read(app_config_string));
     }
     PreinstalledWebAppManager::SetConfigsForTesting(&app_configs);
 
@@ -273,8 +273,8 @@ class PreinstalledWebAppMigrationBrowserTest
   bool IsUninstallSilentlySupported() {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
     DCHECK(IsWebAppsCrosapiEnabled());
-    return chromeos::LacrosService::Get()->GetInterfaceVersion(
-               crosapi::mojom::AppServiceProxy::Uuid_) >=
+    return chromeos::LacrosService::Get()
+               ->GetInterfaceVersion<crosapi::mojom::AppServiceProxy>() >=
            int{crosapi::mojom::AppServiceProxy::MethodMinVersions::
                    kUninstallSilentlyMinVersion};
 #else   // BUILDFLAG(IS_CHROMEOS_LACROS)

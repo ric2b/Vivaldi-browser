@@ -11,6 +11,7 @@
 #include "base/containers/stack_container.h"
 #include "base/functional/overloaded.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/process.h"
 #include "base/task/single_thread_task_runner.h"
@@ -171,7 +172,7 @@ PlatformHandle DecodeHandle(HandleData data,
   const HANDLE handle = DataToHandle(data);
   if (handle_owner == HandleOwner::kRecipient) {
     if (from_transport.destination_type() != Transport::kBroker &&
-        !from_transport.is_peer_trusted()) {
+        !from_transport.is_peer_trusted() && !remote_process.is_current()) {
       // Do not trust non-broker endpoints to send handles which already belong
       // to us, unless the transport is explicitly marked as trustworthy (e.g.
       // is connected to a known elevated process.)
@@ -256,6 +257,11 @@ Transport::GetIOTaskRunner() {
   return GetIOTaskRunnerStorage();
 }
 
+void Transport::OverrideIOTaskRunner(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+  io_task_runner_ = std::move(task_runner);
+}
+
 void Transport::ReportBadActivity(const std::string& error_message) {
   if (!error_handler_) {
     Invitation::InvokeDefaultProcessErrorHandler(error_message);
@@ -286,10 +292,10 @@ bool Transport::Activate(IpczHandle transport,
     activity_handler_ = activity_handler;
     self_reference_for_channel_ = base::WrapRefCounted(this);
     channel_ = Channel::CreateForIpczDriver(this, std::move(inactive_endpoint_),
-                                            GetIOTaskRunner());
+                                            io_task_runner_);
     channel_->Start();
     if (leak_channel_on_shutdown_) {
-      GetIOTaskRunner()->PostTask(
+      io_task_runner_->PostTask(
           FROM_HERE,
           base::BindOnce(
               [](scoped_refptr<Channel> channel) { channel->LeakHandle(); },
@@ -512,9 +518,10 @@ IpczResult Transport::DeserializeObject(
 
   auto object_handles = base::make_span(platform_handles.container());
   switch (header.type) {
-    case ObjectBase::kTransport:
+    case ObjectBase::kTransport: {
       object = Deserialize(*this, object_data, object_handles);
       break;
+    }
 
     case ObjectBase::kSharedBuffer:
       object = SharedBuffer::Deserialize(object_data, object_handles);
@@ -605,7 +612,7 @@ scoped_refptr<Transport> Transport::Deserialize(
   base::Process process;
   const auto& header = *reinterpret_cast<const TransportHeader*>(data.data());
 #if BUILDFLAG(IS_WIN)
-  if (handles.size() >= 2 && from_transport.remote_process().IsValid()) {
+  if (handles.size() >= 2) {
     process = base::Process(handles[1].ReleaseHandle());
   }
 #endif
@@ -626,6 +633,12 @@ scoped_refptr<Transport> Transport::Deserialize(
                           std::move(process));
   transport->set_is_peer_trusted(is_new_peer_trusted);
   transport->set_is_trusted_by_peer(header.is_trusted_by_peer);
+
+  // Inherit the IO task used by the receiving Transport. Deserialized
+  // transports are always adopted by the receiving node, and we want any given
+  // node to receive all of its transports' I/O on the same thread.
+  transport->OverrideIOTaskRunner(from_transport.io_task_runner_);
+
   return transport;
 }
 
@@ -670,9 +683,11 @@ void Transport::OnChannelDestroyed() {
 bool Transport::CanTransmitHandles() const {
 #if BUILDFLAG(IS_WIN)
   // On Windows, we can transmit handles only if at least one endpoint is a
-  // broker, or if we have a handle to the remote process.
+  // broker, or if we have a handle to the remote process, or if the both ends
+  // of the transport are held by the same process.
   return destination_type() == kBroker || source_type() == kBroker ||
-         (remote_process_.IsValid() && is_trusted_by_peer());
+         (remote_process_.IsValid() && is_trusted_by_peer()) ||
+         remote_process_.is_current();
 #else
   return true;
 #endif

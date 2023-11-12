@@ -21,7 +21,7 @@
 <translation id="1325473901257014816">Med Vivaldi kan du beholde alle dine faner i en browser og synkronisere dem på tværs af alle enheder.</translation>
 <translation id="132683371494960526">Tryk to gange for at skifte overordnet mappe.</translation>
 <translation id="1379470994139227452">Indstil Vivaldi som standardbrowser</translation>
-<translation id="1381484244248892686">Du kan bruge gemte adgangskoder på enhver enhed. De er gemt i Vivaldi Adgangskodeadministrator på <ph name="EMAIL" /></translation>
+<translation id="1381484244248892686">Du kan bruge gemte adgangskoder på enhver enhed. De er gemt i Vivaldi Password Manager på <ph name="EMAIL" /></translation>
 <translation id="1383876407941801731">Søg</translation>
 <translation id="1430638949087011281">Ingen blokering</translation>
 <translation id="1446108955355168157">For at kryptere og beskytte dine synkroniserede data (adgangskoder, bogmærker, noter mm.), opret venligst en krypteringsadgangskode. Denne adgangskode vil aldrig blive sendt til os.</translation>
@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">Efter indhold</translation>
 <translation id="2129408066358825297">Alder</translation>
 <translation id="2148384276939959392">Synkroniser valgte</translation>
+<translation id="21693288559538605">Oversigt over annonce- og trackerblokering</translation>
 <translation id="2195713384412091023">Dette vil fjerne alle synkroniseringsdata lagret på vores server, nulstille din krypteringsadgangskode og logge dig ud.</translation>
 <translation id="2243210264130642074">Note gemt</translation>
 <translation id="2272338747456392228">Kontoen er blevet låst</translation>
 <translation id="2273327106802955778">"Flere"-menu</translation>
 <translation id="2324160330092901720">En bekræftelseskode er blevet sendt til <ph name="EMAIL_ID" /></translation>
+<translation id="2336309953058658733">Tøm papirkurv</translation>
 <translation id="2359808026110333948">Fortsæt</translation>
 <translation id="2386793615875593361">1 valgt</translation>
 <translation id="2388224692799337242">Når du begynder at surfe, vil din historik blive vist her</translation>
@@ -83,7 +85,7 @@ blokeret</translation>
 <translation id="2874121295511641364">Synkroniser skrevne URL'er og åbne faner</translation>
 <translation id="2898963176829412617">Ny mappe…</translation>
 <translation id="2961573414320947355">Vil du åbne alle links i Vivaldi? Sørg for at indstille os som standard.</translation>
-<translation id="3006429105107822794">Du behøver ikke at huske denne adgangskode. Den vil blive gemt i Vivaldi Adgangskodeadministrator.</translation>
+<translation id="3006429105107822794">Du behøver ikke at huske denne adgangskode. Den vil blive gemt i Vivaldi Password Manager.</translation>
 <translation id="3018244467214569202">Græsk (<ph name="ORIGIN" />)</translation>
 <translation id="3039671569659952257">Slet mappe</translation>
 <translation id="3073196329485613487">Log ind på din konto</translation>
@@ -116,7 +118,8 @@ blokeret</translation>
 <translation id="3692650606013198282">Åben i privat fane</translation>
 <translation id="3699026013955941879">Koden er udløbet. Anmod venligst om en ny aktiveringskode.</translation>
 <translation id="3700829948786686853">Velkommen til Vivaldi</translation>
-<translation id="3766350025418769949">Du kan bruge adgangskoderne du har gemt i Vivaldi Adgangskodeadministrator i andre apps på din iPad.</translation>
+<translation id="3766350025418769949">Du kan bruge adgangskoderne du har gemt i Vivaldi Password Manager i andre apps på din iPad.</translation>
+<translation id="3845564230651302310">Anvender nye blokeringsindstillinger...</translation>
 <translation id="3858860766373142691">Navn</translation>
 <translation id="3866249974567520381">Beskrivelse</translation>
 <translation id="3872195896030547485">Indtast venligst en gyldig e-mailadresse.</translation>
@@ -152,7 +155,7 @@ blokeret</translation>
 <translation id="4493850495402472953">og</translation>
 <translation id="4497115807425788318">Placering</translation>
 <translation id="4507213865286211606">Forhåndsvisning af størrelse</translation>
-<translation id="4515084385531683114">Adgangskoder er gemt i Adgangskodeadministrator på denne enhed.</translation>
+<translation id="4515084385531683114">Adgangskoder er gemt i Password Manager på denne enhed.</translation>
 <translation id="4525945044609022380">Denne e-mail er allerede forbundet med en anden konto.</translation>
 <translation id="4526803704855831732">Private faner</translation>
 <translation id="4563480492836333884">E-mail ikke accepteret. Brug venligst et andet domæne.</translation>
@@ -212,7 +215,7 @@ blokeret</translation>
 <translation id="5859825823508296659">Rediger domæne</translation>
 <translation id="5867841422488265304">Søg, eller skriv webadresse</translation>
 <translation id="5871497086027727873">1 element flyttet</translation>
-<translation id="5898502570200301364">Du kan bruge adgangskoderne du har gemt i Vivaldi Adgangskodeadministrator i andre apps på din iPhone.</translation>
+<translation id="5898502570200301364">Du kan bruge adgangskoderne du har gemt i Vivaldi Password Manager i andre apps på din iPhone.</translation>
 <translation id="5900160494089383343">Dette brugernavn er ikke ledigt.</translation>
 <translation id="6005497458542935062">Flyt ud af mappe</translation>
 <translation id="6042308850641462728">Mere</translation>
@@ -225,6 +228,7 @@ blokeret</translation>
 <translation id="6406506848690869874">Synkronisering</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> valgt</translation>
 <translation id="6468130661190228905">Beklager, det ser ud til at du er nødt til at vente lidt, inden du kan slutte dig til vores fællesskab. Vi kræver, at vores medlemmer er mindst 16 år, før de kan tilslutte sig.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importer<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Backup-krypteringsnøgle</translation>
 <translation id="6527303717912515753">Del</translation>
 <translation id="6535988230515403205">Polsk (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@ blokeret</translation>
 <translation id="7461899062138731833">KILDER</translation>
 <translation id="750493650310597496">0 valgt</translation>
 <translation id="7525067979554623046">Opret</translation>
-<translation id="7541020606126512786">Opsummering af annonce- og trackerblokering</translation>
 <translation id="7573518470897278603">Vis mobilversion af side</translation>
 <translation id="7574321014880720413">Tilføj nyt domæne</translation>
 <translation id="7587132259180664054">E-mail succesfuldt sendt</translation>

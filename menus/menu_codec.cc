@@ -7,9 +7,9 @@
 #include <memory>
 #include <vector>
 
-#include "base/guid.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "menus/menu_model.h"
 #include "menus/menu_node.h"
@@ -27,7 +27,7 @@ bool MenuCodec::GetVersion(std::string* version, const base::Value& value) {
 
   for (const auto& menu : value.GetList()) {
     if (menu.is_dict()) {
-      const std::string* entry = menu.FindStringPath("version");
+      const std::string* entry = menu.GetDict().FindString("version");
       if (entry) {
         *version = *entry;
         return true;
@@ -48,9 +48,10 @@ bool MenuCodec::Decode(Menu_Node* root,
   }
   for (const auto& menu : value.GetList()) {
     if (menu.is_dict()) {
-      const std::string* type = menu.FindStringPath("type");
-      const std::string* guid = menu.FindStringPath("guid");
-      bool guid_valid = guid && !guid->empty() && base::IsValidGUID(*guid);
+      const std::string* type = menu.GetDict().FindString("type");
+      const std::string* guid = menu.GetDict().FindString("guid");
+      bool guid_valid = guid && !guid->empty() &&
+          base::Uuid::ParseCaseInsensitive(*guid).is_valid();
       if (guid_valid) {
         std::map<std::string, bool>::iterator it = guids_.find(*guid);
         if (it != guids_.end()) {
@@ -65,10 +66,10 @@ bool MenuCodec::Decode(Menu_Node* root,
       }
 
       if (guid_valid && type && *type == "menu") {
-        const std::string* action = menu.FindStringPath("action");
-        const std::string* role = menu.FindStringPath("role");
+        const std::string* action = menu.GetDict().FindString("action");
+        const std::string* role = menu.GetDict().FindString("role");
         const absl::optional<bool> showShortcut =
-            menu.FindBoolPath("showshortcut");
+            menu.GetDict().FindBool("showshortcut");
         if (action && role) {
           std::unique_ptr<Menu_Node> node =
               std::make_unique<Menu_Node>(*guid, Menu_Node::GetNewId());
@@ -79,7 +80,7 @@ bool MenuCodec::Decode(Menu_Node* root,
           // We add the menu even when there is no children added, but not
           // if parsing failed.
           bool parsing_ok = true;
-          const base::Value* children = menu.FindPath("children");
+          const base::Value* children = menu.GetDict().Find("children");
           if (children && children->is_list()) {
             parsing_ok = DecodeNode(node.get(), *children, is_bundle);
           }
@@ -95,11 +96,11 @@ bool MenuCodec::Decode(Menu_Node* root,
           }
         }
       } else if (type && *type == "control") {
-        const std::string* format = menu.FindStringPath("format");
+        const std::string* format = menu.GetDict().FindString("format");
         const std::string* version = force_version.empty()
-                                         ? menu.FindStringPath("version")
+                                         ? menu.GetDict().FindString("version")
                                          : &force_version;
-        const base::Value* deleted_list = menu.FindPath("deleted");
+        const base::Value* deleted_list = menu.GetDict().Find("deleted");
         if (format) {
           control->format = *format;
         }
@@ -118,7 +119,7 @@ bool MenuCodec::Decode(Menu_Node* root,
           if (is_bundle) {
             LOG(ERROR) << "Menu Codec: Developer - Missing in bundled file, "
                           "add: "
-                       << base::GenerateGUID();
+                       << base::Uuid::GenerateRandomV4();
           } else {
             LOG(ERROR) << "Menu Codec: Developer - Missing in profile file, "
                           "remove that file.";
@@ -150,13 +151,14 @@ bool MenuCodec::DecodeNode(Menu_Node* parent,
       }
     }
   } else if (value.is_dict()) {
-    const std::string* type = value.FindStringPath("type");
-    const std::string* action = value.FindStringPath("action");
-    const std::string* title = value.FindStringPath("title");
-    const std::string* guid = value.FindStringPath("guid");
-    const std::string* parameter = value.FindStringPath("parameter");
-    const int origin = value.FindIntKey("origin").value_or(Menu_Node::BUNDLE);
-    bool guid_valid = guid && !guid->empty() && base::IsValidGUID(*guid);
+    const std::string* type = value.GetDict().FindString("type");
+    const std::string* action = value.GetDict().FindString("action");
+    const std::string* title = value.GetDict().FindString("title");
+    const std::string* guid = value.GetDict().FindString("guid");
+    const std::string* parameter = value.GetDict().FindString("parameter");
+    const int origin = value.GetDict().FindInt("origin").value_or(Menu_Node::BUNDLE);
+    bool guid_valid = guid && !guid->empty() &&
+      base::Uuid::ParseCaseInsensitive(*guid).is_valid();
     if (guid_valid) {
       std::map<std::string, bool>::iterator it = guids_.find(*guid);
       if (it != guids_.end()) {
@@ -178,7 +180,7 @@ bool MenuCodec::DecodeNode(Menu_Node* parent,
         if (is_bundle) {
           LOG(ERROR) << "Menu Codec: Developer - Missing in bundled file, "
                         "add: "
-                     << base::GenerateGUID();
+                     << base::Uuid::GenerateRandomV4();
         } else {
           LOG(ERROR) << "Menu Codec: Developer - Missing in profile file, "
                         "remove that file.";
@@ -218,7 +220,7 @@ bool MenuCodec::DecodeNode(Menu_Node* parent,
       } else if (*type == "checkbox") {
         node->SetType(Menu_Node::CHECKBOX);
       } else if (*type == "radio") {
-        const std::string* radio_group = value.FindStringPath("radiogroup");
+        const std::string* radio_group = value.GetDict().FindString("radiogroup");
         if (!radio_group) {
           LOG(ERROR) << "Menu Codec: Radio group missing for " << action;
           return false;
@@ -229,15 +231,15 @@ bool MenuCodec::DecodeNode(Menu_Node* parent,
         node->SetType(Menu_Node::SEPARATOR);
       } else if (*type == "folder") {
         node->SetType(Menu_Node::FOLDER);
-        const base::Value* children_of_folder = value.FindPath("children");
+        const base::Value* children_of_folder = value.GetDict().Find("children");
         if (children_of_folder) {
           if (!DecodeNode(node.get(), *children_of_folder, is_bundle)) {
             return false;
           }
         }
       } else if (*type == "container") {
-        const std::string* container_mode = value.FindStringPath("mode");
-        const std::string* edge = value.FindStringPath("edge");
+        const std::string* container_mode = value.GetDict().FindString("mode");
+        const std::string* edge = value.GetDict().FindString("edge");
         if (!container_mode) {
           LOG(ERROR) << "Menu Codec: Container mode missing for " << action;
           return false;
@@ -288,10 +290,10 @@ base::Value MenuCodec::Encode(Menu_Model* model) {
     for (const auto& deleted : control->deleted) {
       deleted_list.GetList().Append(deleted);
     }
-    dict.SetKey("type", base::Value("control"));
-    dict.SetKey("deleted", base::Value(std::move(deleted_list)));
-    dict.SetKey("format", base::Value(control->format));
-    dict.SetKey("version", base::Value(control->version));
+    dict.GetDict().Set("type", base::Value("control"));
+    dict.GetDict().Set("deleted", base::Value(std::move(deleted_list)));
+    dict.GetDict().Set("format", base::Value(control->format));
+    dict.GetDict().Set("version", base::Value(control->version));
     list.GetList().Append(base::Value(std::move(dict)));
   }
 
@@ -308,48 +310,48 @@ base::Value MenuCodec::EncodeNode(Menu_Node* node) {
   }
 
   base::Value dict(base::Value::Type::DICT);
-  dict.SetKey("action", base::Value(node->action()));
-  dict.SetKey("guid", base::Value(node->guid()));
+  dict.GetDict().Set("action", base::Value(node->action()));
+  dict.GetDict().Set("guid", base::Value(node->guid()));
   if (node->hasCustomTitle()) {
-    dict.SetKey("title", base::Value(node->GetTitle()));
+    dict.GetDict().Set("title", base::Value(node->GetTitle()));
   }
   if (node->origin() != Menu_Node::BUNDLE) {
-    dict.SetKey("origin", base::Value(node->origin()));
+    dict.GetDict().Set("origin", base::Value(node->origin()));
   }
   bool is_folder = false;
   switch (node->type()) {
     case Menu_Node::MENU:
-      dict.SetKey("type", base::Value("menu"));
-      dict.SetKey("role", base::Value(node->role()));
+      dict.GetDict().Set("type", base::Value("menu"));
+      dict.GetDict().Set("role", base::Value(node->role()));
       if (node->showShortcut().has_value()) {
-        dict.SetKey("showshortcut", base::Value(*node->showShortcut()));
+        dict.GetDict().Set("showshortcut", base::Value(*node->showShortcut()));
       }
       is_folder = true;
       break;
     case Menu_Node::FOLDER:
-      dict.SetKey("type", base::Value("folder"));
+      dict.GetDict().Set("type", base::Value("folder"));
       is_folder = true;
       break;
     case Menu_Node::COMMAND:
-      dict.SetKey("type", base::Value("command"));
+      dict.GetDict().Set("type", base::Value("command"));
       if (node->parameter().length() > 0) {
-        dict.SetKey("parameter", base::Value(node->parameter()));
+        dict.GetDict().Set("parameter", base::Value(node->parameter()));
       }
       break;
     case Menu_Node::CHECKBOX:
-      dict.SetKey("type", base::Value("checkbox"));
+      dict.GetDict().Set("type", base::Value("checkbox"));
       break;
     case Menu_Node::RADIO:
-      dict.SetKey("type", base::Value("radio"));
-      dict.SetKey("radiogroup", base::Value(node->radioGroup()));
+      dict.GetDict().Set("type", base::Value("radio"));
+      dict.GetDict().Set("radiogroup", base::Value(node->radioGroup()));
       break;
     case Menu_Node::SEPARATOR:
-      dict.SetKey("type", base::Value("separator"));
+      dict.GetDict().Set("type", base::Value("separator"));
       break;
     case Menu_Node::CONTAINER:
-      dict.SetKey("type", base::Value("container"));
-      dict.SetKey("mode", base::Value(node->containerMode()));
-      dict.SetKey("edge", base::Value(node->containerEdge()));
+      dict.GetDict().Set("type", base::Value("container"));
+      dict.GetDict().Set("mode", base::Value(node->containerMode()));
+      dict.GetDict().Set("edge", base::Value(node->containerEdge()));
       break;
     default:
       NOTREACHED();
@@ -361,7 +363,7 @@ base::Value MenuCodec::EncodeNode(Menu_Node* node) {
     for (const auto& child : node->children()) {
       list.GetList().Append(EncodeNode(child.get()));
     }
-    dict.SetKey("children", base::Value(std::move(list)));
+    dict.GetDict().Set("children", base::Value(std::move(list)));
   }
   return dict;
 }

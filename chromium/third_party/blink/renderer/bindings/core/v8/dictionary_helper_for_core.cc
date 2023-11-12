@@ -182,20 +182,6 @@ bool DictionaryHelper::Get(const Dictionary& dictionary,
 template <>
 bool DictionaryHelper::Get(const Dictionary& dictionary,
                            const StringView& key,
-                           Member<DOMWindow>& value) {
-  v8::Local<v8::Value> v8_value;
-  if (!dictionary.Get(key, v8_value))
-    return false;
-
-  // We need to handle a DOMWindow specially, because a DOMWindow wrapper
-  // exists on a prototype chain of v8Value.
-  value = ToDOMWindow(dictionary.GetIsolate(), v8_value);
-  return true;
-}
-
-template <>
-bool DictionaryHelper::Get(const Dictionary& dictionary,
-                           const StringView& key,
                            Member<TrackBase>& value) {
   v8::Local<v8::Value> v8_value;
   if (!dictionary.Get(key, v8_value))
@@ -203,7 +189,7 @@ bool DictionaryHelper::Get(const Dictionary& dictionary,
 
   // FIXME: this will need to be changed so it can also return an AudioTrack
   // or a VideoTrack once we add them.
-  value = V8TextTrack::ToImplWithTypeCheck(dictionary.GetIsolate(), v8_value);
+  value = V8TextTrack::ToWrappable(dictionary.GetIsolate(), v8_value);
   return true;
 }
 

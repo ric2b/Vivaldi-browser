@@ -13,6 +13,7 @@
 #include "base/no_destructor.h"
 #include "base/process/process_handle.h"
 #include "base/strings/strcat.h"
+#include "base/system/sys_info.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/trace_event.h"
@@ -31,10 +32,6 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/build_info.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "base/system/sys_info.h"
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -114,7 +111,9 @@ GpuHostImpl::GpuHostImpl(Delegate* delegate,
                          InitParams params)
     : delegate_(delegate),
       viz_main_(std::move(viz_main)),
-      params_(std::move(params)) {
+      params_(std::move(params)),
+      shared_bitmap_to_shared_image_flag_(
+          base::FeatureList::IsEnabled(features::kSharedBitmapToSharedImage)) {
   // Create a special GPU info collection service if the GPU process is used for
   // info collection only.
 #if BUILDFLAG(IS_WIN)
@@ -240,8 +239,11 @@ void GpuHostImpl::EstablishGpuChannel(int client_id,
   shutdown_timeout_.Stop();
 
   // If GPU features are already blocklisted, no need to establish the channel.
+  bool gpu_channel_allowed = shared_bitmap_to_shared_image_flag_
+                                 ? true
+                                 : delegate_->GpuAccessAllowed();
   // FEATURE_FORCE_ACCESS_TO_GPU
-  if (!(force_allow_access_to_gpu_ || delegate_->GpuAccessAllowed())) {
+  if (!(force_allow_access_to_gpu_ || gpu_channel_allowed)) {
     DVLOG(1) << "GPU access blocked, refusing to open a GPU channel.";
     std::move(callback).Run(mojo::ScopedMessagePipeHandle(), gpu::GPUInfo(),
                             gpu::GpuFeatureInfo(),
@@ -332,7 +334,7 @@ void GpuHostImpl::CloseChannel(int client_id) {
 }
 
 #if BUILDFLAG(USE_VIZ_DEBUGGER)
-void GpuHostImpl::FilterVisualDebugStream(base::Value json) {
+void GpuHostImpl::FilterVisualDebugStream(base::Value::Dict json) {
   viz_main_->FilterDebugStream(std::move(json));
 }
 
@@ -417,7 +419,8 @@ std::string GpuHostImpl::GetShaderPrefixKey() {
 
     shader_prefix_key_ = params_.product + "-" + info.gl_vendor + "-" +
                          info.gl_renderer + "-" + active_gpu.driver_version +
-                         "-" + active_gpu.driver_vendor;
+                         "-" + active_gpu.driver_vendor + "-" +
+                         base::SysInfo::ProcessCPUArchitecture();
 
 #if BUILDFLAG(IS_ANDROID)
     std::string build_fp =
@@ -485,9 +488,12 @@ void GpuHostImpl::OnChannelEstablished(
 
   // Currently if any of the GPU features are blocklisted, we don't establish a
   // GPU channel.
+  bool gpu_channel_allowed = shared_bitmap_to_shared_image_flag_
+                                 ? true
+                                 : delegate_->GpuAccessAllowed();
   // FEATURE_FORCE_ACCESS_TO_GPU
   if (channel_handle.is_valid() &&
-    !(force_allow_access_to_gpu_ || delegate_->GpuAccessAllowed())) {
+    !(force_allow_access_to_gpu_ || gpu_channel_allowed)) {
     gpu_service_remote_->CloseChannel(client_id);
     std::move(callback).Run(mojo::ScopedMessagePipeHandle(), gpu::GPUInfo(),
                             gpu::GpuFeatureInfo(),
@@ -530,6 +536,8 @@ void GpuHostImpl::DidInitialize(
                               gpu::kDisplayCompositorGpuDiskCacheHandle);
     SetChannelDiskCacheHandle(gpu::kGrShaderCacheClientId,
                               gpu::kGrShaderGpuDiskCacheHandle);
+    SetChannelDiskCacheHandle(gpu::kGraphiteDawnClientId,
+                              gpu::kGraphiteDawnGpuDiskCacheHandle);
   }
 }
 

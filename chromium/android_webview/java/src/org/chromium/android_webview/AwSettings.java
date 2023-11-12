@@ -168,6 +168,9 @@ public class AwSettings {
     private boolean mBuiltInZoomControls;
     private boolean mDisplayZoomControls = true;
 
+    // Cache default user agent string obtained through JNI, since it will not change during the
+    // process lifetime. This saves a JNI call when creating new AwSettings objects after the first
+    // one in the process, and when client code asks for the default UA.
     static class LazyDefaultUserAgent{
         // Lazy Holder pattern
         private static final String sInstance = AwSettingsJni.get().getDefaultUserAgent();
@@ -311,7 +314,7 @@ public class AwSettings {
             mAllowFileUrlAccess =
                     ContextUtils.getApplicationContext().getApplicationInfo().targetSdkVersion
                     < Build.VERSION_CODES.R;
-            if (AwFeatureList.isEnabled(
+            if (AwFeatureMap.isEnabled(
                         AwFeatures.WEBVIEW_X_REQUESTED_WITH_HEADER_MANIFEST_ALLOW_LIST)) {
                 mRequestedWithHeaderAllowedOriginRules =
                         ManifestMetadataUtil.getXRequestedWithAllowList();
@@ -512,7 +515,7 @@ public class AwSettings {
      * See {@link android.webkit.WebSettings#setNeedInitialFocus}.
      */
     public void setShouldFocusFirstNode(boolean flag) {
-        if (TRACE) Log.i(TAG, "setNeedInitialFocusNode=" + flag);
+        if (TRACE) Log.i(TAG, "setNeedInitialFocus=" + flag);
         synchronized (mAwSettingsLock) {
             mShouldFocusFirstNode = flag;
         }
@@ -1134,10 +1137,10 @@ public class AwSettings {
     }
 
     /**
-     * See {@link android.webkit.WebSettings#setImagesEnabled}.
+     * See {@link android.webkit.WebSettings#setBlockNetworkImage}.
      */
     public void setImagesEnabled(boolean flag) {
-        if (TRACE) Log.i(TAG, "setBlockNetworkImage=" + flag);
+        if (TRACE) Log.i(TAG, "setBlockNetworkImage=" + !flag);
         synchronized (mAwSettingsLock) {
             if (mImagesEnabled != flag) {
                 mImagesEnabled = flag;
@@ -1147,7 +1150,7 @@ public class AwSettings {
     }
 
     /**
-     * See {@link android.webkit.WebSettings#getImagesEnabled}.
+     * See {@link android.webkit.WebSettings#getBlockNetworkImage}.
      */
     public boolean getImagesEnabled() {
         synchronized (mAwSettingsLock) {
@@ -1842,7 +1845,7 @@ public class AwSettings {
 
     @CalledByNative
     private boolean getAllowMixedContentAutoupgradesLocked() {
-        if (AwFeatureList.isEnabled(AwFeatures.WEBVIEW_MIXED_CONTENT_AUTOUPGRADES)) {
+        if (AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_MIXED_CONTENT_AUTOUPGRADES)) {
             // We only allow mixed content autoupgrades (upgrading HTTP subresources to HTTPS in
             // HTTPS sites) when the mixed content mode is set to MIXED_CONTENT_COMPATIBILITY,
             // which keeps it in line with the behavior in Chrome. With
@@ -2012,22 +2015,6 @@ public class AwSettings {
         }
     }
 
-    /**
-     * Enable sensitive web content restrictions per WebView.
-     */
-    public void enableRestrictSensitiveWebContent() {
-        synchronized (mAwSettingsLock) {
-            mEventHandler.runOnUiThreadBlockingAndLocked(() -> {
-                assert Thread.holdsLock(mAwSettingsLock);
-                AwOriginVerificationScheduler.initAndScheduleAll(null);
-                if (mNativeAwSettings != 0) {
-                    AwSettingsJni.get().setRestrictSensitiveWebContentEnabled(
-                            mNativeAwSettings, AwSettings.this, true);
-                }
-            });
-        }
-    }
-
     @NativeMethods
     interface Natives {
         long init(AwSettings caller, WebContents webContents);
@@ -2053,7 +2040,5 @@ public class AwSettings {
         boolean getEnterpriseAuthenticationAppLinkPolicyEnabled(
                 long nativeAwSettings, AwSettings caller);
         String[] updateXRequestedWithAllowListOriginMatcher(long nativeAwSettings, String[] rules);
-        void setRestrictSensitiveWebContentEnabled(
-                long nativeAwSettings, AwSettings caller, boolean enabled);
     }
 }

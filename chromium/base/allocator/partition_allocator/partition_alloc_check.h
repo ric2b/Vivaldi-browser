@@ -30,18 +30,18 @@
 // - Otherwise, crash immediately. This provides worse error messages though.
 #if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 // For official build discard log strings to reduce binary bloat.
-#if !CHECK_WILL_STREAM()
+#if !PA_BASE_CHECK_WILL_STREAM()
 // See base/check.h for implementation details.
 #define PA_CHECK(condition)                        \
   PA_UNLIKELY(!(condition)) ? PA_IMMEDIATE_CRASH() \
                             : PA_EAT_CHECK_STREAM_PARAMS()
 #else
-// PartitionAlloc uses async-signal-safe RawCheck() for error reporting.
+// PartitionAlloc uses async-signal-safe RawCheckFailure() for error reporting.
 // Async-signal-safe functions are guaranteed to not allocate as otherwise they
 // could operate with inconsistent allocator state.
 #define PA_CHECK(condition)                                                \
   PA_UNLIKELY(!(condition))                                                \
-  ? ::partition_alloc::internal::logging::RawCheck(                        \
+  ? ::partition_alloc::internal::logging::RawCheckFailure(                 \
         __FILE__ "(" PA_STRINGIFY(__LINE__) ") Check failed: " #condition) \
   : PA_EAT_CHECK_STREAM_PARAMS()
 #endif  // !CHECK_WILL_STREAM()

@@ -15,7 +15,7 @@ source_set("vivaldi_account") {
     "//components/keyed_service/core",
     "//components/os_crypt/sync",
     "//components/prefs",
-    "//components/sync/driver",
+    "//components/sync/service",
     "//components/password_manager/core/browser",
     "//net",
     "//net/traffic_annotation",

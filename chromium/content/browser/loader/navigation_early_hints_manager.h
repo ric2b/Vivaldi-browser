@@ -8,6 +8,7 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/callback_forward.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "content/common/content_export.h"
@@ -194,8 +195,8 @@ class CONTENT_EXPORT NavigationEarlyHintsManager {
   base::OnceCallback<void(PreloadedResources)>
       preloads_completion_callback_for_testing_;
 
-  raw_ptr<network::mojom::NetworkContext> network_context_for_testing_ =
-      nullptr;
+  raw_ptr<network::mojom::NetworkContext, DanglingUntriaged>
+      network_context_for_testing_ = nullptr;
 };
 
 }  // namespace content

@@ -242,20 +242,20 @@ TEST(AttributionReportTest, PopulateAdditionalHeaders) {
       "foo",
   };
 
-  for (const auto& attestation_token : kTestCases) {
+  for (const auto& verification_token : kTestCases) {
     AttributionReport report = ReportBuilder(AttributionInfoBuilder().Build(),
                                              SourceBuilder().BuildStored())
-                                   .SetAttestationToken(attestation_token)
+                                   .SetVerificationToken(verification_token)
                                    .BuildAggregatableAttribution();
 
     net::HttpRequestHeaders headers;
     report.PopulateAdditionalHeaders(headers);
 
-    if (attestation_token.has_value()) {
+    if (verification_token.has_value()) {
       std::string header;
       headers.GetHeader("Sec-Attribution-Reporting-Private-State-Token",
                         &header);
-      EXPECT_EQ(header, *attestation_token);
+      EXPECT_EQ(header, *verification_token);
     } else {
       EXPECT_TRUE(headers.IsEmpty());
     }
@@ -264,7 +264,6 @@ TEST(AttributionReportTest, PopulateAdditionalHeaders) {
 
 TEST(AttributionReportTest, NullAggregatableReport) {
   base::Value::Dict expected = base::test::ParseJsonDict(R"json({
-    "aggregation_coordinator_identifier": "aws-cloud",
     "aggregation_service_payloads": [{
       "key_id": "key",
       "payload": "ABCD1234"
@@ -281,15 +280,15 @@ TEST(AttributionReportTest, NullAggregatableReport) {
 
   auto& data =
       absl::get<AttributionReport::NullAggregatableData>(report.data());
-  data.common_data.assembled_report = AggregatableReport(
-      {AggregatableReport::AggregationServicePayload(
-          /*payload=*/kABCD1234AsBytes,
-          /*key_id=*/"key",
-          /*debug_cleartext_payload=*/absl::nullopt)},
-      "example_shared_info",
-      /*debug_key=*/absl::nullopt,
-      /*additional_fields=*/{},
-      ::aggregation_service::mojom::AggregationCoordinator::kDefault);
+  data.common_data.assembled_report =
+      AggregatableReport({AggregatableReport::AggregationServicePayload(
+                             /*payload=*/kABCD1234AsBytes,
+                             /*key_id=*/"key",
+                             /*debug_cleartext_payload=*/absl::nullopt)},
+                         "example_shared_info",
+                         /*debug_key=*/absl::nullopt,
+                         /*additional_fields=*/{},
+                         /*aggregation_coordinator_origin=*/absl::nullopt);
 
   EXPECT_THAT(report.ReportBody(), IsJson(expected));
 }

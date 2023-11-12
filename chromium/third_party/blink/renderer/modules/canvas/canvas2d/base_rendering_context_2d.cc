@@ -8,9 +8,11 @@
 #include <cmath>
 #include <memory>
 
+#include "base/check_deref.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/numerics/checked_math.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
@@ -22,17 +24,21 @@
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
+#include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/canvas/text_metrics.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/paint/filter_effect_builder.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_color_cache.h"
-#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_filter.h"
+#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_filter_operation_resolver.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_pattern.h"
+#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d_state.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/path_2d.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/v8_canvas_style.h"
 #include "third_party/blink/renderer/modules/webcodecs/video_frame.h"
 #include "third_party/blink/renderer/platform/bindings/string_resource.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
+#include "third_party/blink/renderer/platform/graphics/filters/paint_filter_builder.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/stroke_data.h"
@@ -129,8 +135,6 @@ void BaseRenderingContext2D::save() {
 
   ValidateStateStack();
 
-  DCHECK_GE(state_stack_.size(), 1u);
-
   // GetOrCreatePaintCanvas() can call RestoreMatrixClipStack which syncs
   // canvas to state_stack_. Get the canvas before adjusting state_stack_ to
   // ensure canvas is synced prior to adjusting state_stack_.
@@ -148,7 +152,7 @@ void BaseRenderingContext2D::save() {
   ValidateStateStack();
 }
 
-void BaseRenderingContext2D::restore() {
+void BaseRenderingContext2D::restore(ExceptionState& exception_state) {
   if (UNLIKELY(isContextLost())) {
     return;
   }
@@ -158,33 +162,25 @@ void BaseRenderingContext2D::restore() {
   }
   ValidateStateStack();
   if (state_stack_.size() <= 1)
+    // State stack is empty. Extra `restore()` are silently ignored.
     return;
 
-  DCHECK_GT(state_stack_.size(), static_cast<WTF::wtf_size_t>(layer_count_));
-
   // Verify that the top of the stack was pushed with Save.
-  if (RuntimeEnabledFeatures::Canvas2dLayersEnabled() &&
-      state_stack_.back()->GetSaveType() !=
-          CanvasRenderingContext2DState::SaveType::kSaveRestore) {
+  if (GetState().GetSaveType() !=
+      CanvasRenderingContext2DState::SaveType::kSaveRestore) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "Called `restore()` with no matching `save()` inside layer.");
     return;
   }
 
-  // Verify that the current state's transform is invertible.
-  if (IsTransformInvertible())
-    GetModifiablePath().Transform(GetState().GetTransform());
-
   PopAndRestore();
+  ValidateStateStack();
 }
 
-void BaseRenderingContext2D::pushLayerStack(
-    CanvasRenderingContext2DState::SaveType save_type) {
-  state_stack_.push_back(MakeGarbageCollected<CanvasRenderingContext2DState>(
-      GetState(), CanvasRenderingContext2DState::kDontCopyClipList, save_type));
-  max_state_stack_depth_ =
-      std::max(state_stack_.size(), max_state_stack_depth_);
-}
-
-void BaseRenderingContext2D::beginLayer() {
+void BaseRenderingContext2D::beginLayer(ScriptState* script_state,
+                                        const V8CanvasFilterInput* filter_init,
+                                        ExceptionState& exception_state) {
   if (UNLIKELY(isContextLost())) {
     return;
   }
@@ -193,8 +189,6 @@ void BaseRenderingContext2D::beginLayer() {
 
   ValidateStateStack();
 
-  DCHECK_GE(state_stack_.size(), 1u);
-
   // GetOrCreatePaintCanvas() can call RestoreMatrixClipStack which syncs
   // canvas to state_stack_. Get the canvas before adjusting state_stack_ to
   // ensure canvas is synced prior to adjusting state_stack_.
@@ -202,49 +196,34 @@ void BaseRenderingContext2D::beginLayer() {
   if (!canvas)
     return;
 
-  layer_count_++;
+  ++layer_count_;
 
-  using SaveType = CanvasRenderingContext2DState::SaveType;
-  const int initial_save_count = canvas->getSaveCount();
-  SaveType save_type = SaveType::kBeginEndLayer;
-  bool composite_op_handled = false;
-
-  // For alpha and shadows (which include filters because they can also produce
-  // shadows), we must use two nested layers. The inner one applies the alpha
-  // and the outer one applies the shadow/filter. This is needed to to get a
-  // transparent shadow foreground, as the alpha would otherwise be applied to
-  // the result of foreground+shadow.
-  if (GetState().ShouldDrawShadows() || StateHasFilter()) {
-    pushLayerStack(save_type);
-    save_type = SaveType::kInternalLayer;
-
-    cc::PaintFlags flags;
-    flags.setBlendMode(GetState().GlobalComposite());
-    composite_op_handled = true;
-
-    if (GetState().ShouldDrawShadows() && StateHasFilter()) {
-      flags.setImageFilter(sk_make_sp<ComposePaintFilter>(
-          GetState().ShadowAndForegroundImageFilter(), StateGetFilter()));
-    } else if (GetState().ShouldDrawShadows()) {
-      flags.setImageFilter(GetState().ShadowAndForegroundImageFilter());
-    } else if (StateHasFilter()) {
-      flags.setImageFilter(StateGetFilter());
-    }
-    canvas->saveLayer(flags);
+  CanvasRenderingContext2DState& state = GetState();
+  if (filter_init != nullptr) {
+    FilterEffectBuilder filter_effect_builder(
+        gfx::RectF(Width(), Height()),
+        1.0f);  // Deliberately ignore zoom on the canvas element.
+    // Save the layer's filter in the parent state, along with all the other
+    // render states impacting the layer. Technically, this is only required so
+    // that we could restore the `cc::PaintCanvas` matrix stack (in
+    // `RestoreMatrixClipStack`) if a frame is rendered while the layer is
+    // opened. The filter can be discarded from the parent state as soon as the
+    // layer is closed.
+    state.SetLayerFilter(paint_filter_builder::Build(
+        filter_effect_builder.BuildFilterEffect(
+            CanvasFilterOperationResolver::CreateFilterOperations(
+                CHECK_DEREF(filter_init),
+                CHECK_DEREF(ExecutionContext::From(script_state)),
+                exception_state),
+            !OriginClean()),
+        kInterpolationSpaceSRGB));
   }
 
-  if (GetState().GlobalComposite() != SkBlendMode::kSrcOver &&
-      !composite_op_handled) {
-    pushLayerStack(save_type);
-    cc::PaintFlags flags;
-    flags.setBlendMode(GetState().GlobalComposite());
-    flags.setAlphaf(static_cast<float>(globalAlpha()));
-    canvas->saveLayer(flags);
-  } else if (globalAlpha() != 1 ||
-             initial_save_count == canvas->getSaveCount()) {
-    pushLayerStack(save_type);
-    canvas->saveLayerAlphaf(globalAlpha());
-  }
+  state_stack_.push_back(MakeGarbageCollected<CanvasRenderingContext2DState>(
+      state, CanvasRenderingContext2DState::kDontCopyClipList,
+      SaveLayerForState(state, *canvas)));
+  max_state_stack_depth_ =
+      std::max(state_stack_.size(), max_state_stack_depth_);
 
   ValidateStateStack();
 
@@ -256,12 +235,53 @@ void BaseRenderingContext2D::beginLayer() {
   DCHECK(!GetState().ShouldDrawShadows());
   setGlobalAlpha(1.0);
   setGlobalCompositeOperation("source-over");
-  V8UnionCanvasFilterOrString* filter =
-      MakeGarbageCollected<V8UnionCanvasFilterOrString>("none");
-  setFilter(GetTopExecutionContext(), filter);
+  setFilter(script_state,
+            MakeGarbageCollected<V8UnionCanvasFilterOrString>("none"));
 }
 
-void BaseRenderingContext2D::endLayer() {
+CanvasRenderingContext2DState::SaveType
+BaseRenderingContext2D::SaveLayerForState(
+    const CanvasRenderingContext2DState& state,
+    cc::PaintCanvas& canvas) const {
+  const int initial_save_count = canvas.getSaveCount();
+  bool needs_compositing = state.GlobalComposite() != SkBlendMode::kSrcOver;
+
+  // Global states must be applied on the result of the layer's filter.
+  // For alpha + shadows or compositing, we must use two nested layers. The
+  // inner one applies the alpha and the outer one applies the shadow and/or
+  // compositing. This is needed to to get a transparent foreground, as the
+  // alpha would otherwise be applied to the result of foreground+background.
+  if (state.ShouldDrawShadows() || BlendModeRequiresCompositedDraw(state)) {
+    cc::PaintFlags flags;
+    flags.setBlendMode(state.GlobalComposite());
+    needs_compositing = false;
+    if (state.ShouldDrawShadows()) {
+      flags.setImageFilter(state.ShadowAndForegroundImageFilter());
+    }
+    canvas.saveLayer(flags);
+  }
+
+  if (state.HasLayerFilter() || needs_compositing) {
+    cc::PaintFlags flags;
+    flags.setAlphaf(static_cast<float>(state.GlobalAlpha()));
+    flags.setImageFilter(state.GetLayerFilter());
+    if (needs_compositing) {
+      flags.setBlendMode(state.GlobalComposite());
+    }
+    canvas.saveLayer(flags);
+  } else if (state.GlobalAlpha() != 1 ||
+             initial_save_count == canvas.getSaveCount()) {
+    canvas.saveLayerAlphaf(state.GlobalAlpha());
+  }
+
+  const int save_diff = canvas.getSaveCount() - initial_save_count;
+  CHECK(save_diff == 1 || save_diff == 2);
+  using SaveType = CanvasRenderingContext2DState::SaveType;
+  return save_diff == 2 ? SaveType::kBeginEndLayerTwoSaves
+                        : SaveType::kBeginEndLayerOneSave;
+}
+
+void BaseRenderingContext2D::endLayer(ExceptionState& exception_state) {
   if (UNLIKELY(isContextLost())) {
     return;
   }
@@ -269,97 +289,129 @@ void BaseRenderingContext2D::endLayer() {
   identifiability_study_helper_.set_encountered_skipped_ops();
 
   ValidateStateStack();
-  if (state_stack_.size() <= 1 || layer_count_ <= 0)
+  if (state_stack_.size() <= 1 || layer_count_ <= 0) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "Called `endLayer()` with no matching `beginLayer()`.");
     return;
-
-  DCHECK_GT(state_stack_.size(), static_cast<WTF::wtf_size_t>(layer_count_));
-
-  // Verify that the current state's transform is invertible.
-  if (IsTransformInvertible())
-    GetModifiablePath().Transform(GetState().GetTransform());
-
-  // All saves performed since the last beginLayer are no-ops.
-  while (state_stack_.back() &&
-         state_stack_.back()->GetSaveType() ==
-             CanvasRenderingContext2DState::SaveType::kSaveRestore) {
-    PopAndRestore();
   }
 
-  // If we do an endLayer, we have to be sure that we did a beginLayer (that
-  // could have introduced an extra state).
-  DCHECK(state_stack_.back()->GetSaveType() ==
-             CanvasRenderingContext2DState::SaveType::kBeginEndLayer ||
-         state_stack_.back()->GetSaveType() ==
-             CanvasRenderingContext2DState::SaveType::kInternalLayer);
+  // Verify that the top of the stack was pushed with `beginLayer`.
+  if (!GetState().IsLayerSaveType()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "Called `endLayer()` with no matching `beginLayer()` inside parent "
+        "`save()`/`restore()` pair.");
+    return;
+  }
+
   PopAndRestore();
-  layer_count_--;
+
+  --layer_count_;
+  ValidateStateStack();
 }
 
 void BaseRenderingContext2D::PopAndRestore() {
-  if (state_stack_.size() <= 1) {
-    NOTREACHED();
-    return;
-  }
-
   cc::PaintCanvas* canvas = GetOrCreatePaintCanvas();
-
   if (!canvas)
     return;
 
   if (state_stack_.back()->GetSaveType() ==
-      CanvasRenderingContext2DState::SaveType::kInternalLayer) {
-    // If this is a ExtraState state, it means we have to restore twice, as we
-    // added an extra state while doing a beginLayer.
-    state_stack_.pop_back();
-    DCHECK(state_stack_.back());
-    state_stack_.back()->ClearResolvedFilter();
-
-    SetIsTransformInvertible(GetState().IsTransformInvertible());
-    if (IsTransformInvertible())
-      GetModifiablePath().Transform(GetState().GetTransform().Inverse());
-
-    DCHECK(state_stack_.back()->GetSaveType() ==
-           CanvasRenderingContext2DState::SaveType::kBeginEndLayer);
+      CanvasRenderingContext2DState::SaveType::kBeginEndLayerTwoSaves) {
     canvas->restore();
   }
 
+  if (IsTransformInvertible()) {
+    GetModifiablePath().Transform(GetState().GetTransform());
+  }
+
+  canvas->restore();
   state_stack_.pop_back();
-  state_stack_.back()->ClearResolvedFilter();
+  CanvasRenderingContext2DState& state = GetState();
+  state.ClearResolvedFilter();
+  // If we popped a layer, we can clear its filter as it's no longer needed.
+  state.SetLayerFilter(nullptr);
 
   SetIsTransformInvertible(GetState().IsTransformInvertible());
   if (IsTransformInvertible())
     GetModifiablePath().Transform(GetState().GetTransform().Inverse());
+}
 
-  canvas->restore();
+void BaseRenderingContext2D::ValidateStateStackImpl(
+    const cc::PaintCanvas* canvas) const {
+  if (canvas == nullptr) {
+    canvas = GetPaintCanvas();
+  }
 
-  ValidateStateStack();
+  DCHECK_GE(state_stack_.size(), 1u);
+  DCHECK_GT(state_stack_.size(), static_cast<WTF::wtf_size_t>(layer_count_));
+
+  using SaveType = CanvasRenderingContext2DState::SaveType;
+  DCHECK_EQ(state_stack_[0]->GetSaveType(), SaveType::kInitial);
+
+  int actual_layer_count = 0;
+  int extra_layer_saves = 0;
+  for (wtf_size_t i = 1; i < state_stack_.size(); ++i) {
+    if (RuntimeEnabledFeatures::Canvas2dLayersEnabled()) {
+      DCHECK_NE(state_stack_[i]->GetSaveType(), SaveType::kInitial);
+    } else {
+      DCHECK_EQ(state_stack_[i]->GetSaveType(), SaveType::kSaveRestore);
+    }
+
+    if (state_stack_[i]->IsLayerSaveType()) {
+      ++actual_layer_count;
+    }
+    if (state_stack_[i]->GetSaveType() == SaveType::kBeginEndLayerTwoSaves) {
+      ++extra_layer_saves;
+    }
+  }
+  DCHECK_EQ(layer_count_, actual_layer_count);
+
+  if (canvas) {
+    // The canvas should always have an initial save frame, to support
+    // resetting the top level matrix and clip.
+    DCHECK_GT(canvas->getSaveCount(), 1);
+
+    if (context_lost_mode_ == CanvasRenderingContext::kNotLostContext) {
+      DCHECK_EQ(static_cast<size_t>(canvas->getSaveCount()),
+                state_stack_.size() + extra_layer_saves + 1);
+    }
+  }
 }
 
 void BaseRenderingContext2D::RestoreMatrixClipStack(cc::PaintCanvas* c) const {
   if (!c)
     return;
-  HeapVector<Member<CanvasRenderingContext2DState>>::const_iterator curr_state;
-  DCHECK(state_stack_.begin() < state_stack_.end());
-  for (curr_state = state_stack_.begin(); curr_state < state_stack_.end();
-       curr_state++) {
-    c->setMatrix(SkM44());
-    if (curr_state->Get()) {
-      curr_state->Get()->PlaybackClips(c);
-      c->setMatrix(AffineTransformToSkM44(curr_state->Get()->GetTransform()));
+  CanvasRenderingContext2DState* prev_state = nullptr;
+  for (Member<CanvasRenderingContext2DState> curr_state : state_stack_) {
+    if (curr_state->IsLayerSaveType()) {
+      // Layers are rendered with the render states of their parent.
+      CanvasRenderingContext2DState::SaveType save_type =
+          SaveLayerForState(CHECK_DEREF(prev_state), *c);
+      CHECK_EQ(save_type, curr_state->GetSaveType());
+    } else {
+      c->save();
     }
-    c->save();
-  }
-  c->restore();
-  ValidateStateStackWithCanvas(c);
-}
 
-void BaseRenderingContext2D::UnwindStateStack() {
-  if (size_t stack_size = state_stack_.size()) {
-    if (cc::PaintCanvas* sk_canvas = GetPaintCanvas()) {
-      while (--stack_size)
-        sk_canvas->restore();
+    AffineTransform prev_transform =
+        (prev_state != nullptr ? prev_state->GetTransform()
+                               : AffineTransform());
+    if (curr_state->HasClip()) {
+      if (!prev_transform.IsIdentity()) {
+        c->setMatrix(SkM44());
+        prev_transform = AffineTransform();
+      }
+      curr_state->PlaybackClips(c);
     }
+
+    if (AffineTransform curr_transform = curr_state->GetTransform();
+        prev_transform != curr_transform) {
+      c->setMatrix(AffineTransformToSkM44(curr_transform));
+    }
+
+    prev_state = curr_state.Get();
   }
+  ValidateStateStack(c);
 }
 
 void BaseRenderingContext2D::ResetInternal() {
@@ -367,16 +419,16 @@ void BaseRenderingContext2D::ResetInternal() {
     identifiability_study_helper_.UpdateBuilder(CanvasOps::kReset);
   }
   ValidateStateStack();
-  UnwindStateStack();
   state_stack_.resize(1);
   state_stack_.front() = MakeGarbageCollected<CanvasRenderingContext2DState>();
+  layer_count_ = 0;
   SetIsTransformInvertible(true);
   Clear();
   if (cc::PaintCanvas* c = GetPaintCanvas()) {
     // The canvas should always have an initial/unbalanced save frame, which
     // we use to reset the top level matrix and clip here.
-    DCHECK_EQ(c->getSaveCount(), 2);
-    c->restore();
+    c->restoreToCount(1);
+    // Save once, to match the first entry in `state_stack_`.
     c->save();
     DCHECK(c->getLocalToDevice() == SkM44());
 #if DCHECK_IS_ON()
@@ -500,7 +552,7 @@ void BaseRenderingContext2D::setStrokeStyle(v8::Isolate* isolate,
       if (!ExtractColorFromV8ValueAndUpdateCache(v8_style, parsed_color)) {
         return;
       }
-      if (GetState().StrokeStyle()->IsEquivalentColor(parsed_color)) {
+      if (GetState().StrokeStyle().IsEquivalentColor(parsed_color)) {
         GetState().SetUnparsedStrokeColor(v8_style.string);
         return;
       }
@@ -560,7 +612,7 @@ void BaseRenderingContext2D::setFillStyle(v8::Isolate* isolate,
       if (!ExtractColorFromV8ValueAndUpdateCache(v8_style, parsed_color)) {
         return;
       }
-      if (GetState().FillStyle()->IsEquivalentColor(parsed_color)) {
+      if (GetState().FillStyle().IsEquivalentColor(parsed_color)) {
         GetState().SetUnparsedFillColor(v8_style.string);
         return;
       }
@@ -787,7 +839,7 @@ const V8UnionCanvasFilterOrString* BaseRenderingContext2D::filter() const {
 }
 
 void BaseRenderingContext2D::setFilter(
-    const ExecutionContext* execution_context,
+    ScriptState* script_state,
     const V8UnionCanvasFilterOrString* input) {
   if (!input)
     return;
@@ -812,12 +864,11 @@ void BaseRenderingContext2D::setFilter(
           filter_string == GetState().UnparsedCSSFilter()) {
         return;
       }
-      if (!execution_context)
-        return;
       const CSSValue* css_value = CSSParser::ParseSingleValue(
           CSSPropertyID::kFilter, filter_string,
           MakeGarbageCollected<CSSParserContext>(
-              kHTMLStandardMode, execution_context->GetSecureContextMode()));
+              kHTMLStandardMode,
+              ExecutionContext::From(script_state)->GetSecureContextMode()));
       if (!css_value || css_value->IsCSSWideKeyword())
         return;
       GetState().SetUnparsedCSSFilter(filter_string);
@@ -1040,8 +1091,10 @@ void BaseRenderingContext2D::DrawPathInternal(
     CanvasRenderingContext2DState::PaintType paint_type,
     SkPathFillType fill_type,
     UsePaintCache use_paint_cache) {
-  if (path.IsEmpty())
+  if (path.IsEmpty() ||
+      (path.BoundingRect().height() == 0 && path.BoundingRect().width() == 0)) {
     return;
+  }
 
   gfx::RectF bounds(path.BoundingRect());
   if (std::isnan(bounds.x()) || std::isnan(bounds.y()) ||
@@ -1052,6 +1105,11 @@ void BaseRenderingContext2D::DrawPathInternal(
     InflateStrokeRect(bounds);
 
   if (path.IsLine()) {
+    if (UNLIKELY(paint_type == CanvasRenderingContext2DState::kFillPaintType)) {
+      // Filling a line is a no-op.
+      // Also, SKCanvas::drawLine() ignores paint type and always strokes.
+      return;
+    }
     auto line = path.line();
     Draw<OverdrawOp::kNone>(
         [line](cc::PaintCanvas* c,
@@ -2081,7 +2139,8 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
     // putImageData: crbug.com/1112060.
     if (IsAccelerated() && !IsDesynchronized()) {
       read_count_++;
-      if (read_count_ >= kFallbackToCPUAfterReadbacks) {
+      if (read_count_ >= kFallbackToCPUAfterReadbacks ||
+          ShouldDisableAccelerationBecauseOfReadback()) {
         DisableAcceleration();
         base::UmaHistogramEnumeration("Blink.Canvas.GPUFallbackToCPU",
                                       GPUFallbackToCPUScenario::kGetImageData);

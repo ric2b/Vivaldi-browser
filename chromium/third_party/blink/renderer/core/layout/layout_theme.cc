@@ -216,9 +216,10 @@ ControlPart LayoutTheme::AdjustAppearanceWithElementType(
                                                            : auto_appearance;
 
     case kTextFieldPart:
-      if (IsA<HTMLInputElement>(*element) &&
-          To<HTMLInputElement>(*element).type() == input_type_names::kSearch)
+      if (const auto* input_element = DynamicTo<HTMLInputElement>(*element);
+          input_element && input_element->type() == input_type_names::kSearch) {
         return part;
+      }
       return auto_appearance;
   }
 
@@ -282,18 +283,6 @@ void LayoutTheme::AdjustStyle(const Element* element,
 }
 
 String LayoutTheme::ExtraDefaultStyleSheet() {
-  if (RuntimeEnabledFeatures::LayoutMediaChildPaintContainmentEnabled()) {
-    return R"CSS(
-audio::-webkit-media-controls,
-video::-webkit-media-controls {
-    contain: paint !important;
-}
-video::-webkit-media-text-track-container {
-    contain: paint !important;
-    position: relative !important;
-}
-)CSS";
-  }
   return g_empty_string;
 }
 
@@ -610,6 +599,14 @@ Color LayoutTheme::DefaultSystemColor(
   // https://www.w3.org/TR/css-color-4/#deprecated-system-colors.
 
   switch (css_value_id) {
+    case CSSValueID::kAccentcolor:
+      return RuntimeEnabledFeatures::CSSSystemAccentColorEnabled()
+                 ? GetAccentColorOrDefault(color_scheme)
+                 : Color();
+    case CSSValueID::kAccentcolortext:
+      return RuntimeEnabledFeatures::CSSSystemAccentColorEnabled()
+                 ? GetAccentColorText(color_scheme)
+                 : Color();
     case CSSValueID::kActivetext:
       return Color::FromRGBA32(0xFFFF0000);
     case CSSValueID::kButtonborder:
@@ -867,6 +864,24 @@ void LayoutTheme::UpdateForcedColorsState() {
   in_forced_colors_mode_ =
       WebThemeEngineHelper::GetNativeThemeEngine()->GetForcedColors() !=
       ForcedColors::kNone;
+}
+
+Color LayoutTheme::GetAccentColorOrDefault(
+    mojom::blink::ColorScheme color_scheme) const {
+  // This is from the kAccent color from NativeThemeBase::GetControlColor
+  const Color kDefaultAccentColor = Color(0x00, 0x75, 0xFF);
+  Color accent_color = GetSystemAccentColor(color_scheme);
+  return accent_color == Color() ? kDefaultAccentColor : accent_color;
+}
+
+Color LayoutTheme::GetAccentColorText(
+    mojom::blink::ColorScheme color_scheme) const {
+  Color accent_color = GetAccentColorOrDefault(color_scheme);
+  // This logic matches AccentColorText in Firefox. If the accent color to draw
+  // text on is dark, then use white. If it's light, then use dark.
+  return color_utils::GetRelativeLuminance4f(accent_color.toSkColor4f()) <= 128
+             ? Color::kWhite
+             : Color::kBlack;
 }
 
 }  // namespace blink

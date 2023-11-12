@@ -4,6 +4,7 @@
 
 #include "components/password_manager/core/browser/ui/credential_ui_entry.h"
 
+#include "base/strings/utf_string_conversions.h"
 #include "components/password_manager/core/browser/affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/form_parsing/form_parser.h"
 #include "components/password_manager/core/browser/import/csv_password.h"
@@ -117,6 +118,19 @@ CredentialUIEntry::CredentialUIEntry(const std::vector<PasswordForm>& forms) {
     if (form.IsUsingProfileStore())
       stored_in.insert(PasswordForm::Store::kProfileStore);
   }
+}
+
+CredentialUIEntry::CredentialUIEntry(const PasskeyCredential& passkey)
+    : passkey_credential_id(passkey.credential_id()),
+      username(base::UTF8ToUTF16(passkey.username())),
+      user_display_name(base::UTF8ToUTF16(passkey.display_name())) {
+  CHECK(!passkey.credential_id().empty());
+  CredentialFacet facet;
+  facet.url = RPIDToURL(passkey.rp_id());
+  facet.signon_realm =
+      FacetURI::FromPotentiallyInvalidSpec(facet.url.possibly_invalid_spec())
+          .potentially_invalid_spec();
+  facets.push_back(std::move(facet));
 }
 
 CredentialUIEntry::CredentialUIEntry(const CSVPassword& csv_password,

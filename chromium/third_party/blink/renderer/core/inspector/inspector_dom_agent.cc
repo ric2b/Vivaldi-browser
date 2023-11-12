@@ -1086,8 +1086,10 @@ protocol::Response InspectorDOMAgent::setOuterHTML(int node_id,
   if (!response.IsSuccess())
     return response;
 
-  Document* document =
-      IsA<Document>(node) ? To<Document>(node) : node->ownerDocument();
+  Document* document = DynamicTo<Document>(node);
+  if (!document) {
+    document = node->ownerDocument();
+  }
   if (!document ||
       (!IsA<HTMLDocument>(document) && !IsA<XMLDocument>(document)))
     return protocol::Response::ServerError("Not an HTML/XML document");
@@ -1344,14 +1346,10 @@ protocol::Response InspectorDOMAgent::NodeForRemoteObjectId(
     return protocol::Response::ServerError(
         ToCoreString(std::move(error)).Utf8());
   }
-  if (!V8Node::HasInstance(value, isolate_)) {
-    return protocol::Response::ServerError(
-        "Object id doesn't reference a Node");
-  }
-  node = V8Node::ToImpl(v8::Local<v8::Object>::Cast(value));
+  node = V8Node::ToWrappable(isolate_, value);
   if (!node) {
     return protocol::Response::ServerError(
-        "Couldn't convert object with given objectId to Node");
+        "Object id doesn't reference a Node");
   }
   return protocol::Response::Success();
 }
@@ -1683,7 +1681,8 @@ protocol::Response InspectorDOMAgent::getContainerForNode(
     }
   }
 
-  element->GetDocument().UpdateStyleAndLayoutTreeForNode(element);
+  element->GetDocument().UpdateStyleAndLayoutTreeForNode(
+      element, DocumentUpdateReason::kInspector);
   StyleResolver& style_resolver = element->GetDocument().GetStyleResolver();
   // Container rule origin no longer known at this point, match name from all
   // scopes.
@@ -1720,7 +1719,8 @@ const HeapVector<Member<Element>>
 InspectorDOMAgent::GetContainerQueryingDescendants(Element* container) {
   // This won't work for edge cases with display locking
   // (https://crbug.com/1235306).
-  container->GetDocument().UpdateStyleAndLayoutTreeForSubtree(container);
+  container->GetDocument().UpdateStyleAndLayoutTreeForSubtree(
+      container, DocumentUpdateReason::kInspector);
 
   HeapVector<Member<Element>> querying_descendants;
   for (Element& element : ElementTraversal::DescendantsOf(*container)) {
@@ -1735,8 +1735,9 @@ InspectorDOMAgent::GetContainerQueryingDescendants(Element* container) {
 bool InspectorDOMAgent::ContainerQueriedByElement(Element* container,
                                                   Element* element) {
   const ComputedStyle* style = element->GetComputedStyle();
-  if (!style || !style->DependsOnSizeContainerQueries())
+  if (!style || !style->DependsOnContainerQueries()) {
     return false;
+  }
 
   StyleResolver& style_resolver = element->GetDocument().GetStyleResolver();
   RuleIndexList* matched_rules =
@@ -2719,14 +2720,10 @@ protocol::Response InspectorDOMAgent::getFileInfo(const String& object_id,
         ToCoreString(std::move(error)).Utf8());
   }
 
-  if (!V8File::HasInstance(value, isolate_)) {
-    return protocol::Response::ServerError(
-        "Object id doesn't reference a File");
-  }
-  File* file = V8File::ToImpl(v8::Local<v8::Object>::Cast(value));
+  File* file = V8File::ToWrappable(isolate_, value);
   if (!file) {
     return protocol::Response::ServerError(
-        "Couldn't convert object with given objectId to File");
+        "Object id doesn't reference a File");
   }
 
   *path = file->GetPath();

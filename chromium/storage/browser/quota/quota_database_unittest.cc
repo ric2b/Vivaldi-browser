@@ -517,8 +517,8 @@ TEST_P(QuotaDatabaseTest, BucketLastAccessTimeLRU) {
   EXPECT_TRUE(EnsureOpened(db.get()));
 
   std::set<BucketId> bucket_exceptions;
-  QuotaErrorOr<BucketLocator> result =
-      db->GetLruEvictableBucket(kTemp, bucket_exceptions, nullptr);
+  QuotaErrorOr<std::set<BucketLocator>> result =
+      db->GetBucketsForEviction(kTemp, 1, {}, bucket_exceptions, nullptr);
   ASSERT_FALSE(result.has_value());
   EXPECT_EQ(result.error(), QuotaError::kNotFound);
 
@@ -576,38 +576,45 @@ TEST_P(QuotaDatabaseTest, BucketLastAccessTimeLRU) {
       db->SetBucketLastAccessTime(BucketId(777), base::Time::FromJavaTime(40)),
       QuotaError::kNone);
 
-  result = db->GetLruEvictableBucket(kTemp, bucket_exceptions, nullptr);
+  result = db->GetBucketsForEviction(kTemp, 1, {}, bucket_exceptions, nullptr);
   ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(bucket_id1, result.value().id);
+  ASSERT_EQ(1U, result->size());
+  EXPECT_EQ(bucket_id1, result->begin()->id);
 
   // Test that unlimited origins are excluded from eviction, but
   // protected origins are not excluded.
   auto policy = base::MakeRefCounted<MockSpecialStoragePolicy>();
   policy->AddUnlimited(storage_key1.origin().GetURL());
   policy->AddProtected(storage_key2.origin().GetURL());
-  result = db->GetLruEvictableBucket(kTemp, bucket_exceptions, policy.get());
+  result =
+      db->GetBucketsForEviction(kTemp, 1, {}, bucket_exceptions, policy.get());
   ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(bucket_id2, result.value().id);
+  ASSERT_EQ(1U, result->size());
+  EXPECT_EQ(bucket_id2, result->begin()->id);
 
   // Test that durable origins are excluded from eviction.
   policy->AddDurable(storage_key2.origin().GetURL());
-  result = db->GetLruEvictableBucket(kTemp, bucket_exceptions, policy.get());
+  result =
+      db->GetBucketsForEviction(kTemp, 1, {}, bucket_exceptions, policy.get());
   ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(bucket_id3, result.value().id);
+  ASSERT_EQ(1U, result->size());
+  EXPECT_EQ(bucket_id3, result->begin()->id);
 
   // Bucket exceptions exclude specified buckets.
   bucket_exceptions.insert(bucket_id1);
-  result = db->GetLruEvictableBucket(kTemp, bucket_exceptions, nullptr);
+  result = db->GetBucketsForEviction(kTemp, 1, {}, bucket_exceptions, nullptr);
   ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(bucket_id2, result.value().id);
+  ASSERT_EQ(1U, result->size());
+  EXPECT_EQ(bucket_id2, result->begin()->id);
 
   bucket_exceptions.insert(bucket_id2);
-  result = db->GetLruEvictableBucket(kTemp, bucket_exceptions, nullptr);
+  result = db->GetBucketsForEviction(kTemp, 1, {}, bucket_exceptions, nullptr);
   ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(bucket_id3, result.value().id);
+  ASSERT_EQ(1U, result->size());
+  EXPECT_EQ(bucket_id3, result->begin()->id);
 
   bucket_exceptions.insert(bucket_id3);
-  result = db->GetLruEvictableBucket(kTemp, bucket_exceptions, nullptr);
+  result = db->GetBucketsForEviction(kTemp, 1, {}, bucket_exceptions, nullptr);
   ASSERT_FALSE(result.has_value());
   EXPECT_EQ(result.error(), QuotaError::kNotFound);
 
@@ -626,14 +633,16 @@ TEST_P(QuotaDatabaseTest, BucketLastAccessTimeLRU) {
 
   // Querying again to see if the deletion has worked.
   bucket_exceptions.clear();
-  result = db->GetLruEvictableBucket(kTemp, bucket_exceptions, nullptr);
+  result = db->GetBucketsForEviction(kTemp, 1, {}, bucket_exceptions, nullptr);
   ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(bucket_id2, result.value().id);
+  ASSERT_EQ(1U, result->size());
+  EXPECT_EQ(bucket_id2, result->begin()->id);
 
   bucket_exceptions.insert(bucket_id1);
   bucket_exceptions.insert(bucket_id2);
-  result = db->GetLruEvictableBucket(kTemp, bucket_exceptions, nullptr);
+  result = db->GetBucketsForEviction(kTemp, 1, {}, bucket_exceptions, nullptr);
   ASSERT_FALSE(result.has_value());
+
   EXPECT_EQ(result.error(), QuotaError::kNotFound);
 }
 
@@ -642,8 +651,8 @@ TEST_P(QuotaDatabaseTest, BucketPersistence) {
   EXPECT_TRUE(EnsureOpened(db.get()));
 
   std::set<BucketId> bucket_exceptions;
-  QuotaErrorOr<BucketLocator> result =
-      db->GetLruEvictableBucket(kTemp, bucket_exceptions, nullptr);
+  QuotaErrorOr<std::set<BucketLocator>> result =
+      db->GetBucketsForEviction(kTemp, 1, {}, bucket_exceptions, nullptr);
   ASSERT_FALSE(result.has_value());
   EXPECT_EQ(result.error(), QuotaError::kNotFound);
 
@@ -675,14 +684,16 @@ TEST_P(QuotaDatabaseTest, BucketPersistence) {
       db->SetBucketLastAccessTime(bucket_id2, base::Time::FromJavaTime(20)),
       QuotaError::kNone);
 
-  result = db->GetLruEvictableBucket(kTemp, bucket_exceptions, nullptr);
+  result = db->GetBucketsForEviction(kTemp, 1, {}, bucket_exceptions, nullptr);
   ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(bucket_id1, result.value().id);
+  ASSERT_EQ(1U, result->size());
+  EXPECT_EQ(bucket_id1, result->begin()->id);
 
   ASSERT_TRUE(db->UpdateBucketPersistence(bucket_id1, true).has_value());
-  result = db->GetLruEvictableBucket(kTemp, bucket_exceptions, nullptr);
+  result = db->GetBucketsForEviction(kTemp, 1, {}, bucket_exceptions, nullptr);
   ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(bucket_id2, result.value().id);
+  ASSERT_EQ(1U, result->size());
+  EXPECT_EQ(bucket_id2, result->begin()->id);
 }
 
 TEST_P(QuotaDatabaseTest, SetStorageKeyLastAccessTime) {
@@ -1005,6 +1016,8 @@ TEST_F(QuotaDatabaseTest, OpenCorruptedDatabase) {
     expecter.ExpectError(SQLITE_CORRUPT);
     auto db = CreateDatabase(/*is_incognito=*/false);
     ASSERT_TRUE(EnsureOpened(db.get()));
+    histograms.ExpectBucketCount("Quota.DatabaseSpecificError.Open",
+                                 sql::SqliteLoggedResultCode::kCorrupt, 1);
     EXPECT_TRUE(expecter.SawExpectedErrors());
 
     // Ensure data is deleted.
@@ -1015,11 +1028,6 @@ TEST_F(QuotaDatabaseTest, OpenCorruptedDatabase) {
   histograms.ExpectTotalCount("Quota.QuotaDatabaseReset", 1);
   histograms.ExpectBucketCount("Quota.QuotaDatabaseReset",
                                DatabaseResetReason::kCreateSchema, 1);
-
-  EXPECT_GE(histograms.GetTotalSum("Quota.QuotaDatabaseError"), 1);
-  EXPECT_GE(histograms.GetBucketCount("Quota.QuotaDatabaseError",
-                                      sql::SqliteLoggedResultCode::kCorrupt),
-            1);
 }
 
 TEST_F(QuotaDatabaseTest, QuotaDatabasePathMigration) {
@@ -1117,14 +1125,20 @@ TEST_F(QuotaDatabaseTest, QuotaDatabaseDirectoryMigrationError) {
 #endif  // !BUILDFLAG(IS_APPLE)
 
 TEST_F(QuotaDatabaseTest, UpdateOrCreateBucket_CorruptedDatabase) {
+  base::HistogramTester histograms;
   QuotaDatabase db(ProfilePath());
   BucketInitParams params(
       StorageKey::CreateFromStringForTesting("http://google/"),
       "google_bucket");
+  int sqlite_error_code = 0;
+  db.SetDbErrorCallback(base::BindRepeating(
+      [](int* error_code_out, int error_code) { *error_code_out = error_code; },
+      &sqlite_error_code));
 
   {
     ASSERT_TRUE(db.UpdateOrCreateBucket(params, 0).has_value())
         << "Failed to create bucket to be used in test";
+    EXPECT_EQ(sqlite_error_code, static_cast<int>(sql::SqliteResultCode::kOk));
   }
 
   // Bucket lookup uses the `buckets_by_storage_key` index.
@@ -1137,14 +1151,12 @@ TEST_F(QuotaDatabaseTest, UpdateOrCreateBucket_CorruptedDatabase) {
       << "Failed to corrupt the database";
 
   {
-    base::HistogramTester histograms;
-
     EXPECT_FALSE(db.UpdateOrCreateBucket(params, 0).has_value());
 
-    histograms.ExpectTotalCount("Quota.QuotaDatabaseError", 1);
-    histograms.ExpectBucketCount("Quota.QuotaDatabaseError",
-                                 sql::SqliteLoggedResultCode::kCorrupt, 1);
+    EXPECT_EQ(sqlite_error_code,
+              static_cast<int>(sql::SqliteResultCode::kCorrupt));
   }
+  histograms.ExpectTotalCount("Quota.DatabaseSpecificError.GetBucket", 1);
 }
 
 TEST_P(QuotaDatabaseTest, Expiration) {
@@ -1213,17 +1225,19 @@ TEST_P(QuotaDatabaseTest, PersistentPolicy) {
 
   // Get evictable bucket --- should be the default one.
   auto policy = base::MakeRefCounted<MockSpecialStoragePolicy>();
-  QuotaErrorOr<BucketLocator> lru_result =
-      db.GetLruEvictableBucket(kTemp, {}, policy.get());
+  QuotaErrorOr<std::set<BucketLocator>> lru_result =
+      db.GetBucketsForEviction(kTemp, 1, {}, {}, policy.get());
   ASSERT_TRUE(lru_result.has_value());
-  EXPECT_EQ(default_id, lru_result.value().id);
+  ASSERT_EQ(1U, lru_result->size());
+  EXPECT_EQ(default_id, lru_result->begin()->id);
 
   // Check that durable policy applies to the default bucket but not the non
   // default (non default buckets use the persist columnn in the database).
   policy->AddDurable(storage_key.origin().GetURL());
-  lru_result = db.GetLruEvictableBucket(kTemp, {}, policy.get());
+  lru_result = db.GetBucketsForEviction(kTemp, 1, {}, {}, policy.get());
   ASSERT_TRUE(lru_result.has_value());
-  EXPECT_EQ(non_default_id, lru_result.value().id);
+  ASSERT_EQ(1U, lru_result->size());
+  EXPECT_EQ(non_default_id, lru_result->begin()->id);
 }
 
 INSTANTIATE_TEST_SUITE_P(All,

@@ -62,6 +62,7 @@ template <typename TextContainerType>
 class PLATFORM_EXPORT ShapeResultSpacing;
 class TextRun;
 class ShapeResultView;
+struct TabSize;
 
 enum class AdjustMidCluster {
   // Adjust the middle of a grapheme cluster to the logical end boundary.
@@ -128,11 +129,6 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
     return base::AdoptRef(new ShapeResult(other));
   }
   static scoped_refptr<ShapeResult> CreateForTabulationCharacters(
-      const Font*,
-      const TextRun&,
-      float position_offset,
-      unsigned length);
-  static scoped_refptr<ShapeResult> CreateForTabulationCharacters(
       const Font* font,
       TextDirection direction,
       const TabSize& tab_size,
@@ -163,6 +159,7 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
   unsigned NumCharacters() const { return num_characters_; }
   unsigned NumGlyphs() const { return num_glyphs_; }
   const SimpleFontData* PrimaryFont() const { return primary_font_.get(); }
+  bool HasFallbackFonts() const;
 
   // TODO(eae): Remove start_x and return value once ShapeResultBuffer has been
   // removed.

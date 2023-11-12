@@ -11,11 +11,16 @@
 #include "build/chromeos_buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+class GURL;
 class Profile;
+
+namespace gfx {
+struct VectorIcon;
+}
 
 namespace chrome {
 
-// Returns true if a 'Managed by your organization' message should appear in
+// Returns true if a 'Managed by <...>' message should appear in
 // Chrome's App Menu, and on the following chrome:// pages:
 // - chrome://bookmarks
 // - chrome://downloads
@@ -23,17 +28,42 @@ namespace chrome {
 // - chrome://history
 // - chrome://settings
 //
+// This applies to all forms of management (eg. both Enterprise and Parental
+// controls), a suitable string will be returned by the methods below.
+//
 // N.B.: This is independent of Chrome OS's system tray message for enterprise
 // users.
 bool ShouldDisplayManagedUi(Profile* profile);
 
 #if !BUILDFLAG(IS_ANDROID)
+// The URL which management surfaces should link to for more info.
+//
+// Returns an empty string if ShouldDisplayManagedUi(profile) is false.
+GURL GetManagedUiUrl(Profile* profile);
+
+// The icon to use in the Managed UI.
+const gfx::VectorIcon& GetManagedUiIcon(Profile* profile);
+
 // The label for the App Menu item for Managed UI.
+//
+// Must only be called if ShouldDisplayManagedUi(profile) is true.
 std::u16string GetManagedUiMenuItemLabel(Profile* profile);
+
+// An icon name/label recognized by <iron-icon> for the WebUI footnote for
+// Managed UI indicating that the browser is managed.
+//
+// Returns an empty string if ShouldDisplayManagedUi(profile) is false.
+std::string GetManagedUiWebUIIcon(Profile* profile);
 
 // The label for the WebUI footnote for Managed UI indicating that the browser
 // is managed. These strings contain HTML for an <a> element.
+//
+// Returns an empty string if ShouldDisplayManagedUi(profile) is false.
 std::u16string GetManagedUiWebUILabel(Profile* profile);
+
+// The label for the string describing whether the browser is managed or not, in
+// the chrome://settings/help page.
+std::u16string GetDeviceManagedUiHelpLabel(Profile* profile);
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

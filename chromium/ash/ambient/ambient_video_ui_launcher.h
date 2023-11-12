@@ -34,13 +34,12 @@ class AmbientVideoUiLauncher : public AmbientUiLauncher {
   void Finalize() override;
   AmbientBackendModel* GetAmbientBackendModel() override;
   bool IsActive() override;
-  bool IsReady() override;
 
  private:
   bool is_active_ = false;
   AmbientVideo current_video_;
-  const base::raw_ptr<PrefService> pref_service_;
-  const base::raw_ptr<AmbientViewDelegate> view_delegate_;
+  const raw_ptr<PrefService> pref_service_;
+  const raw_ptr<AmbientViewDelegate> view_delegate_;
   std::unique_ptr<AmbientWeatherController::ScopedRefresher> weather_refresher_;
 };
 

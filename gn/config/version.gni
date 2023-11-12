@@ -69,5 +69,8 @@ if (is_android && defined(is_vivaldi) && is_vivaldi) {
                   "trim string",
                   [vivaldi_version_path]
           )
+  if (is_vivaldi_gas) {
+    vivaldi_version_code = "1" + vivaldi_version_code
+  }
   #print("Vivaldi version code: " + vivaldi_version_code)
 }

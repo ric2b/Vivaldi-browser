@@ -127,13 +127,8 @@ ScriptPromise RTCRtpReceiver::getStats(ScriptState* script_state) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
-  bool is_track_stats_deprecation_trial_enabled =
-      RuntimeEnabledFeatures::RTCLegacyTrackStatsEnabled(
-          ExecutionContext::From(script_state));
   receiver_->GetStats(WTF::BindOnce(WebRTCStatsReportCallbackResolver,
-                                    WrapPersistent(resolver)),
-                      GetExposedGroupIds(script_state),
-                      is_track_stats_deprecation_trial_enabled);
+                                    WrapPersistent(resolver)));
   return promise;
 }
 
@@ -418,8 +413,7 @@ void RTCRtpReceiver::InitializeEncodedAudioStreams(ScriptState* script_state) {
             script_state,
             WTF::CrossThreadBindOnce(
                 &RTCRtpReceiver::UnregisterEncodedAudioStreamCallback,
-                WrapCrossThreadWeakPersistent(this)),
-            /*is_receiver=*/true);
+                WrapCrossThreadWeakPersistent(this)));
 
     auto set_underlying_source =
         WTF::CrossThreadBindRepeating(&RTCRtpReceiver::SetAudioUnderlyingSource,
@@ -467,7 +461,8 @@ void RTCRtpReceiver::InitializeEncodedAudioStreams(ScriptState* script_state) {
 }
 
 void RTCRtpReceiver::OnAudioFrameFromDepacketizer(
-    std::unique_ptr<webrtc::TransformableFrameInterface> encoded_audio_frame) {
+    std::unique_ptr<webrtc::TransformableAudioFrameInterface>
+        encoded_audio_frame) {
   base::AutoLock locker(audio_underlying_source_lock_);
   if (audio_from_depacketizer_underlying_source_) {
     audio_from_depacketizer_underlying_source_->OnFrameFromSource(
@@ -564,8 +559,7 @@ void RTCRtpReceiver::InitializeEncodedVideoStreams(ScriptState* script_state) {
     // Set up writable.
     video_to_decoder_underlying_sink_ =
         MakeGarbageCollected<RTCEncodedVideoUnderlyingSink>(
-            script_state, encoded_video_transformer_,
-            webrtc::TransformableFrameInterface::Direction::kReceiver);
+            script_state, encoded_video_transformer_);
 
     auto set_underlying_sink =
         WTF::CrossThreadBindOnce(&RTCRtpReceiver::SetVideoUnderlyingSink,

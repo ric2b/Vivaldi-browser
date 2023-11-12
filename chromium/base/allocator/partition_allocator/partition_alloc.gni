@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/cronet/config.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build_overrides/partition_alloc.gni")
 
@@ -15,7 +16,7 @@ if (is_nacl) {
   # NaCl targets don't use 64-bit pointers.
   has_64_bit_pointers = false
 } else if (current_cpu == "x64" || current_cpu == "arm64" ||
-           current_cpu == "loong64") {
+           current_cpu == "loong64" || current_cpu == "riscv64") {
   has_64_bit_pointers = true
 } else if (current_cpu == "x86" || current_cpu == "arm") {
   has_64_bit_pointers = false
@@ -57,13 +58,32 @@ declare_args() {
 }
 
 declare_args() {
+  # Causes all the allocations to be routed via allocator_shim.cc.
+  use_allocator_shim = use_allocator_shim_default
+}
+
+assert(!use_allocator_shim || (is_android || is_apple || is_chromeos ||
+                                   is_fuchsia || is_linux || is_win),
+       "The allocator shim does not (yet) support the platform.")
+
+if (use_allocator_shim && is_win) {
+  # It's hard to override CRT's malloc family in every case in the component
+  # build, and it's very easy to override it partially and to be inconsistent
+  # among allocations and deallocations. Then, we'll crash when PA deallocates
+  # a memory region allocated by the CRT's malloc or vice versa.
+  assert(!is_component_build,
+         "The allocator shim doesn't work for the component build on Windows.")
+}
+
+declare_args() {
   use_freeslot_bitmap = false
 
   # Puts the regular and BRP pools right next to each other, so that we can
   # check "belongs to one of the two pools" with a single bitmask operation.
   glue_core_pools = false
 
-  # Introduces pointer compression support in PA.
+  # Introduces pointer compression support in PA. These are 4-byte
+  # pointers that can point within the core pools (regular and BRP).
   #
   # This is effective only for memory allocated from PartitionAlloc, so it is
   # recommended to enable PA-E above, but isn't strictly necessary. Embedders
@@ -92,20 +112,6 @@ declare_args() {
   # RAW_PTR_EXCLUSION macro is disabled on official builds because it increased
   # binary size. This flag can be used to enable it for official builds too.
   force_enable_raw_ptr_exclusion = false
-}
-
-declare_args() {
-  # Determines whether `raw_ptr_experimental<T>` is an alias for
-  # `raw_ptr<T>` or `T*` (true raw pointer).
-  #
-  # Members rewritten as `raw_ptr_experimental` rely on this as an
-  # escape hatch to degrade to a `T*` if `raw_ptr` performance proves
-  # problematic. Defaults to match standard `raw_ptr` support.
-  #
-  # One side effect of this is that `raw_ptr_experimental<T> foo_` must
-  # not use `foo_.get()`; this is incoherent when `foo_` is a `T*`.
-  # Use `base::to_address()` instead.
-  enable_raw_ptr_experimental = enable_backup_ref_ptr_support
 }
 
 assert(!enable_pointer_compression_support || glue_core_pools,
@@ -209,7 +215,6 @@ if (is_nacl) {
 if (!use_partition_alloc) {
   use_partition_alloc_as_malloc = false
   enable_backup_ref_ptr_support = false
-  enable_raw_ptr_experimental = false
   use_asan_backup_ref_ptr = false
   use_asan_unowned_ptr = false
   use_hookable_raw_ptr = false
@@ -226,19 +231,16 @@ if (!use_partition_alloc) {
 # enable_backup_ref_ptr_support is true.
 assert(
     enable_backup_ref_ptr_support || !put_ref_count_in_previous_slot,
-    "Can't put ref count in the previous slot if BackupRefPtr isn't enabled at all")
+    "Can't put ref count in the previous slot if BackupRefPtr isn't enabled " +
+        "at all")
 
-# enable_backup_ref_ptr_slow_checks can only be used if enable_backup_ref_ptr_support
-# is true.
+# enable_backup_ref_ptr_slow_checks can only be used if
+# enable_backup_ref_ptr_support is true.
 assert(enable_backup_ref_ptr_support || !enable_backup_ref_ptr_slow_checks,
        "Can't enable additional BackupRefPtr checks if it isn't enabled at all")
 
-assert(
-    enable_backup_ref_ptr_support || !enable_raw_ptr_experimental,
-    "Can't make `raw_ptr_experimental` = `raw_ptr` when the latter is wholly disabled")
-
-# enable_dangling_raw_ptr_checks can only be used if enable_backup_ref_ptr_support
-# is true.
+# enable_dangling_raw_ptr_checks can only be used if
+# enable_backup_ref_ptr_support is true.
 assert(
     enable_backup_ref_ptr_support || !enable_dangling_raw_ptr_checks,
     "Can't enable dangling raw_ptr checks if BackupRefPtr isn't enabled at all")
@@ -249,18 +251,21 @@ assert(
     enable_dangling_raw_ptr_checks || !enable_dangling_raw_ptr_perf_experiment,
     "Missing dangling pointer checks feature for its performance experiment")
 
-# To poison OOB pointers for BackupRefPtr, the underlying feature must
-# be enabled, too.
+# To poison OOB pointers for BackupRefPtr, the underlying feature must be
+# enabled, too.
 assert(
     enable_backup_ref_ptr_support || !backup_ref_ptr_poison_oob_ptr,
-    "Can't enable poisoning for OOB pointers if BackupRefPtr isn't enabled at all")
+    "Can't enable poisoning for OOB pointers if BackupRefPtr isn't enabled " +
+        "at all")
 assert(has_64_bit_pointers || !backup_ref_ptr_poison_oob_ptr,
        "Can't enable poisoning for OOB pointers if pointers are only 32-bit")
 
-# AsanBackupRefPtr and AsanUnownedPtr are mutually exclusive variants of raw_ptr.
+# AsanBackupRefPtr and AsanUnownedPtr are mutually exclusive variants of
+# raw_ptr.
 assert(
     !use_asan_unowned_ptr || !use_asan_backup_ref_ptr,
-    "Both AsanUnownedPtr and AsanBackupRefPtr can't be enabled at the same time")
+    "Both AsanUnownedPtr and AsanBackupRefPtr can't be enabled at the same " +
+        "time")
 
 # BackupRefPtr and AsanBackupRefPtr are mutually exclusive variants of raw_ptr.
 assert(
@@ -271,15 +276,19 @@ assert(
 assert(!enable_backup_ref_ptr_support || !use_asan_unowned_ptr,
        "Both BackupRefPtr and AsanUnownedPtr can't be enabled at the same time")
 
-# RawPtrHookableImpl and BackupRefPtr are mutually exclusive variants of raw_ptr.
+# RawPtrHookableImpl and BackupRefPtr are mutually exclusive variants of
+# raw_ptr.
 assert(
     !use_hookable_raw_ptr || !enable_backup_ref_ptr_support,
-    "Both RawPtrHookableImpl and BackupRefPtr can't be enabled at the same time")
+    "Both RawPtrHookableImpl and BackupRefPtr can't be enabled at the same " +
+        "time")
 
-# RawPtrHookableImpl and AsanUnownedPtr are mutually exclusive variants of raw_ptr.
+# RawPtrHookableImpl and AsanUnownedPtr are mutually exclusive variants of
+# raw_ptr.
 assert(
     !use_hookable_raw_ptr || !use_asan_unowned_ptr,
-    "Both RawPtrHookableImpl and AsanUnownedPtr can't be enabled at the same time")
+    "Both RawPtrHookableImpl and AsanUnownedPtr can't be enabled at the same " +
+        "time")
 
 assert(!use_asan_backup_ref_ptr || is_asan,
        "AsanBackupRefPtr requires AddressSanitizer")
@@ -296,8 +305,8 @@ if (is_apple) {
 }
 
 # AsanBackupRefPtr is not supported outside Chromium. The implementation is
-# entangled with `//base`. The code is only physically located with the
-# rest of `raw_ptr` to keep it together.
+# entangled with `//base`. The code is only physically located with the rest of
+# `raw_ptr` to keep it together.
 assert(build_with_chromium || !use_asan_backup_ref_ptr,
        "AsanBackupRefPtr is not supported outside Chromium")
 
@@ -305,7 +314,10 @@ assert(!use_asan_backup_ref_ptr || use_hookable_raw_ptr,
        "AsanBackupRefPtr requires RawPtrHookableImpl")
 
 declare_args() {
-  enable_pkeys = is_linux && target_cpu == "x64"
+  # pkeys support is explicitly disabled in all Cronet builds, as some test
+  # dependencies that use partition_allocator are compiled in AOSP against a
+  # version of glibc that does not include pkeys syscall numbers.
+  enable_pkeys = is_linux && target_cpu == "x64" && !is_cronet_build
 }
 assert(!enable_pkeys || (is_linux && target_cpu == "x64"),
        "Pkeys are only supported on x64 linux")

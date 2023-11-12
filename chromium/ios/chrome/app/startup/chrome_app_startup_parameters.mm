@@ -4,6 +4,7 @@
 
 #import "ios/chrome/app/startup/chrome_app_startup_parameters.h"
 
+#import "base/apple/bundle_locations.h"
 #import "base/mac/foundation_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
@@ -12,7 +13,7 @@
 #import "base/strings/stringprintf.h"
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/default_browser/utils.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/common/app_group/app_group_constants.h"
 #import "ios/chrome/common/x_callback_url.h"
 #import "ios/components/webui/web_ui_url_constants.h"
@@ -55,6 +56,8 @@ NSString* const kWidgetKitHostDinoGameWidget = @"dino-game-widget";
 // Host used to identify the Lockscreen Launcher widget.
 NSString* const kWidgetKitHostLockscreenLauncherWidget =
     @"lockscreen-launcher-widget";
+// Host used to identify the Chrome Shortcuts widget.
+NSString* const kWidgetKitHostShortcutsWidget = @"shortcuts-widget";
 // Path for search action.
 NSString* const kWidgetKitActionSearch = @"/search";
 // Path for incognito action.
@@ -67,6 +70,8 @@ NSString* const kWidgetKitActionQRReader = @"/qrreader";
 NSString* const kWidgetKitActionLens = @"/lens";
 // Path for Game action.
 NSString* const kWidgetKitActionGame = @"/game";
+// Path for open URL action.
+NSString* const kWidgetKitActionOpenURL = @"/open";
 
 const CGFloat kAppGroupTriggersVoiceSearchTimeout = 15.0;
 
@@ -128,7 +133,9 @@ enum class WidgetKitExtensionAction {
   ACTION_LOCKSCREEN_LAUNCHER_VOICE_SEARCH = 8,
   ACTION_LOCKSCREEN_LAUNCHER_GAME = 9,
   ACTION_QUICK_ACTIONS_LENS = 10,
-  kMaxValue = ACTION_QUICK_ACTIONS_LENS,
+  ACTION_SHORTCUTS_SEARCH = 11,
+  ACTION_SHORTCUTS_OPEN = 12,
+  kMaxValue = ACTION_SHORTCUTS_OPEN,
 };
 
 // Histogram helper to log the UMA IOS.WidgetKit.Action histogram.
@@ -200,7 +207,7 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
   if (!gurl.is_valid() || gurl.scheme().length() == 0)
     return nil;
 
-  if ([completeURL.scheme isEqual:kWidgetKitSchemeChrome]) {
+  if ([completeURL.scheme isEqualToString:kWidgetKitSchemeChrome]) {
     UMA_HISTOGRAM_ENUMERATION(kUMAMobileSessionStartActionHistogram,
                               START_ACTION_WIDGET_KIT_COMMAND,
                               MOBILE_SESSION_START_ACTION_COUNT);
@@ -208,17 +215,19 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
     const char* command = "";
     NSString* sourceWidget = completeURL.host;
 
-    if ([completeURL.path isEqual:kWidgetKitActionSearch]) {
+    if ([completeURL.path isEqualToString:kWidgetKitActionSearch]) {
       command = app_group::kChromeAppGroupFocusOmniboxCommand;
-    } else if ([completeURL.path isEqual:kWidgetKitActionIncognito]) {
+    } else if ([completeURL.path isEqualToString:kWidgetKitActionIncognito]) {
       command = app_group::kChromeAppGroupIncognitoSearchCommand;
-    } else if ([completeURL.path isEqual:kWidgetKitActionVoiceSearch]) {
+    } else if ([completeURL.path isEqualToString:kWidgetKitActionVoiceSearch]) {
       command = app_group::kChromeAppGroupVoiceSearchCommand;
-    } else if ([completeURL.path isEqual:kWidgetKitActionQRReader]) {
+    } else if ([completeURL.path isEqualToString:kWidgetKitActionQRReader]) {
       command = app_group::kChromeAppGroupQRScannerCommand;
-    } else if ([completeURL.path isEqual:kWidgetKitActionLens]) {
+    } else if ([completeURL.path isEqualToString:kWidgetKitActionLens]) {
       command = app_group::kChromeAppGroupLensCommand;
-    } else if ([completeURL.path isEqual:kWidgetKitActionGame]) {
+    } else if ([completeURL.path isEqual:kWidgetKitActionOpenURL]) {
+      command = app_group::kChromeAppGroupOpenURLCommand;
+    } else if ([completeURL.path isEqualToString:kWidgetKitActionGame]) {
       if ([sourceWidget isEqualToString:kWidgetKitHostDinoGameWidget]) {
         LogWidgetKitAction(WidgetKitExtensionAction::ACTION_DINO_WIDGET_GAME);
       } else if ([sourceWidget
@@ -568,7 +577,7 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
             secureSourceApp:secureSourceApp
                 completeURL:url
             applicationMode:ApplicationModeForTabOpening::NORMAL];
-    [params setPostOpeningAction:START_LENS];
+    [params setPostOpeningAction:START_LENS_FROM_HOME_SCREEN_WIDGET];
     action = ACTION_LENS;
   }
 
@@ -660,7 +669,19 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
         break;
     }
   }
-
+  if ([secureSourceApp isEqualToString:kWidgetKitHostShortcutsWidget]) {
+    switch (action) {
+      case ACTION_NEW_SEARCH:
+        LogWidgetKitAction(WidgetKitExtensionAction::ACTION_SHORTCUTS_SEARCH);
+        break;
+      case ACTION_OPEN_URL:
+        LogWidgetKitAction(WidgetKitExtensionAction::ACTION_SHORTCUTS_OPEN);
+        break;
+      default:
+        NOTREACHED();
+        break;
+    }
+  }
   return params;
 }
 
@@ -690,8 +711,9 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
   }
 
   if ([_declaredSourceApp
-          isEqualToString:[[NSBundle mainBundle] bundleIdentifier]])
+          isEqualToString:[base::apple::FrameworkBundle() bundleIdentifier]]) {
     return CALLER_APP_GOOGLE_CHROME;
+  }
   if ([_declaredSourceApp isEqualToString:@"com.google.GoogleMobile"])
     return CALLER_APP_GOOGLE_SEARCH;
   if ([_declaredSourceApp isEqualToString:@"com.google.Gmail"])

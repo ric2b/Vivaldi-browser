@@ -13,6 +13,7 @@
 #include "content/browser/preloading/prerender/prerender_host.h"
 #include "content/public/browser/prerender_trigger_type.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "services/network/public/mojom/fetch_api.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace content {
@@ -27,8 +28,8 @@ enum class PrerenderCancelledInterface {
   kGamepadHapticsManager = 1,
   kGamepadMonitor = 2,
   // kNotificationService = 3,   Deprecated.
-  kSyncEncryptionKeysExtension = 4,
-  kMaxValue = kSyncEncryptionKeysExtension
+  kTrustedVaultEncryptionKeys = 4,
+  kMaxValue = kTrustedVaultEncryptionKeys
 };
 
 // Used by PrerenderNavigationThrottle, to track the cross-origin cancellation
@@ -53,13 +54,15 @@ enum class PrerenderCrossOriginRedirectionMismatch {
 class PrerenderCancellationReason {
  public:
   using DetailedReasonVariant =
-      absl::variant<absl::monostate, uint64_t, std::string>;
+      absl::variant<absl::monostate, int32_t, uint64_t, std::string>;
 
   static PrerenderCancellationReason BuildForDisallowActivationState(
       uint64_t disallow_activation_reason);
 
   static PrerenderCancellationReason BuildForMojoBinderPolicy(
       const std::string& interface_name);
+
+  static PrerenderCancellationReason BuildForLoadingError(int32_t error_code);
 
   explicit PrerenderCancellationReason(PrerenderFinalStatus final_status);
   ~PrerenderCancellationReason();
@@ -149,6 +152,22 @@ void CONTENT_EXPORT AnalyzePrerenderActivationHeader(
     PrerenderTriggerType trigger_type,
     const std::string& embedder_histogram_suffix);
 
+// Records ui::PageTransition of prerender activation navigation when transition
+// mismatch happens on prerender activation.
+void RecordPrerenderActivationTransition(
+    int32_t potential_activation_transition,
+    PrerenderTriggerType trigger_type,
+    const std::string& embedder_histogram_suffix);
+
+// Records the net error code when a prerendering page fails the navigation upon
+// PrerenderHost::DidFinishNavigation. Note that this is different from the one
+// that checked at `PrerenderNavigationThrottle::WillProcessResponse` which
+// checks the http_response_code of the `commit_params`.
+void RecordPrerenderNavigationErrorCode(
+    net::Error error_code,
+    PrerenderTriggerType trigger_type,
+    const std::string& embedder_histogram_suffix);
+
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 // These are also mapped onto the second content internal range of
@@ -177,6 +196,16 @@ void RecordPrerenderBackNavigationEligibility(
     PreloadingPredictor predictor,
     PrerenderBackNavigationEligibility eligibility,
     PreloadingAttempt* preloading_attempt);
+
+void RecordPrerenderActivationCommitDeferTime(
+    base::TimeDelta time_delta,
+    PrerenderTriggerType trigger_type,
+    const std::string& embedder_histogram_suffix);
+
+void RecordBlockedByClientResourceType(
+    network::mojom::RequestDestination request_destination,
+    PrerenderTriggerType trigger_type,
+    const std::string& embedder_histogram_suffix);
 
 }  // namespace content
 

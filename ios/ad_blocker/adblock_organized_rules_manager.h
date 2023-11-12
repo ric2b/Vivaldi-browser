@@ -68,7 +68,6 @@ class OrganizedRulesManager : public RuleManager::Observer {
                               std::unique_ptr<base::Value> rules);
   void OnOrganizedRulesReady(base::Value rules);
   void Disable();
-  void ApplyOrganizedRules(base::Value rules, bool save);
 
   const raw_ptr<RuleManager> rule_manager_;
   std::unique_ptr<AdBlockerContentRuleListProvider> content_rule_list_provider_;

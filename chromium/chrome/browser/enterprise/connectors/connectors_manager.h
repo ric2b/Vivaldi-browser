@@ -16,6 +16,11 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#include "chrome/browser/ui/browser_list_observer.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
 namespace storage {
 class FileSystemURL;
 }
@@ -26,7 +31,13 @@ class BrowserCrashEventRouter;
 // Manages access to Connector policies for a given profile. This class is
 // responsible for caching the Connector policies, validate them against
 // approved service providers and provide a simple interface to them.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+class ConnectorsManager : public BrowserListObserver,
+                          public TabStripModelObserver {
+#else
 class ConnectorsManager {
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
  public:
   // Maps used to cache connectors settings.
   using AnalysisConnectorsSettings =
@@ -40,7 +51,11 @@ class ConnectorsManager {
       PrefService* pref_service,
       const ServiceProviderConfig* config,
       bool observe_prefs = true);
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  ~ConnectorsManager() override;
+#else
   ~ConnectorsManager();
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
   // Validates which settings should be applied to a reporting event
   // against cached policies. Cache the policy value the first time this is
@@ -66,6 +81,11 @@ class ConnectorsManager {
   bool IsConnectorEnabled(AnalysisConnector connector) const;
   bool IsConnectorEnabled(ReportingConnector connector) const;
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  // Check if the corresponding connector is enabled for any local agent.
+  bool IsConnectorEnabledForLocalAgent(AnalysisConnector connector) const;
+#endif
+
   bool DelayUntilVerdict(AnalysisConnector connector);
   absl::optional<std::u16string> GetCustomMessage(AnalysisConnector connector,
                                                   const std::string& tag);
@@ -89,6 +109,18 @@ class ConnectorsManager {
       const;
 
  private:
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  // BrowserListObserver overrides:
+  void OnBrowserAdded(Browser* browser) override;
+  void OnBrowserRemoved(Browser* browser) override;
+
+  // TabStripModelObserver overrides:
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
   // Validates which settings should be applied to an analysis connector event
   // against connector policies. Cache the policy value the first time this is
   // called for every different connector.
@@ -99,6 +131,16 @@ class ConnectorsManager {
   // Read and cache the policy corresponding to |connector|.
   void CacheAnalysisConnectorPolicy(AnalysisConnector connector) const;
   void CacheReportingConnectorPolicy(ReportingConnector connector);
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  // Close connection with local agent if all the relevant connectors are turned
+  // off for it.
+  void MaybeCloseLocalContentAnalysisAgentConnection();
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
+  // Re-cache analysis connector policy and update local agent connection if
+  // needed.
+  void OnPrefChanged(AnalysisConnector connector);
 
   // Sets up |pref_change_registrar_|. Used by the constructor and
   // SetUpForTesting.

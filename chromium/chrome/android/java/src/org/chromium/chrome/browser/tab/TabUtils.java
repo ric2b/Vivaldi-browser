@@ -28,6 +28,7 @@ import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
 import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
@@ -86,8 +87,7 @@ public class TabUtils {
     /**
      * @return {@link Activity} associated with the given tab.
      */
-    @Nullable
-    public static Activity getActivity(Tab tab) {
+    public static @Nullable Activity getActivity(Tab tab) {
         WebContents webContents = tab != null ? tab.getWebContents() : null;
         if (webContents == null || webContents.isDestroyed()) return null;
         WindowAndroid window = webContents.getTopLevelNativeWindow();
@@ -197,7 +197,7 @@ public class TabUtils {
      */
     public static boolean readRequestDesktopSiteContentSettings(
             Profile profile, @Nullable GURL url) {
-        if (ContentFeatureList.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)) {
+        if (ContentFeatureMap.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_EXCEPTIONS)) {
             // Vivaldi: The global setting overrides the site exceptions setting.
             if (BuildConfig.IS_VIVALDI && url != null &&
                     TabUtils.isDesktopSiteGlobalEnabled(profile)) return true;

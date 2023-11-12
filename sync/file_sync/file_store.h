@@ -8,7 +8,7 @@
 
 #include "base/containers/span.h"
 #include "base/functional/callback.h"
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync/base/model_type.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -39,7 +39,7 @@ class SyncedFileStore : public KeyedService {
   // entity of the given |sync_type|. This can be called whether or not sync is
   // active and whether or not the entity is synced.
   // If the owner already had a reference, it will be replaced.
-  virtual void SetLocalFileRef(base::GUID owner_guid,
+  virtual void SetLocalFileRef(base::Uuid owner_uuid,
                                syncer::ModelType sync_type,
                                std::string checksum) = 0;
 
@@ -48,7 +48,7 @@ class SyncedFileStore : public KeyedService {
   // whether or not sync is active and whether or not the entity is synced. This
   // returns the checksum that can be used to address the file in future calls.
   // If the owner already had a reference, it will be replaced.
-  virtual std::string SetLocalFile(base::GUID owner_guid,
+  virtual std::string SetLocalFile(base::Uuid owner_uuid,
                                    syncer::ModelType sync_type,
                                    std::vector<uint8_t> content) = 0;
 
@@ -76,7 +76,7 @@ class SyncedFileStore : public KeyedService {
   // around when it has no more local reference until all sync references are
   // gone to avoid needing to re-download the file if a conflict causes the
   // entity to be resurected.
-  virtual void RemoveLocalRef(base::GUID owner_guid,
+  virtual void RemoveLocalRef(base::Uuid owner_uuid,
                               syncer::ModelType sync_type) = 0;
 
   virtual void RemoveSyncRef(std::string owner_sync_id,

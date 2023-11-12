@@ -9,6 +9,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/check_is_test.h"
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
@@ -18,8 +19,9 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/web_applications/externally_managed_app_manager_impl.h"
+#include "chrome/browser/web_applications/externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/file_utils_wrapper.h"
+#include "chrome/browser/web_applications/isolated_web_apps/install_isolated_web_app_from_command_line.h"
 #include "chrome/browser/web_applications/manifest_update_manager.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/os_integration/url_handler_manager.h"
@@ -43,6 +45,7 @@
 #include "chrome/browser/web_applications/web_app_translation_manager.h"
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
+#include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/browser/web_contents.h"
 
@@ -140,6 +143,16 @@ void WebAppProvider::Start() {
   StartImpl();
 }
 
+WebAppCommandScheduler& WebAppProvider::scheduler() {
+  return *command_scheduler_;
+}
+
+WebAppCommandManager& WebAppProvider::command_manager() {
+  // Note: It is OK to access the command manager before connection or start.
+  // Internally it will queue commands to only happen after it has started.
+  return *command_manager_;
+}
+
 WebAppRegistrar& WebAppProvider::registrar_unsafe() {
   CheckIsConnected();
   return *registrar_;
@@ -180,6 +193,12 @@ WebAppPolicyManager& WebAppProvider::policy_manager() {
   return *web_app_policy_manager_;
 }
 
+IsolatedWebAppCommandLineInstallManager&
+WebAppProvider::iwa_command_line_install_manager() {
+  CheckIsConnected();
+  return *iwa_command_line_install_manager_;
+}
+
 WebAppUiManager& WebAppProvider::ui_manager() {
   CheckIsConnected();
   return *ui_manager_;
@@ -214,14 +233,8 @@ WebAppOriginAssociationManager& WebAppProvider::origin_association_manager() {
   return *origin_association_manager_;
 }
 
-WebAppCommandManager& WebAppProvider::command_manager() {
-  // Note: It is OK to access the command manager before connection or start.
-  // Internally it will queue commands to only happen after it has started.
-  return *command_manager_;
-}
-
-WebAppCommandScheduler& WebAppProvider::scheduler() {
-  return *command_scheduler_;
+WebContentsManager& WebAppProvider::web_contents_manager() {
+  return *web_contents_manager_;
 }
 
 void WebAppProvider::Shutdown() {
@@ -230,6 +243,7 @@ void WebAppProvider::Shutdown() {
   ui_manager_->Shutdown();
   externally_managed_app_manager_->Shutdown();
   manifest_update_manager_->Shutdown();
+  iwa_command_line_install_manager_->Shutdown();
   install_manager_->Shutdown();
   icon_manager_->Shutdown();
   install_finalizer_->Shutdown();
@@ -247,10 +261,12 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
   install_manager_ = std::make_unique<WebAppInstallManager>(profile);
   manifest_update_manager_ = std::make_unique<ManifestUpdateManager>();
   externally_managed_app_manager_ =
-      std::make_unique<ExternallyManagedAppManagerImpl>(profile);
+      std::make_unique<ExternallyManagedAppManager>(profile);
   preinstalled_web_app_manager_ =
       std::make_unique<PreinstalledWebAppManager>(profile);
   web_app_policy_manager_ = std::make_unique<WebAppPolicyManager>(profile);
+  iwa_command_line_install_manager_ =
+      std::make_unique<IsolatedWebAppCommandLineInstallManager>(*profile);
 
   database_factory_ = std::make_unique<WebAppDatabaseFactory>(profile);
 
@@ -305,6 +321,8 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
   web_app_run_on_os_login_manager_ =
       std::make_unique<WebAppRunOnOsLoginManager>(command_scheduler_.get());
 #endif
+
+  web_contents_manager_ = std::make_unique<WebContentsManager>();
 }
 
 void WebAppProvider::ConnectSubsystems() {
@@ -322,7 +340,8 @@ void WebAppProvider::ConnectSubsystems() {
                                           registrar_.get(), ui_manager_.get(),
                                           command_scheduler_.get());
   externally_managed_app_manager_->SetSubsystems(
-      ui_manager_.get(), install_finalizer_.get(), command_scheduler_.get());
+      ui_manager_.get(), install_finalizer_.get(), command_scheduler_.get(),
+      web_contents_manager_.get());
   preinstalled_web_app_manager_->SetSubsystems(
       registrar_.get(), ui_manager_.get(),
       externally_managed_app_manager_.get());
@@ -335,6 +354,7 @@ void WebAppProvider::ConnectSubsystems() {
   os_integration_manager_->SetSubsystems(sync_bridge_.get(), registrar_.get(),
                                          ui_manager_.get(),
                                          icon_manager_.get());
+  iwa_command_line_install_manager_->SetSubsystems(command_scheduler_.get());
   connected_ = true;
 }
 
@@ -346,10 +366,6 @@ void WebAppProvider::StartSyncBridge() {
 void WebAppProvider::OnSyncBridgeReady() {
   DCHECK(!on_registry_ready_.is_signaled());
 
-  if (base::FeatureList::IsEnabled(features::kMigrateExternalPrefsToWebAppDB)) {
-    ExternallyInstalledWebAppPrefs::MigrateExternalPrefData(
-        profile_->GetPrefs(), sync_bridge_.get());
-  }
   DoMigrateProfilePrefs(profile_);
 
   // Note: This does not wait for the call from the ChromeOS
@@ -372,6 +388,8 @@ void WebAppProvider::OnSyncBridgeReady() {
   install_manager_->Start();
   preinstalled_web_app_manager_->Start(external_manager_barrier);
   web_app_policy_manager_->Start(external_manager_barrier);
+  iwa_command_line_install_manager_->Start();
+
 #if (BUILDFLAG(IS_CHROMEOS))
   on_external_managers_synchronized_.Post(
       FROM_HERE,

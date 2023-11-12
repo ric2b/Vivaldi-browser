@@ -131,24 +131,25 @@ export class RemoteCall {
   }
 
   /**
-   * Waits until a window having the given ID prefix appears.
-   * @param {string} windowIdPrefix ID prefix of the requested window.
-   * @return {!Promise<string>} promise Promise to be fulfilled with a found
-   *     window's ID.
+   * Wait for a SWA window to be open.
+   * @param {boolean=} debug Whether to debug the findSwaWindow.
+   * @return {!Promise<string>}
    */
-  waitForWindow(windowIdPrefix) {
+  async waitForWindow(debug = false) {
     const caller = getCaller();
-    const windowIdRegex = new RegExp(windowIdPrefix);
-    return repeatUntil(async () => {
-      const windows = await this.callRemoteTestUtil('getWindows', null, []);
-      for (const id in windows) {
-        if (id.indexOf(windowIdPrefix) === 0 || windowIdRegex.test(id)) {
-          return id;
-        }
+    const appId = await repeatUntil(async () => {
+      const msg = {name: 'findSwaWindow'};
+      if (debug) {
+        msg['debug'] = true;
       }
-      return pending(
-          caller, 'Window with the prefix %s is not found.', windowIdPrefix);
+      const ret = await sendTestMessage(msg);
+      if (ret === 'none') {
+        return pending(caller, 'Wait for SWA window');
+      }
+      return ret;
     });
+
+    return appId;
   }
 
   /**
@@ -489,30 +490,8 @@ export class RemoteCallFilesApp extends RemoteCall {
     });
   }
 
-  /** @override */
-  async waitForWindow(windowIdPrefix) {
-    return this.waitForSwaWindow();
-  }
-
   async getWindows() {
     return JSON.parse(await sendTestMessage({name: 'getWindows'}));
-  }
-
-  /**
-   * Wait for a SWA window to be open.
-   * @return {!Promise<string>}
-   */
-  async waitForSwaWindow() {
-    const caller = getCaller();
-    const appId = await repeatUntil(async () => {
-      const ret = await sendTestMessage({name: 'findSwaWindow'});
-      if (ret === 'none') {
-        return pending(caller, 'Wait for SWA window');
-      }
-      return ret;
-    });
-
-    return appId;
   }
 
   /**
@@ -1051,6 +1030,18 @@ export class RemoteCallFilesApp extends RemoteCall {
   }
 
   /**
+   * Whether the Jellybean UI is enabled.
+   * @param {string} appId app window ID
+   * @returns {Promise<boolean>}
+   */
+  async isJellybean(appId) {
+    return await sendTestMessage({
+             appId,
+             name: 'isJellybean',
+           }) === 'true';
+  }
+
+  /**
    * Wait for the nudge with the given text to be visible.
    *
    * @param {string} appId app window ID.
@@ -1073,5 +1064,147 @@ export class RemoteCallFilesApp extends RemoteCall {
 
       return true;
     });
+  }
+
+  /**
+   * Waits for the <xf-cloud-panel> element to be visible on the DOM.
+   * @param {string} appId app window ID
+   */
+  async waitForCloudPanelVisible(appId) {
+    const caller = getCaller();
+    return repeatUntil(async () => {
+      const styles = await this.waitForElementStyles(
+          appId, ['xf-cloud-panel', 'cr-action-menu', 'dialog'], ['left']);
+
+      if (styles.renderedHeight > 0 && styles.renderedWidth > 0 &&
+          styles.renderedTop > 0 && styles.renderedLeft > 0) {
+        return true;
+      }
+
+      return pending(caller, `Waiting for xf-cloud-panel to appear.`);
+    });
+  }
+
+  /**
+   * Wait for the underlying bulk pinning manager to enter the specified stage.
+   * @param {string} want The stage the bulk pinning is expected to be in. This
+   *     is a string relating to the stage defined in the `PinManager`.
+   */
+  async waitForBulkPinningStage(want) {
+    const caller = getCaller();
+    return repeatUntil(async () => {
+      const currentStage = await sendTestMessage({name: 'getBulkPinningStage'});
+      if (currentStage === want) {
+        return true;
+      }
+      return pending(caller, `Still waiting for syncing stage: ${want}`);
+    });
+  }
+
+  /**
+   * Wait until the pin manager has the expected required space.
+   * @param {number} want
+   */
+  async waitForBulkPinningRequiredSpace(want) {
+    const caller = getCaller();
+    return repeatUntil(async () => {
+      const actualRequiredSpace =
+          await sendTestMessage({name: 'getBulkPinningRequiredSpace'});
+      const parsedSpace = parseInt(actualRequiredSpace, 10);
+      if (parsedSpace === want) {
+        return true;
+      }
+      return pending(caller, `Still waiting for required space to be ${want}`);
+    });
+  }
+
+  /**
+   * Wait until the cloud panel has the specified item and percentage attributes
+   * defined, if the `timeoutSeconds` is supplied it will only wait for the
+   * specified time before timing out.
+   * @param {string} appId app window ID
+   * @param {number} items The items expected on the cloud panel.
+   * @param {number} percentage The percentage integer expected on the cloud
+   *     panel.
+   * @param {number=} timeoutSeconds Whether to timeout when verifying the panel
+   *     attributes.
+   */
+  async waitForCloudPanelState(appId, items, percentage, timeoutSeconds = 10) {
+    const futureDate = new Date();
+    futureDate.setSeconds(futureDate.getSeconds() + timeoutSeconds);
+    const caller = getCaller();
+    return repeatUntil(async () => {
+      chrome.test.assertTrue(
+          new Date() < futureDate,
+          `Timed out waiting for items=${items} and percentage=${
+              percentage} to appear on xf-cloud-panel`);
+      const cloudPanel = await this.callRemoteTestUtil(
+          'deepQueryAllElements', appId,
+          [`xf-cloud-panel[percentage="${percentage}"][items="${items}"]`]);
+      if (cloudPanel && cloudPanel.length === 1) {
+        return true;
+      }
+      return pending(
+          caller,
+          `Still waiting for xf-cloud-panel to have items=${
+              items} and percentage=${percentage}`);
+    });
+  }
+
+  /**
+   * Clicks the enabled and visible move to trash button and ensures the delete
+   * button is hidden.
+   * @param {string} appId
+   */
+  async clickTrashButton(appId) {
+    await this.waitForElement(appId, '#delete-button[hidden]');
+    await this.waitAndClickElement(
+        appId, '#move-to-trash-button:not([hidden]):not([disabled])');
+  }
+
+  /**
+   * Fakes the response from spaced when it retrieves the free space.
+   * @param {bigint} freeSpace
+   */
+  async setSpacedFreeSpace(freeSpace) {
+    console.log(freeSpace);
+    await sendTestMessage(
+        {name: 'setSpacedFreeSpace', freeSpace: String(freeSpace)});
+  }
+
+  /**
+   * Waits for the specified element appearing in the DOM. `query_jelly` or
+   * `query_old` are used depending on the state of the migration to
+   * cros_components.
+   * @param  {string} appId App window Id.
+   * @param {string|!Array<string>} query_jelly Used when cros_components are
+   *     used. See `waitForElement` for details.
+   * @param {string|!Array<string>} query_old Used when cros_components are not
+   *     used. See `waitForElement` for details.
+   * @returns {Promise<ElementObject>} Promise to be fulfilled when the
+   *     element appears.
+   */
+  waitForElementJelly(appId, query_jelly, query_old) {
+    return this.isJellybean(appId).then(
+        isJellybean =>
+            this.waitForElement(appId, isJellybean ? query_jelly : query_old));
+  }
+
+  /**
+   * Shorthand for clicking the appropriate element, depending the state of the
+   * Jellybean experiment.
+   * @param {string} appId App window Id.
+   * @param {string|!Array<string>} query_jelly The query when using
+   *     cros_components. See `waitAndClickElement` for details.
+   * @param {string|!Array<string>} query_old The query when not using
+   *     cros_components. See `waitAndClickElement` for details.
+   * @param {KeyModifiers=} opt_keyModifiers Object
+   * @return {Promise} Promise to be fulfilled with the clicked element.
+   */
+  async waitAndClickElementJelly(
+      appId, query_jelly, query_old, opt_keyModifiers) {
+    const isJellybean = await this.isJellybean(appId);
+    return await this.waitAndClickElement(
+        appId, isJellybean ? query_jelly : query_old, opt_keyModifiers);
   }
 }

@@ -107,6 +107,8 @@ external/wpt/WebCryptoAPI/generateKey/successes_RSA-OAEP.https.any.worker.html?1
 external/wpt/WebCryptoAPI/import_export/ec_importKey.https.any.html
 external/wpt/accelerometer/Accelerometer-enabled-by-feature-policy.https.html
 external/wpt/accessibility/crashtests/activedescendant-crash.html
+external/wpt/acid/acid2/reftest.html
+external/wpt/acid/acid3/test.html
 external/wpt/audio-output/selectAudioOutput-permissions-policy.https.sub.html
 external/wpt/beacon/headers/header-referrer-no-referrer-when-downgrade.https.html
 external/wpt/bluetooth/characteristic/readValue/characteristic-is-removed.https.window.html
@@ -371,7 +373,6 @@ external/wpt/html/canvas/element/drawing-text-to-the-canvas/direction-rtl.html
 external/wpt/html/canvas/element/fill-and-stroke-styles/2d.gradient.interpolate.zerosize.fillText.html
 external/wpt/html/canvas/element/manual/drawing-images-to-the-canvas/image-orientation/drawImage-from-blob.tentative.html
 external/wpt/html/canvas/element/manual/shadows/canvas_shadows_001.htm
-external/wpt/html/canvas/offscreen/manual/the-offscreen-canvas/offscreencanvas.commit.html
 external/wpt/html/canvas/offscreen/manual/the-offscreen-canvas/offscreencanvas.resize.html
 external/wpt/html/canvas/offscreen/text/2d.text.draw.fill.maxWidth.NaN.html
 external/wpt/html/canvas/offscreen/text/2d.text.draw.fill.maxWidth.NaN.worker.html
@@ -676,7 +677,6 @@ fast/css-generated-content/014.html
 fast/css-generated-content/before-with-first-letter.html
 fast/css-generated-content/quotes-lang.html
 fast/css/008.html
-fast/css/acid2.html
 fast/css/bidi-override-in-anonymous-block.html
 fast/css/clip-zooming.html
 fast/css/content-counter-010.htm
@@ -926,14 +926,10 @@ http/tests/devtools/indexeddb/live-update-indexeddb-list.js
 http/tests/devtools/service-workers/sw-navigate-useragent.js
 http/tests/devtools/tracing/frame-model-instrumentation.js
 http/tests/devtools/tracing/timeline-js/timeline-gc-event.js
-http/tests/devtools/tracing/timeline-js/timeline-microtasks.js
-http/tests/devtools/tracing/timeline-js/timeline-script-id.js
-http/tests/devtools/tracing/timeline-layout/timeline-layout-reason.js
 http/tests/devtools/tracing/timeline-layout/timeline-layout-with-invalidations.js
 http/tests/devtools/tracing/timeline-paint/paint-profiler-update.js
 http/tests/devtools/tracing/timeline-paint/timeline-paint.js
 http/tests/devtools/tracing/timeline-paint/timeline-pre-paint.js
-http/tests/devtools/tracing/timeline-time/timeline-time.js
 http/tests/dom/raf-throttling-out-of-view-cross-origin-page.html
 http/tests/html/validation-bubble-oopif-clip.html
 http/tests/images/document-policy-lossy-images-max-bpp.php
@@ -957,14 +953,11 @@ http/tests/media/media-source/mediasource-duration.html
 http/tests/media/reload-after-dialog.html
 http/tests/media/video-buffered-range-contains-currentTime.html
 http/tests/media/video-frame-size-change.html
-http/tests/misc/acid2.html
-http/tests/misc/acid3.html
 http/tests/misc/hover-state-recomputed-on-main-frame.html
 http/tests/misc/insert-iframe-into-xml-document-before-xsl-transform.html
 http/tests/navigation/location-change-repeated-from-blank.html
 http/tests/permissions/chromium/test-request-worker.html
 http/tests/preload/meta-viewport-link-headers-imagesrcset.html
-http/tests/preload/without_doc_write_evaluator.html
 http/tests/security/cross-origin-shared-worker-allowed.html
 http/tests/security/frameNavigation/xss-ALLOWED-parent-navigation-change-async.html
 http/tests/security/offscreencanvas-placeholder-read-blocked-no-crossorigin.html
@@ -1517,7 +1510,6 @@ virtual/oopr-canvas2d/fast/canvas/canvas-imageSmoothingEnabled-patterns.html
 virtual/oopr-canvas2d/fast/canvas/canvas-largedraws.html
 virtual/oopr-canvas2d/fast/canvas/canvas-pattern-no-repeat-with-transformations.html
 virtual/oopr-canvas2d/fast/canvas/canvas-text-baseline.html
-virtual/oopr-canvas2d/fast/canvas/canvas-zero-length-lineCap.html
 virtual/oopr-canvas2d/fast/canvas/image-object-in-canvas.html
 virtual/oopr-canvas2d/fast/canvas/quadraticCurveTo.xml
 virtual/overlay-scrollbar/plugin-overlay-scrollbar-mouse-capture.html
@@ -1888,7 +1880,6 @@ virtual/threaded/external/wpt/css/css-scroll-snap/input/keyboard.html
 virtual/threaded/external/wpt/scroll-animations/css/at-scroll-timeline-default-descriptors-iframe.html
 virtual/threaded/external/wpt/scroll-animations/scroll-timelines/current-time-nan.html
 virtual/threaded/external/wpt/web-animations/timing-model/animations/updating-the-finished-state.html
-virtual/threaded/http/tests/devtools/tracing/timeline-misc/timeline-event-causes.js
 virtual/threaded/http/tests/devtools/tracing/timeline-paint/paint-profiler-update.js
 virtual/threaded/printing/absolute-position-headers-and-footers.html
 virtual/threaded/printing/fixed-positioned-headers-and-footers-inside-transform.html

@@ -26,6 +26,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace content {
 
 namespace {
@@ -115,7 +119,7 @@ class TextInputClientMacTest : public content::RenderViewHostTestHarness {
  private:
   friend class ScopedTestingThread;
 
-  raw_ptr<RenderWidgetHost> widget_;
+  raw_ptr<RenderWidgetHost, DanglingUntriaged> widget_;
   std::unique_ptr<TextInputClientLocalFrame> local_frame_;
 
   base::Thread thread_;

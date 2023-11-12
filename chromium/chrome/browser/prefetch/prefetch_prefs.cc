@@ -17,7 +17,7 @@ void RegisterPredictionOptionsProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterIntegerPref(
       prefs::kNetworkPredictionOptions,
-      static_cast<int>(NetworkPredictionOptions::kDefault),
+      static_cast<int>(NetworkPredictionOptions::kDisabled), // Vivaldi
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 

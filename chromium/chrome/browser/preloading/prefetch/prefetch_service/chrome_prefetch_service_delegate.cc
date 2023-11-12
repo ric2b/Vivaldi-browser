@@ -4,6 +4,8 @@
 
 #include "chrome/browser/preloading/prefetch/prefetch_service/chrome_prefetch_service_delegate.h"
 
+#include "chrome/browser/battery/battery_saver.h"
+#include "chrome/browser/data_saver/data_saver.h"
 #include "chrome/browser/prefetch/prefetch_prefs.h"
 #include "chrome/browser/preloading/prefetch/prefetch_service/prefetch_origin_decider.h"
 #include "chrome/browser/profiles/profile.h"
@@ -18,6 +20,9 @@
 #include "google_apis/google_api_keys.h"
 #include "net/http/http_util.h"
 #include "url/gurl.h"
+
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 
 ChromePrefetchServiceDelegate::ChromePrefetchServiceDelegate(
     content::BrowserContext* browser_context)
@@ -37,7 +42,7 @@ std::string ChromePrefetchServiceDelegate::GetAcceptLanguageHeader() {
 }
 
 GURL ChromePrefetchServiceDelegate::GetDefaultPrefetchProxyHost() {
-  return GURL("https://tunnel.googlezip.net/");
+  return GURL(KNOWN_404("/tunnel"));
 }
 
 std::string ChromePrefetchServiceDelegate::GetAPIKey() {
@@ -45,11 +50,11 @@ std::string ChromePrefetchServiceDelegate::GetAPIKey() {
 }
 
 GURL ChromePrefetchServiceDelegate::GetDefaultDNSCanaryCheckURL() {
-  return GURL("http://dns-tunnel-check.googlezip.net/connect");
+  return GURL(KNOWN_404("/dns-tunnel-check/connect"));
 }
 
 GURL ChromePrefetchServiceDelegate::GetDefaultTLSCanaryCheckURL() {
-  return GURL("http://tls-tunnel-check.googlezip.net/connect");
+  return GURL(KNOWN_404("/tls-tunnel-check/connect"));
 }
 
 void ChromePrefetchServiceDelegate::ReportOriginRetryAfter(
@@ -81,7 +86,24 @@ ChromePrefetchServiceDelegate::IsSomePreloadingEnabled() {
   return prefetch::IsSomePreloadingEnabled(*profile_->GetPrefs());
 }
 
+bool ChromePrefetchServiceDelegate::IsPreloadingPrefEnabled() {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
+  return prefetch::IsSomePreloadingEnabled(*profile_->GetPrefs()) !=
+         content::PreloadingEligibility::kPreloadingDisabled;
+}
+
+bool ChromePrefetchServiceDelegate::IsDataSaverEnabled() {
+  return data_saver::IsDataSaverEnabled();
+}
+
+bool ChromePrefetchServiceDelegate::IsBatterySaverEnabled() {
+  return battery::IsBatterySaverEnabled();
+}
+
 bool ChromePrefetchServiceDelegate::IsExtendedPreloadingEnabled() {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
   return prefetch::GetPreloadPagesState(*profile_->GetPrefs()) ==
          prefetch::PreloadPagesState::kExtendedPreloading;
 }

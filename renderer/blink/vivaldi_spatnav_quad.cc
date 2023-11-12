@@ -38,6 +38,10 @@ blink::Element* Quad::GetElement() {
   return web_element_.Unwrap<blink::Element>();
 }
 
+blink::WebElement Quad::GetWebElement() {
+  return web_element_;
+}
+
 gfx::Rect Quad::GetRect() {
   gfx::Rect r = gfx::Rect(x_, y_, width_, height_);
   return r;

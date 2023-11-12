@@ -44,16 +44,17 @@ display UI to the user.
 
 ![Updater process architecture diagram](images/architecture.svg)
 
-The updater may be installed *per-user* or *system-wide*. If installed per-user,
-the updater can only update applications owned by that user, whereas a system-
-wide updater can update applications owned by any entity on the system. In
-multi-user systems, it is efficient for software such as the browser to be
-installed system-wide, owned by root (or the system user) and run by individual
-users, but this requires the updater to maintain root privileges in order to
-update it. Therefore, in a system-wide installation, the server process runs as
-root (or at high integrity). One system-wide installation of the updater and any
-number of per-user installations of the updater can coexist and operate
-independently on the same system.
+The updater may be installed *per-user* or *system-wide*. If installed
+per-user, the updater may lack permissions to update applications owned by
+other users, whereas a system- wide updater can update applications owned by
+any entity on the system. In multi-user systems, it is efficient for software
+such as the browser to be installed system-wide, owned by root (or the system
+user) and run by individual users, but this requires the updater to maintain
+root privileges in order to update it. Therefore, in a system-wide
+installation, the server process runs as root (or at high integrity). One
+system-wide installation of the updater and any number of per-user
+installations of the updater can coexist and operate independently on the same
+system.
 
 Different versions of the updater can coexist even within the same installation
 of the updater, but only one such instance is *active*. Inactive versions of the
@@ -94,6 +95,11 @@ prefs" file. Access to the global prefs file is protected by a global
 Each instance of the updater also has its own separate local prefs file. Local
 prefs store information specific to the instance that owns them.
 
+When a new version of the updater installs, it will call GetVersion to discover
+the active version of the server. If the active version does not respond, the
+installer will assume it is broken and activate the version of the updater that
+has just been installed.
+
 ##### Qualification
 Instances are installed in the `Unqualified` state. Unqualified instances of
 the updater perform a self-test before activating. Each instance registers a
@@ -109,7 +115,7 @@ The updater also performs other basic health checks during qualification, which
 are detailed in the platform-specific sections.
 
 Qualification is skipped (along with any other pre-active states) if there is
-no active instance of the updater.
+no active instance of the updater, or if this instance of the updater is active.
 
 ##### Activation
 When an instance transitions to the active state, it acquires the updater's
@@ -120,6 +126,11 @@ with its own. Then, it clears the "swapping" bit, flushes the prefs file again,
 and starts listening for instructions on the RPC channels. The swapping bit
 ensures that the an updater will recover and restart activation if the program
 is interrupted mid-activation.
+
+After activating, the server resets its own qualification state to
+"unqualified". If somehow the active version of the updater decreases (most
+likely due to unexpected user intervention), the instance will have to qualify
+itself again before reactivating.
 
 ##### Deactivation
 When a newer instance of the updater activates, formerly active instances will
@@ -915,8 +926,8 @@ a lock.
 On POSIX, the most common means of uninstalling a program is to delete the
 program's application bundle from disk. When a program registers itself with
 the updater, it provides the path to the application bundle. If the bundle has
-been removed (or is owned by a user different from the updater), the updater
-considers it uninstalled and ceases attempting to update it.
+been removed (or is owned by root and the updater is a user-scope updater), the
+updater considers it uninstalled and ceases attempting to update it.
 
 ### Periodic Task Scheduling
 On Mac, the scheduler is implemented via LaunchAgents (for user-level installs)

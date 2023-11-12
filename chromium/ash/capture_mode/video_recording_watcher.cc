@@ -16,7 +16,6 @@
 #include "ash/capture_mode/capture_mode_metrics.h"
 #include "ash/capture_mode/recording_overlay_controller.h"
 #include "ash/constants/ash_features.h"
-#include "ash/projector/projector_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/style/ash_color_id.h"
 #include "ash/wm/desks/desks_util.h"
@@ -183,7 +182,6 @@ VideoRecordingWatcher::VideoRecordingWatcher(
     aura::Window* window_being_recorded,
     mojo::PendingRemote<viz::mojom::FrameSinkVideoCaptureOverlay>
         cursor_capture_overlay,
-    bool projector_mode,
     bool is_recording_audio)
     : controller_(controller),
       active_behavior_(active_behavior),
@@ -192,12 +190,10 @@ VideoRecordingWatcher::VideoRecordingWatcher(
       current_root_(window_being_recorded->GetRootWindow()),
       recording_source_(controller_->source()),
       cursor_capture_overlay_remote_(std::move(cursor_capture_overlay)),
-      is_in_projector_mode_(projector_mode),
       is_recording_audio_(is_recording_audio) {
-  DCHECK(controller_);
-  DCHECK(window_being_recorded_);
-  DCHECK(current_root_);
-  DCHECK(!is_in_projector_mode_ || features::IsProjectorEnabled());
+  CHECK(controller_);
+  CHECK(window_being_recorded_);
+  CHECK(current_root_);
 
   if (!window_being_recorded_->IsRootWindow()) {
     DCHECK_EQ(recording_source_, CaptureModeSource::kWindow);
@@ -243,41 +239,38 @@ VideoRecordingWatcher::VideoRecordingWatcher(
   window_being_recorded_->AddPreTargetHandler(
       this, ui::EventTarget::Priority::kAccessibility);
 
-  controller_->camera_controller()->OnRecordingStarted(is_in_projector_mode_);
-
-  if (active_behavior_->ShouldCreateRecordingOverlayController()) {
+  const bool should_create_recording_overlay =
+      active_behavior_->ShouldCreateRecordingOverlayController();
+  if (should_create_recording_overlay) {
     recording_overlay_controller_ =
         std::make_unique<RecordingOverlayController>(window_being_recorded_,
                                                      GetOverlayWidgetBounds());
   }
+
+  controller_->camera_controller()->OnRecordingStarted(active_behavior_);
 
   if (features::AreCaptureModeDemoToolsEnabled() &&
       controller_->enable_demo_tools()) {
     demo_tools_controller_ =
         std::make_unique<CaptureModeDemoToolsController>(this);
   }
-
-  if (features::IsProjectorEnabled()) {
-    ProjectorControllerImpl::Get()->OnRecordingStarted(current_root_,
-                                                       is_in_projector_mode_);
-  }
 }
 
 VideoRecordingWatcher::~VideoRecordingWatcher() {
-  DCHECK(is_shutting_down_);
+  CHECK(is_shutting_down_);
 }
 
 void VideoRecordingWatcher::ToggleRecordingOverlayEnabled() {
-  DCHECK(is_in_projector_mode_);
-  DCHECK(!is_shutting_down_);
-  DCHECK(recording_overlay_controller_);
+  CHECK(active_behavior_->ShouldCreateRecordingOverlayController());
+  CHECK(!is_shutting_down_);
+  CHECK(recording_overlay_controller_);
 
   recording_overlay_controller_->Toggle();
 }
 
 void VideoRecordingWatcher::ShutDown() {
   is_shutting_down_ = true;
-  DCHECK(window_being_recorded_);
+  CHECK(window_being_recorded_);
 
   window_size_change_throttle_timer_.Stop();
   cursor_events_throttle_timer_.Stop();
@@ -287,10 +280,6 @@ void VideoRecordingWatcher::ShutDown() {
   demo_tools_controller_.reset();
   dimmers_.clear();
   ReleaseLayer();
-
-  if (features::IsProjectorEnabled()) {
-    ProjectorControllerImpl::Get()->OnRecordingEnded(is_in_projector_mode_);
-  }
 
   window_being_recorded_->RemovePreTargetHandler(this);
   TabletModeController::Get()->RemoveObserver(this);
@@ -452,10 +441,6 @@ void VideoRecordingWatcher::OnWindowRemovingFromRootWindow(
   root_observer_ =
       std::make_unique<RecordedWindowRootObserver>(current_root_, this);
   controller_->OnRecordedWindowChangingRoot(window_being_recorded_, new_root);
-
-  if (is_in_projector_mode_) {
-    ProjectorControllerImpl::Get()->OnRecordedWindowChangingRoot(new_root);
-  }
 }
 
 void VideoRecordingWatcher::OnPaintLayer(const ui::PaintContext& context) {

@@ -10,12 +10,12 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
-#include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_tick_clock.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
 #include "cc/layers/layer.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
@@ -41,6 +41,7 @@
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/webapps/browser/installable/installable_manager.h"
+#include "components/webapps/browser/installable/ml_installability_promoter.h"
 #include "components/webrtc/media_stream_devices_controller.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -318,7 +319,8 @@ TabImpl::TabImpl(ProfileImpl* profile,
                  const std::string& guid)
     : profile_(profile),
       web_contents_(std::move(web_contents)),
-      guid_(guid.empty() ? base::GenerateGUID() : guid) {
+      guid_(guid.empty() ? base::Uuid::GenerateRandomV4().AsLowercaseString()
+                         : guid) {
   GetTabs().insert(this);
   DCHECK(web_contents_);
   // This code path is hit when the page requests a new tab, which should
@@ -422,7 +424,7 @@ TabImpl::TabImpl(ProfileImpl* profile,
   webapps::InstallableManager::CreateForWebContents(web_contents_.get());
 
 #if BUILDFLAG(IS_ANDROID)
-  // Must be created after InstallableManager.
+  // Must be created after InstallableManager and MLInstallabilityPromoter.
   WebLayerAppBannerManagerAndroid::CreateForWebContents(web_contents_.get());
 #endif
 }

@@ -16,7 +16,7 @@
 #include "base/task/thread_pool.h"
 #include "components/arc/common/intent_helper/adaptive_icon_delegate.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
-#include "ui/base/layout.h"
+#include "ui/base/resource/resource_scale_factor.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_skia_rep.h"
@@ -132,11 +132,11 @@ GetInstanceForRequestActivityIcons() {
     return ActivityIconLoader::GetResult::FAILED_ARC_NOT_SUPPORTED;
   }
 
-  if (service->GetInterfaceVersion(crosapi::mojom::Arc::Uuid_) <
+  if (service->GetInterfaceVersion<crosapi::mojom::Arc>() <
       int{crosapi::mojom::Arc::MethodMinVersions::
               kRequestActivityIconsMinVersion}) {
     VLOG(2) << "Ash Lacros-Arc version "
-            << service->GetInterfaceVersion(crosapi::mojom::Arc::Uuid_)
+            << service->GetInterfaceVersion<crosapi::mojom::Arc>()
             << " does not support RequestActivityIcons().";
     return ActivityIconLoader::GetResult::FAILED_ARC_NOT_SUPPORTED;
   }

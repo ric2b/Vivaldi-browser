@@ -7,8 +7,8 @@ package org.chromium.chrome.browser.gesturenav;
 import android.os.SystemClock;
 import android.view.MotionEvent;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -28,6 +28,7 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.init.AsyncInitializationActivity;
 import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.layouts.LayoutTestUtils;
 import org.chromium.chrome.browser.layouts.LayoutType;
@@ -37,7 +38,6 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.ChromeApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -59,7 +59,6 @@ public class NavigationHandlerTest {
     private static final String RENDERED_PAGE = "/chrome/test/data/android/navigate/simple.html";
     private static final boolean LEFT_EDGE = true;
     private static final boolean RIGHT_EDGE = false;
-    private static final int PAGELOAD_TIMEOUT_MS = 4000;
 
     private EmbeddedTestServer mTestServer;
     private HistoryNavigationLayout mNavigationLayout;
@@ -122,11 +121,12 @@ public class NavigationHandlerTest {
 
     @Test
     @SmallTest
-    @DisabledTest(message = "https://crbug.com/1376200")
     public void testCloseChromeAtHistoryStackHead() {
         loadNewTabPage();
+        AsyncInitializationActivity.interceptMoveTaskToBackForTesting();
         mNavUtils.swipeFromLeftEdge();
-        ChromeApplicationTestUtils.waitUntilChromeInBackground();
+        CriteriaHelper.pollUiThread(
+                AsyncInitializationActivity::wasMoveTaskToBackInterceptedForTesting);
     }
 
     @Test
@@ -173,19 +173,8 @@ public class NavigationHandlerTest {
     @Test
     @SmallTest
     public void testSwipeNavigateOnRenderedPage() {
-        FeatureList.setTestFeatures(Map.of(ChromeFeatureList.BACK_FORWARD_TRANSITIONS, false));
-        testSwipeNavigateOnRenderedPageInternal();
-    }
-
-    @Test
-    @SmallTest
-    @DisabledTest(message = "crbug.com/1426201")
-    public void testSwipeNavigateOnRenderedPage_withBackForwardTransition() {
-        FeatureList.setTestFeatures(Map.of(ChromeFeatureList.BACK_FORWARD_TRANSITIONS, true));
-        testSwipeNavigateOnRenderedPageInternal();
-    }
-
-    private void testSwipeNavigateOnRenderedPageInternal() {
+        // TODO(crbug.com/1426201): Write a test variation running with
+        //     ChromeFeatureList.BACK_FORWARD_TRANSITIONS enabled when the feature is completed.
         mTestServer = EmbeddedTestServer.createAndStartServer(
                 InstrumentationRegistry.getInstrumentation().getContext());
         mActivityTestRule.loadUrl(mTestServer.getURL(RENDERED_PAGE));
@@ -303,6 +292,7 @@ public class NavigationHandlerTest {
     @Test
     @SmallTest
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @DisabledTest(message = "https://crbug.com/1435090")
     public void testSwipeAndHoldOnNtp_EnterTabSwitcher() throws TimeoutException {
         // Clicking tab switcher button while swiping and holding the gesture navigation
         // bubble should reset the state and dismiss the UI.

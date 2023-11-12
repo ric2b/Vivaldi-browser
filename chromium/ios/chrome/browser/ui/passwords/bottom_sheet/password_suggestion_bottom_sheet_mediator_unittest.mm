@@ -11,9 +11,10 @@
 #import "components/password_manager/core/browser/affiliation/mock_affiliation_service.h"
 #import "components/password_manager/core/browser/password_manager_test_utils.h"
 #import "components/password_manager/core/browser/test_password_store.h"
-#import "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
+#import "components/password_manager/ios/shared_password_controller.h"
+#import "components/prefs/pref_registry_simple.h"
+#import "components/prefs/testing_pref_service.h"
 #import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/favicon/favicon_service_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
@@ -22,10 +23,12 @@
 #import "ios/chrome/browser/passwords/ios_chrome_password_check_manager.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_check_manager_factory.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/web_state_list/test/fake_web_state_list_delegate.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/ui/passwords/bottom_sheet/password_suggestion_bottom_sheet_consumer.h"
-#import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
@@ -80,15 +83,18 @@
 
 + (instancetype)providerWithSuggestions {
   NSArray<FormSuggestion*>* suggestions = @[
-    [FormSuggestion suggestionWithValue:@"foo"
-                     displayDescription:nil
-                                   icon:@""
-                             identifier:0
-                         requiresReauth:NO],
+    [FormSuggestion
+        suggestionWithValue:@"foo"
+         displayDescription:nil
+                       icon:nil
+                popupItemId:autofill::PopupItemId::kAutocompleteEntry
+          backendIdentifier:nil
+             requiresReauth:NO],
     [FormSuggestion suggestionWithValue:@"bar"
                      displayDescription:nil
-                                   icon:@""
-                             identifier:1
+                                   icon:nil
+                            popupItemId:autofill::PopupItemId::kAddressEntry
+                      backendIdentifier:nil
                          requiresReauth:NO]
   ];
   return [[PasswordSuggestionBottomSheetMediatorTestSuggestionProvider alloc]
@@ -164,8 +170,7 @@ class PasswordSuggestionBottomSheetMediatorTest : public PlatformTest {
         chrome_browser_state_(TestChromeBrowserState::Builder().Build()) {}
 
   void SetUp() override {
-    GURL url("http://foo.com");
-    test_web_state_->SetCurrentURL(url);
+    test_web_state_->SetCurrentURL(URL());
 
     TestChromeBrowserState::Builder builder;
     builder.AddTestingFactory(ios::FaviconServiceFactory::GetInstance(),
@@ -208,23 +213,26 @@ class PasswordSuggestionBottomSheetMediatorTest : public PlatformTest {
                                    WebStateList::INSERT_ACTIVATE,
                                    WebStateOpener());
 
+    prefs_ = std::make_unique<TestingPrefServiceSimple>();
+    prefs_->registry()->RegisterIntegerPref(
+        prefs::kIosPasswordBottomSheetDismissCount, 0);
+
     password_manager::MockAffiliationService affiliation_service_;
     store_ =
         base::WrapRefCounted(static_cast<password_manager::TestPasswordStore*>(
             IOSChromePasswordStoreFactory::GetForBrowserState(
                 chrome_browser_state_.get(), ServiceAccessType::EXPLICIT_ACCESS)
                 .get()));
-    presenter_ = std::make_unique<password_manager::SavedPasswordsPresenter>(
-        &affiliation_service_, store_, /*accont_store=*/nullptr);
-
     mediator_ = [[PasswordSuggestionBottomSheetMediator alloc]
-           initWithWebStateList:&web_state_list_
-                  faviconLoader:IOSChromeFaviconLoaderFactory::
-                                    GetForBrowserState(
-                                        chrome_browser_state_.get())
-                    prefService:chrome_browser_state_->GetPrefs()
-                         params:params_
-        savedPasswordsPresenter:presenter_.get()];
+        initWithWebStateList:&web_state_list_
+               faviconLoader:IOSChromeFaviconLoaderFactory::GetForBrowserState(
+                                 chrome_browser_state_.get())
+                 prefService:prefs_.get()
+                      params:params_
+                reauthModule:nil
+                         URL:URL()
+        profilePasswordStore:store_
+        accountPasswordStore:nullptr];
   }
 
   void CreateMediatorWithSuggestions() {
@@ -234,17 +242,19 @@ class PasswordSuggestionBottomSheetMediatorTest : public PlatformTest {
     CreateMediator();
   }
 
+  GURL URL() { return GURL("http://foo.com"); }
+
   web::WebTaskEnvironment task_environment_;
   std::unique_ptr<web::FakeWebState> test_web_state_;
   FakeWebStateListDelegate web_state_list_delegate_;
   WebStateList web_state_list_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   scoped_refptr<password_manager::TestPasswordStore> store_;
-  std::unique_ptr<password_manager::SavedPasswordsPresenter> presenter_;
   id consumer_;
   NSArray<id<FormSuggestionProvider>>* suggestion_providers_;
   autofill::FormActivityParams params_;
   PasswordSuggestionBottomSheetMediator* mediator_;
+  std::unique_ptr<TestingPrefServiceSimple> prefs_;
 };
 
 // Tests PasswordSuggestionBottomSheetMediator can be initialized.
@@ -268,7 +278,87 @@ TEST_F(PasswordSuggestionBottomSheetMediatorTest, WithSuggestions) {
   CreateMediatorWithSuggestions();
   EXPECT_TRUE(mediator_);
 
-  OCMExpect([consumer_ setSuggestions:[OCMArg isNotNil]]);
+  OCMExpect([consumer_ setSuggestions:[OCMArg isNotNil]
+                            andDomain:[OCMArg isNotNil]]);
   [mediator_ setConsumer:consumer_];
   EXPECT_OCMOCK_VERIFY(consumer_);
+}
+
+TEST_F(PasswordSuggestionBottomSheetMediatorTest, IncrementDismissCount) {
+  CreateMediatorWithSuggestions();
+  EXPECT_TRUE(mediator_);
+
+  EXPECT_EQ(
+      prefs_.get()->GetInteger(prefs::kIosPasswordBottomSheetDismissCount), 0);
+  [mediator_ dismiss];
+  EXPECT_EQ(
+      prefs_.get()->GetInteger(prefs::kIosPasswordBottomSheetDismissCount), 1);
+  [mediator_ dismiss];
+  EXPECT_EQ(
+      prefs_.get()->GetInteger(prefs::kIosPasswordBottomSheetDismissCount), 2);
+  [mediator_ dismiss];
+  EXPECT_EQ(
+      prefs_.get()->GetInteger(prefs::kIosPasswordBottomSheetDismissCount), 3);
+
+  // Expect failure after 3 times.
+#if defined(GTEST_HAS_DEATH_TEST)
+  EXPECT_DEATH([mediator_ dismiss],
+               "Failed when dismiss count is incremented higher than the "
+               "expected value.");
+#endif  // defined(GTEST_HAS_DEATH_TEST)
+}
+
+TEST_F(PasswordSuggestionBottomSheetMediatorTest, SuggestionUsernameHasSuffix) {
+  CreateMediatorWithSuggestions();
+  EXPECT_TRUE(mediator_);
+
+  password_manager::CredentialUIEntry expectedCredential;
+  expectedCredential.username = u"test1";
+  expectedCredential.password = u"test1password";
+  password_manager::CredentialFacet facet;
+  GURL URL(u"http://www.example.com/");
+  facet.signon_realm = URL.spec();
+  expectedCredential.facets = {facet};
+  [mediator_ setCredentialsForTesting:{expectedCredential}];
+
+  FormSuggestion* suggestion = [FormSuggestion
+      suggestionWithValue:[NSString
+                              stringWithFormat:@"%@%@", @"test1",
+                                               kPasswordFormSuggestionSuffix]
+       displayDescription:nil
+                     icon:nil
+              popupItemId:autofill::PopupItemId::kAutocompleteEntry
+        backendIdentifier:nil
+           requiresReauth:NO];
+  absl::optional<password_manager::CredentialUIEntry> credential =
+      [mediator_ getCredentialForFormSuggestion:suggestion];
+  EXPECT_TRUE(credential.has_value());
+  EXPECT_EQ(credential.value(), expectedCredential);
+}
+
+TEST_F(PasswordSuggestionBottomSheetMediatorTest,
+       SuggestionUsernameWithoutSuffix) {
+  CreateMediatorWithSuggestions();
+  EXPECT_TRUE(mediator_);
+
+  password_manager::CredentialUIEntry expectedCredential;
+  expectedCredential.username = u"test1";
+  expectedCredential.password = u"test1password";
+  password_manager::CredentialFacet facet;
+  GURL URL(u"http://www.example.com/");
+  facet.signon_realm = URL.spec();
+  expectedCredential.facets = {facet};
+  [mediator_ setCredentialsForTesting:{expectedCredential}];
+
+  FormSuggestion* suggestion = [FormSuggestion
+      suggestionWithValue:@"test1"
+       displayDescription:nil
+                     icon:nil
+              popupItemId:autofill::PopupItemId::kAutocompleteEntry
+        backendIdentifier:nil
+           requiresReauth:NO];
+  absl::optional<password_manager::CredentialUIEntry> credential =
+      [mediator_ getCredentialForFormSuggestion:suggestion];
+  EXPECT_TRUE(credential.has_value());
+  EXPECT_EQ(credential.value(), expectedCredential);
 }

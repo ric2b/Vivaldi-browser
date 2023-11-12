@@ -86,9 +86,12 @@ enum class ProfileSignout {
   // User cleared account cookies when there's no sync consent, which has caused
   // sign out.
   kUserDeletedAccountCookies = 25,
+  // User tapped 'Undo' in a snackbar that is shown right after sign-in through
+  // promo in bookmarks and reading list page. (iOS only).
+  kUserTappedUndoRightAfterSignIn = 26,
 
   // Keep this as the last enum.
-  kMaxValue = kUserDeletedAccountCookies
+  kMaxValue = kUserTappedUndoRightAfterSignIn
 };
 
 // Enum values used for use with "AutoLogin.Reverse" histograms.
@@ -129,6 +132,7 @@ enum AccessPointAction {
 enum class AccessPoint : int {
   ACCESS_POINT_START_PAGE = 0,
   ACCESS_POINT_NTP_LINK = 1,
+  // Access point from the three dot app menu.
   ACCESS_POINT_MENU = 2,
   ACCESS_POINT_SETTINGS = 3,
   ACCESS_POINT_SUPERVISED_USER = 4,
@@ -141,7 +145,7 @@ enum class AccessPoint : int {
   ACCESS_POINT_USER_MANAGER = 11,
   ACCESS_POINT_DEVICES_PAGE = 12,
   ACCESS_POINT_CLOUD_PRINT = 13,
-  ACCESS_POINT_CONTENT_AREA = 14,
+  // ACCESS_POINT_CONTENT_AREA = 14, no longer used.
   ACCESS_POINT_SIGNIN_PROMO = 15,
   ACCESS_POINT_RECENT_TABS = 16,
   // This should never have been used to get signin URL.
@@ -172,9 +176,6 @@ enum class AccessPoint : int {
   ACCESS_POINT_NTP_SIGNED_OUT_ICON = 41,
   ACCESS_POINT_NTP_FEED_CARD_MENU_PROMO = 42,
   ACCESS_POINT_NTP_FEED_BOTTOM_PROMO = 43,
-  // TODO(crbug.com/1261772): Not a real access point, as this is an internal
-  // component. We should replace its usage with actual access points once we
-  // find ways to attribute the changes accurately.
   ACCESS_POINT_DESKTOP_SIGNIN_MANAGER = 44,
   // Access point for the "For You" First Run Experience on Desktop. See
   // go/for-you-fre or launch/4223982 for more info.
@@ -192,6 +193,8 @@ enum class AccessPoint : int {
   ACCESS_POINT_SEARCH_COMPANION = 50,
   // Access point for the IOS Set Up List on the NTP.
   ACCESS_POINT_SET_UP_LIST = 51,
+  // Access point for the local password migration warning on Android.
+  ACCESS_POINT_PASSWORD_MIGRATION_WARNING_ANDROID = 52,
 
   // Add values above this line with a corresponding label to the
   // "SigninAccessPoint" enum in tools/metrics/histograms/enums.xml
@@ -594,11 +597,11 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point);
 // Records |Signin_Impression_From*| user action.
 void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point);
 
-#if BUILDFLAG(IS_IOS)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 // Records |Signin.AccountConsistencyPromoAction.{PromoEvent}| histogram.
 void RecordConsistencyPromoUserAction(AccountConsistencyPromoAction action,
                                       AccessPoint access_point);
-#endif  // BUILDFLAG(IS_IOS)
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 
 }  // namespace signin_metrics
 

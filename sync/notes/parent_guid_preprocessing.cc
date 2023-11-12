@@ -8,7 +8,7 @@
 #include <unordered_map>
 
 #include "base/check.h"
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
@@ -46,7 +46,7 @@ bool NeedsParentGuidInSpecifics(const syncer::UpdateResponseData& update) {
 // Tried to use the information known by |tracker| to determine the GUID of the
 // parent folder, for the entity updated in |update|. Returns an invalid GUID
 // if the GUID could not be determined. |tracker| must not be null.
-base::GUID TryGetParentGuidFromTracker(
+base::Uuid TryGetParentGuidFromTracker(
     const SyncedNoteTracker* tracker,
     const syncer::UpdateResponseData& update) {
   DCHECK(tracker);
@@ -59,27 +59,27 @@ base::GUID TryGetParentGuidFromTracker(
       tracker->GetEntityForSyncId(update.entity.legacy_parent_id);
   if (!tracked_parent) {
     // Parent not known by tracker.
-    return base::GUID();
+    return base::Uuid();
   }
 
   if (!tracked_parent->note_node()) {
     // Parent is a tombstone; cannot determine the GUID.
-    return base::GUID();
+    return base::Uuid();
   }
 
-  return tracked_parent->note_node()->guid();
+  return tracked_parent->note_node()->uuid();
 }
 
 base::StringPiece GetGuidForEntity(const syncer::EntityData& entity) {
   // Special-case permanent folders, which may not include a GUID in specifics.
   if (entity.server_defined_unique_tag == kMainNotesTag) {
-    return vivaldi::NoteNode::kMainNodeGuid;
+    return vivaldi::NoteNode::kMainNodeUuid;
   }
   if (entity.server_defined_unique_tag == kOtherNotesTag) {
-    return vivaldi::NoteNode::kOtherNotesNodeGuid;
+    return vivaldi::NoteNode::kOtherNotesNodeUuid;
   }
   if (entity.server_defined_unique_tag == kTrashNotesTag) {
-    return vivaldi::NoteNode::kTrashNodeGuid;
+    return vivaldi::NoteNode::kTrashNodeUuid;
   }
   // Fall back to the regular case, i.e. GUID in specifics, or an empty value
   // if not present (including tombstones).
@@ -134,7 +134,7 @@ class LazySyncIdToGuidMapInUpdates {
           sync_id_to_guid_map_;
 };
 
-base::GUID GetParentGuidForUpdate(
+base::Uuid GetParentGuidForUpdate(
     const syncer::UpdateResponseData& update,
     const SyncedNoteTracker* tracker,
     LazySyncIdToGuidMapInUpdates* sync_id_to_guid_map_in_updates) {
@@ -144,14 +144,14 @@ base::GUID GetParentGuidForUpdate(
   if (update.entity.legacy_parent_id.empty()) {
     // Without the |SyncEntity.parent_id| field set, there is no information
     // available to determine the parent and/or its GUID.
-    return base::GUID();
+    return base::Uuid();
   }
 
   // If a tracker is available, i.e. initial sync already done, it may know
   // parent's GUID already.
-  base::GUID guid = TryGetParentGuidFromTracker(tracker, update);
-  if (guid.is_valid()) {
-    return guid;
+  base::Uuid uuid = TryGetParentGuidFromTracker(tracker, update);
+  if (uuid.is_valid()) {
+    return uuid;
   }
 
   // Otherwise, fall back to checking if the parent is included in the full list
@@ -159,21 +159,21 @@ base::GUID GetParentGuidForUpdate(
   // codepath is most crucial for initial sync, where |tracker| is empty, but is
   // also useful for non-initial sync, if the same incoming batch creates both
   // parent and child, none of which would be known by |tracker|.
-  guid = base::GUID::ParseLowercase(
+  uuid = base::Uuid::ParseLowercase(
       sync_id_to_guid_map_in_updates->GetGuidForSyncId(
           update.entity.legacy_parent_id));
-  if (guid.is_valid()) {
-    return guid;
+  if (uuid.is_valid()) {
+    return uuid;
   }
 
   // At this point the parent's GUID couldn't be determined, but actually
   // the |SyncEntity.parent_id| was non-empty. The update will be ignored
   // regardless, but to avoid behavioral differences in UMA metrics, a fake
   // parent GUID is used here, which is known to never match an existing entity.
-  guid = base::GUID::ParseLowercase(kInvalidParentGuid);
-  DCHECK(guid.is_valid());
-  DCHECK(!tracker->GetEntityForGUID(guid));
-  return guid;
+  uuid = base::Uuid::ParseLowercase(kInvalidParentGuid);
+  DCHECK(uuid.is_valid());
+  DCHECK(!tracker->GetEntityForUuid(uuid));
+  return uuid;
 }
 
 // Same as PopulateParentGuidInSpecifics(), but |tracker| must not be null.
@@ -193,11 +193,11 @@ void PopulateParentGuidInSpecificsWithTracker(
       continue;
     }
 
-    const base::GUID guid =
+    const base::Uuid uuid =
         GetParentGuidForUpdate(update, tracker, &sync_id_to_guid_map);
-    if (guid.is_valid()) {
+    if (uuid.is_valid()) {
       update.entity.specifics.mutable_notes()->set_parent_guid(
-          guid.AsLowercaseString());
+          uuid.AsLowercaseString());
     }
   }
 }
@@ -213,12 +213,12 @@ void PopulateParentGuidInSpecifics(const SyncedNoteTracker* tracker,
     // SyncedNoteTracker. Since this is prone to change in the future, the
     // DCHECK below is added to avoid subtle bugs, without relying exclusively
     // on integration tests that exercise legacy data..
-    DCHECK(tracker->GetEntityForGUID(
-        base::GUID::ParseLowercase(vivaldi::NoteNode::kMainNodeGuid)));
-    DCHECK(tracker->GetEntityForGUID(
-        base::GUID::ParseLowercase(vivaldi::NoteNode::kOtherNotesNodeGuid)));
-    DCHECK(tracker->GetEntityForGUID(
-        base::GUID::ParseLowercase(vivaldi::NoteNode::kTrashNodeGuid)));
+    DCHECK(tracker->GetEntityForUuid(
+        base::Uuid::ParseLowercase(vivaldi::NoteNode::kMainNodeUuid)));
+    DCHECK(tracker->GetEntityForUuid(
+        base::Uuid::ParseLowercase(vivaldi::NoteNode::kOtherNotesNodeUuid)));
+    DCHECK(tracker->GetEntityForUuid(
+        base::Uuid::ParseLowercase(vivaldi::NoteNode::kTrashNodeUuid)));
 
     PopulateParentGuidInSpecificsWithTracker(tracker, updates);
     return;

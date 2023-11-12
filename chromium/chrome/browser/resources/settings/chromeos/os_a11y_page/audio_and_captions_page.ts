@@ -13,10 +13,10 @@ import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-import '../../controls/settings_slider.js';
-import '../../controls/settings_toggle_button.js';
-import '../../settings_shared.css.js';
-import '../../a11y_page/captions_subpage.js';
+import '/shared/settings/controls/settings_slider.js';
+import '/shared/settings/controls/settings_toggle_button.js';
+import '../settings_shared.css.js';
+import './captions_subpage.js';
 import 'chrome://resources/cr_components/localized_link/localized_link.js';
 
 import {CrToggleElement} from 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
@@ -27,9 +27,8 @@ import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/p
 
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteOriginMixin} from '../route_origin_mixin.js';
-import {Route} from '../router.js';
+import {Route, routes} from '../router.js';
 
 import {getTemplate} from './audio_and_captions_page.html.js';
 import {AudioAndCaptionsPageBrowserProxy, AudioAndCaptionsPageBrowserProxyImpl} from './audio_and_captions_page_browser_proxy.js';
@@ -108,7 +107,11 @@ export class SettingsAudioAndCaptionsPageElement extends
     this.addWebUiListener(
         'initial-data-ready',
         (startupSoundEnabled: boolean) =>
-            this.onAudioAndCaptionsPageReady_(startupSoundEnabled));
+            this.updateStartupSoundEnabled_(startupSoundEnabled));
+    this.addWebUiListener(
+        'startup-sound-setting-retrieved',
+        (startupSoundEnabled: boolean) =>
+            this.updateStartupSoundEnabled_(startupSoundEnabled));
     this.audioAndCaptionsBrowserProxy_.audioAndCaptionsPageReady();
   }
 
@@ -147,6 +150,7 @@ export class SettingsAudioAndCaptionsPageElement extends
       return;
     }
 
+    this.audioAndCaptionsBrowserProxy_.getStartupSoundEnabled();
     this.attemptDeepLink();
   }
 
@@ -158,7 +162,7 @@ export class SettingsAudioAndCaptionsPageElement extends
    * Handles updating the visibility of the shelf navigation buttons setting
    * and updating whether startupSoundEnabled is checked.
    */
-  private onAudioAndCaptionsPageReady_(startupSoundEnabled: boolean): void {
+  private updateStartupSoundEnabled_(startupSoundEnabled: boolean): void {
     this.$.startupSoundEnabled.checked = startupSoundEnabled;
   }
 }

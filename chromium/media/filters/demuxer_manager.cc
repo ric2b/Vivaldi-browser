@@ -114,7 +114,7 @@ HlsFallbackImplementation SelectHlsFallbackImplementation() {
   if (base::FeatureList::IsEnabled(kHlsPlayer)) {
     return HlsFallbackImplementation::kMediaPlayer;
   }
-  return kNone;
+  return HlsFallbackImplementation::kNone;
 #endif
 }
 
@@ -367,6 +367,10 @@ void DemuxerManager::RespondToDemuxerMemoryUsageReport(
   }
 }
 
+void DemuxerManager::DisableDemuxerCanChangeType() {
+  demuxer_->DisableCanChangeType();
+}
+
 PipelineStatus DemuxerManager::CreateDemuxer(
     bool load_media_source,
     DataSource::Preload preload,
@@ -580,9 +584,11 @@ std::unique_ptr<Demuxer> DemuxerManager::CreateFFmpegDemuxer() {
 
 #if BUILDFLAG(ENABLE_HLS_DEMUXER)
 std::unique_ptr<Demuxer> DemuxerManager::CreateHlsDemuxer() {
-  auto player_impl = std::make_unique<HlsManifestDemuxerEngine>();
-  return std::make_unique<ManifestDemuxer>(
-      media_task_runner_, std::move(player_impl), media_log_.get());
+  auto engine = std::make_unique<HlsManifestDemuxerEngine>(
+      client_->GetHlsDataSourceProvider(), media_task_runner_, loaded_url_,
+      media_log_.get());
+  return std::make_unique<ManifestDemuxer>(media_task_runner_,
+                                           std::move(engine), media_log_.get());
 }
 #endif
 

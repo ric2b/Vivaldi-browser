@@ -45,6 +45,7 @@ import org.chromium.android_webview.common.AwSwitches;
 import org.chromium.android_webview.common.CommandLineUtil;
 import org.chromium.android_webview.common.DeveloperModeUtils;
 import org.chromium.android_webview.common.FlagOverrideHelper;
+import org.chromium.android_webview.common.Lifetime;
 import org.chromium.android_webview.common.ProductionSupportedFlagList;
 import org.chromium.android_webview.common.SafeModeController;
 import org.chromium.android_webview.variations.FastVariationsSeedSafeModeAction;
@@ -104,6 +105,7 @@ import java.util.concurrent.FutureTask;
  * </ul>
  */
 @SuppressWarnings("deprecation")
+@Lifetime.Singleton
 public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
     private static final String TAG = "WVCFactoryProvider";
 
@@ -170,6 +172,15 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
     private boolean mIsSafeModeEnabled;
 
     private ServiceWorkerController mServiceWorkerController;
+
+    // Timestamp of init start and duration, used in the
+    // 'WebView.Startup.CreationTime.Stage1.FactoryInit' trace event.
+    public class InitInfo {
+        public long mStartTime;
+        public long mDuration;
+    };
+
+    private InitInfo mInitInfo = new InitInfo();
 
     @RequiresApi(Build.VERSION_CODES.P)
     private ObjectHolderForP mObjectHolderForP =
@@ -285,7 +296,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
     @SuppressWarnings("NoContextGetApplicationContext")
     private void initialize(WebViewDelegate webViewDelegate) {
-        long startTime = SystemClock.uptimeMillis();
+        mInitInfo.mStartTime = SystemClock.uptimeMillis();
         try (ScopedSysTraceEvent e1 =
                         ScopedSysTraceEvent.scoped("WebViewChromiumFactoryProvider.initialize")) {
             PackageInfo packageInfo;
@@ -454,11 +465,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
             SafeModeController controller = SafeModeController.getInstance();
             controller.registerActions(BrowserSafeModeActionList.sList);
-            long safeModeStart = SystemClock.elapsedRealtime();
             mIsSafeModeEnabled = controller.isSafeModeEnabled(webViewPackageName);
-            long safeModeEnd = SystemClock.elapsedRealtime();
-            RecordHistogram.recordTimesHistogram(
-                    "Android.WebView.SafeMode.CheckStateBlockingTime", safeModeEnd - safeModeStart);
             RecordHistogram.recordBooleanHistogram(
                     "Android.WebView.SafeMode.SafeModeEnabled", mIsSafeModeEnabled);
             if (mIsSafeModeEnabled) {
@@ -492,9 +499,9 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
             }
         }
 
+        mInitInfo.mDuration = SystemClock.uptimeMillis() - mInitInfo.mStartTime;
         RecordHistogram.recordTimesHistogram(
-                "Android.WebView.Startup.CreationTime.Stage1.FactoryInit",
-                SystemClock.uptimeMillis() - startTime);
+                "Android.WebView.Startup.CreationTime.Stage1.FactoryInit", mInitInfo.mDuration);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             final long webviewLoadStart =
@@ -842,5 +849,9 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
     @Override
     public PacProcessor createPacProcessor() {
         return GlueApiHelperForR.createPacProcessor();
+    }
+
+    public InitInfo getInitInfo() {
+        return mInitInfo;
     }
 }

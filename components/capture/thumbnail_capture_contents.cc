@@ -52,7 +52,7 @@ scoped_refptr<base::RefCountedMemory> ConvertToPNGOnWorkerThread(
 }  // namespace
 
 // static
-void ThumbnailCaptureContents::Capture(content::BrowserContext* browser_context,
+ThumbnailCaptureContents* ThumbnailCaptureContents::Capture(content::BrowserContext* browser_context,
                                        const GURL& start_url,
                                        gfx::Size initial_size,
                                        gfx::Size target_size,
@@ -60,6 +60,7 @@ void ThumbnailCaptureContents::Capture(content::BrowserContext* browser_context,
   ThumbnailCaptureContents* capture = new ThumbnailCaptureContents();
   capture->Start(browser_context, start_url, initial_size, target_size,
                  std::move(callback));
+  return capture;
 }
 
 ThumbnailCaptureContents::ThumbnailCaptureContents() = default;

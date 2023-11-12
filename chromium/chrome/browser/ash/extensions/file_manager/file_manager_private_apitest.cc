@@ -32,7 +32,7 @@
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ash/file_system_provider/icon_set.h"
 #include "chrome/browser/ash/file_system_provider/provided_file_system_info.h"
-#include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
+#include "chrome/browser/ash/policy/dlp/dlp_files_controller_ash.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
@@ -344,7 +344,7 @@ class FileManagerPrivateApiTest : public extensions::ExtensionApiTest {
 
   base::ScopedTempDir temp_dir_;
   base::ScopedTempDir non_watchable_dir_;
-  raw_ptr<ash::disks::MockDiskMountManager, ExperimentalAsh>
+  raw_ptr<ash::disks::MockDiskMountManager, DanglingUntriaged | ExperimentalAsh>
       disk_mount_manager_mock_ = nullptr;
   DiskMountManager::Disks volumes_;
   DiskMountManager::MountPoints mount_points_;
@@ -764,7 +764,7 @@ class FileManagerPrivateApiDlpTest : public FileManagerPrivateApiTest {
         .WillByDefault(testing::Return(true));
 
     files_controller_ =
-        std::make_unique<policy::DlpFilesController>(*mock_rules_manager_);
+        std::make_unique<policy::DlpFilesControllerAsh>(*mock_rules_manager_);
     ON_CALL(*mock_rules_manager_, GetDlpFilesController)
         .WillByDefault(testing::Return(files_controller_.get()));
 
@@ -775,7 +775,7 @@ class FileManagerPrivateApiDlpTest : public FileManagerPrivateApiTest {
   base::ScopedTempDir drive_path_;
   raw_ptr<policy::MockDlpRulesManager, ExperimentalAsh> mock_rules_manager_ =
       nullptr;
-  std::unique_ptr<policy::DlpFilesController> files_controller_;
+  std::unique_ptr<policy::DlpFilesControllerAsh> files_controller_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -879,15 +879,16 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiDlpTest, DlpMetadata) {
     ASSERT_TRUE(untracked_test_file.IsValid());
   }
 
-  base::MockCallback<chromeos::DlpClient::AddFileCallback> add_file_cb;
-  EXPECT_CALL(add_file_cb, Run).Times(2);
-  dlp::AddFileRequest request;
-  request.set_file_path(blocked_file_path.value());
-  request.set_source_url("https://example1.com");
-  chromeos::DlpClient::Get()->AddFile(request, add_file_cb.Get());
-  request.set_file_path(unrestricted_file_path.value());
-  request.set_source_url("https://example2.com");
-  chromeos::DlpClient::Get()->AddFile(request, add_file_cb.Get());
+  base::MockCallback<chromeos::DlpClient::AddFilesCallback> add_files_cb;
+  EXPECT_CALL(add_files_cb, Run).Times(1);
+  dlp::AddFilesRequest request;
+  dlp::AddFileRequest* file_request1 = request.add_add_file_requests();
+  file_request1->set_file_path(blocked_file_path.value());
+  file_request1->set_source_url("https://example1.com");
+  dlp::AddFileRequest* file_request2 = request.add_add_file_requests();
+  file_request2->set_file_path(unrestricted_file_path.value());
+  file_request2->set_source_url("https://example2.com");
+  chromeos::DlpClient::Get()->AddFiles(request, add_files_cb.Get());
 
   EXPECT_CALL(*mock_rules_manager_, IsRestrictedByAnyRule)
       .WillOnce(testing::Return(policy::DlpRulesManager::Level::kBlock))
@@ -914,15 +915,15 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiDlpTest, DlpRestrictionDetails) {
       "https://internal.com");
   policy::DlpRulesManager::AggregatedComponents components;
   components[policy::DlpRulesManager::Level::kBlock].insert(
-      policy::DlpRulesManager::Component::kArc);
+      data_controls::Component::kArc);
   components[policy::DlpRulesManager::Level::kBlock].insert(
-      policy::DlpRulesManager::Component::kCrostini);
+      data_controls::Component::kCrostini);
   components[policy::DlpRulesManager::Level::kBlock].insert(
-      policy::DlpRulesManager::Component::kPluginVm);
+      data_controls::Component::kPluginVm);
   components[policy::DlpRulesManager::Level::kBlock].insert(
-      policy::DlpRulesManager::Component::kUsb);
+      data_controls::Component::kUsb);
   components[policy::DlpRulesManager::Level::kAllow].insert(
-      policy::DlpRulesManager::Component::kDrive);
+      data_controls::Component::kDrive);
   EXPECT_CALL(*mock_rules_manager_, GetAggregatedDestinations)
       .WillOnce(testing::Return(destinations));
   EXPECT_CALL(*mock_rules_manager_, GetAggregatedComponents)
@@ -943,15 +944,15 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiDlpTest, DlpBlockedComponents) {
 
   policy::DlpRulesManager::AggregatedComponents components;
   components[policy::DlpRulesManager::Level::kBlock].insert(
-      policy::DlpRulesManager::Component::kArc);
+      data_controls::Component::kArc);
   components[policy::DlpRulesManager::Level::kBlock].insert(
-      policy::DlpRulesManager::Component::kCrostini);
+      data_controls::Component::kCrostini);
   components[policy::DlpRulesManager::Level::kBlock].insert(
-      policy::DlpRulesManager::Component::kPluginVm);
+      data_controls::Component::kPluginVm);
   components[policy::DlpRulesManager::Level::kBlock].insert(
-      policy::DlpRulesManager::Component::kUsb);
+      data_controls::Component::kUsb);
   components[policy::DlpRulesManager::Level::kAllow].insert(
-      policy::DlpRulesManager::Component::kDrive);
+      data_controls::Component::kDrive);
   EXPECT_CALL(*mock_rules_manager_, GetAggregatedComponents)
       .WillOnce(testing::Return(components));
 
@@ -986,12 +987,13 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiDlpTest, DlpMetadata_Disabled) {
     ASSERT_TRUE(blocked_test_file.IsValid());
   }
 
-  base::MockCallback<chromeos::DlpClient::AddFileCallback> add_file_cb;
-  EXPECT_CALL(add_file_cb, Run).Times(1);
-  dlp::AddFileRequest request;
-  request.set_file_path(blocked_file_path.value());
-  request.set_source_url("https://example1.com");
-  chromeos::DlpClient::Get()->AddFile(request, add_file_cb.Get());
+  base::MockCallback<chromeos::DlpClient::AddFilesCallback> add_files_cb;
+  EXPECT_CALL(add_files_cb, Run).Times(1);
+  dlp::AddFilesRequest request;
+  dlp::AddFileRequest* file_request = request.add_add_file_requests();
+  file_request->set_file_path(blocked_file_path.value());
+  file_request->set_source_url("https://example1.com");
+  chromeos::DlpClient::Get()->AddFiles(request, add_files_cb.Get());
 
   EXPECT_TRUE(RunExtensionTest("file_browser/dlp_metadata",
                                {.custom_arg = "disabled"},
@@ -1020,12 +1022,13 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiDlpTest, DlpMetadata_Error) {
     ASSERT_TRUE(blocked_test_file.IsValid());
   }
 
-  base::MockCallback<chromeos::DlpClient::AddFileCallback> add_file_cb;
-  EXPECT_CALL(add_file_cb, Run).Times(1);
-  dlp::AddFileRequest request;
-  request.set_file_path(blocked_file_path.value());
-  request.set_source_url("https://example1.com");
-  chromeos::DlpClient::Get()->AddFile(request, add_file_cb.Get());
+  base::MockCallback<chromeos::DlpClient::AddFilesCallback> add_files_cb;
+  EXPECT_CALL(add_files_cb, Run).Times(1);
+  dlp::AddFilesRequest request;
+  dlp::AddFileRequest* file_request = request.add_add_file_requests();
+  file_request->set_file_path(blocked_file_path.value());
+  file_request->set_source_url("https://example1.com");
+  chromeos::DlpClient::Get()->AddFiles(request, add_files_cb.Get());
 
   EXPECT_TRUE(RunExtensionTest("file_browser/dlp_metadata",
                                {.custom_arg = "error"},

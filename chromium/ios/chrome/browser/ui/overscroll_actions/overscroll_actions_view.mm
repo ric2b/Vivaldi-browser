@@ -14,12 +14,20 @@
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/grit/ios_theme_resources.h"
 #import "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -253,15 +261,27 @@ const CGFloat kActionViewBackgroundColorBrightnessIncognito = 80.0 / 256.0;
     [_selectionCircleCroppingLayer addSublayer:_selectionCircleLayer];
 
     _addTabActionImageView = [[UIImageView alloc] init];
+
+    if (IsVivaldiRunning()) {
+      _addTabActionImageView.image = [UIImage imageNamed:vMenuNewTab];
+    } else {
     _addTabActionImageView.image = DefaultSymbolTemplateWithPointSize(
         kPlusSymbol, kOverScrollSymbolPointSize);
+    } // End Vivaldi
+
     _addTabActionImageView.tintColor = [UIColor colorNamed:kTextPrimaryColor];
     [_addTabActionImageView sizeToFit];
     [self addSubview:_addTabActionImageView];
 
     _reloadActionImageView = [[UIImageView alloc] init];
+
+    if (IsVivaldiRunning()) {
+      _reloadActionImageView.image = [UIImage imageNamed:@"toolbar_reload"];
+    } else {
     _reloadActionImageView.image = CustomSymbolTemplateWithPointSize(
         kArrowClockWiseSymbol, kOverScrollSymbolPointSize);
+    } // End Vivaldi
+
     _reloadActionImageView.tintColor = [UIColor colorNamed:kTextPrimaryColor];
     [_reloadActionImageView sizeToFit];
     [self addSubview:_reloadActionImageView];
@@ -269,6 +289,14 @@ const CGFloat kActionViewBackgroundColorBrightnessIncognito = 80.0 / 256.0;
     _closeTabActionImageView = [[UIImageView alloc] init];
     _closeTabActionImageView.image = DefaultSymbolTemplateWithPointSize(
         kXMarkSymbol, kOverScrollSymbolPointSize);
+
+    if (IsVivaldiRunning()) {
+      _closeTabActionImageView.image = [UIImage imageNamed:vMenuClose];
+    } else {
+    _closeTabActionImageView.image = DefaultSymbolTemplateWithPointSize(
+        kXMarkSymbol, kOverScrollSymbolPointSize);
+    } // End Vivaldi
+
     _closeTabActionImageView.tintColor = [UIColor colorNamed:kTextPrimaryColor];
     [_closeTabActionImageView sizeToFit];
     [self addSubview:_closeTabActionImageView];
@@ -902,7 +930,9 @@ const CGFloat kActionViewBackgroundColorBrightnessIncognito = 80.0 / 256.0;
   _style = style;
   switch (self.style) {
     case OverscrollStyle::NTP_NON_INCOGNITO:
-      self.backgroundColor = ntp_home::NTPBackgroundColor();
+      self.backgroundColor = IsMagicStackEnabled()
+                                 ? [UIColor clearColor]
+                                 : ntp_home::NTPBackgroundColor();
       break;
     case OverscrollStyle::NTP_INCOGNITO:
       self.backgroundColor = [UIColor colorWithWhite:0 alpha:0];

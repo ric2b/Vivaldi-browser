@@ -4,6 +4,8 @@
 
 #include "chrome/browser/permissions/one_time_permissions_tracker.h"
 
+#include <utility>
+
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/notreached.h"
@@ -13,11 +15,9 @@
 #include "chrome/browser/permissions/one_time_permissions_tracker_observer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/permissions/features.h"
 #include "content/public/browser/visibility.h"
 #include "url/gurl.h"
-
-constexpr auto kBackgroundExpirationDuration = base::Minutes(5);
-constexpr auto kMediaExpirationDuration = kBackgroundExpirationDuration;
 
 OneTimePermissionsTracker::OneTimePermissionsTracker() = default;
 OneTimePermissionsTracker::~OneTimePermissionsTracker() = default;
@@ -52,7 +52,8 @@ void OneTimePermissionsTracker::WebContentsBackgrounded(
       // When all undiscarded tabs which point to the origin are in the
       // background, the timer should be reset.
       origin_tracker_[origin].background_expiration_timer->Start(
-          FROM_HERE, kBackgroundExpirationDuration,
+          FROM_HERE,
+          permissions::feature_params::kOneTimePermissionTimeout.Get(),
           base::BindOnce(
               &OneTimePermissionsTracker::NotifyBackgroundTimerExpired,
               weak_factory_.GetWeakPtr(), origin));
@@ -60,7 +61,7 @@ void OneTimePermissionsTracker::WebContentsBackgrounded(
       HandleUserMediaState(origin, ContentSettingsType::MEDIASTREAM_CAMERA);
       HandleUserMediaState(origin, ContentSettingsType::MEDIASTREAM_MIC);
     } else {
-      origin_tracker_[origin].background_expiration_timer->AbandonAndStop();
+      origin_tracker_[origin].background_expiration_timer->Stop();
     }
   }
 }
@@ -70,7 +71,7 @@ void OneTimePermissionsTracker::WebContentsUnbackgrounded(
   if (!ShouldIgnoreOrigin(origin)) {
     origin_tracker_[origin].background_tab_counter--;
     // Since the tab has been unbackgrounded, the timer should be reset
-    origin_tracker_[origin].background_expiration_timer->AbandonAndStop();
+    origin_tracker_[origin].background_expiration_timer->Stop();
   }
 }
 
@@ -78,7 +79,7 @@ void OneTimePermissionsTracker::WebContentsLoadedOrigin(
     const url::Origin& origin) {
   if (!ShouldIgnoreOrigin(origin)) {
     origin_tracker_[origin].undiscarded_tab_counter++;
-    origin_tracker_[origin].background_expiration_timer->AbandonAndStop();
+    origin_tracker_[origin].background_expiration_timer->Stop();
   }
 }
 
@@ -103,7 +104,8 @@ void OneTimePermissionsTracker::StartContentSpecificExpirationTimer(
   origin_tracker_[origin]
       .content_setting_specific_expiration_timer_map[content_setting]
       ->Start(
-          FROM_HERE, kMediaExpirationDuration,
+          FROM_HERE,
+          permissions::feature_params::kOneTimePermissionTimeout.Get(),
           base::BindOnce(notify_callback, weak_factory_.GetWeakPtr(), origin));
 }
 
@@ -143,7 +145,7 @@ void OneTimePermissionsTracker::HandleUserMediaState(
     } else {
       origin_tracker_[origin]
           .content_setting_specific_expiration_timer_map[content_setting]
-          ->AbandonAndStop();
+          ->Stop();
     }
   }
 }
@@ -180,6 +182,32 @@ void OneTimePermissionsTracker::CapturingAudioChanged(const url::Origin& origin,
     origin_tracker_[origin].content_setting_specific_counter_map
         [ContentSettingsType::MEDIASTREAM_MIC] += is_capturing_audio ? 1 : -1;
     HandleUserMediaState(origin, ContentSettingsType::MEDIASTREAM_MIC);
+  }
+}
+
+void OneTimePermissionsTracker::CleanupStateForExpiredContentSetting(
+    ContentSettingsType type,
+    ContentSettingsPattern primary_pattern,
+    ContentSettingsPattern secondary_pattern) {
+  std::vector<url::Origin> affected_origins;
+  for (const auto& entry : origin_tracker_) {
+    const GURL top_level_origin_as_gurl = entry.first.GetURL();
+    if (primary_pattern.Matches(top_level_origin_as_gurl) &&
+        secondary_pattern.Matches(top_level_origin_as_gurl)) {
+      affected_origins.push_back(entry.first);
+    }
+  }
+
+  for (const auto& origin : affected_origins) {
+    if (type == ContentSettingsType::GEOLOCATION) {
+      origin_tracker_[origin].background_expiration_timer->Stop();
+    } else {
+      origin_tracker_[origin]
+          .content_setting_specific_expiration_timer_map.erase(type);
+    }
+
+    origin_tracker_[origin].content_setting_specific_counter_map.erase(type);
+    origin_tracker_[origin].used_content_settings_set.erase(type);
   }
 }
 
@@ -226,7 +254,7 @@ void OneTimePermissionsTracker::NotifyBackgroundTimerExpired(
   for (auto& observer : observer_list_) {
     observer.OnAllTabsInBackgroundTimerExpired(origin);
   }
-  origin_tracker_[origin].background_expiration_timer->AbandonAndStop();
+  origin_tracker_[origin].background_expiration_timer->Stop();
 }
 
 void OneTimePermissionsTracker::NotifyCapturingVideoExpired(

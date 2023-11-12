@@ -314,7 +314,7 @@ class WebStateImpl final : public WebState {
   int GetNavigationItemCount() const final;
   const GURL& GetVisibleURL() const final;
   const GURL& GetLastCommittedURL() const final;
-  GURL GetCurrentURL(URLVerificationTrustLevel* trust_level) const final;
+  absl::optional<GURL> GetLastCommittedURLIfTrusted() const final;
   id<CRWWebViewProxy> GetWebViewProxy() const final;
   void DidChangeVisibleSecurityState() final;
   InterfaceBinder* GetInterfaceBinderForMainFrame() final;
@@ -344,6 +344,7 @@ class WebStateImpl final : public WebState {
   void SetFindInteractionEnabled(bool enabled) final;
   id<CRWFindInteraction> GetFindInteraction() final API_AVAILABLE(ios(16));
   id GetActivityItem() final API_AVAILABLE(ios(16.4));
+  UIColor* GetThemeColor() final;
 
  protected:
   // WebState:

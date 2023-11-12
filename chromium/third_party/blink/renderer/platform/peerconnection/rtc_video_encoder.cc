@@ -10,6 +10,7 @@
 
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -60,6 +61,13 @@
 #include "third_party/webrtc/rtc_base/time_utils.h"
 
 namespace {
+
+#if !BUILDFLAG(IS_ANDROID)
+// Enabled-by-default: only used as a kill-switch.
+BASE_FEATURE(kForceSoftwareForLowResolutions,
+             "ForceSoftwareForLowResolutions",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH) && defined(ARCH_CPU_ARM_FAMILY)
 bool IsRK3399Board() {
@@ -197,24 +205,54 @@ class ScopedSignaledValue {
   SignaledValue sv;
 };
 
+// TODO(https://crbug.com/1448809): Move to base/memory/ref_counted_memory.h
+class RefCountedWritableSharedMemoryMapping
+    : public base::RefCountedThreadSafe<RefCountedWritableSharedMemoryMapping> {
+ public:
+  explicit RefCountedWritableSharedMemoryMapping(
+      base::WritableSharedMemoryMapping mapping)
+      : mapping_(std::move(mapping)) {}
+
+  RefCountedWritableSharedMemoryMapping(
+      const RefCountedWritableSharedMemoryMapping&) = delete;
+  RefCountedWritableSharedMemoryMapping& operator=(
+      const RefCountedWritableSharedMemoryMapping&) = delete;
+
+  const unsigned char* front() const {
+    return static_cast<unsigned char*>(mapping_.memory());
+  }
+  unsigned char* front() {
+    return static_cast<unsigned char*>(mapping_.memory());
+  }
+  size_t size() const { return mapping_.size(); }
+
+ private:
+  friend class base::RefCountedThreadSafe<
+      RefCountedWritableSharedMemoryMapping>;
+  ~RefCountedWritableSharedMemoryMapping() = default;
+
+  const base::WritableSharedMemoryMapping mapping_;
+};
+
 class EncodedDataWrapper : public webrtc::EncodedImageBufferInterface {
  public:
-  EncodedDataWrapper(uint8_t* data,
-                     size_t size,
-                     base::OnceClosure reuse_buffer_callback)
-      : data_(data),
+  EncodedDataWrapper(
+      const scoped_refptr<RefCountedWritableSharedMemoryMapping>&& mapping,
+      size_t size,
+      base::OnceClosure reuse_buffer_callback)
+      : mapping_(std::move(mapping)),
         size_(size),
         reuse_buffer_callback_(std::move(reuse_buffer_callback)) {}
   ~EncodedDataWrapper() override {
     DCHECK(reuse_buffer_callback_);
     std::move(reuse_buffer_callback_).Run();
   }
-  const uint8_t* data() const override { return data_; }
-  uint8_t* data() override { return data_; }
+  const uint8_t* data() const override { return mapping_->front(); }
+  uint8_t* data() override { return mapping_->front(); }
   size_t size() const override { return size_; }
 
  private:
-  uint8_t* const data_;
+  const scoped_refptr<RefCountedWritableSharedMemoryMapping> mapping_;
   const size_t size_;
   base::OnceClosure reuse_buffer_callback_;
 };
@@ -289,23 +327,17 @@ struct CrossThreadCopier<SignaledValue> {
 
 namespace blink {
 
+namespace features {
+
+// When disabled, SW is forced at <360p. When enabled, SW is forced at <=360p.
+// Only applicable if `kForceSoftwareForLowResolutions` has not been disabled.
+BASE_FEATURE(kForcingSoftwareIncludes360,
+             "kForcingSoftwareIncludes360",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+}  // namespace features
+
 namespace {
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused. Please keep in sync with
-// "RTCVideoEncoderShutdownReason" in src/tools/metrics/histograms/enums.xml.
-enum class RTCVideoEncoderShutdownReason {
-  kSuccessfulRelease = 0,
-  kInvalidArgument = 1,
-  kIllegalState = 2,
-  kPlatformFailure = 3,
-  kMaxValue = kPlatformFailure,
-};
-
-static_assert(static_cast<int>(RTCVideoEncoderShutdownReason::kMaxValue) ==
-                  media::VideoEncodeAccelerator::kErrorMax + 1,
-              "RTCVideoEncoderShutdownReason should follow "
-              "VideoEncodeAccelerator::Error (+1 for the success case)");
-
 media::VideoEncodeAccelerator::Config::InterLayerPredMode
 CopyFromWebRtcInterLayerPredMode(
     const webrtc::InterLayerPredMode inter_layer_pred) {
@@ -488,29 +520,27 @@ void RecordInitEncodeUMA(int32_t init_retval,
                             media::VIDEO_CODEC_PROFILE_MAX + 1);
 }
 
-void RecordEncoderShutdownReasonUMA(RTCVideoEncoderShutdownReason reason,
-                                    webrtc::VideoCodecType type) {
+void RecordEncoderStatusUMA(const media::EncoderStatus& status,
+                            webrtc::VideoCodecType type) {
+  std::string histogram_name = "Media.RTCVideoEncoderStatus.";
   switch (type) {
     case webrtc::VideoCodecType::kVideoCodecH264:
-      base::UmaHistogramEnumeration("Media.RTCVideoEncoderShutdownReason.H264",
-                                    reason);
+      histogram_name += "H264";
       break;
     case webrtc::VideoCodecType::kVideoCodecVP8:
-      base::UmaHistogramEnumeration("Media.RTCVideoEncoderShutdownReason.VP8",
-                                    reason);
+      histogram_name += "VP8";
       break;
     case webrtc::VideoCodecType::kVideoCodecVP9:
-      base::UmaHistogramEnumeration("Media.RTCVideoEncoderShutdownReason.VP9",
-                                    reason);
+      histogram_name += "VP9";
       break;
     case webrtc::VideoCodecType::kVideoCodecAV1:
-      base::UmaHistogramEnumeration("Media.RTCVideoEncoderShutdownReason.AV1",
-                                    reason);
+      histogram_name += "AV1";
       break;
     default:
-      base::UmaHistogramEnumeration("Media.RTCVideoEncoderShutdownReason.Other",
-                                    reason);
+      histogram_name += "Other";
+      break;
   }
+  base::UmaHistogramEnumeration(histogram_name, status.code());
 }
 
 bool SupportGpuMemoryBufferEncoding() {
@@ -547,10 +577,6 @@ bool IsZeroCopyEnabled(webrtc::VideoContentType content_type) {
 }  // namespace
 
 namespace features {
-// Initialize VideoEncodeAccelerator on the first encode.
-BASE_FEATURE(kWebRtcInitializeOnFirstFrame,
-             "WebRtcInitializeEncoderOnFirstFrame",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 // Fallback from hardware encoder (if available) to software, for WebRTC
 // screensharing that uses temporal scalability.
 BASE_FEATURE(kWebRtcScreenshareSwEncoding,
@@ -701,7 +727,7 @@ class RTCVideoEncoder::Impl : public media::VideoEncodeAccelerator::Client {
   Vector<std::unique_ptr<base::MappedReadOnlyRegion>> input_buffers_;
 
   Vector<std::pair<base::UnsafeSharedMemoryRegion,
-                   base::WritableSharedMemoryMapping>>
+                   scoped_refptr<RefCountedWritableSharedMemoryMapping>>>
       output_buffers_;
 
   // The number of frames that are sent to a hardware video encoder by Encode()
@@ -907,7 +933,6 @@ void RTCVideoEncoder::Impl::Enqueue(FrameChunk frame_chunk,
     EncodeOneFrameWithNativeInput(std::move(frame_chunk));
     return;
   }
-
   pending_frames_.push_back(std::move(frame_chunk));
   // When |input_buffers_free_| is empty, EncodeOneFrame() for the frame in
   // |pending_frames_| will be invoked from InputBufferReleased().
@@ -1050,8 +1075,10 @@ void RTCVideoEncoder::Impl::RequireBitstreamBuffers(
                          "failed to create output buffer"});
       return;
     }
-    output_buffers_.push_back(
-        std::make_pair(std::move(region), std::move(mapping)));
+    output_buffers_.push_back(std::make_pair(
+        std::move(region),
+        base::MakeRefCounted<RefCountedWritableSharedMemoryMapping>(
+            std::move(mapping))));
   }
 
   // Immediately provide all output buffers to the VEA.
@@ -1085,15 +1112,16 @@ void RTCVideoEncoder::Impl::BitstreamBufferReady(
                            base::NumberToString(bitstream_buffer_id)});
     return;
   }
-  void* output_mapping_memory =
-      output_buffers_[bitstream_buffer_id].second.memory();
+  scoped_refptr<RefCountedWritableSharedMemoryMapping> output_mapping =
+      output_buffers_[bitstream_buffer_id].second;
   if (metadata.payload_size_bytes >
-      output_buffers_[bitstream_buffer_id].second.size()) {
+      output_buffers_[bitstream_buffer_id].second->size()) {
     NotifyErrorStatus({media::EncoderStatus::Codes::kInvalidOutputBuffer,
                        "invalid payload_size: " +
                            base::NumberToString(metadata.payload_size_bytes)});
     return;
   }
+
   DCHECK_NE(output_buffers_in_encoder_count_, 0u);
   output_buffers_in_encoder_count_--;
 
@@ -1161,7 +1189,7 @@ void RTCVideoEncoder::Impl::BitstreamBufferReady(
 
   webrtc::EncodedImage image;
   image.SetEncodedData(rtc::make_ref_counted<EncodedDataWrapper>(
-      static_cast<uint8_t*>(output_mapping_memory), metadata.payload_size_bytes,
+      std::move(output_mapping), metadata.payload_size_bytes,
       base::BindPostTaskToCurrentDefault(
           base::BindOnce(&RTCVideoEncoder::Impl::BitstreamBufferAvailable,
                          weak_this_, bitstream_buffer_id))));
@@ -1295,36 +1323,12 @@ void RTCVideoEncoder::Impl::NotifyErrorStatus(
   LOG(ERROR) << "NotifyErrorStatus is called with code="
              << static_cast<int>(status.code())
              << ", message=" << status.message();
-  // TODO(b/275663480): Deprecate RTCVideoEncoderShutdownReason
-  // in favor of UKM.
-  int32_t retval = WEBRTC_VIDEO_CODEC_ERROR;
-  switch (media::ConvertStatusToVideoEncodeAcceleratorError(status)) {
-    case media::VideoEncodeAccelerator::kInvalidArgumentError:
-      retval = WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
-      RecordEncoderShutdownReasonUMA(
-          RTCVideoEncoderShutdownReason::kInvalidArgument, video_codec_type_);
-      break;
-    case media::VideoEncodeAccelerator::kIllegalStateError:
-      RecordEncoderShutdownReasonUMA(
-          RTCVideoEncoderShutdownReason::kIllegalState, video_codec_type_);
-      retval = WEBRTC_VIDEO_CODEC_ERROR;
-      break;
-    case media::VideoEncodeAccelerator::kPlatformFailureError:
-      // Some platforms(i.e. Android) do not have SW H264 implementation so
-      // check if it is available before asking for fallback.
-      retval = video_codec_type_ != webrtc::kVideoCodecH264 ||
-                       webrtc::H264Encoder::IsSupported()
-                   ? WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE
-                   : WEBRTC_VIDEO_CODEC_ERROR;
-      RecordEncoderShutdownReasonUMA(
-          RTCVideoEncoderShutdownReason::kPlatformFailure, video_codec_type_);
-  }
+  RecordEncoderStatusUMA(status, video_codec_type_);
   video_encoder_.reset();
+  status_ = WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
 
-  status_ = retval;
-
-  async_init_event_.SetAndReset(retval);
-  async_encode_event_.SetAndReset(retval);
+  async_init_event_.SetAndReset(WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE);
+  async_encode_event_.SetAndReset(WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE);
 
   execute_software_fallback_.Run();
 }
@@ -1336,8 +1340,7 @@ RTCVideoEncoder::Impl::~Impl() {
   if (video_encoder_) {
     video_encoder_.reset();
     status_ = WEBRTC_VIDEO_CODEC_UNINITIALIZED;
-    RecordEncoderShutdownReasonUMA(
-        RTCVideoEncoderShutdownReason::kSuccessfulRelease, video_codec_type_);
+    RecordEncoderStatusUMA(media::EncoderStatus::Codes::kOk, video_codec_type_);
   }
 
   async_init_event_.reset();
@@ -1724,6 +1727,33 @@ int32_t RTCVideoEncoder::InitEncode(
            << ", height=" << codec_settings->height
            << ", startBitrate=" << codec_settings->startBitrate;
 
+  if (impl_) {
+    Release();
+  }
+
+  // Several HW encoders are known to yield worse quality compared to SW
+  // encoders for smaller resolutions such as 180p. (270p should also be a
+  // problem but some HW encoders already fallback for resolutions not divisible
+  // by 4.) At 360p, manual testing suggests HW and SW are roughly on par in
+  // terms of quality.
+  //
+  // Android is excluded from this logic because there are situations where a
+  // codec like H264 is available in HW but not SW in which case SW fallback
+  // would result in a change of codec, see https://crbug.com/1469318.
+#if !BUILDFLAG(IS_ANDROID)
+  uint16_t force_sw_height = 359;
+  if (base::FeatureList::IsEnabled(features::kForcingSoftwareIncludes360)) {
+    force_sw_height = 360;
+  }
+  if (base::FeatureList::IsEnabled(kForceSoftwareForLowResolutions) &&
+      codec_settings->height <= force_sw_height) {
+    LOG(WARNING)
+        << "Fallback to SW due to low resolution being less than 360p ("
+        << codec_settings->width << "x" << codec_settings->height << ")";
+    return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
+  }
+#endif
+
   if (profile_ >= media::H264PROFILE_MIN &&
       profile_ <= media::H264PROFILE_MAX &&
       (codec_settings->width % 2 != 0 || codec_settings->height % 2 != 0)) {
@@ -1733,9 +1763,6 @@ int32_t RTCVideoEncoder::InitEncode(
         << "but hardware H.264 encoder only supports even sized frames.";
     return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
   }
-
-  if (impl_)
-    Release();
 
   has_error_ = false;
 
@@ -1819,7 +1846,8 @@ int32_t RTCVideoEncoder::InitEncode(
       /*h264_output_level=*/absl::nullopt, is_constrained_h264_, storage_type,
       vea_content_type, spatial_layers, inter_layer_pred);
 
-  if (!base::FeatureList::IsEnabled(features::kWebRtcInitializeOnFirstFrame)) {
+  if (!base::FeatureList::IsEnabled(
+          features::kWebRtcInitializeEncoderOnFirstFrame)) {
     int32_t initialization_ret = InitializeEncoder(*vea_config_);
     vea_config_.reset();
     if (initialization_ret != WEBRTC_VIDEO_CODEC_OK) {

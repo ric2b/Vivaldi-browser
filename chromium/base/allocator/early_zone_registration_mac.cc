@@ -8,6 +8,7 @@
 #include <malloc/malloc.h>
 
 #include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
+#include "base/allocator/partition_allocator/shim/early_zone_registration_constants.h"
 
 // BASE_EXPORT tends to be defined as soon as anything from //base is included.
 #if defined(BASE_EXPORT)
@@ -40,8 +41,9 @@ malloc_zone_t* GetDefaultMallocZone() {
   vm_address_t* zones = nullptr;
   kern_return_t result =
       malloc_get_all_zones(mach_task_self(), nullptr, &zones, &zone_count);
-  if (result != KERN_SUCCESS)
+  if (result != KERN_SUCCESS) {
     abort_report_np("Cannot enumerate malloc() zones");
+  }
   return reinterpret_cast<malloc_zone_t*>(zones[0]);
 }
 
@@ -207,11 +209,11 @@ void EarlyMallocZoneRegistration() {
 
   // Could use something lower to support fewer functions, but this is
   // consistent with the real zone installed by PartitionAlloc.
-  g_delegating_zone.version = kZoneVersion;
+  g_delegating_zone.version = allocator_shim::kZoneVersion;
   g_delegating_zone.introspect = &g_delegating_zone_introspect;
   // This name is used in PartitionAlloc's initialization to determine whether
   // it should replace the delegating zone.
-  g_delegating_zone.zone_name = kDelegatingZoneName;
+  g_delegating_zone.zone_name = allocator_shim::kDelegatingZoneName;
 
   // Register puts the new zone at the end, unregister swaps the new zone with
   // the last one.
@@ -233,8 +235,9 @@ void EarlyMallocZoneRegistration() {
   // |g_delegating_zone|...|g_default_zone|purgeable_zone|
 
   // Sanity check.
-  if (GetDefaultMallocZone() != &g_delegating_zone)
+  if (GetDefaultMallocZone() != &g_delegating_zone) {
     abort_report_np("Failed to install the delegating zone as default.");
+  }
 }
 
 void AllowDoublePartitionAllocZoneRegistration() {
@@ -242,8 +245,9 @@ void AllowDoublePartitionAllocZoneRegistration() {
   vm_address_t* zones = nullptr;
   kern_return_t result =
       malloc_get_all_zones(mach_task_self(), nullptr, &zones, &zone_count);
-  if (result != KERN_SUCCESS)
+  if (result != KERN_SUCCESS) {
     abort_report_np("Cannot enumerate malloc() zones");
+  }
 
   // If PartitionAlloc is one of the zones, *change* its name so that
   // registration can happen multiple times. This works because zone
@@ -251,7 +255,7 @@ void AllowDoublePartitionAllocZoneRegistration() {
   for (unsigned int i = 0; i < zone_count; i++) {
     malloc_zone_t* zone = reinterpret_cast<malloc_zone_t*>(zones[i]);
     if (zone->zone_name &&
-        strcmp(zone->zone_name, kPartitionAllocZoneName) == 0) {
+        strcmp(zone->zone_name, allocator_shim::kPartitionAllocZoneName) == 0) {
       zone->zone_name = "RenamedPartitionAlloc";
       break;
     }

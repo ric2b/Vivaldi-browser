@@ -3,11 +3,11 @@
 #include "menus/menu_model.h"
 
 #include "app/vivaldi_version_info.h"
-#include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/uuid.h"
 #include "menus/menu_node.h"
 #include "menus/menu_storage.h"
 
@@ -32,21 +32,23 @@ Menu_Model::~Menu_Model() {
 }
 
 std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(
-    const std::string& menu) {
+    const std::string& menu, bool is_reset) {
   Menu_Node* mainmenu = new Menu_Node(Menu_Node::mainmenu_node_guid(),
                                       Menu_Node::mainmenu_node_id());
   Menu_Control* control = new Menu_Control();
   control->version = ::vivaldi::GetVivaldiVersionString();
   return base::WrapUnique(
-      new MenuLoadDetails(mainmenu, control, menu, loaded_));
+      new MenuLoadDetails(mainmenu, control, menu, loaded_, is_reset));
 }
 
-std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(int64_t id) {
+std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(
+    int64_t id, bool is_reset) {
   Menu_Node* mainmenu = new Menu_Node(Menu_Node::mainmenu_node_guid(),
                                       Menu_Node::mainmenu_node_id());
   Menu_Control* control = new Menu_Control();
   control->version = ::vivaldi::GetVivaldiVersionString();
-  return base::WrapUnique(new MenuLoadDetails(mainmenu, control, id, loaded_));
+  return base::WrapUnique(
+      new MenuLoadDetails(mainmenu, control, id, loaded_, is_reset));
 }
 
 void Menu_Model::Load() {
@@ -58,7 +60,7 @@ void Menu_Model::Load() {
           base::TaskShutdownBehavior::BLOCK_SHUTDOWN,
       });
   store_.reset(new MenuStorage(context_, this, task_runner.get()));
-  store_->Load(CreateLoadDetails(""));
+  store_->Load(CreateLoadDetails("", false));
 }
 
 bool Menu_Model::Save() {
@@ -75,29 +77,37 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
   if (loaded_) {
     // Reset exisiting content
     if (!details->menu().empty()) {
-      // Replace all
-      // Remove old content
-      int index = 0;
-      for (const auto& top_node : root_.children()) {
-        if (top_node->id() == details->mainmenu_node()->id()) {
-          root_.Remove(index);
+      // Reset named menu entry. Works even if old is missing. A menu is in this
+      // case a full menu bar, the vivaldi menu, the tab context menu etc.
+      for (const auto& node : root_.children()) {
+        // All nodes we deal with is within the mainmenu_node
+        // TODO: The name main menu node is kind of misleading since we also
+        // store context menus under it.
+        if (node->id() == details->mainmenu_node()->id()) {
+          Menu_Node* old_menu = mainmenu_node()->GetMenuByResourceName(
+            details->menu());
+          Menu_Node* new_menu = details->mainmenu_node()->GetMenuByResourceName(
+            details->menu());
+          if (old_menu) {
+            Remove(old_menu);
+          }
+          if (new_menu) {
+            absl::optional<size_t> index = details->mainmenu_node()->GetIndexOf(
+              new_menu);
+            if (index.has_value()) {
+              std::unique_ptr<Menu_Node> new_menu_node =
+                  details->mainmenu_node()->Remove(index.value());
+              Add(std::move(new_menu_node), mainmenu_node(), 0);
+            }
+          }
           break;
         }
-        index++;
       }
-
-      // Add new content
-      std::unique_ptr<Menu_Node> mainmenu_node(
-          details->release_mainmenu_node());
-      mainmenu_node_ = mainmenu_node.get();
-      root_.Add(std::move(mainmenu_node), index);
-
-      control_ = details->release_control();
 
       Save();
 
       int id = -1;
-      Menu_Node* menu = GetNamedMenu(details->menu());
+      Menu_Node* menu = GetMenuByResourceName(details->menu());
       if (menu && menu->children().size() > 0) {
         id = menu->children()[0]->id();
       }
@@ -105,7 +115,11 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
       for (auto& observer : observers_)
         observer.MenuModelChanged(this, id, details->menu());
     } else if (details->id() >= 0) {
-      // Replace node specified by the id
+      // Replace node specified by id. The id refers to an exising id in the
+      // current installed model. Unlike guids every time we create a new item
+      // the id steps. So we can not compare ids in current model and the newly
+      // loaded model in details.
+      // TODO: Use guid instead. We can fetch the guid in Reset().
       Menu_Node* target = root_.GetById(details->id());
       Menu_Node* target_parent = target ? target->parent() : nullptr;
       const Menu_Node* target_menu = target ? target->GetMenu() : nullptr;
@@ -163,6 +177,14 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
     for (auto& observer : observers_)
       observer.MenuModelLoaded(this);
   }
+
+  // If loading took place as result of resetting content we have to signal
+  // model content is updated.
+  if (details->is_reset()) {
+    for (auto& observer : observers_)
+      observer.MenuModelReset(this);
+  }
+
 }
 
 bool Menu_Model::Move(const Menu_Node* node,
@@ -214,10 +236,29 @@ bool Menu_Model::Move(const Menu_Node* node,
 Menu_Node* Menu_Model::Add(std::unique_ptr<Menu_Node> node,
                            Menu_Node* parent,
                            size_t index) {
-  const Menu_Node* menu = parent->GetMenu();
-  if (!menu) {
-    NOTREACHED();
-    return nullptr;
+  std::string action;
+  // We can add a full menu to the node that holds all menus.
+  if (parent->id() == Menu_Node::mainmenu_node_id()) {
+    if (!node->is_menu()) {
+      NOTREACHED();
+      return nullptr;
+    }
+    // Sanity check to prevent duplicate menus.
+    for (const auto& menu_node : parent->children()) {
+      if (menu_node->action() == node->action()) {
+        NOTREACHED();
+        return nullptr;
+      }
+    }
+    action = node->action();
+  } else {
+    // Or we can add a new element to an existing menu.
+    const Menu_Node* menu = parent->GetMenu();
+    if (!menu) {
+      NOTREACHED();
+      return nullptr;
+    }
+    action = menu->action();
   }
 
   Menu_Node* node_ptr = node.get();
@@ -226,7 +267,7 @@ Menu_Node* Menu_Model::Add(std::unique_ptr<Menu_Node> node,
   Save();
 
   for (auto& observer : observers_)
-    observer.MenuModelChanged(this, -1, menu->action());
+    observer.MenuModelChanged(this, -1, action);
 
   return node_ptr;
 }
@@ -408,7 +449,7 @@ bool Menu_Model::RemoveAction(Menu_Node* root, const std::string& action) {
 
 bool Menu_Model::Reset(const Menu_Node* node) {
   if (store_.get()) {
-    store_->Load(CreateLoadDetails(node->id()));
+    store_->Load(CreateLoadDetails(node->id(), true));
     return true;
   }
   return false;
@@ -416,7 +457,7 @@ bool Menu_Model::Reset(const Menu_Node* node) {
 
 bool Menu_Model::Reset(const std::string& menu) {
   if (store_.get()) {
-    store_->Load(CreateLoadDetails(menu));
+    store_->Load(CreateLoadDetails(menu, true));
     return true;
   }
   return false;
@@ -454,7 +495,7 @@ void Menu_Model::RemoveGuidDuplication(const Menu_Node* node) {
   Menu_Node* n = root_.GetByGuid(node->guid());
   if (n) {
     n->SetOrigin(Menu_Node::USER);
-    n->SetGuid(base::GenerateGUID());
+    n->SetGuid(base::Uuid::GenerateRandomV4().AsLowercaseString());
   }
   if (node->is_folder()) {
     for (auto& child : node->children()) {
@@ -476,11 +517,12 @@ void Menu_Model::RemoveObserver(MenuModelObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-Menu_Node* Menu_Model::GetNamedMenu(const std::string& named_menu) {
+Menu_Node* Menu_Model::GetMenuByResourceName(const std::string& menu) {
   // We have <root> -> <top nodes> -> <named menus>
   for (const auto& top_node : root_.children()) {
     for (const auto& menu_node : top_node->children()) {
-      if (menu_node->action() == named_menu) {
+      // Resource name is stored in the action field for menu nodes.
+      if (menu_node->action() == menu) {
         return menu_node.get();
       }
     }

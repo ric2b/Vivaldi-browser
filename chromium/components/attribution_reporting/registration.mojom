@@ -4,11 +4,12 @@
 
 module attribution_reporting.mojom;
 
-import "components/aggregation_service/aggregation_service.mojom";
+import "components/attribution_reporting/source_registration_time_config.mojom";
 import "mojo/public/mojom/base/int128.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "services/network/public/mojom/schemeful_site.mojom";
 import "url/mojom/origin.mojom";
+import "url/mojom/url.mojom";
 
 struct DebugKey {
   uint64 value;
@@ -155,6 +156,28 @@ struct TriggerRegistration {
   // Specifies whether to enable verbose debug reporting.
   bool debug_reporting = false;
 
-  // Specifies the deployment option for the aggregation service.
-  aggregation_service.mojom.AggregationCoordinator aggregation_coordinator;
+  // Specifies the deployment option for the aggregation service. The default
+  // deployment will be used if not set.
+  SuitableOrigin? aggregation_coordinator_origin;
+
+  // Specifies whether to include source registration time in aggregatable
+  // reports.
+  SourceRegistrationTimeConfig source_registration_time_config;
+};
+
+// Represents a source or trigger registration item that will be passed to the OS, if supported.
+struct OsRegistrationItem {
+  // The URL to which the OS will make a request in order to retrieve the actual
+  // source or trigger registration.
+  url.mojom.Url url;
+  // Specifies whether to enable verbose debug reporting.
+  bool debug_reporting;
+};
+
+// Represents a source or trigger registration that will be passed to the OS, if supported.
+// A registration may contain multiple registration items.
+struct OsRegistration {
+  // The registrations to which the OS will make a request in order to retrieve the actual
+  // source or trigger registration.
+  array<OsRegistrationItem> items;
 };

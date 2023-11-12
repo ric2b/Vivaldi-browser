@@ -11,6 +11,7 @@
 
 #include "base/check.h"
 #include "components/viz/common/resources/resource_format.h"
+#include "components/viz/common/viz_resource_format_export.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 #include "mojo/public/cpp/bindings/union_traits.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -27,7 +28,7 @@ class MultiplanarFormatDataView;
 // images (eg. RGBA) or multiplanar images (eg. NV12). This format can be
 // either ResourceFormat or MultiplanarFormat (PlaneConfig + Subsampling +
 // ChannelFormat).
-class SharedImageFormat {
+class VIZ_RESOURCE_FORMAT_EXPORT SharedImageFormat {
  public:
   // Specifies how YUV (and optionally A) are divided among planes. Planes are
   // separated by underscores in the enum value names. Within each plane the
@@ -121,6 +122,9 @@ class SharedImageFormat {
   // if size in bytes overflows. Includes all planes for multiplanar formats.
   size_t EstimatedSizeInBytes(const gfx::Size& size) const;
 
+  // Returns true if the size in bytes doesn't overflow size_t.
+  bool VerifySizeInBytes(const gfx::Size& size) const;
+
   // Returns number of channels for a plane for multiplanar formats.
   int NumChannelsInPlane(int plane_index) const;
 
@@ -142,6 +146,10 @@ class SharedImageFormat {
   // Returns true if format is legacy multiplanar ResourceFormat i.e.
   // YUV_420_BIPLANAR, YVU_420, YUVA_420_TRIPLANAR, P010.
   bool IsLegacyMultiplanar() const;
+
+  // NOTE: Supported only for true single-plane formats (i.e., formats for
+  // which is_single_plane() is true and IsLegacyMultiplanar() is false).
+  int BitsPerPixel() const;
 
   bool operator==(const SharedImageFormat& o) const;
   bool operator!=(const SharedImageFormat& o) const;
@@ -242,6 +250,14 @@ inline constexpr SharedImageFormat kRGBA_1010102 =
     SharedImageFormat::SinglePlane(ResourceFormat::RGBA_1010102);
 inline constexpr SharedImageFormat kBGRA_1010102 =
     SharedImageFormat::SinglePlane(ResourceFormat::BGRA_1010102);
+
+// All known singleplanar formats.
+constexpr SharedImageFormat kAll[18] = {
+    kRGBA_8888,     kRGBA_4444,    kBGRA_8888,   kALPHA_8, kLUMINANCE_8,
+    kRGB_565,       kBGR_565,      kETC1,        kR_8,     kRG_88,
+    kLUMINANCE_F16, kRGBA_F16,     kR_16,        kRG_1616, kRGBX_8888,
+    kBGRX_8888,     kRGBA_1010102, kBGRA_1010102};
+
 }  // namespace SinglePlaneFormat
 
 // Constants for legacy single-plane representations of multiplanar formats.
@@ -256,7 +272,19 @@ inline constexpr SharedImageFormat kNV12A =
     SharedImageFormat::SinglePlane(ResourceFormat::YUVA_420_TRIPLANAR);
 inline constexpr SharedImageFormat kP010 =
     SharedImageFormat::SinglePlane(ResourceFormat::P010);
+
+// All known legacy multiplanar formats.
+constexpr SharedImageFormat kAll[4] = {kYV12, kNV12, kNV12A, kP010};
+
 }  // namespace LegacyMultiPlaneFormat
+
+// The number of singleplanar and legacy multiplanar formats should correspond
+// exactly to the number of ResourceFormat types. Note that RESOURCE_FORMAT_MAX
+// uses zero-based indexing.
+constexpr auto kNumResourceFormatTypes = RESOURCE_FORMAT_MAX + 1;
+static_assert(std::size(SinglePlaneFormat::kAll) +
+                  std::size(LegacyMultiPlaneFormat::kAll) ==
+              kNumResourceFormatTypes);
 
 // Constants for common multi-planar formats.
 namespace MultiPlaneFormat {

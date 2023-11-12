@@ -196,9 +196,18 @@ class OzonePlatformWayland : public OzonePlatform,
     if (path_finder_.GetDrmRenderNodePath().empty())
       return false;
 
-    if (supported_buffer_formats_.find(format) ==
-        supported_buffer_formats_.end()) {
-      return false;
+    // When OzonePlatform instance is called from GPU process,
+    // |supported_buffer_formats_| is empty. Supported buffer formats are sent
+    // to |buffer_manager_| via IPC after gpu service init in that case.
+    if (buffer_manager_) {
+      if (!buffer_manager_->SupportsFormat(format)) {
+        return false;
+      }
+    } else {
+      if (supported_buffer_formats_.find(format) ==
+          supported_buffer_formats_.end()) {
+        return false;
+      }
     }
 
     return gfx::ClientNativePixmapDmaBuf::IsConfigurationSupported(format,
@@ -310,8 +319,7 @@ class OzonePlatformWayland : public OzonePlatform,
       // their position on screens and always assume they are located at some
       // arbitrary position.
       properties->supports_global_screen_coordinates =
-          features::IsWaylandScreenCoordinatesEnabled();
-
+          kDefaultScreenCoordinateEnabled;
       initialised = true;
     }
 
@@ -351,12 +359,6 @@ class OzonePlatformWayland : public OzonePlatform,
         properties.supports_activation =
             zaura_shell_get_version(connection_->zaura_shell()->wl_object()) >=
             ZAURA_TOPLEVEL_ACTIVATE_SINCE_VERSION;
-        properties.supports_tooltip =
-            (wl::get_version_of_object(
-                 connection_->zaura_shell()->wl_object()) >=
-             ZAURA_SURFACE_SHOW_TOOLTIP_SINCE_VERSION) &&
-            connection_->zaura_shell()->HasBugFix(1402158) &&
-            connection_->zaura_shell()->HasBugFix(1410676);
       }
 
       if (surface_factory_) {
@@ -399,6 +401,12 @@ class OzonePlatformWayland : public OzonePlatform,
             &OzonePlatformWayland::CreateWaylandBufferManagerGpuBinding,
             base::Unretained(this)),
         gpu_task_runner);
+  }
+
+  void DumpState(std::ostream& out) const override {
+    if (connection_) {
+      connection_->DumpState(out);
+    }
   }
 
   void CreateWaylandBufferManagerGpuBinding(

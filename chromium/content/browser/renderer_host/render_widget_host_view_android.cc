@@ -82,7 +82,6 @@
 #include "ui/android/window_android.h"
 #include "ui/android/window_android_compositor.h"
 #include "ui/base/cursor/cursor.h"
-#include "ui/base/layout.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/display/display_util.h"
 #include "ui/events/android/gesture_event_android.h"
@@ -106,7 +105,6 @@ namespace content {
 
 namespace {
 
-static const char kAsyncReadBackString[] = "Compositing.CopyFromSurfaceTime";
 static const base::TimeDelta kClickCountInterval = base::Seconds(0.5);
 static const float kClickCountRadiusSquaredDIP = 25;
 static const base::TimeDelta kThrottleTimeout = base::Milliseconds(200);
@@ -1135,13 +1133,8 @@ void RenderWidgetHostViewAndroid::ShowWithVisibility(
     PageVisibilityState page_visibility) {
   // We can transition from `PageVisibilityState::kHiddenButPainting` to
   // `PageVisibilityState::kVisible` while `is_showing_`. We only want to
-  // support updating visibility requests for this transition. So for the non
-  // `features::kOnShowWithPageVisibility` path, still exit early based on
-  // `is_showing_` to prevent non-request work from being re-ran.
-  if (base::FeatureList::IsEnabled(kOnShowWithPageVisibility) &&
-      page_visibility_ == page_visibility) {
-    return;
-  } else if (is_showing_) {
+  // support updating visibility requests for this transition.
+  if (page_visibility_ == page_visibility) {
     return;
   }
 
@@ -1586,8 +1579,6 @@ void RenderWidgetHostViewAndroid::CopyFromSurface(
     return;
   }
 
-  base::TimeTicks start_time = base::TimeTicks::Now();
-
   if (!using_browser_compositor_) {
     SynchronousCopyContents(src_subrect, output_size, std::move(callback));
     return;
@@ -1598,16 +1589,12 @@ void RenderWidgetHostViewAndroid::CopyFromSurface(
       src_subrect, output_size,
       base::BindOnce(
           [](base::OnceCallback<void(const SkBitmap&)> callback,
-             base::TimeTicks start_time, const SkBitmap& bitmap) {
+             const SkBitmap& bitmap) {
             TRACE_EVENT0(
                 "cc", "RenderWidgetHostViewAndroid::CopyFromSurface finished");
-            // TODO(crbug/1110301): Make the Compositing.CopyFromSurfaceTime
-            // histogram obsolete.
-            UMA_HISTOGRAM_TIMES(kAsyncReadBackString,
-                                base::TimeTicks::Now() - start_time);
             std::move(callback).Run(bitmap);
           },
-          std::move(callback), start_time));
+          std::move(callback)));
 }
 
 void RenderWidgetHostViewAndroid::EnsureSurfaceSynchronizedForWebTest() {
@@ -1975,13 +1962,7 @@ void RenderWidgetHostViewAndroid::ShowInternal() {
   if (!show)
     return;
 
-  if (base::FeatureList::IsEnabled(kOnShowWithPageVisibility)) {
-    OnShowWithPageVisibility(page_visibility_);
-  } else {
-    if (!host() || !host()->is_hidden())
-      return;
-    NotifyHostAndDelegateOnWasShown(TakeContentToVisibleTimeRequest(host()));
-  }
+  OnShowWithPageVisibility(page_visibility_);
 }
 
 void RenderWidgetHostViewAndroid::HideInternal() {
@@ -2198,7 +2179,7 @@ RenderWidgetHostViewAndroid::FilterInputEvent(
     return blink::mojom::InputEventResultState::kNotConsumed;
 
   if (input_event.GetType() == blink::WebInputEvent::Type::kTouchStart) {
-    GpuProcessHost::CallOnIO(FROM_HERE, GPU_PROCESS_KIND_SANDBOXED,
+    GpuProcessHost::CallOnUI(FROM_HERE, GPU_PROCESS_KIND_SANDBOXED,
                              false /* force_create */,
                              base::BindOnce(&WakeUpGpu));
   }
@@ -2548,20 +2529,10 @@ void RenderWidgetHostViewAndroid::OnRendererWidgetCreated() {
 
 bool RenderWidgetHostViewAndroid::OnMouseEvent(
     const ui::MotionEventAndroid& event) {
-  // Ignore ACTION_HOVER_ENTER & ACTION_HOVER_EXIT because every mouse-down on
-  // Android follows a hover-exit and is followed by a hover-enter.
-  // https://crbug.com/715114 filed on distinguishing actual hover
-  // enter/exit from these bogus ones.
-  auto action = event.GetAction();
-  if (action == ui::MotionEventAndroid::Action::HOVER_ENTER ||
-      action == ui::MotionEventAndroid::Action::HOVER_EXIT) {
-    return false;
-  }
-
   RecordToolTypeForActionDown(event);
 
   blink::WebInputEvent::Type webMouseEventType =
-      ui::ToWebMouseEventType(action);
+      ui::ToWebMouseEventType(event.GetAction());
 
   if (webMouseEventType == blink::WebInputEvent::Type::kUndefined) {
     return false;
@@ -3281,6 +3252,14 @@ void RenderWidgetHostViewAndroid::SetWebContentsAccessibility(
 void RenderWidgetHostViewAndroid::SetNeedsBeginFrameForFlingProgress() {
   if (sync_compositor_)
     sync_compositor_->RequestOneBeginFrame();
+}
+
+const cc::slim::SurfaceLayer* RenderWidgetHostViewAndroid::GetSurfaceLayer()
+    const {
+  if (!delegated_frame_host_) {
+    return nullptr;
+  }
+  return delegated_frame_host_->content_layer();
 }
 
 void RenderWidgetHostViewAndroid::BeginRotationBatching() {

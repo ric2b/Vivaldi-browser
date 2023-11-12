@@ -242,7 +242,7 @@ base::expected<base::Value::Dict, std::string> ExtensionTabUtil::OpenTab(
   // -title
   // -favIconUrl
 
-  GURL url;
+  GURL url(chrome::kChromeUINewTabURL);
   if (params.url) {
     auto result = ExtensionTabUtil::PrepareURLForNavigation(
         *params.url, function->extension(), function->browser_context());
@@ -250,8 +250,6 @@ base::expected<base::Value::Dict, std::string> ExtensionTabUtil::OpenTab(
       return base::unexpected(result.error());
     }
     url = std::move(*result);
-  } else {
-    url = GURL(chrome::kChromeUINewTabURL);
   }
 
   // Default to foreground for the new tab. The presence of 'active' property
@@ -998,17 +996,15 @@ bool ExtensionTabUtil::OpenOptionsPage(const Extension* extension,
     url_to_navigate = url_to_navigate.ReplaceComponents(replacements);
   }
 
-  NavigateParams params(
-      GetSingletonTabNavigateParams(browser, url_to_navigate));
   // We need to respect path differences because we don't want opening the
   // options page to close a page that might be open to extension content.
   // However, if the options page opens inside the chrome://extensions page, we
   // can override an existing page.
   // Note: ref behavior is to ignore.
-  params.path_behavior = open_in_tab ? NavigateParams::RESPECT
-                                     : NavigateParams::IGNORE_AND_NAVIGATE;
-  params.url = url_to_navigate;
-  ShowSingletonTabOverwritingNTP(browser, &params);
+  ShowSingletonTabOverwritingNTP(browser, url_to_navigate,
+                                 open_in_tab
+                                     ? NavigateParams::RESPECT
+                                     : NavigateParams::IGNORE_AND_NAVIGATE);
   return true;
 }
 

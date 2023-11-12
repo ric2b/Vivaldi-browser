@@ -30,6 +30,7 @@
 #include "third_party/blink/public/common/navigation/impression.h"
 #include "third_party/blink/public/common/runtime_feature_state/runtime_feature_state_context.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
+#include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom.h"
 #include "third_party/blink/public/mojom/loader/referrer.mojom.h"
 #include "third_party/blink/public/mojom/loader/transferrable_url_loader.mojom-forward.h"
 #include "third_party/blink/public/mojom/navigation/navigation_initiator_activation_and_ad_status.mojom.h"
@@ -388,6 +389,11 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   virtual void SetCorsExemptRequestHeader(const std::string& header_name,
                                           const std::string& header_value) = 0;
 
+  // Set LCP Critical Path Predictor hint data to be passed along to the
+  // renderer process on the navigation commit.
+  virtual void SetLCPPNavigationHint(
+      const blink::mojom::LCPCriticalPathPredictorNavigationTimeHint& hint) = 0;
+
   // Returns the response headers for the request, or nullptr if there aren't
   // any response headers or they have not been received yet. The response
   // headers may change during the navigation (e.g. after encountering a server
@@ -466,14 +472,14 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // navigation. This can be nullptr if the navigation was not associated with a
   // frame, or may return a valid frame token to a frame that no longer exists
   // because it was deleted before the navigation began. This parameter is
-  // defined if and only if GetInitiatorProcessID below is.
+  // defined if and only if GetInitiatorProcessId below is.
   virtual const absl::optional<blink::LocalFrameToken>&
   GetInitiatorFrameToken() = 0;
 
   // Return the ID of the renderer process of the frame host that initiated the
   // navigation. This is defined if and only if GetInitiatorFrameToken above is,
   // and it is only valid in conjunction with it.
-  virtual int GetInitiatorProcessID() = 0;
+  virtual int GetInitiatorProcessId() = 0;
 
   // Returns, if available, the origin of the document that has initiated the
   // navigation for this NavigationHandle.

@@ -929,6 +929,85 @@ TEST_F(EventHandlerTest, NonEmptyTextfieldInsertionOnLongPress) {
   ASSERT_TRUE(Selection().IsHandleVisible());
 }
 
+TEST_F(EventHandlerTest, SelectionOnDoublePress) {
+  ScopedTouchTextEditingRedesignForTest touch_text_editing_redesign(true);
+  SetHtmlInnerHTML(
+      R"HTML(
+        <div id='targetdiv' style='font-size:500%;width:50px;'>
+        <p id='target' contenteditable>Test selection</p>
+        </div>
+      )HTML");
+
+  Element* element = GetDocument().getElementById("target");
+  gfx::PointF tap_point = gfx::PointF(element->BoundsInWidget().CenterPoint());
+  TapDownEventBuilder single_tap_down_event(tap_point);
+  single_tap_down_event.data.tap_down.tap_down_count = 1;
+  TapEventBuilder single_tap_event(tap_point, 1);
+  TapDownEventBuilder double_tap_down_event(tap_point);
+  double_tap_down_event.data.tap_down.tap_down_count = 2;
+  TapEventBuilder double_tap_event(tap_point, 2);
+
+  // Double press should select nearest word.
+  GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
+      single_tap_down_event);
+  GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
+      single_tap_event);
+  GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
+      double_tap_down_event);
+  EXPECT_TRUE(Selection().GetSelectionInDOMTree().IsRange());
+  EXPECT_EQ(Selection().SelectedText(), "selection");
+
+  // Releasing double tap should keep the selection.
+  GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
+      double_tap_event);
+  EXPECT_TRUE(Selection().GetSelectionInDOMTree().IsRange());
+  EXPECT_EQ(Selection().SelectedText(), "selection");
+}
+
+TEST_F(EventHandlerTest, SelectionOnDoublePressPreventDefaultMousePress) {
+  ScopedTouchTextEditingRedesignForTest touch_text_editing_redesign(true);
+  GetDocument().GetSettings()->SetScriptEnabled(true);
+  SetHtmlInnerHTML(
+      R"HTML(
+        <div id='targetdiv' style='font-size:500%;width:50px;'>
+        <p id='target' contenteditable>Test selection</p>
+        </div>
+      )HTML");
+  Element* script = GetDocument().CreateRawElement(html_names::kScriptTag);
+  script->setInnerHTML(
+      R"HTML(
+        let targetDiv = document.getElementById('targetdiv');
+        targetDiv.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+        });
+      )HTML");
+  GetDocument().body()->AppendChild(script);
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kTest);
+
+  Element* element = GetDocument().getElementById("target");
+  gfx::PointF tap_point = gfx::PointF(element->BoundsInWidget().CenterPoint());
+  TapDownEventBuilder single_tap_down_event(tap_point);
+  single_tap_down_event.data.tap_down.tap_down_count = 1;
+  TapEventBuilder single_tap_event(tap_point, 1);
+  TapDownEventBuilder double_tap_down_event(tap_point);
+  double_tap_down_event.data.tap_down.tap_down_count = 2;
+  TapEventBuilder double_tap_event(tap_point, 2);
+
+  // Double press should not select anything.
+  GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
+      single_tap_down_event);
+  GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
+      single_tap_event);
+  GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
+      double_tap_down_event);
+  EXPECT_TRUE(Selection().GetSelectionInDOMTree().IsNone());
+
+  // Releasing double tap also should not select anything.
+  GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
+      double_tap_event);
+  EXPECT_TRUE(Selection().GetSelectionInDOMTree().IsNone());
+}
+
 TEST_F(EventHandlerTest, ClearHandleAfterTap) {
   SetHtmlInnerHTML("<textarea cols=50  rows=10>Enter text</textarea>");
 
@@ -3462,6 +3541,201 @@ TEST_F(EventHandlerSimTest, TestWheelEventsWithDifferentPhases) {
   element->setInnerHTML("no wheel event");
   GetDocument().GetFrame()->GetEventHandler().HandleWheelEvent(wheel_event);
   EXPECT_EQ("no wheel event", element->innerHTML().Utf8());
+}
+
+TEST_F(EventHandlerSimTest, TestScrollendFiresOnKeyUpAfterScroll) {
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+      <!DOCTYPE html>
+      <style>
+        #scroller {
+          overflow: scroll;
+          height: 100px;
+          height: 100px;
+        }
+        #spacer {
+          height: 400px;
+          height: 400px;
+        }
+      </style>
+      <body>
+        <p id='log'></p> <br>
+        <div id="scroller">
+          <div id="spacer"></div>
+        </div>
+      </body>
+      <script>
+        scroller.addEventListener('scrollend', (e) => {
+          let log = document.getElementById('log');
+          log.innerText += 'scrollend';
+        });
+      </script>
+      )HTML");
+  Compositor().BeginFrame();
+  WebKeyboardEvent e{WebInputEvent::Type::kRawKeyDown,
+                     WebInputEvent::kNoModifiers,
+                     WebInputEvent::GetStaticTimeStampForTests()};
+  const int num_keydowns = 5;
+
+  GetDocument().getElementById("scroller")->Focus(FocusOptions::Create());
+  // Send first keyDown.
+  e.windows_key_code = VKEY_DOWN;
+  e.SetType(WebInputEvent::Type::kKeyDown);
+  GetDocument().GetFrame()->GetEventHandler().KeyEvent(e);
+  // BeginFrame to create scroll_animation.
+  Compositor().BeginFrame();
+  // BeginFrame to Tick scroll_animation far enough to complete scroll.
+  Compositor().BeginFrame(0.30);
+
+  // The first invocation of BeginFrame will create another scroll_animation
+  // and subsequent ones will update the animation target.
+  for (int i = 0; i < num_keydowns - 1; i++) {
+    GetDocument().GetFrame()->GetEventHandler().KeyEvent(e);
+    Compositor().BeginFrame();
+  }
+  // BeginFrame to advance to the end of the last scroll animation.
+  Compositor().BeginFrame(0.15 * num_keydowns);
+
+  // Verify that we have not yet fired scrollend.
+  EXPECT_EQ(GetDocument().getElementById("log")->innerHTML().Utf8(), "");
+
+  // Fire keyUp, which should tigger a scrollend event.
+  e.SetType(WebInputEvent::Type::kKeyUp);
+  GetDocument().GetFrame()->GetEventHandler().KeyEvent(e);
+
+  Compositor().BeginFrame();
+  EXPECT_EQ(GetDocument().getElementById("log")->innerHTML().Utf8(),
+            "scrollend");
+}
+
+TEST_F(EventHandlerSimTest, TestScrollendFiresAfterScrollWithEarlyKeyUp) {
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+      <!DOCTYPE html>
+      <style>
+        #scroller {
+          overflow: scroll;
+          height: 100px;
+          height: 100px;
+        }
+        #spacer {
+          height: 400px;
+          height: 400px;
+        }
+      </style>
+      <body>
+        <p id='log'></p> <br>
+        <div id="scroller">
+          <div id="spacer"></div>
+        </div>
+      </body>
+      <script>
+        scroller.addEventListener('scrollend', (e) => {
+          let log = document.getElementById('log');
+          log.innerText += 'scrollend';
+        });
+      </script>
+      )HTML");
+  Compositor().BeginFrame();
+  WebKeyboardEvent e{WebInputEvent::Type::kRawKeyDown,
+                     WebInputEvent::kNoModifiers,
+                     WebInputEvent::GetStaticTimeStampForTests()};
+
+  GetDocument().getElementById("scroller")->Focus(FocusOptions::Create());
+
+  // Send first keyDown.
+  e.windows_key_code = VKEY_DOWN;
+  e.SetType(WebInputEvent::Type::kKeyDown);
+  GetDocument().GetFrame()->GetEventHandler().KeyEvent(e);
+  // BeginFrame to create first scroll_animation.
+  Compositor().BeginFrame();
+  // BeginFrame to tick first scroll_animation to completion.
+  Compositor().BeginFrame(0.30);
+
+  // Start a second scroll_animation that should end after the keyup event.
+  GetDocument().GetFrame()->GetEventHandler().KeyEvent(e);
+  Compositor().BeginFrame();
+
+  // Verify that we have not yet fired scrollend.
+  EXPECT_EQ(GetDocument().getElementById("log")->innerHTML().Utf8(), "");
+
+  // Fire keyUp, which should not tigger a scrollend event since another scroll
+  // is in progress.
+  e.SetType(WebInputEvent::Type::kKeyUp);
+  GetDocument().GetFrame()->GetEventHandler().KeyEvent(e);
+
+  // Tick second scroll to completion which should fire scrollend.
+  Compositor().BeginFrame(0.30);
+
+  EXPECT_EQ(GetDocument().getElementById("log")->innerHTML().Utf8(),
+            "scrollend");
+}
+
+TEST_F(EventHandlerSimTest, TestScrollendFiresOnKeyUpAfterScrollInstant) {
+  GetDocument().GetSettings()->SetScrollAnimatorEnabled(false);
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+      <!DOCTYPE html>
+      <style>
+        #scroller {
+          overflow: scroll;
+          height: 100px;
+          height: 100px;
+        }
+        #spacer {
+          height: 400px;
+          height: 400px;
+        }
+      </style>
+      <body>
+        <p id='log'></p> <br>
+        <div id="scroller">
+          <div id="spacer"></div>
+        </div>
+      </body>
+      <script>
+        scroller.addEventListener('scrollend', (e) => {
+          let log = document.getElementById('log');
+          log.innerText += 'scrollend';
+        });
+      </script>
+      )HTML");
+  Compositor().BeginFrame();
+  WebKeyboardEvent e{WebInputEvent::Type::kRawKeyDown,
+                     WebInputEvent::kNoModifiers,
+                     WebInputEvent::GetStaticTimeStampForTests()};
+  const int num_keydowns = 5;
+
+  GetDocument().getElementById("scroller")->Focus(FocusOptions::Create());
+  // Send first keyDown.
+  e.windows_key_code = VKEY_DOWN;
+  e.SetType(WebInputEvent::Type::kKeyDown);
+  GetDocument().GetFrame()->GetEventHandler().KeyEvent(e);
+  // BeginFrame to trigger first instant scroll.
+  Compositor().BeginFrame();
+
+  // Trigger a sequence of instant scrolls.
+  for (int i = 0; i < num_keydowns - 1; i++) {
+    GetDocument().GetFrame()->GetEventHandler().KeyEvent(e);
+    Compositor().BeginFrame();
+  }
+
+  // Verify that we have not yet fired scrollend.
+  EXPECT_EQ(GetDocument().getElementById("log")->innerHTML().Utf8(), "");
+
+  // Fire keyUp, which should trigger a scrollend event.
+  e.SetType(WebInputEvent::Type::kKeyUp);
+  GetDocument().GetFrame()->GetEventHandler().KeyEvent(e);
+
+  Compositor().BeginFrame();
+  EXPECT_EQ(GetDocument().getElementById("log")->innerHTML().Utf8(),
+            "scrollend");
 }
 
 }  // namespace blink

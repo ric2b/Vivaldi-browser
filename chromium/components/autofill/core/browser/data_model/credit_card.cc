@@ -164,7 +164,8 @@ std::unique_ptr<CreditCard> CreditCard::CreateVirtualCardWithGuidSuffix(
 }
 
 CreditCard::CreditCard(const std::string& guid, const std::string& origin)
-    : AutofillDataModel(guid, origin),
+    : AutofillDataModel(guid),
+      origin_(origin),
       record_type_(LOCAL_CARD),
       network_(kGenericCard),
       expiration_month_(0),
@@ -589,8 +590,7 @@ std::u16string CreditCard::GetRawInfo(ServerFieldType type) const {
       return number_;
 
     case CREDIT_CARD_VERIFICATION_CODE:
-      // Chrome doesn't store credit card verification codes.
-      return std::u16string();
+      return cvc_;
 
     default:
       // ComputeDataPresentForArray will hit this repeatedly.
@@ -653,7 +653,11 @@ void CreditCard::SetRawInfoWithVerificationStatus(ServerFieldType type,
     }
 
     case CREDIT_CARD_VERIFICATION_CODE:
-      // Chrome doesn't store the credit card verification code.
+      // network_ is default as kGenericCard, network_ will be set when setting
+      // card number.
+      if (IsValidCreditCardSecurityCode(value, network_)) {
+        cvc_ = value;
+      }
       break;
 
     default:
@@ -796,6 +800,11 @@ int CreditCard::Compare(const CreditCard& credit_card) const {
   if (comparison != 0)
     return comparison;
 
+  comparison = cvc_.compare(credit_card.cvc_);
+  if (comparison != 0) {
+    return comparison;
+  }
+
   if (static_cast<int>(card_issuer_) <
       static_cast<int>(credit_card.card_issuer_)) {
     return -1;
@@ -841,23 +850,33 @@ int CreditCard::Compare(const CreditCard& credit_card) const {
   return 0;
 }
 
-bool CreditCard::IsLocalDuplicateOfServerCard(const CreditCard& other) const {
-  if (record_type() != LOCAL_CARD || other.record_type() == LOCAL_CARD)
+bool CreditCard::IsLocalOrServerDuplicateOf(const CreditCard& other) const {
+  if (record_type() == other.record_type()) {
     return false;
+  }
+  // If `this` or `other` is only a partial card, i.e. some fields are
+  // missing, assume those fields match.
+  bool name_on_card_differs = !name_on_card_.empty() &&
+                              !other.name_on_card_.empty() &&
+                              name_on_card_ != other.name_on_card_;
+  bool expiration_month_differs = expiration_month_ != 0 &&
+                                  other.expiration_month_ != 0 &&
+                                  expiration_month_ != other.expiration_month_;
+  bool expiration_year_differs = expiration_year_ != 0 &&
+                                 other.expiration_year_ != 0 &&
+                                 expiration_year_ != other.expiration_year_;
+  bool billing_address_differs =
+      !billing_address_id_.empty() && !other.billing_address_id_.empty() &&
+      billing_address_id_ != other.billing_address_id_;
 
-  // If |this| is only a partial card, i.e. some fields are missing, assume
-  // those fields match.
-  if ((!name_on_card_.empty() && name_on_card_ != other.name_on_card_) ||
-      (expiration_month_ != 0 &&
-       expiration_month_ != other.expiration_month_) ||
-      (expiration_year_ != 0 && expiration_year_ != other.expiration_year_) ||
-      (!billing_address_id_.empty() &&
-       billing_address_id_ != other.billing_address_id_)) {
+  if (name_on_card_differs || expiration_month_differs ||
+      expiration_year_differs || billing_address_differs) {
     return false;
   }
 
-  if (number_.empty())
+  if (number_.empty() || other.number_.empty()) {
     return true;
+  }
 
   return MatchingCardDetails(other);
 }
@@ -868,7 +887,7 @@ bool CreditCard::MatchingCardDetails(const CreditCard& other) const {
   // cards matches.
   if (record_type() == MASKED_SERVER_CARD ||
       other.record_type() == MASKED_SERVER_CARD) {
-    bool last_four_digits_match = LastFourDigits() == other.LastFourDigits();
+    bool last_four_digits_match = HasSameNumberAs(other);
 
     bool months_match = expiration_month() == other.expiration_month() ||
                         expiration_month() == 0 ||
@@ -880,7 +899,21 @@ bool CreditCard::MatchingCardDetails(const CreditCard& other) const {
     return last_four_digits_match && months_match && years_match;
   }
 
+  return HasSameNumberAs(other);
+}
+
+bool CreditCard::HasSameNumberAs(const CreditCard& other) const {
+  if (record_type() == CreditCard::MASKED_SERVER_CARD ||
+      other.record_type() == CreditCard::MASKED_SERVER_CARD) {
+    return LastFourDigits() == other.LastFourDigits();
+  }
+
   return StripSeparators(number_) == StripSeparators(other.number_);
+}
+
+bool CreditCard::HasSameExpirationDateAs(const CreditCard& other) const {
+  return expiration_month() == other.expiration_month() &&
+         expiration_year() == other.expiration_year();
 }
 
 bool CreditCard::operator==(const CreditCard& credit_card) const {
@@ -891,6 +924,10 @@ bool CreditCard::operator==(const CreditCard& credit_card) const {
 
 bool CreditCard::operator!=(const CreditCard& credit_card) const {
   return !operator==(credit_card);
+}
+
+bool CreditCard::IsVerified() const {
+  return !origin_.empty() && !GURL(origin_).is_valid();
 }
 
 bool CreditCard::IsEmpty(const std::string& app_locale) const {
@@ -983,8 +1020,7 @@ std::pair<std::u16string, std::u16string> CreditCard::LabelPieces() const {
     return std::make_pair(name_on_card_, std::u16string());
   }
 
-  return std::make_pair(CardIdentifierStringForAutofillDisplay(),
-                        name_on_card_);
+  return std::make_pair(CardNameAndLastFourDigits(), name_on_card_);
 }
 
 std::u16string CreditCard::Label() const {
@@ -1051,8 +1087,7 @@ std::u16string CreditCard::NetworkAndLastFourDigits(
                          : network + u"  " + obfuscated_string;
 }
 
-// TODO(crbug.com/1357204): Rename to CardNameAndLastFourDigits.
-std::u16string CreditCard::CardIdentifierStringForAutofillDisplay(
+std::u16string CreditCard::CardNameAndLastFourDigits(
     std::u16string customized_nickname,
     int obfuscation_length) const {
   std::u16string card_name = CardNameForAutofillDisplay(customized_nickname);
@@ -1098,7 +1133,7 @@ std::u16string CreditCard::CardIdentifierStringAndDescriptiveExpiration(
     std::u16string customized_nickname) const {
   return l10n_util::GetStringFUTF16(
       IDS_AUTOFILL_CREDIT_CARD_TWO_LINE_LABEL_FROM_NAME,
-      CardIdentifierStringForAutofillDisplay(customized_nickname),
+      CardNameAndLastFourDigits(customized_nickname),
       GetInfo(AutofillType(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR), app_locale));
 }
 
@@ -1284,7 +1319,8 @@ std::ostream& operator<<(std::ostream& os, const CreditCard& credit_card) {
             << credit_card.instrument_id() << " "
             << credit_card.virtual_card_enrollment_state() << " "
             << credit_card.card_art_url().spec() << " "
-            << base::UTF16ToUTF8(credit_card.product_description());
+            << base::UTF16ToUTF8(credit_card.product_description()) << " "
+            << credit_card.cvc();
 }
 
 void CreditCard::SetNameOnCardFromSeparateParts() {

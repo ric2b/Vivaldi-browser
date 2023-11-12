@@ -633,8 +633,7 @@
   }],
   "login": {
     "dependencies": ["permission:login"],
-    "contexts": ["blessed_extension"],
-    "disallow_for_service_workers": true
+    "contexts": ["blessed_extension"]
   },
   "loginScreenStorage": {
     "dependencies": ["permission:loginScreenStorage"],
@@ -828,6 +827,15 @@
     "dependencies": ["permission:sidePanel"],
     "contexts": ["blessed_extension"]
   },
+  "sidePanel.open": [{
+    "feature_flag": "ApiSidePanelOpen"
+  }, {
+    "allowlist": [
+      // Note: this list is also enforced in the sidePanel.open() implementation
+      // as a sanity check.
+      "3CEFE7915CDBD48D769E214807ACAA51581724A0"  // https://crbug.com/1446731
+    ]
+  }],
   "smartCardProviderPrivate": {
     "dependencies": ["permission:smartCardProviderPrivate"],
     "contexts": ["blessed_extension"]
@@ -850,7 +858,9 @@
   },
   "tabCapture": {
     "dependencies": ["permission:tabCapture"],
-    "contexts": ["blessed_extension"],
+    "contexts": ["blessed_extension"]
+  },
+  "tabCapture.capture": {
     "disallow_for_service_workers": true
   },
   "tabGroups": {

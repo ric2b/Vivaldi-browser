@@ -51,7 +51,6 @@ export class Resolution {
    * Compares width/height of resolutions, see if they are equal or not.
    *
    * @param resolution Resolution to be compared with.
-   * @return Whether width/height of resolutions are equal.
    */
   equals(resolution: Resolution|null): boolean {
     if (resolution === null) {
@@ -65,7 +64,6 @@ export class Resolution {
    * returns true if the resolution is rotated.
    *
    * @param resolution Resolution to be compared with.
-   * @return Whether width/height of resolutions are equal.
    */
   equalsWithRotation(resolution: Resolution): boolean {
     return (this.width === resolution.width &&
@@ -77,7 +75,6 @@ export class Resolution {
    * Compares aspect ratio of resolutions, see if they are equal or not.
    *
    * @param resolution Resolution to be compared with.
-   * @return Whether aspect ratio of resolutions are equal.
    */
   aspectRatioEquals(resolution: Resolution): boolean {
     return this.aspectRatio === resolution.aspectRatio;
@@ -137,7 +134,6 @@ export enum ViewName {
   EXPERT_SETTINGS = 'view-expert-settings',
   FLASH = 'view-flash',
   LOW_STORAGE_DIALOG = 'view-low-storage-dialog',
-  MESSAGE_DIALOG = 'view-message-dialog',
   OPTION_PANEL = 'view-option-panel',
   PHOTO_ASPECT_RATIO_SETTINGS = 'view-photo-aspect-ratio-settings',
   PHOTO_RESOLUTION_SETTINGS = 'view-photo-resolution-settings',
@@ -339,6 +335,7 @@ export enum ErrorType {
   IDLE_DETECTOR_FAILURE = 'idle-detector-failure',
   INVALID_REVIEW_UI_STATE = 'invalid-review-ui-state',
   METADATA_MAPPING_FAILURE = 'metadata-mapping-failure',
+  MULTI_WINDOW_HANDLING_FAILURE = 'multi-window-handling-failure',
   MULTIPLE_STREAMS_FAILURE = 'multiple-streams-failure',
   NO_AVAILABLE_LEVEL = 'no-available-level',
   PERF_METRICS_FAILURE = 'perf-metrics-failure',
@@ -477,6 +474,7 @@ export enum LocalStorageKey {
   ENABLE_FPS_PICKER = 'enableFPSPicker',
   ENABLE_FULL_SIZED_VIDEO_SNAPSHOT = 'enableFullSizedVideoSnapshot',
   ENABLE_MULTISTREAM_RECORDING = 'enableMultistreamRecording',
+  ENABLE_MULTISTREAM_RECORDING_CHROME = 'enableMultistreamRecordingChrome',
   ENABLE_PTZ_FOR_BUILTIN = 'enablePTZForBuiltin',
   EXPERT_MODE = 'expert',
   GA_USER_ID = 'google-analytics.analytics.user-id',

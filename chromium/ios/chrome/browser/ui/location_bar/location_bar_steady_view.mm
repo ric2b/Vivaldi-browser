@@ -21,9 +21,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
-#import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
-#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -142,6 +140,13 @@ const CGFloat kLocationLabelVerticalOffset = -1;
 
 - (void)setHighlighted:(BOOL)highlighted {
   [super setHighlighted:highlighted];
+
+  // Note: (prio@vivaldi.com) We don't want to highlight the steady view since
+  // that ends up showing a visible glitch in transition as the UI begins to
+  // move at the same time.
+  if (IsVivaldiRunning())
+    return;
+
   CGFloat duration = highlighted ? 0.1 : 0.2;
   [UIView animateWithDuration:duration
                         delay:0
@@ -200,6 +205,19 @@ const CGFloat kLocationLabelVerticalOffset = -1;
     [_locationContainerView addSubview:_locationIconImageView];
     [_locationContainerView addSubview:_locationLabel];
 
+    if (IsVivaldiRunning()) {
+      _showLocationImageConstraints = @[
+        [_locationContainerView.leadingAnchor
+            constraintEqualToAnchor:_locationIconImageView.leadingAnchor],
+        [_locationIconImageView.trailingAnchor
+            constraintEqualToAnchor:_locationLabel.leadingAnchor
+                constant:vLocationBarSteadyViewLocationImageToLabelSpacing],
+        [_locationLabel.trailingAnchor
+            constraintEqualToAnchor:_locationContainerView.trailingAnchor],
+        [_locationIconImageView.centerYAnchor
+            constraintEqualToAnchor:_locationContainerView.centerYAnchor],
+      ];
+    } else {
     _showLocationImageConstraints = @[
       [_locationContainerView.leadingAnchor
           constraintEqualToAnchor:_locationIconImageView.leadingAnchor],
@@ -211,6 +229,7 @@ const CGFloat kLocationLabelVerticalOffset = -1;
       [_locationIconImageView.centerYAnchor
           constraintEqualToAnchor:_locationContainerView.centerYAnchor],
     ];
+    } // End Vivaldi
 
     _hideLocationImageConstraints = @[
       [_locationContainerView.leadingAnchor
@@ -245,11 +264,9 @@ const CGFloat kLocationLabelVerticalOffset = -1;
       // Setup and activate constraints.
       [NSLayoutConstraint activateConstraints:@[
         [_locationLabel.centerYAnchor
-            constraintEqualToAnchor:_locationContainerView.centerYAnchor
-                           constant:kLocationLabelVerticalOffset],
+            constraintEqualToAnchor:_locationContainerView.centerYAnchor],
         [_locationLabel.heightAnchor
-            constraintLessThanOrEqualToAnchor:_locationContainerView.heightAnchor
-                                     constant:2 * kLocationLabelVerticalOffset],
+            constraintLessThanOrEqualToAnchor:_locationContainerView.heightAnchor],
         [_trailingButton.centerYAnchor
             constraintEqualToAnchor:self.centerYAnchor],
         [_locationContainerView.centerYAnchor
@@ -326,6 +343,11 @@ const CGFloat kLocationLabelVerticalOffset = -1;
 
 - (CGFloat)trailingButtonTrailingSpacing {
   if (IsSplitToolbarMode(self)) {
+
+    if (IsVivaldiRunning())
+      return vLocationBarSteadyViewShareButtonTrailingSpacing;
+    // End Vivaldi
+
     return kShareButtonTrailingSpacing;
   } else {
     return kVoiceSearchButtonTrailingSpacing;
@@ -567,6 +589,11 @@ const CGFloat kLocationLabelVerticalOffset = -1;
 - (CGRect)sourceRect {
   return self.trailingButton.bounds;
 }
+
+- (void)fadeSteadyViewContentsWithAlpha:(CGFloat)alpha {
+  _locationButton.alpha = alpha;
+}
+
 // End Vivaldi
 
 @end

@@ -460,9 +460,9 @@ std::string GetImagePathFromProfilePath(const std::string& preferences_path,
   if (list.is_list()) {
     for (auto& item : list.GetList()) {
       if (item.is_dict()) {
-        const std::string* value = item.FindStringKey(kProfilePathKey);
+        const std::string* value = item.GetDict().FindString(kProfilePathKey);
         if (value && *value == profile_path) {
-          const std::string* image_path = item.FindStringKey(kImagePathKey);
+          const std::string* image_path = item.GetDict().FindString(kImagePathKey);
           if (image_path) {
             return *image_path;
           }
@@ -485,15 +485,15 @@ void SetImagePathForProfilePath(const std::string& preferences_path,
   std::string image_path;
   for (auto& item : update_pref_data) {
     if (item.is_dict()) {
-      const std::string* value = item.FindStringKey(kProfilePathKey);
+      const std::string* value = item.GetDict().FindString(kProfilePathKey);
 
       // If it exists already, update it
       if (value && *value == profile_path) {
         if (avatar_path.size()) {
-          item.SetStringKey(kImagePathKey, avatar_path);
+          item.GetDict().Set(kImagePathKey, avatar_path);
         } else {
           // empty path means remove the dictionary.
-          item.RemoveKey(kImagePathKey);
+          item.GetDict().Remove(kImagePathKey);
         }
         updated = true;
         break;
@@ -502,8 +502,8 @@ void SetImagePathForProfilePath(const std::string& preferences_path,
   }
   if (!updated) {
     base::Value dict(base::Value::Type::DICT);
-    dict.SetKey(kProfilePathKey, base::Value(profile_path));
-    dict.SetKey(kImagePathKey, base::Value(avatar_path));
+    dict.GetDict().Set(kProfilePathKey, base::Value(profile_path));
+    dict.GetDict().Set(kImagePathKey, base::Value(avatar_path));
     update_pref_data.Append(std::move(dict));
   }
 }

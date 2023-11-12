@@ -52,7 +52,7 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_page_control.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_top_toolbar.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/thumb_strip_plus_sign_button.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/grid_transition_layout.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/legacy_grid_transition_layout.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -529,7 +529,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   return l10n_util::GetNSString(stringID);
 }
 
-#pragma mark - GridTransitionAnimationLayoutProviding properties
+#pragma mark - LegacyGridTransitionAnimationLayoutProviding properties
 
 - (BOOL)isSelectedCellVisible {
   if (self.activePage != self.currentPage) {
@@ -551,8 +551,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
-- (GridTransitionLayout*)transitionLayout:(TabGridPage)activePage {
-  GridTransitionLayout* layout = [self transitionLayoutForPage:activePage];
+- (LegacyGridTransitionLayout*)transitionLayout:(TabGridPage)activePage {
+  LegacyGridTransitionLayout* layout =
+      [self transitionLayoutForPage:activePage];
   if (!layout) {
     return nil;
   }
@@ -695,7 +696,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 
   // Vivaldi
-  [self vivaldiUpdatePageWithCurrentSearchTerms:page];
+  if (IsVivaldiRunning())
+    return [self vivaldiUpdatePageWithCurrentSearchTerms:page];
   // End Vivaldi
 
   NSString* searchTerms = nil;
@@ -1218,7 +1220,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 // Returns transition layout for the provided `page`.
-- (GridTransitionLayout*)transitionLayoutForPage:(TabGridPage)page {
+- (LegacyGridTransitionLayout*)transitionLayoutForPage:(TabGridPage)page {
   switch (page) {
     case TabGridPageIncognitoTabs:
       return [self.incognitoTabsViewController transitionLayout];
@@ -1236,12 +1238,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 // Returns transition layout provider for the regular tabs page.
-- (GridTransitionLayout*)transitionLayoutForRegularTabsPage {
-  GridTransitionLayout* regularTabsTransitionLayout =
+- (LegacyGridTransitionLayout*)transitionLayoutForRegularTabsPage {
+  LegacyGridTransitionLayout* regularTabsTransitionLayout =
       [self.regularTabsViewController transitionLayout];
 
   if (IsPinnedTabsEnabled()) {
-    GridTransitionLayout* pinnedTabsTransitionLayout =
+    LegacyGridTransitionLayout* pinnedTabsTransitionLayout =
         [self.pinnedTabsViewController transitionLayout];
 
     return [self combineTransitionLayout:regularTabsTransitionLayout
@@ -1255,43 +1257,47 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 // priority over `secondaryLayout`. This means that in case there are two
 // activeItems and/or two selectionItems available, only the ones from
 // `primaryLayout` would be picked for a combined layout.
-- (GridTransitionLayout*)
-    combineTransitionLayout:(GridTransitionLayout*)primaryLayout
-       withTransitionLayout:(GridTransitionLayout*)secondaryLayout {
-  NSArray<GridTransitionItem*>* primaryInactiveItems =
+- (LegacyGridTransitionLayout*)
+    combineTransitionLayout:(LegacyGridTransitionLayout*)primaryLayout
+       withTransitionLayout:(LegacyGridTransitionLayout*)secondaryLayout {
+  NSArray<LegacyGridTransitionItem*>* primaryInactiveItems =
       primaryLayout.inactiveItems;
-  NSArray<GridTransitionItem*>* secondaryInactiveItems =
+  NSArray<LegacyGridTransitionItem*>* secondaryInactiveItems =
       secondaryLayout.inactiveItems;
 
-  NSArray<GridTransitionItem*>* inactiveItems =
+  NSArray<LegacyGridTransitionItem*>* inactiveItems =
       [self combineInactiveItems:primaryInactiveItems
                withInactiveItems:secondaryInactiveItems];
 
-  GridTransitionActiveItem* primaryActiveItem = primaryLayout.activeItem;
-  GridTransitionActiveItem* secondaryActiveItem = secondaryLayout.activeItem;
+  LegacyGridTransitionActiveItem* primaryActiveItem = primaryLayout.activeItem;
+  LegacyGridTransitionActiveItem* secondaryActiveItem =
+      secondaryLayout.activeItem;
 
   // Prefer primary active item.
-  GridTransitionActiveItem* activeItem =
+  LegacyGridTransitionActiveItem* activeItem =
       primaryActiveItem ? primaryActiveItem : secondaryActiveItem;
 
-  GridTransitionItem* primarySelectionItem = primaryLayout.selectionItem;
-  GridTransitionItem* secondarySelectionItem = secondaryLayout.selectionItem;
+  LegacyGridTransitionItem* primarySelectionItem = primaryLayout.selectionItem;
+  LegacyGridTransitionItem* secondarySelectionItem =
+      secondaryLayout.selectionItem;
 
   // Prefer primary selection item.
-  GridTransitionItem* selectionItem =
+  LegacyGridTransitionItem* selectionItem =
       primarySelectionItem ? primarySelectionItem : secondarySelectionItem;
 
-  return [GridTransitionLayout layoutWithInactiveItems:inactiveItems
-                                            activeItem:activeItem
-                                         selectionItem:selectionItem];
+  return [LegacyGridTransitionLayout layoutWithInactiveItems:inactiveItems
+                                                  activeItem:activeItem
+                                               selectionItem:selectionItem];
 }
 
 // Combines two arrays of inactive items into one. The `primaryInactiveItems`
 // (if any) would be placed in the front of the resulting array, whether the
 // `secondaryInactiveItems` would be placed in the back.
-- (NSArray<GridTransitionItem*>*)
-    combineInactiveItems:(NSArray<GridTransitionItem*>*)primaryInactiveItems
-       withInactiveItems:(NSArray<GridTransitionItem*>*)secondaryInactiveItems {
+- (NSArray<LegacyGridTransitionItem*>*)
+    combineInactiveItems:
+        (NSArray<LegacyGridTransitionItem*>*)primaryInactiveItems
+       withInactiveItems:
+           (NSArray<LegacyGridTransitionItem*>*)secondaryInactiveItems {
   if (primaryInactiveItems == nil) {
     primaryInactiveItems = @[];
   }
@@ -1674,6 +1680,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   if (IsVivaldiRunning()) {
     self.remoteTabsViewController.overrideUserInterfaceStyle =
           UIUserInterfaceStyleUnspecified;
+    styler.cellBackgroundColor =
+        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
   }
   // End Vivaldi
 
@@ -2350,7 +2358,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 // Creates and shows a new regular tab.
 - (void)openNewRegularTabForKeyboardCommand {
-  [self.handler dismissModalDialogs];
+  [self.handler dismissModalDialogsWithCompletion:nil];
   [self openNewTabInPage:TabGridPageRegularTabs focusOmnibox:YES];
   base::RecordAction(
       base::UserMetricsAction("MobileTabGridCreateRegularTabKeyboard"));
@@ -2358,7 +2366,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 // Creates and shows a new incognito tab.
 - (void)openNewIncognitoTabForKeyboardCommand {
-  [self.handler dismissModalDialogs];
+  [self.handler dismissModalDialogsWithCompletion:nil];
   [self openNewTabInPage:TabGridPageIncognitoTabs focusOmnibox:YES];
   base::RecordAction(
       base::UserMetricsAction("MobileTabGridCreateIncognitoTabKeyboard"));
@@ -2528,7 +2536,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 - (void)reportTabSelectionTime {
   if (self.tabGridEnterTime.is_null()) {
     // The enter time was not recorded. Bail out.
-    base::debug::DumpWithoutCrashing();
     return;
   }
   base::TimeDelta duration = base::TimeTicks::Now() - self.tabGridEnterTime;
@@ -2537,7 +2544,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   self.tabGridEnterTime = base::TimeTicks();
 }
 
-#pragma mark UIGestureRecognizerDelegate
+#pragma mark - UIGestureRecognizerDelegate
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer*)gestureRecognizer
     shouldRecognizeSimultaneouslyWithGestureRecognizer:
@@ -2547,7 +2554,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   return NO;
 }
 
-#pragma mark UISearchBarDelegate
+#pragma mark - UISearchBarDelegate
 
 - (void)searchBarTextDidBeginEditing:(UISearchBar*)searchBar {
   [self updateScrimVisibilityForText:searchBar.text];
@@ -2816,8 +2823,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     return;
   }
 
-  // Check if the tab being selected is already selected.
-  BOOL alreadySelected = NO;
   id<GridCommands> tabsDelegate;
   if (gridViewController == self.regularTabsViewController) {
     tabsDelegate = self.regularTabsDelegate;
@@ -2838,7 +2843,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   // Record how long it took to select an item.
   [self reportTabSelectionTime];
 
-  alreadySelected = [tabsDelegate isItemWithIDSelected:itemID];
+  // Check if the tab being selected is already selected.
+  BOOL alreadySelected = [tabsDelegate isItemWithIDSelected:itemID];
   if (!alreadySelected) {
     [self setCurrentIdlePageStatus:NO];
   }
@@ -3125,22 +3131,36 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 - (void)undoCloseAllItemsForRegularTabs {
+  GridViewController* regularViewController =
+      [self gridViewControllerForPage:TabGridPageRegularTabs];
+
+  [regularViewController willUndoCloseAll];
+
   // This was saved as a stack: first save the inactive tabs, then the active
   // tabs. So undo in the reverse order: first undo the active tabs, then the
   // inactive tabs.
   [self.regularTabsDelegate undoCloseAllItems];
   [self.inactiveTabsDelegate undoCloseAllItems];
 
+  [regularViewController didUndoCloseAll];
+
   self.undoCloseAllAvailable = NO;
   [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
 }
 
 - (void)saveAndCloseAllItemsForRegularTabs {
+  GridViewController* regularViewController =
+      [self gridViewControllerForPage:TabGridPageRegularTabs];
+
+  [regularViewController willCloseAll];
+
   // This was saved as a stack: first save the inactive tabs, then the active
   // tabs. So undo in the reverse order: first undo the active tabs, then the
   // inactive tabs.
   [self.inactiveTabsDelegate saveAndCloseAllItems];
   [self.regularTabsDelegate saveAndCloseAllItems];
+
+  [regularViewController didCloseAll];
 
   self.undoCloseAllAvailable = YES;
   [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
@@ -3684,8 +3704,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   } else {
     self.closedTabsViewController.searchTerms = searchTerms;
   }
-
-  return;
 }
 
 // Sets the proper insets for the Recently Closed Tabs ViewController to
@@ -3742,6 +3760,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   ChromeTableViewStyler* styler = [[ChromeTableViewStyler alloc] init];
   styler.tableViewBackgroundColor = [UIColor colorNamed:kGridBackgroundColor];
   styler.cellHighlightColor = [UIColor colorNamed:kTableViewRowHighlightColor];
+
+  // Vivaldi
+  styler.cellBackgroundColor =
+      [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+  // End Vivaldi
+
   self.closedTabsViewController.styler = styler;
 
   UIView* contentView = self.scrollContentView;

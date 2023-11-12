@@ -44,6 +44,7 @@ namespace password_manager_util {
 // For credentials returned from PasswordStore::GetLogins, the enum specifies
 // the type of the match for the requested page. Higher value always means
 // weaker match.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.password_manager
 enum class GetLoginMatchType {
   // Exact origin or Android credentials.
   kExact,
@@ -123,19 +124,18 @@ base::StringPiece GetSignonRealmWithProtocolExcluded(
 GetLoginMatchType GetMatchType(const password_manager::PasswordForm& form);
 
 // Given all non-blocklisted |non_federated_matches|, finds and populates
-// |non_federated_same_scheme|, |best_matches|, and |preferred_match|
-// accordingly. For comparing credentials the following rule is used: non-psl
-// match is better than psl match, most recently used match is better than other
-// matches. In case of tie, an arbitrary credential from the tied ones is chosen
-// for |best_matches| and |preferred_match|.
+// |non_federated_same_scheme|, |best_matches| accordingly.
+// For comparing credentials the following rule is used: non-psl match is better
+// than psl match, most recently used match is better than other matches. In
+// case of tie, an arbitrary credential from the tied ones is chosen for
+// |best_matches|.
 void FindBestMatches(
     const std::vector<const password_manager::PasswordForm*>&
         non_federated_matches,
     password_manager::PasswordForm::Scheme scheme,
     std::vector<const password_manager::PasswordForm*>*
         non_federated_same_scheme,
-    std::vector<const password_manager::PasswordForm*>* best_matches,
-    const password_manager::PasswordForm** preferred_match);
+    std::vector<const password_manager::PasswordForm*>* best_matches);
 
 // Returns a form with the given |username_value| from |forms|, or nullptr if
 // none exists. If multiple matches exist, returns the first one.

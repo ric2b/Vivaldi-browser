@@ -18,7 +18,7 @@
 #include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
-#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gl/trace_util.h"
 
@@ -169,6 +169,11 @@ const gfx::Size DisplayResourceProvider::GetResourceBackedSize(ResourceId id) {
 gfx::BufferFormat DisplayResourceProvider::GetBufferFormat(ResourceId id) {
   ChildResource* resource = GetResource(id);
   return gpu::ToBufferFormat(resource->transferable.format);
+}
+
+SharedImageFormat DisplayResourceProvider::GetSharedImageFormat(ResourceId id) {
+  ChildResource* resource = GetResource(id);
+  return resource->transferable.format;
 }
 
 const gfx::ColorSpace& DisplayResourceProvider::GetOverlayColorSpace(

@@ -20,8 +20,8 @@
 #import "base/task/thread_pool.h"
 #import "base/time/default_clock.h"
 #import "base/time/default_tick_clock.h"
+#import "components/breadcrumbs/core/breadcrumbs_status.h"
 #import "components/breadcrumbs/core/crash_reporter_breadcrumb_observer.h"
-#import "components/breadcrumbs/core/features.h"
 #import "components/component_updater/component_updater_service.h"
 #import "components/component_updater/timer_update_scheduler.h"
 #import "components/gcm_driver/gcm_client_factory.h"
@@ -43,23 +43,24 @@
 #import "components/variations/service/variations_service.h"
 #import "components/version_info/channel.h"
 #import "ios/chrome/app/tests_hook.h"
-#import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state_manager_impl.h"
 #import "ios/chrome/browser/browser_state/ios_chrome_io_thread.h"
 #import "ios/chrome/browser/component_updater/ios_component_updater_configurator.h"
 #import "ios/chrome/browser/crash_report/breadcrumbs/application_breadcrumbs_logger.h"
+#import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/gcm/ios_chrome_gcm_profile_service_factory.h"
 #import "ios/chrome/browser/history/history_service_factory.h"
 #import "ios/chrome/browser/metrics/ios_chrome_metrics_services_manager_client.h"
-#import "ios/chrome/browser/paths/paths.h"
+#import "ios/chrome/browser/shared/model/paths/paths.h"
 #import "ios/chrome/browser/policy/browser_policy_connector_ios.h"
 #import "ios/chrome/browser/policy/configuration_policy_handler_list_factory.h"
-#import "ios/chrome/browser/prefs/browser_prefs.h"
 #import "ios/chrome/browser/prefs/ios_chrome_pref_service_factory.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/push_notification/push_notification_service.h"
 #import "ios/chrome/browser/segmentation_platform/otr_web_state_observer.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/browser_prefs.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/update_client/ios_chrome_update_query_params_delegate.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_service_impl.h"
@@ -167,7 +168,7 @@ void ApplicationContextImpl::PreMainMessageLoopRun() {
                                    GetSharedURLLoaderFactory());
   }
 
-  if (base::FeatureList::IsEnabled(breadcrumbs::kLogBreadcrumbs)) {
+  if (breadcrumbs::IsEnabled()) {
     // Start crash reporter listening for breadcrumb events. Collected
     // breadcrumbs will be attached to crash reports.
     breadcrumbs::CrashReporterBreadcrumbObserver::GetInstance();
@@ -569,6 +570,12 @@ void ApplicationContextImpl::CreateLocalState() {
       std::max(std::min<int>(net::kDefaultMaxSocketsPerProxyServer, 99),
                net::ClientSocketPoolManager::max_sockets_per_group(
                    net::HttpNetworkSession::NORMAL_SOCKET_POOL)));
+
+  // Cleanup obsolete preferences.
+  MigrateObsoleteLocalStatePrefs(local_state_.get());
+
+  // Delete obsolete data from user storage.
+  CleanupUnusedStorage();
 }
 
 void ApplicationContextImpl::CreateGCMDriver() {

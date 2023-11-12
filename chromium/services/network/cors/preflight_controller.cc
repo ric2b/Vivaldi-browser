@@ -31,6 +31,7 @@
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "services/network/public/mojom/devtools_observer.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/parsed_headers.mojom.h"
@@ -226,15 +227,6 @@ base::expected<void, CorsErrorStatus> CheckPreflightAccess(
       CheckAccess(response_url, allow_origin_header, allow_credentials_header,
                   actual_credentials_mode, origin);
   const bool has_ok_status = IsSuccessfulStatus(response_status_code);
-
-  AccessCheckResult result = (!cors_result.has_value() || !has_ok_status)
-                                 ? AccessCheckResult::kNotPermittedInPreflight
-                                 : AccessCheckResult::kPermittedInPreflight;
-  UMA_HISTOGRAM_ENUMERATION("Net.Cors.AccessCheckResult", result);
-  if (!network::IsOriginPotentiallyTrustworthy(origin)) {
-    UMA_HISTOGRAM_ENUMERATION("Net.Cors.AccessCheckResult.NotSecureRequestor",
-                              result);
-  }
 
   if (cors_result.has_value()) {
     if (has_ok_status) {
@@ -675,6 +667,11 @@ void PreflightController::PerformPreflightCheck(
       std::move(client_security_state), devtools_observer, net_log,
       acam_preflight_spec_conformant));
   (*emplaced_pair.first)->Request(loader_factory);
+}
+
+void PreflightController::ClearCorsPreflightCache(
+    mojom::ClearDataFilterPtr url_filter) {
+  cache_.ClearCache(std::move(url_filter));
 }
 
 void PreflightController::RemoveLoader(PreflightLoader* loader) {

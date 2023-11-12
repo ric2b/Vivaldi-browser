@@ -404,7 +404,7 @@ void CertProvisioningWorkerDynamic::GenerateKeyForVa() {
   tpm_challenge_key_subtle_impl_ =
       attestation::TpmChallengeKeySubtleFactory::Create();
   tpm_challenge_key_subtle_impl_->StartPrepareKeyStep(
-      GetVaKeyType(cert_scope_),
+      GetVaFlowType(cert_scope_),
       /*will_register_key=*/true, ::attestation::KEY_TYPE_RSA,
       GetKeyName(cert_profile_.profile_id), profile_,
       base::BindOnce(&CertProvisioningWorkerDynamic::OnGenerateKeyForVaDone,
@@ -644,7 +644,7 @@ void CertProvisioningWorkerDynamic::MarkKey(
   MarkKeyAsCorporate(cert_scope_, profile_, public_key_);
 
   platform_keys_service_->SetAttributeForKey(
-      GetPlatformKeysTokenId(cert_scope_), BytesToStr(public_key_),
+      GetPlatformKeysTokenId(cert_scope_), public_key_,
       chromeos::platform_keys::KeyAttributeType::kCertificateProvisioningId,
       StrToBytes(cert_profile_.profile_id),
       base::BindOnce(&CertProvisioningWorkerDynamic::OnMarkKeyDone,
@@ -996,7 +996,7 @@ void CertProvisioningWorkerDynamic::InitAfterDeserialization() {
       key_location_ != KeyLocation::kPkcs11Token) {
     tpm_challenge_key_subtle_impl_ =
         attestation::TpmChallengeKeySubtleFactory::CreateForPreparedKey(
-            GetVaKeyType(cert_scope_),
+            GetVaFlowType(cert_scope_),
             /*will_register_key=*/true, ::attestation::KEY_TYPE_RSA,
             GetKeyName(cert_profile_.profile_id), BytesToStr(public_key_),
             profile_);

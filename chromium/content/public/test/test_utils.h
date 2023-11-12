@@ -31,7 +31,6 @@
 
 namespace base {
 class CommandLine;
-class Value;
 }  // namespace base
 
 // A collection of functions designed for use with unit and browser tests.
@@ -77,13 +76,6 @@ void RunAllTasksUntilIdle();
 // TODO(gab): Assess the need for this API (see comment on
 // RunAllPendingInMessageLoop() above).
 base::OnceClosure GetDeferredQuitTaskForRunLoop(base::RunLoop* run_loop);
-
-// Executes the specified JavaScript in the specified frame, and runs a nested
-// MessageLoop. When the result is available, it is returned.
-// This should not be used; the use of the ExecuteScript functions in
-// browser_test_utils is preferable.
-base::Value ExecuteScriptAndGetValue(RenderFrameHost* render_frame_host,
-                                     const std::string& script);
 
 // Returns true if all sites are isolated. Typically used to bail from a test
 // that is incompatible with --site-per-process.
@@ -140,6 +132,10 @@ bool WillSameSiteNavigationsChangeRenderFrameHosts();
 // Note that unlike CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()
 // above, this will not be true when RenderDocument for main-frame is enabled.
 bool CanSameSiteMainFrameNavigationsChangeSiteInstances();
+
+// Returns true if navigation queueing is fully enabled, where we will queue new
+// navigations that happen when there is an existing pending commit navigation.
+bool IsNavigationQueueingEnabled();
 
 // Makes sure that navigations that start in |rfh| won't result in a proactive
 // BrowsingInstance swap (note they might still result in a normal

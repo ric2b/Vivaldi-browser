@@ -80,20 +80,6 @@ schema:
             hash:
               type: string
               description: Hexadecimal encoded SHA-256 hash of the data.
-        uefi_image_x86_64:
-          type: object
-          description: The UEFI firmware image used by the VM. This exists as a
-           temporary measure while we package it as a ChromeOS DLC.
-          required:
-          - url
-          - hash
-          properties:
-            url:
-              type: string
-              description: URL of the firmware image to download.
-            hash:
-              type: string
-              description: Hexadecimal encoded SHA-256 hash of the firmware image.
         vtpm:
           type: object
           description: Controls if VMs using this configuration have
@@ -122,6 +108,11 @@ schema:
            Defaults to the empty list.
           items:
             type: string
+        display_order:
+          type: integer
+          description: The order in which the VM configuration will be displayed in the installer.
+           When multiple VM configurations are specified, the one with the smallest display_order
+           value is displayed at the top of the list. Defaults to zero.
 
 example_value:
   vm-type:
@@ -133,14 +124,12 @@ example_value:
     uefi_pflash_x86_64:
       url: https://example.com/uefi_pflash
       hash: 4d9a81e8feb96abb6da0d92642996a26edea6e94345da12a19999470c57bb0a6
-    uefi_image_x86_64:
-      url: https://example.com/uefi_image
-      hash: 5dcf78750da3326fb02b89051135ac563eb9509ec1587769ef36e86c260ab86d
     vtpm:
       enabled: true
       policy_update_action: NONE
     oem_strings:
       - example config string
+    display_order: 5
 
 tags:
  - system-security

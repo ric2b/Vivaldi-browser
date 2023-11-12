@@ -195,5 +195,24 @@
       <property name="ignoreComments" value="true"/>
       <property name="message" value="Subclassing collections is uncommon. If you are not doing so, please ignore. If you are subclassing in order to call add()/put(), use List.of() / Set.of() / Map.of() instead, or use multiple statements."/>
     </module>
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="AccessibilityManagerUsage"/>
+      <property name="severity" value="warning"/>
+      <property name="format" value="android\.view\.accessibility\.AccessibilityManager"/>
+      <property name="ignoreComments" value="true"/>
+      <property name="message" value="Use org.chromium.ui.accessibility.AccessibilityState instead of AccessibilityManager. For more information, contact //ui/accessibility/OWNERS."/>
+    </module>
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="FullscreenDialogs"/>
+      <property name="severity" value="warning"/>
+      <property name="format" value="ThemeOverlay\_BrowserUI\_Fullscreen"/>
+      <property name="message" value="Fullscreen AlertDialogs must use FullscreenAlertDialog and fullscreen Dialogs must use ChromeDialog. Not doing this will break automotive devices. (This check is triggered by the presence of ThemeOverlay_BrowserUI_Fullscreen and does not know if you are already using the correct class)"/>
+    </module>
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="InclusiveLanguageCheck"/>
+      <property name="severity" value="warning"/>
+      <property name="format" value="([dD]ummy)|([sS]anity)|([bB]lind)"/>
+      <property name="message" value="&#xA;&#xA;Please use inclusive language where possible.&#xA;&#xA;Instead of 'dummy', use a term such as placeholder or empty (e.g. PlaceholderImpl, not DummyImpl).&#xA;Instead of 'sanity', use a term such as 'confidence' (e.g. confidence check, not sanity check).&#xA;Instead of 'blind', use a term such as unaware (e.g. being unaware of, not being blind to. unconfirmed change, not blind change).&#xA;&#xA;For more info see: https://developers.google.com/style/word-list&#xA;"/>
+    </module>
   </module>
 </module>

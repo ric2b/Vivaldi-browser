@@ -5,20 +5,20 @@
 #include "chrome/browser/ui/quick_answers/quick_answers_ui_controller.h"
 
 #include "base/functional/bind.h"
-#include "base/strings/escape.h"
 #include "base/strings/stringprintf.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/quick_answers/quick_answers_controller_impl.h"
+#include "chrome/browser/ui/quick_answers/ui/quick_answers_util.h"
+#include "chrome/browser/ui/quick_answers/ui/rich_answers_definition_view.h"
 #include "chrome/browser/ui/quick_answers/ui/rich_answers_translation_view.h"
+#include "chrome/browser/ui/quick_answers/ui/rich_answers_unit_conversion_view.h"
 #include "chrome/browser/ui/quick_answers/ui/rich_answers_view.h"
-#include "chromeos/components/quick_answers/public/cpp/quick_answers_state.h"
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/aura_constants.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
@@ -41,12 +41,7 @@ namespace {
 using quick_answers::QuickAnswer;
 using quick_answers::QuickAnswersExitPoint;
 
-constexpr char kGoogleSearchUrlPrefix[] = "https://www.google.com/search?q=";
-constexpr char kGoogleTranslateUrlTemplate[] =
-    "https://translate.google.com/?sl=auto&tl=%s&text=%s&op=translate";
-
 constexpr char kFeedbackDescriptionTemplate[] = "#QuickAnswers\nQuery:%s\n";
-constexpr char kTranslationQueryPrefix[] = "Translate:";
 
 constexpr char kQuickAnswersSettingsUrl[] =
     "chrome://os-settings/osSearch/search";
@@ -93,55 +88,60 @@ void QuickAnswersUiController::CreateQuickAnswersView(const gfx::Rect& bounds,
   SetActiveQuery(query);
 
   // Owned by view hierarchy.
-  auto* const quick_answers_view = new QuickAnswersView(
+  quick_answers_widget_ = quick_answers::QuickAnswersView::CreateWidget(
       bounds, title, is_internal, weak_factory_.GetWeakPtr());
-  quick_answers_view_tracker_.SetView(quick_answers_view);
-  quick_answers_view->GetWidget()->ShowInactive();
+  quick_answers_widget_->ShowInactive();
+}
+
+void QuickAnswersUiController::CreateRichAnswersView() {
+  CHECK(controller_->quick_answer());
+
+  // TODO(b/279061152): Build result type specific rich answers view with
+  // reading `controller_->structured_result()`. Note that each result type
+  // will be copyable, i.e. we can copy a struct to a view without worrying
+  // about object-life-time management.
+  views::UniqueWidgetPtr widget = quick_answers::RichAnswersView::CreateWidget(
+      quick_answers_view()->GetAnchorViewBounds(), weak_factory_.GetWeakPtr(),
+      *controller_->quick_answer());
+
+  if (!widget) {
+    // If the rich card widget cannot be created, fall-back to open the query
+    // in Google Search.
+    OpenUrl(quick_answers::GetDetailsUrlForQuery(query_));
+    controller_->OnQuickAnswerClick();
+  }
+
+  rich_answers_widget_ = std::move(widget);
+  rich_answers_widget_->ShowInactive();
+  controller_->SetVisibility(QuickAnswersVisibility::kRichAnswersVisible);
+  return;
 }
 
 void QuickAnswersUiController::OnQuickAnswersViewPressed() {
   // Route dismissal through |controller_| for logging impressions.
   controller_->DismissQuickAnswers(QuickAnswersExitPoint::kQuickAnswersClick);
 
+  // Trigger the corresponding rich card view if the feature is enabled.
   if (chromeos::features::IsQuickAnswersRichCardEnabled() &&
-      controller_->quick_answer() != nullptr &&
-      controller_->quick_answer()->result_type !=
-          quick_answers::ResultType::kNoResult) {
-    // TODO(b/279061152): Build result type specific rich answers view with
-    // reading `controller_->structured_result()`. Note that each result type
-    // will be copyable, i.e. we can copy a struct to a view without worrying
-    // about object-life-time management.
-    auto* const rich_answers_view = new quick_answers::RichAnswersView(
-        quick_answers_view_tracker_.view()->bounds(),
-        weak_factory_.GetWeakPtr(), *controller_->quick_answer());
-    rich_answers_view->GetWidget()->ShowInactive();
-
-    rich_answers_view_tracker_.SetView(rich_answers_view);
-    controller_->SetVisibility(QuickAnswersVisibility::kRichAnswersVisible);
+      controller_->quick_answer() != nullptr) {
+    CreateRichAnswersView();
     return;
   }
 
-  // TODO(b/240619915): Refactor so that we can access the request metadata
-  // instead of just the query itself.
-  if (base::StartsWith(query_, kTranslationQueryPrefix)) {
-    auto query_text = base::EscapeUrlEncodedData(
-        query_.substr(strlen(kTranslationQueryPrefix)), /*use_plus=*/true);
-    auto device_language =
-        l10n_util::GetLanguage(QuickAnswersState::Get()->application_locale());
-    auto translate_url =
-        base::StringPrintf(kGoogleTranslateUrlTemplate, device_language.c_str(),
-                           query_text.c_str());
-    OpenUrl(GURL(translate_url));
-  } else {
-    OpenUrl(GURL(kGoogleSearchUrlPrefix +
-                 base::EscapeUrlEncodedData(query_, /*use_plus=*/true)));
-  }
+  OpenUrl(quick_answers::GetDetailsUrlForQuery(query_));
   controller_->OnQuickAnswerClick();
+}
+
+void QuickAnswersUiController::OnGoogleSearchLabelPressed() {
+  OpenUrl(quick_answers::GetDetailsUrlForQuery(query_));
+
+  // Route dismissal through |controller_| for logging impressions.
+  controller_->DismissQuickAnswers(QuickAnswersExitPoint::kUnspecified);
 }
 
 bool QuickAnswersUiController::CloseQuickAnswersView() {
   if (IsShowingQuickAnswersView()) {
-    quick_answers_view()->GetWidget()->Close();
+    quick_answers_widget_->Close();
     return true;
   }
   return false;
@@ -149,7 +149,7 @@ bool QuickAnswersUiController::CloseQuickAnswersView() {
 
 bool QuickAnswersUiController::CloseRichAnswersView() {
   if (IsShowingRichAnswersView()) {
-    rich_answers_view()->GetWidget()->Close();
+    rich_answers_widget_->Close();
     return true;
   }
   return false;
@@ -198,15 +198,14 @@ void QuickAnswersUiController::CreateUserConsentView(
   DCHECK(!IsShowingUserConsentView());
 
   // Owned by view hierarchy.
-  auto* const user_consent_view = new quick_answers::UserConsentView(
+  user_consent_widget_ = quick_answers::UserConsentView::CreateWidget(
       anchor_bounds, intent_type, intent_text, weak_factory_.GetWeakPtr());
-  user_consent_view_tracker_.SetView(user_consent_view);
-  user_consent_view->GetWidget()->ShowInactive();
+  user_consent_widget_->ShowInactive();
 }
 
 void QuickAnswersUiController::CloseUserConsentView() {
   if (IsShowingUserConsentView()) {
-    user_consent_view()->GetWidget()->Close();
+    user_consent_widget_->Close();
   }
 }
 
@@ -257,16 +256,16 @@ void QuickAnswersUiController::OnUserConsentResult(bool consented) {
 }
 
 bool QuickAnswersUiController::IsShowingUserConsentView() const {
-  return user_consent_view_tracker_.view() &&
-         !user_consent_view_tracker_.view()->GetWidget()->IsClosed();
+  return user_consent_widget_ && !user_consent_widget_->IsClosed() &&
+         user_consent_widget_->GetContentsView();
 }
 
 bool QuickAnswersUiController::IsShowingQuickAnswersView() const {
-  return quick_answers_view_tracker_.view() &&
-         !quick_answers_view_tracker_.view()->GetWidget()->IsClosed();
+  return quick_answers_widget_ && !quick_answers_widget_->IsClosed() &&
+         quick_answers_widget_->GetContentsView();
 }
 
 bool QuickAnswersUiController::IsShowingRichAnswersView() const {
-  return rich_answers_view_tracker_.view() &&
-         !rich_answers_view_tracker_.view()->GetWidget()->IsClosed();
+  return rich_answers_widget_ && !rich_answers_widget_->IsClosed() &&
+         rich_answers_widget_->GetContentsView();
 }

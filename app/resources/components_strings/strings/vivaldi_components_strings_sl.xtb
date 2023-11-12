@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Pritisnite gumb za vnovično nalaganje, da znova pošljete podatke za nalaganje strani.</translation>
 <translation id="3234666976984236645">Vedno zaznaj pomembno vsebino na tem spletnem mestu</translation>
 <translation id="3308738399950580893">oglasi</translation>
+<translation id="3384522979010096022">Vaša organizacija vam ne dovoli ogleda tega spletnega mesta</translation>
 <translation id="3422472998109090673">Spletno mesto <ph name="HOST_NAME" /> trenutno ni dosegljivo.</translation>
 <translation id="3427092606871434483">Dovoli (privzeto)</translation>
 <translation id="3447661539832366887">Lastnik te naprave je izklopil to zastarelo igro.</translation>
@@ -193,7 +194,6 @@
 <translation id="8150722005171944719">Datoteke na <ph name="URL" /> ni mogoče prebrati. Morda je odstranjena, premaknjena ali pa dostop preprečujejo dovoljenja za datoteke.</translation>
 <translation id="8184538546369750125">Uporabi globalno privzeto (Dovoli)</translation>
 <translation id="8211406090763984747">Povezava je varna</translation>
-<translation id="8225771182978767009">Oseba, ki je nastavila ta računalnik, je blokirala to spletno mesto.</translation>
 <translation id="8241707690549784388">Stran, ki jo iščete, je uporabila informacije, ki ste jih vnesli. Z vrnitvijo na to stran se bodo morda ponovila vsa vaša dejanja, ki ste jih opravili. Ali želite nadaljevati?</translation>
 <translation id="8241712895048303527">Blokiraj na tem spletnem mestu</translation>
 <translation id="8286036467436129157">Prijava</translation>
@@ -214,7 +214,6 @@
 <translation id="9062620674789239642">Morda je premaknjena, urejana ali izbrisana.</translation>
 <translation id="9069693763241529744">Blokirano z razširitvijo</translation>
 <translation id="9073799351042754113">Izbrali ste izklop varnostnih opozoril za to spletno mesto.</translation>
-<translation id="910924428752220542">Vivaldi gesla</translation>
 <translation id="9169664750068251925">Vedno blokiraj na tem spletnem mestu</translation>
 <translation id="9180553614777056266">Blokator oglasov</translation>
 <translation id="9183425211371246419">Spletno mesto <ph name="HOST_NAME" /> uporablja nepodprt protokol.</translation>

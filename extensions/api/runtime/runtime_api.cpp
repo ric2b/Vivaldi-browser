@@ -29,6 +29,7 @@
 #include "chrome/browser/profiles/profile_statistics_factory.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/profiles/profiles_state.h"
+#include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/profile_picker.h"
@@ -688,15 +689,6 @@ void RuntimePrivateGetProfileStatisticsFunction::GetProfileStatsCallback(
   }
 }
 
-// MaybeScheduleProfileForDeletion does not consistently call the callback, so
-// we can't rely on it being called.
-namespace runtime_api {
-void DeleteProfileCallback(std::unique_ptr<ScopedKeepAlive> keep_alive,
-                           Profile* profile) {
-  webui::OpenNewWindowForProfile(profile);
-}
-}  // namespace runtime_api
-
 ExtensionFunction::ResponseAction RuntimePrivateDeleteProfileFunction::Run() {
   namespace Results = vivaldi::runtime_private::DeleteProfile::Results;
   using vivaldi::runtime_private::DeleteProfile::Params;
@@ -718,16 +710,14 @@ ExtensionFunction::ResponseAction RuntimePrivateDeleteProfileFunction::Run() {
     extensions::VivaldiWindowsAPI::WindowsForProfileClosing(profile);
   }
 
-  g_browser_process->profile_manager()
-    ->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
-      profile_path,
-      base::BindOnce(
-        &runtime_api::DeleteProfileCallback,
-        std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::PROFILE_MANAGER,
-          KeepAliveRestartOption::DISABLED)),
-      ProfileMetrics::DELETE_PROFILE_SETTINGS);
+  bool delete_profile_allowed = signin_util::IsProfileDeletionAllowed(profile);
 
-  return RespondNow(ArgumentList(Results::Create(true)));
+  if (delete_profile_allowed) {
+      webui::DeleteProfileAtPath(profile_path,
+                                 ProfileMetrics::DELETE_PROFILE_SETTINGS);
+  }
+
+  return RespondNow(ArgumentList(Results::Create(delete_profile_allowed)));
 }
 
 ExtensionFunction::ResponseAction

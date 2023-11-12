@@ -83,7 +83,7 @@ using form_util::FindFormControlElementsByUniqueRendererId;
 using form_util::GetFieldRendererId;
 using form_util::GetFormRendererId;
 using form_util::IsElementEditable;
-using form_util::IsWebElementFocusable;
+using form_util::IsWebElementFocusableForAutofill;
 
 using mojom::SubmissionIndicatorEvent;
 using mojom::SubmissionSource;
@@ -293,7 +293,7 @@ void AnnotateFieldsWithSignatures(
                       form_signature);
     SetAttributeAsync(
         control_element, kDebugAttributeForVisibility,
-        IsWebElementFocusable(control_element) ? "true" : "false");
+        IsWebElementFocusableForAutofill(control_element) ? "true" : "false");
   }
 }
 
@@ -340,7 +340,7 @@ WebInputElement FindUsernameElementPrecedingPasswordElement(
     const WebInputElement input = iter->DynamicTo<WebInputElement>();
     if (!input.IsNull() && input.IsTextField() &&
         !input.IsPasswordFieldForAutofill() && IsElementEditable(input) &&
-        IsWebElementFocusable(input)) {
+        IsWebElementFocusableForAutofill(input)) {
       return input;
     }
   }
@@ -606,10 +606,11 @@ class PasswordAutofillAgent::DeferringPasswordManagerDriver
              text_direction, typed_username, options, bounds);
   }
 #if BUILDFLAG(IS_ANDROID)
-  void ShowTouchToFill(
-      mojom::SubmissionReadinessState submission_readiness) override {
-    DeferMsg(&mojom::PasswordManagerDriver::ShowTouchToFill,
-             submission_readiness);
+  void ShowKeyboardReplacingSurface(
+      mojom::SubmissionReadinessState submission_readiness,
+      bool is_webauthn_form) override {
+    DeferMsg(&mojom::PasswordManagerDriver::ShowKeyboardReplacingSurface,
+             submission_readiness, is_webauthn_form);
   }
 #endif
   void CheckSafeBrowsingReputation(const GURL& form_action,
@@ -782,14 +783,13 @@ void PasswordAutofillAgent::TrackAutofilledElement(
   autofill_agent_->TrackAutofilledElement(element);
 }
 
-bool PasswordAutofillAgent::FillSuggestion(
-    const WebFormControlElement& control_element,
+void PasswordAutofillAgent::FillPasswordSuggestion(
     const std::u16string& username,
     const std::u16string& password) {
-  // The element in context of the suggestion popup.
-  WebInputElement element = control_element.DynamicTo<WebInputElement>();
+  auto element =
+      autofill_agent_->focused_element().DynamicTo<WebInputElement>();
   if (element.IsNull())
-    return false;
+    return;
 
   WebInputElement username_element;
   WebInputElement password_element;
@@ -799,7 +799,7 @@ bool PasswordAutofillAgent::FillSuggestion(
                                   &username_element, &password_element,
                                   &password_info) ||
       (!password_element.IsNull() && !IsElementEditable(password_element))) {
-    return false;
+    return;
   }
 
   password_info->password_was_edited_last = false;
@@ -830,8 +830,9 @@ bool PasswordAutofillAgent::FillSuggestion(
     // If the |username_element| is visible/focusable and the |password_element|
     // is not, trigger submission on the former as the latter unlikely has an
     // Enter listener.
-    if (!username_element.IsNull() && username_element.IsFocusable() &&
-        !password_element.IsFocusable()) {
+    if (!username_element.IsNull() &&
+        IsWebElementFocusableForAutofill(username_element) &&
+        !IsWebElementFocusableForAutofill(password_element)) {
       field_renderer_id_to_submit_ = GetFieldRendererId(username_element);
     } else {
       field_renderer_id_to_submit_ = GetFieldRendererId(password_element);
@@ -839,8 +840,6 @@ bool PasswordAutofillAgent::FillSuggestion(
   }
 
   element.SetSelectionRange(element.Value().length(), element.Value().length());
-
-  return true;
 }
 
 void PasswordAutofillAgent::FillIntoFocusedField(
@@ -1018,14 +1017,18 @@ void PasswordAutofillAgent::MaybeCheckSafeBrowsingReputation(
 
 #if BUILDFLAG(IS_ANDROID)
 bool PasswordAutofillAgent::ShouldSuppressKeyboard() {
-  // The keyboard should be suppressed if we are showing the Touch To Fill UI.
-  return touch_to_fill_state_ == TouchToFillState::kIsShowing;
+  // The keyboard should be suppressed if a keyboard replacing surface is
+  // displayed (e.g. TouchToFill).
+  return keyboard_replacing_surface_state_ ==
+         KeyboardReplacingSurfaceState::kIsShowing;
 }
 
-bool PasswordAutofillAgent::TryToShowTouchToFill(
+bool PasswordAutofillAgent::TryToShowKeyboardReplacingSurface(
     const WebFormControlElement& control_element) {
-  if (touch_to_fill_state_ != TouchToFillState::kShouldShow)
+  if (keyboard_replacing_surface_state_ !=
+      KeyboardReplacingSurfaceState::kShouldShow) {
     return false;
+  }
 
   const WebInputElement input_element =
       control_element.DynamicTo<WebInputElement>();
@@ -1043,30 +1046,24 @@ bool PasswordAutofillAgent::TryToShowTouchToFill(
       username_element, input_element.IsPasswordFieldForAutofill());
   bool has_editable_password_element =
       !password_element.IsNull() && IsElementEditable(password_element);
-  DCHECK(has_amendable_username_element || has_editable_password_element);
-
-  // Highlight the fields that are about to be filled by the user and remember
-  // the old autofill state of |username_element| and |password_element|.
-  if (has_amendable_username_element) {
-    username_autofill_state_ = username_element.GetAutofillState();
-    username_element.SetAutofillState(WebAutofillState::kPreviewed);
-  }
-  if (has_editable_password_element) {
-    password_autofill_state_ = password_element.GetAutofillState();
-    password_element.SetAutofillState(WebAutofillState::kPreviewed);
-  }
+  CHECK(has_amendable_username_element || has_editable_password_element);
 
   WebFormElement form = !password_element.IsNull() ? password_element.Form()
                                                    : username_element.Form();
   std::unique_ptr<FormData> form_data =
       form.IsNull() ? GetFormDataFromUnownedInputElements()
                     : GetFormDataFromWebForm(form);
-  GetPasswordManagerDriver().ShowTouchToFill(
+  bool is_webauthn_form =
+      form_data &&
+      std::any_of(form_data->fields.begin(), form_data->fields.end(),
+                  autofill::FieldHasWebAuthnAutocompleteAttribute);
+  GetPasswordManagerDriver().ShowKeyboardReplacingSurface(
       form_data ? CalculateSubmissionReadiness(*form_data, username_element,
                                                password_element)
-                : mojom::SubmissionReadinessState::kNoInformation);
+                : mojom::SubmissionReadinessState::kNoInformation,
+      is_webauthn_form);
 
-  touch_to_fill_state_ = TouchToFillState::kIsShowing;
+  keyboard_replacing_surface_state_ = KeyboardReplacingSurfaceState::kIsShowing;
   return true;
 }
 #endif
@@ -1101,12 +1098,14 @@ bool PasswordAutofillAgent::ShowSuggestions(
     return false;
 
 #if BUILDFLAG(IS_ANDROID)
-  // Don't call ShowSuggestionPopup if Touch To Fill is currently showing. Since
-  // Touch To Fill in spirit is very similar to a suggestion pop-up, return true
-  // so that the AutofillAgent does not try to show other autofill suggestions
-  // instead.
-  if (touch_to_fill_state_ == TouchToFillState::kIsShowing)
+  // Don't call ShowSuggestionPopup if a keyboard replacing surface is currently
+  // showing. Since a keyboard replacing surface in spirit is very similar to a
+  // suggestion pop-up, return true so that the AutofillAgent does not try to
+  // show other autofill suggestions instead.
+  if (keyboard_replacing_surface_state_ ==
+      KeyboardReplacingSurfaceState::kIsShowing) {
     return true;
+  }
 #endif
 
   if (!HasDocumentWithValidFrame(element))
@@ -1184,8 +1183,9 @@ void PasswordAutofillAgent::FireSubmissionIfFormDisappear(
                       .IsNull()) {
         fields = {field};
       }
-      if (base::ranges::any_of(fields, IsWebElementFocusable))
+      if (base::ranges::any_of(fields, IsWebElementFocusableForAutofill)) {
         return;
+      }
     }
   }
   GetPasswordManagerDriver().DynamicFormSubmission(event);
@@ -1265,8 +1265,8 @@ void PasswordAutofillAgent::SendPasswordForms(bool only_visible) {
   std::vector<FormData> password_forms_data;
   for (const WebFormElement& form : forms) {
     if (only_visible) {
-      bool is_form_visible = base::ranges::any_of(form.GetFormControlElements(),
-                                                  &IsWebElementFocusable);
+      bool is_form_visible = base::ranges::any_of(
+          form.GetFormControlElements(), &IsWebElementFocusableForAutofill);
       LogHTMLForm(logger.get(), Logger::STRING_FORM_FOUND_ON_PAGE, form);
       LogBoolean(logger.get(), Logger::STRING_FORM_IS_VISIBLE, is_form_visible);
 
@@ -1309,8 +1309,8 @@ void PasswordAutofillAgent::SendPasswordForms(bool only_visible) {
     std::vector<WebFormControlElement> control_elements =
         form_util::GetUnownedAutofillableFormFieldElements(
             frame->GetDocument());
-    add_unowned_inputs =
-        base::ranges::any_of(control_elements, &IsWebElementFocusable);
+    add_unowned_inputs = base::ranges::any_of(
+        control_elements, &IsWebElementFocusableForAutofill);
     LogBoolean(logger.get(), Logger::STRING_UNOWNED_INPUTS_VISIBLE,
                add_unowned_inputs);
   }
@@ -1518,40 +1518,24 @@ void PasswordAutofillAgent::InformNoSavedCredentials(
 }
 
 #if BUILDFLAG(IS_ANDROID)
-void PasswordAutofillAgent::TouchToFillClosed(bool show_virtual_keyboard) {
-  touch_to_fill_state_ = TouchToFillState::kWasShown;
+void PasswordAutofillAgent::KeyboardReplacingSurfaceClosed(
+    bool show_virtual_keyboard) {
+  keyboard_replacing_surface_state_ = KeyboardReplacingSurfaceState::kWasShown;
 
-  // Clear the autofill state from the username and password element. Note that
-  // we don't make use of ClearPreview() here, since this is considering the
-  // elements' SuggestedValue(), which Touch To Fill does not set.
   auto focused_input_element =
       autofill_agent_->focused_element().DynamicTo<WebInputElement>();
   if (focused_input_element.IsNull()) {
     return;
   }
 
-  WebInputElement username_element;
-  WebInputElement password_element;
-  PasswordInfo* password_info = nullptr;
-  if (!FindPasswordInfoForElement(focused_input_element, UseFallbackData(true),
-                                  &username_element, &password_element,
-                                  &password_info)) {
-    return;
-  }
-
-  if (!username_element.IsNull())
-    username_element.SetAutofillState(username_autofill_state_);
-
-  if (!password_element.IsNull())
-    password_element.SetAutofillState(password_autofill_state_);
-
   if (show_virtual_keyboard) {
     render_frame()->ShowVirtualKeyboard();
 
-    // Since Touch To Fill suppresses the Autofill popup, re-trigger the
-    // suggestions in case the virtual keyboard should be shown. This is limited
-    // to the keyboard accessory, as otherwise it would result in a flickering
-    // of the popup, due to showing the keyboard at the same time.
+    // Since a keyboard replacing surface suppresses the Autofill popup,
+    // re-trigger the suggestions in case the virtual keyboard should be shown.
+    // This is limited to the keyboard accessory, as otherwise it would result
+    // in a flickering of the popup, due to showing the keyboard at the same
+    // time.
     if (IsKeyboardAccessoryEnabled()) {
       ShowSuggestions(focused_input_element, ShowAll(false),
                       GenerationShowing(false));
@@ -1694,7 +1678,8 @@ void PasswordAutofillAgent::CleanupOnDocumentShutdown() {
   last_updated_form_renderer_id_ = FormRendererId();
   field_renderer_id_to_submit_ = FieldRendererId();
 #if BUILDFLAG(IS_ANDROID)
-  touch_to_fill_state_ = TouchToFillState::kShouldShow;
+  keyboard_replacing_surface_state_ =
+      KeyboardReplacingSurfaceState::kShouldShow;
 #endif
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   page_passwords_analyser_.Reset();
@@ -1934,8 +1919,9 @@ void PasswordAutofillAgent::OnInferredFormSubmission(SubmissionSource source) {
 }
 
 void PasswordAutofillAgent::HidePopup() {
-  if (autofill_agent_)
-    autofill_agent_->GetAutofillDriver().HidePopup();
+  if (autofill_agent_ && autofill_agent_->unsafe_autofill_driver()) {
+    autofill_agent_->unsafe_autofill_driver()->HidePopup();
+  }
 }
 
 mojom::PasswordManagerDriver&

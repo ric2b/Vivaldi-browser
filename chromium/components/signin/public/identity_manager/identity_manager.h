@@ -55,6 +55,7 @@ class AccountFetcherService;
 class AccountTrackerService;
 class GaiaCookieManagerService;
 class NewTabPageUI;
+class PrivacySandboxSettingsDelegate;
 
 namespace signin {
 
@@ -352,8 +353,8 @@ class IdentityManager : public KeyedService,
     raw_ptr<SigninClient> signin_client = nullptr;
 #endif
 #if BUILDFLAG(IS_CHROMEOS)
-    raw_ptr<account_manager::AccountManagerFacade> account_manager_facade =
-        nullptr;
+    raw_ptr<account_manager::AccountManagerFacade, DanglingUntriaged>
+        account_manager_facade = nullptr;
 #endif
 
     InitParameters();
@@ -591,10 +592,11 @@ class IdentityManager : public KeyedService,
   FRIEND_TEST_ALL_PREFIXES(IdentityManagerTest, RefreshAccountInfoIfStale);
   FRIEND_TEST_ALL_PREFIXES(IdentityManagerTest, FindExtendedPrimaryAccountInfo);
 
-  // Only caller to FindExtendedPrimaryAccountInfo().
-  // TODO(https://crbug.com/1213351): Delete once the private call has been
+  // Both classes only call FindExtendedPrimaryAccountInfo().
+  // TODO(https://crbug.com/1213351): Delete once the private calls have been
   // removed.
   friend class ::NewTabPageUI;
+  friend class ::PrivacySandboxSettingsDelegate;
 
   // Returns the extended account info for the primary account. This function
   // does not require tokens to be loaded.
@@ -670,7 +672,8 @@ class IdentityManager : public KeyedService,
   const raw_ptr<SigninClient> signin_client_;
 #endif
 #if BUILDFLAG(IS_CHROMEOS)
-  const raw_ptr<account_manager::AccountManagerFacade> account_manager_facade_;
+  const raw_ptr<account_manager::AccountManagerFacade, DanglingUntriaged>
+      account_manager_facade_;
 #endif
 
   IdentityMutator identity_mutator_;

@@ -14,7 +14,6 @@
 
 // Vivaldi
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view.h"
-#import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
 // End Vivaldi
 
 @class InfobarMetricsRecorder;
@@ -79,7 +78,6 @@
 @property(nonatomic, weak) id<ActivityServiceCommands,
                               ApplicationCommands,
                               LoadQueryCommands,
-                              PopupMenuCommands, // Vivaldi
                               OmniboxCommands>
     dispatcher;
 
@@ -126,7 +124,6 @@
 
 // Vivaldi
 - (LocationBarSteadyView*)steadyView;
-- (void)updateVivaldiShieldState:(ATBSettingType)setting;
 // End Vivaldi
 
 @end

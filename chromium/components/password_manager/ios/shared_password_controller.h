@@ -19,6 +19,9 @@
 #import "ios/web/public/js_messaging/web_frames_manager_observer_bridge.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 
+// The string ' ••••••••' appended to the username in the suggestion.
+extern NSString* const kPasswordFormSuggestionSuffix;
+
 namespace password_manager {
 class PasswordManagerClient;
 }  // namespace password_manager
@@ -54,7 +57,12 @@ class PasswordManagerClient;
 // one of the suggestions.
 - (void)attachListenersForBottomSheet:
             (const std::vector<autofill::FieldRendererId>&)rendererIds
-                              inFrame:(web::WebFrame*)frame;
+                           forFrameId:(const std::string&)frameId;
+
+// Detach listeners to fields which are associated with a bottom sheet.
+// When there are no more credentials, we want to show the user the keyboard
+// instead of the bottom sheet.
+- (void)detachListenersForBottomSheet:(const std::string&)frameId;
 
 @end
 

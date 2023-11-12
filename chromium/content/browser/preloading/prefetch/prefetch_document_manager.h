@@ -9,6 +9,8 @@
 #include <memory>
 #include <vector>
 
+#include "base/containers/circular_deque.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/preloading/prefetch/no_vary_search_helper.h"
 #include "content/browser/preloading/prefetch/prefetch_type.h"
@@ -33,6 +35,9 @@ class CONTENT_EXPORT PrefetchDocumentManager
     : public DocumentUserData<PrefetchDocumentManager>,
       public WebContentsObserver {
  public:
+  using PrefetchDestructionCallback =
+      base::RepeatingCallback<void(const GURL&)>;
+
   ~PrefetchDocumentManager() override;
 
   PrefetchDocumentManager(const PrefetchDocumentManager&) = delete;
@@ -46,9 +51,13 @@ class CONTENT_EXPORT PrefetchDocumentManager
   // prefetched. Any candidates that can be prefetched are removed from
   // |candidates|, and a prefetch for the URL of the candidate is started.
   void ProcessCandidates(
-      const absl::optional<base::UnguessableToken>&
-          initiator_devtools_navigation_token,
       std::vector<blink::mojom::SpeculationCandidatePtr>& candidates,
+      base::WeakPtr<SpeculationHostDevToolsObserver> devtools_observer);
+
+  // Attempts to prefetch the given candidate. Returns true if a new prefetch
+  // for the candidate's URL is started.
+  bool MaybePrefetch(
+      blink::mojom::SpeculationCandidatePtr candidate,
       base::WeakPtr<SpeculationHostDevToolsObserver> devtools_observer);
 
   // Starts the process to prefetch |url| with the given |prefetch_type|.
@@ -57,12 +66,8 @@ class CONTENT_EXPORT PrefetchDocumentManager
       const PrefetchType& prefetch_type,
       const blink::mojom::Referrer& referrer,
       const network::mojom::NoVarySearchPtr& no_vary_search_expected,
+      blink::mojom::SpeculationInjectionWorld world,
       base::WeakPtr<SpeculationHostDevToolsObserver> devtools_observer);
-
-  absl::optional<base::UnguessableToken> initiator_devtools_navigation_token()
-      const {
-    return initiator_devtools_navigation_token_;
-  }
 
   // Releases ownership of the |PrefetchContainer| associated with |url|. The
   // prefetch is removed from |owned_prefetches_|, but a pointer to it remains
@@ -96,15 +101,32 @@ class CONTENT_EXPORT PrefetchDocumentManager
 
   // Updates metrics when the response for a prefetch requested by this page
   // load is received.
-  void OnPrefetchSuccessful();
+  void OnPrefetchSuccessful(PrefetchContainer* prefetch);
 
   // Whether the prefetch attempt for target |url| failed or discarded
   bool IsPrefetchAttemptFailedOrDiscarded(const GURL& url);
 
-  // Helper function to get the |NoVarySearchHelper| associated with |this|.
-  const NoVarySearchHelper& GetNoVarySearchHelper() const;
-
+  base::WeakPtr<PrefetchContainer> MatchUrl(const GURL& url) const;
+  std::vector<std::pair<GURL, base::WeakPtr<PrefetchContainer>>>
+  GetAllForUrlWithoutRefAndQueryForTesting(const GURL& url) const;
   void EnableNoVarySearchSupport();
+
+  // Returns true if we can prefetch |next_prefetch| based on the number of
+  // existing completed prefetches. This method will make room for
+  // another prefetch by evicting an existing prefetch if possible. The
+  // eagerness of |next_prefetch| is taken into account when making the
+  // decision.
+  bool CanPrefetchNow(PrefetchContainer* next_prefetch);
+
+  // See documentation for |prefetch_destruction_callback_|.
+  void SetPrefetchDestructionCallback(PrefetchDestructionCallback callback);
+
+  // Called when a PrefetchContainer started by |this| is being destroyed.
+  void PrefetchWillBeDestroyed(PrefetchContainer* prefetch);
+
+  // Destroys |prefetch|. |prefetch| could either be owned by |this| or by
+  // PrefetchService.
+  void EvictPrefetch(base::WeakPtr<PrefetchContainer> prefetch);
 
   base::WeakPtr<PrefetchDocumentManager> GetWeakPtr() {
     return weak_method_factory_.GetWeakPtr();
@@ -136,18 +158,21 @@ class CONTENT_EXPORT PrefetchDocumentManager
   // requested by this page.
   int number_prefetch_request_attempted_{0};
 
+  // The number of eager prefetch requests (from this page) that have completed.
+  // An 'eager' prefetch is a prefetch whose eagerness is kEager.
+  size_t number_eager_prefetches_completed_{0};
+  // A list of non-eager prefetch requests (from this page) that have completed
+  // (oldest to newest).
+  base::circular_deque<base::WeakPtr<PrefetchContainer>>
+      completed_non_eager_prefetches_;
+
   // Metrics related to the prefetches requested by this page load.
   PrefetchReferringPageMetrics referring_page_metrics_;
 
-  // NoVarySearchHelper that manages NoVarySearch data and url matching.
-  // Used through the getter GetNoVarySearchHelper
-  scoped_refptr<NoVarySearchHelper> no_vary_search_helper_;
-
   bool no_vary_search_support_enabled_ = false;
 
-  // A DevTools token used to identify document. And this token is expected to
-  // be initialized when ProcessCandidates is called by PreloadingDecider.
-  absl::optional<base::UnguessableToken> initiator_devtools_navigation_token_;
+  // Callback that is run when a prefetch started by |this| is being destroyed.
+  PrefetchDestructionCallback prefetch_destruction_callback_;
 
   base::WeakPtrFactory<PrefetchDocumentManager> weak_method_factory_{this};
 

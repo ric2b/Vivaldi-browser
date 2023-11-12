@@ -63,7 +63,6 @@ class TestUninstallAndReplaceJobCommand
 
   base::Value ToDebugValue() const override { return base::Value(); }
 
-  void OnSyncSourceRemoved() override {}
   void OnShutdown() override {}
 
  private:
@@ -108,7 +107,7 @@ class WebAppUninstallAndReplaceJobTest : public WebAppTest {
   TestShortcutManager* shortcut_manager() { return shortcut_manager_; }
 
  private:
-  raw_ptr<TestShortcutManager> shortcut_manager_;
+  raw_ptr<TestShortcutManager, DanglingUntriaged> shortcut_manager_;
 };
 
 // `WebAppUninstallAndReplaceJob` uses `AppServiceProxy` to do uninstall, app

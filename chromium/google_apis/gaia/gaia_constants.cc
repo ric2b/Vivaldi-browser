@@ -48,6 +48,10 @@ const char kGoogleUserInfoEmail[] =
 const char kGoogleUserInfoProfile[] =
     "https://www.googleapis.com/auth/userinfo.profile";
 
+// OAuth2 scope for IP protection proxy authentication
+const char kIpProtectionAuthScope[] =
+    "https://www.googleapis.com/auth/ip-protection";
+
 // OAuth2 scope for access to the parent approval widget.
 const char kParentApprovalOAuth2Scope[] =
     "https://www.googleapis.com/auth/kids.parentapproval";
@@ -117,6 +121,10 @@ const char kCryptAuthOAuth2Scope[] =
 // OAuth2 scope for access to Drive.
 const char kDriveOAuth2Scope[] = "https://www.googleapis.com/auth/drive";
 
+// OAuth2 scope for access for DriveFS to access flags.
+const char kExperimentsAndConfigsOAuth2Scope[] =
+    "https://www.googleapis.com/auth/experimentsandconfigs";
+
 // The scope required for an access token in order to query ItemSuggest.
 const char kDriveReadOnlyOAuth2Scope[] =
     "https://www.googleapis.com/auth/drive.readonly";
@@ -173,6 +181,19 @@ const char kCalendarReadOnlyOAuth2Scope[] =
 const char kTasksReadOnlyOAuth2Scope[] =
     "https://www.googleapis.com/auth/tasks.readonly";
 const char kTasksOAuth2Scope[] = "https://www.googleapis.com/auth/tasks";
+
+// OAuth 2 scopes for Google Classroom API.
+const char kClassroomReadOnlyCoursesOAuth2Scope[] =
+    "https://www.googleapis.com/auth/classroom.courses.readonly";
+const char kClassroomReadOnlyCourseWorkSelfOAuth2Scope[] =
+    "https://www.googleapis.com/auth/classroom.coursework.me.readonly";
+const char kClassroomReadOnlyCourseWorkStudentsOAuth2Scope[] =
+    "https://www.googleapis.com/auth/classroom.coursework.students.readonly";
+const char kClassroomReadOnlyStudentSubmissionsSelfOAuth2Scope[] =
+    "https://www.googleapis.com/auth/classroom.student-submissions.me.readonly";
+const char kClassroomReadOnlyStudentSubmissionsStudentsOAuth2Scope[] =
+    "https://www.googleapis.com/auth/"
+    "classroom.student-submissions.students.readonly";
 
 // Used to build ClientOAuth requests.  These are the names of keys used when
 // building base::DictionaryValue that represent the json data that makes up

@@ -233,7 +233,8 @@ InstallableManager::InstallableManager(content::WebContents* web_contents)
       manifest_(std::make_unique<ManifestProperty>()),
       valid_manifest_(std::make_unique<ValidManifestProperty>()),
       worker_(std::make_unique<ServiceWorkerProperty>()),
-      service_worker_context_(nullptr) {
+      service_worker_context_(nullptr),
+      sequenced_task_runner_(base::SequencedTaskRunner::GetCurrentDefault()) {
   // This is null in unit tests.
   if (web_contents) {
     content::StoragePartition* storage_partition =
@@ -329,6 +330,11 @@ void InstallableManager::GetPrimaryIcon(
   params.valid_primary_icon = true;
   GetData(params,
           base::BindOnce(OnDidCompleteGetPrimaryIcon, std::move(callback)));
+}
+
+void InstallableManager::SetSequencedTaskRunnerForTesting(
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {
+  sequenced_task_runner_ = task_runner;
 }
 
 InstallableManager::ManifestProperty::ManifestProperty() = default;
@@ -570,7 +576,7 @@ void InstallableManager::WorkOnTask() {
   if ((!check_passed && !params.is_debug_mode) || IsComplete(params)) {
     // Yield the UI thread before processing the next task. If this object is
     // deleted in the meantime, the next task naturally won't run.
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+    sequenced_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&InstallableManager::CleanupAndStartNextTask,
                                   weak_factory_.GetWeakPtr()));
 
@@ -597,12 +603,7 @@ void InstallableManager::WorkOnTask() {
                           IconUsage::kPrimary);
   } else if (params.fetch_screenshots && !screenshots_downloading_ &&
              !is_screenshots_fetch_complete_) {
-    if (base::FeatureList::IsEnabled(
-            webapps::features::kDesktopPWAsDetailedInstallDialog)) {
-      CheckAndFetchScreenshots();
-    } else {
-      CheckAndFetchScreenshots(/*check_form_factor=*/false);
-    }
+    CheckAndFetchScreenshots();
   } else if (params.has_worker && !worker_->fetched) {
     CheckServiceWorker();
   } else if (params.valid_splash_icon && params.prefer_maskable_icon &&
@@ -688,6 +689,9 @@ bool InstallableManager::IsManifestValidForWebApp(
   if (!manifest.start_url.is_valid()) {
     valid_manifest_->errors.push_back(START_URL_NOT_VALID);
     is_valid = false;
+  } else {
+    // If the start_url is valid, the id must be valid.
+    CHECK(manifest.id.is_valid());
   }
 
   if ((!manifest.name || manifest.name->empty()) &&
@@ -889,7 +893,7 @@ void InstallableManager::OnIconFetched(const GURL icon_url,
   WorkOnTask();
 }
 
-void InstallableManager::CheckAndFetchScreenshots(bool check_form_factor) {
+void InstallableManager::CheckAndFetchScreenshots() {
   DCHECK(!blink::IsEmptyManifest(manifest()));
   DCHECK(!is_screenshots_fetch_complete_);
 
@@ -898,15 +902,13 @@ void InstallableManager::CheckAndFetchScreenshots(bool check_form_factor) {
   int num_of_screenshots = 0;
   for (const auto& url : manifest().screenshots) {
 #if BUILDFLAG(IS_ANDROID)
-    if (check_form_factor &&
-        url->form_factor ==
-            blink::mojom::ManifestScreenshot::FormFactor::kWide) {
+    if (url->form_factor ==
+        blink::mojom::ManifestScreenshot::FormFactor::kWide) {
       continue;
     }
 #else
-    if (check_form_factor &&
-        url->form_factor !=
-            blink::mojom::ManifestScreenshot::FormFactor::kWide) {
+    if (url->form_factor !=
+        blink::mojom::ManifestScreenshot::FormFactor::kWide) {
       continue;
     }
 #endif  // BUILDFLAG(IS_ANDROID)

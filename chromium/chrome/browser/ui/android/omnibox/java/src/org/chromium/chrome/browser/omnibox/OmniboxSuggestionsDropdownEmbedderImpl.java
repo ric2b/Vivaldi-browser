@@ -127,8 +127,7 @@ import org.chromium.ui.display.DisplayUtil;
     }
 
     @Override
-    @NonNull
-    public WindowDelegate getWindowDelegate() {
+    public @NonNull WindowDelegate getWindowDelegate() {
         return mWindowDelegate;
     }
 

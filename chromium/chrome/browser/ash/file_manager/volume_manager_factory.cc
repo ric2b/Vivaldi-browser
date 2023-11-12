@@ -5,7 +5,7 @@
 #include "chrome/browser/ash/file_manager/volume_manager_factory.h"
 
 #include "base/functional/bind.h"
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ash/file_system_provider/service_factory.h"
@@ -23,7 +23,8 @@ VolumeManager* VolumeManagerFactory::Get(content::BrowserContext* context) {
 }
 
 VolumeManagerFactory* VolumeManagerFactory::GetInstance() {
-  return base::Singleton<VolumeManagerFactory>::get();
+  static base::NoDestructor<VolumeManagerFactory> instance;
+  return instance.get();
 }
 
 bool VolumeManagerFactory::ServiceIsCreatedWithBrowserContext() const {
@@ -51,7 +52,12 @@ VolumeManagerFactory::VolumeManagerFactory()
     : ProfileKeyedServiceFactory(
           "VolumeManagerFactory",
           // Explicitly allow this manager in guest login mode.
-          ProfileSelections::BuildForRegularAndIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {
   DependsOn(drive::DriveIntegrationServiceFactory::GetInstance());
   DependsOn(ash::file_system_provider::ServiceFactory::GetInstance());
 }

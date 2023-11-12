@@ -20,8 +20,17 @@ enum class Destination {
   WhatsNew = 8,
   SpotlightDebugger = 9,
   PriceNotifications = 10,
+};
 
-  Notes = 1001, // Vivaldi
+enum class ActionType {
+  Follow = 0,
+  Bookmarks,
+  ReadingList,
+  ClearBrowsingData,
+  Translate,
+  DesktopSite,
+  FindInPage,
+  TextZoom,
 };
 
 // Ingests `destination` string representation and returns corresponding
@@ -36,5 +45,8 @@ std::string StringNameForDestination(Destination destination);
 // corresponding UMA action.
 void RecordUmaActionForDestination(Destination destination);
 }  // namespace overflow_menu
+
+using DestinationRanking = std::vector<overflow_menu::Destination>;
+using ActionRanking = std::vector<overflow_menu::ActionType>;
 
 #endif  // IOS_CHROME_BROWSER_UI_POPUP_MENU_OVERFLOW_MENU_OVERFLOW_MENU_CONSTANTS_H_

@@ -29,7 +29,6 @@
 #include "components/url_formatter/url_fixer.h"
 #include "net/base/url_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "ui/base/layout.h"
 #include "url/url_constants.h"
 
 namespace arc {
@@ -83,29 +82,6 @@ enum class ArcIntentHelperOpenType {
   WEB_APP = 6,
   kMaxValue = WEB_APP,
 };
-
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class OpenIntentAction {
-  kUnknown = 0,
-  kView = 1,
-  kSend = 2,
-  kSendMultiple = 3,
-  kMaxValue = kSendMultiple,
-};
-
-void RecordOpenAppIntentAction(const mojom::LaunchIntentPtr& intent) {
-  OpenIntentAction action = OpenIntentAction::kUnknown;
-  if (intent->action == kIntentActionView) {
-    action = OpenIntentAction::kView;
-  } else if (intent->action == kIntentActionSend) {
-    action = OpenIntentAction::kSend;
-  } else if (intent->action == kIntentActionSendMultiple) {
-    action = OpenIntentAction::kSendMultiple;
-  }
-
-  UMA_HISTOGRAM_ENUMERATION("Arc.IntentHelper.OpenAppWithIntentAction", action);
-}
 
 // Returns true if a Web App is allowed to be opened for the given URL.
 bool CanOpenWebAppForUrl(const GURL& url) {
@@ -352,8 +328,6 @@ void ArcIntentHelperBridge::OnOpenAppWithIntent(
     arc::mojom::LaunchIntentPtr intent) {
   // Web app launches should only be invoked on HTTPS URLs.
   if (CanOpenWebAppForUrl(start_url)) {
-    RecordOpenAppIntentAction(intent);
-
     g_open_url_delegate->OpenAppWithIntent(start_url, std::move(intent));
   }
 }

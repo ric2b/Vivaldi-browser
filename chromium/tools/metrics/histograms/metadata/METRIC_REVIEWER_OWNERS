@@ -17,6 +17,7 @@ yulunwu@chromium.org
 # arc
 mhasank@chromium.org
 batoon@google.com
+youkichihosoi@chromium.org
 # ash_clipboard
 ckincaid@chromium.org
 dmblack@google.com
@@ -25,6 +26,7 @@ tby@chromium.org
 jimmyxgong@chromium.org
 zentaro@chromium.org
 yulunwu@chromium.org
+michelefan@chromium.org
 # assistant
 xiaohuic@chromium.org
 # autofill
@@ -140,6 +142,7 @@ jonross@chromium.org
 kelvinjiang@chromium.org
 # families
 courtneywong@chromium.org
+ljjlee@google.com
 # fastpair
 jackshira@google.com
 julietlevesque@google.com
@@ -241,6 +244,7 @@ rsorokin@google.com
 alemate@chromium.org
 # optimization
 mcrouse@chromium.org
+robertogden@chromium.org
 sophiechang@chromium.org
 tbansal@chromium.org
 # others
@@ -338,6 +342,7 @@ jimmyxgong@chromium.org
 zentaro@chromium.org
 # scheduler
 altimin@chromium.org
+spvw@chromium.org
 # search
 ender@google.com
 # security
@@ -346,6 +351,8 @@ dullweber@chromium.org
 # segmentation_platform
 nyquist@chromium.org
 shaktisahu@chromium.org
+haileywang@google.com
+ritikagup@google.com
 # service
 wanderview@chromium.org
 ayui@chromium.org
@@ -370,6 +377,8 @@ xinghuilu@chromium.org
 # storage
 ayui@chromium.org
 wanderview@chromium.org
+# structured_metrics
+jongahn@chromium.org
 # subresource
 csharrison@chromium.org
 johnidel@chromium.org
@@ -390,9 +399,6 @@ toyoshim@chromium.org
 poromov@chromium.org
 # v8
 mlippautz@chromium.org
-# video_tutorials
-qinmin@chromium.org
-shaktisahu@chromium.org
 # web_apk
 eirage@chromium.org
 hartmanng@chromium.org

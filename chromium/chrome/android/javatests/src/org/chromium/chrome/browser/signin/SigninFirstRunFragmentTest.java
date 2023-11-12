@@ -67,6 +67,7 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.chrome.browser.enterprise.util.EnterpriseInfo;
 import org.chromium.chrome.browser.enterprise.util.EnterpriseInfo.OwnedState;
 import org.chromium.chrome.browser.enterprise.util.FakeEnterpriseInfo;
@@ -75,7 +76,6 @@ import org.chromium.chrome.browser.firstrun.FirstRunUtils;
 import org.chromium.chrome.browser.firstrun.FirstRunUtilsJni;
 import org.chromium.chrome.browser.firstrun.MobileFreProgress;
 import org.chromium.chrome.browser.firstrun.PolicyLoadListener;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -337,7 +337,7 @@ public class SigninFirstRunFragmentTest {
 
     @Test
     @MediumTest
-    @DisableIf.Build(sdk_is_less_than = VERSION_CODES.Q, message = "https://crbug.com/1434098")
+    @DisabledTest(message = "https://crbug.com/1434098")
     public void testFragmentWhenSigninIsDisabledByPolicy() {
         IdentityServicesProvider.setInstanceForTests(mIdentityServicesProviderMock);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -392,7 +392,7 @@ public class SigninFirstRunFragmentTest {
 
     @Test
     @MediumTest
-    @DisableIf.Build(sdk_is_less_than = VERSION_CODES.Q, message = "https://crbug.com/1434098")
+    @DisabledTest(message = "https://crbug.com/1434098")
     public void testFragmentWhenAddingAccountDynamicallyAndSigninIsDisabledByPolicy() {
         IdentityServicesProvider.setInstanceForTests(mIdentityServicesProviderMock);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -469,7 +469,6 @@ public class SigninFirstRunFragmentTest {
     @Test
     @MediumTest
     public void testFragmentWithChildAccountWithNonDisplayableAccountEmail() {
-        ChromeFeatureList.sHideNonDisplayableAccountEmail.setForTesting(true);
         mSigninTestRule.addAccount(CHILD_ACCOUNT_EMAIL, CHILD_FULL_NAME, /* givenName= */ null,
                 /* avatar= */ null, SigninTestRule.NON_DISPLAYABLE_EMAIL_ACCOUNT_CAPABILITIES);
         when(mPolicyLoadListenerMock.get()).thenReturn(true);
@@ -483,7 +482,6 @@ public class SigninFirstRunFragmentTest {
     @Test
     @MediumTest
     public void testFragmentWithChildAccountWithNonDisplayableAccountEmailWithEmptyDisplayName() {
-        ChromeFeatureList.sHideNonDisplayableAccountEmail.setForTesting(true);
         mSigninTestRule.addAccount(CHILD_ACCOUNT_EMAIL, /* fullName= */ null, /* givenName= */ null,
                 /* avatar= */ null, SigninTestRule.NON_DISPLAYABLE_EMAIL_ACCOUNT_CAPABILITIES);
         when(mPolicyLoadListenerMock.get()).thenReturn(true);
@@ -692,9 +690,9 @@ public class SigninFirstRunFragmentTest {
                             .getIdentityManager(Profile.getLastUsedRegularProfile())
                             .hasPrimaryAccount(ConsentLevel.SIGNIN);
         });
-        verify(mFirstRunPageDelegateMock).acceptTermsOfService(true);
-        verify(mFirstRunPageDelegateMock).advanceToNextPage();
-        verify(mFirstRunPageDelegateMock)
+        waitForEvent(mFirstRunPageDelegateMock).acceptTermsOfService(true);
+        waitForEvent(mFirstRunPageDelegateMock).advanceToNextPage();
+        waitForEvent(mFirstRunPageDelegateMock)
                 .recordFreProgressHistogram(MobileFreProgress.WELCOME_DISMISS);
     }
 
@@ -730,7 +728,6 @@ public class SigninFirstRunFragmentTest {
 
     @Test
     @MediumTest
-    @CommandLineFlags.Add({ChromeSwitches.FORCE_HIDE_NON_DISPLAYABLE_ACCOUNT_EMAIL_FRE})
     public void testContinueButtonWithChildAccountWithNonDisplayableAccountEmail() {
         IdentityServicesProvider.setInstanceForTests(mIdentityServicesProviderMock);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -747,7 +744,6 @@ public class SigninFirstRunFragmentTest {
 
     @Test
     @MediumTest
-    @CommandLineFlags.Add({ChromeSwitches.FORCE_HIDE_NON_DISPLAYABLE_ACCOUNT_EMAIL_FRE})
     public void
     testContinueButtonWithChildAccountWithNonDisplayableAccountEmailWithEmptyDisplayName() {
         IdentityServicesProvider.setInstanceForTests(mIdentityServicesProviderMock);
@@ -1343,5 +1339,10 @@ public class SigninFirstRunFragmentTest {
 
     private ViewAction clickOnTosLink() {
         return ViewUtils.clickOnClickableSpan(0);
+    }
+
+    private static <T> T waitForEvent(T mock) {
+        return verify(mock,
+                timeout(ScalableTimeout.scaleTimeout(CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL)));
     }
 }

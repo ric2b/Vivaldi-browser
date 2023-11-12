@@ -104,11 +104,6 @@ template("rust_target") {
     _visibility = invoker.visibility
   }
 
-  _use_local_std = use_local_std_by_default
-  if (defined(invoker.use_local_std)) {
-    _use_local_std = invoker.use_local_std
-  }
-
   _rustflags = []
   if (defined(invoker.rustflags)) {
     _rustflags += invoker.rustflags
@@ -122,27 +117,22 @@ template("rust_target") {
   if (defined(invoker.edition)) {
     _edition = invoker.edition
   }
+
+  assert(!defined(configs))
   _configs = [ "//build/rust:edition_${_edition}" ]
   _test_configs = []
   if (invoker.target_type == "executable") {
-    if (defined(invoker.executable_configs)) {
-      _configs += invoker.executable_configs
-    }
+    _configs += invoker.executable_configs
   } else if (invoker.target_type == "rust_proc_macro") {
-    if (defined(invoker.proc_macro_configs)) {
-      _configs += invoker.proc_macro_configs
-      _test_configs += [ "//build/rust:proc_macro_extern" ]
-    }
+    _configs += invoker.proc_macro_configs
+    _test_configs += [ "//build/rust:proc_macro_extern" ]
+  } else if (invoker.target_type == "shared_library") {
+    _configs += invoker.shared_library_configs
   } else {
-    if (defined(invoker.library_configs)) {
-      _configs += invoker.library_configs
-    }
+    _configs += invoker.library_configs
   }
-  _forward_to_host_toolchain = false
+
   if (invoker.target_type == "rust_proc_macro") {
-    if (current_toolchain != host_toolchain_no_sanitizers) {
-      _forward_to_host_toolchain = true
-    }
     _main_target_suffix = "${target_name}__proc_macro"
   } else {
     _main_target_suffix = "__rlib"
@@ -187,14 +177,6 @@ template("rust_target") {
     _rustenv += invoker.rustenv
   }
 
-  # TODO(danakj): This could be a hash generated from the input crate, such as
-  # from its path, in which case the BUILD.gn would not need to specify
-  # anything. But GN doesn't give us a hash function to make that easy.
-  _metadata = "0"
-  if (defined(invoker.epoch)) {
-    _metadata = invoker.epoch
-  }
-
   # We require that all source files are listed, even though this is
   # not a requirement for rustc. The reason is to ensure that tools
   # such as `gn deps` give the correct answer, and thus we trigger
@@ -202,16 +184,17 @@ template("rust_target") {
   # TODO(crbug.com/1256930) - verify this is correct
   assert(defined(invoker.sources), "sources must be listed")
 
-  if (_forward_to_host_toolchain) {
-    # Redirect to the host toolchain.
+  if (invoker.target_type == "rust_proc_macro" &&
+      !toolchain_for_rust_host_build_tools) {
+    # Redirect to the proc macro toolchain, which uses prebuilt stdlib libraries
+    # that are not built with panic=abort.
     group(_target_name) {
       testonly = _testonly
       if (defined(_visibility)) {
         visibility = _visibility
       }
-      public_deps = [
-        ":${_target_name}${_main_target_suffix}($host_toolchain_no_sanitizers)",
-      ]
+      public_deps =
+          [ ":${_target_name}${_main_target_suffix}($rust_macro_toolchain)" ]
     }
 
     not_needed(invoker, "*")
@@ -224,17 +207,27 @@ template("rust_target") {
                  "_deps",
                  "_aliased_deps",
                  "_is_data_dep",
-                 "_metadata",
+                 "_rustc_metadata",
                  "_out_dir",
                  "_public_deps",
                  "_rustenv",
                  "_rustflags",
                  "_support_use_from_cpp",
                  "_testonly",
-                 "_use_local_std",
                  "_visibility",
                ])
   } else {
+    _rustc_metadata = ""
+    if (defined(invoker.rustc_metadata)) {
+      _rustc_metadata = invoker.rustc_metadata
+    }
+
+    # Add a metadata-influenced suffix to the output name for libraries only.
+    _output_suffix = ""
+    if (invoker.target_type == "rust_library" && _rustc_metadata != "") {
+      _output_suffix = "-${_rustc_metadata}"
+    }
+
     group(_target_name) {
       testonly = _testonly
       if (defined(_visibility)) {
@@ -259,23 +252,11 @@ template("rust_target") {
         # target that depends on a rust target directly may need access to Cxx
         # as well, which means it must appear in public_deps.
         public_deps += [ "//build/rust:cxx_cppdeps" ]
-
-        # cxx_cppdeps pulls in the default libstd, so make sure the default was
-        # not overridden.
-        assert(
-            _use_local_std == use_local_std_by_default,
-            "Rust targets with cxx bindings cannot override the default libstd")
       } else if (!defined(invoker.no_std) || !invoker.no_std) {
         # If C++ depends on and links in the library, we need to make sure C++
         # links in the Rust stdlib. This is orthogonal to if the library exports
         # bindings for C++ to use.
-        if (_use_local_std) {
-          deps = [ "//build/rust/std:link_local_std" ]
-        } else {
-          assert(prebuilt_libstd_supported,
-                 "Prebuilt Rust stdlib is not available for this target")
-          deps = [ "//build/rust/std:link_prebuilt_std" ]
-        }
+        deps = [ "//build/rust/std:stdlib_for_clang" ]
       }
     }
 
@@ -295,99 +276,12 @@ template("rust_target") {
     }
 
     if (!defined(invoker.no_std) || !invoker.no_std) {
-      if (_use_local_std) {
-        _rust_deps += [ "//build/rust/std:local_std_for_rustc" ]
-      } else {
-        _rust_deps += [ "//build/rust/std:prebuilt_std_for_rustc" ]
-      }
-    } else {
-      not_needed([ "_use_local_std" ])
+      _rust_deps += [ "//build/rust/std:stdlib_for_rustc" ]
     }
 
     # You must go through the groups above to get to these targets.
     _visibility = []
     _visibility = [ ":${_target_name}" ]
-
-    target(invoker.target_type, "${_target_name}${_main_target_suffix}") {
-      forward_variables_from(invoker,
-                             "*",
-                             TESTONLY_AND_VISIBILITY + [
-                                   "features",
-                                   "deps",
-                                   "aliased_deps",
-                                   "public_deps",
-                                   "rustflags",
-                                   "rustenv",
-                                   "configs",
-                                   "unit_test_output_dir",
-                                   "unit_test_target",
-                                   "test_inputs",
-                                 ])
-
-      testonly = _testonly
-      visibility = _visibility
-      crate_name = _crate_name
-      crate_root = _crate_root
-      configs = []
-      configs = _configs
-      deps = _rust_deps
-      aliased_deps = _rust_aliased_deps
-      public_deps = _rust_public_deps
-      rustflags = _rustflags
-      rustflags += [ "-Cmetadata=${_metadata}" ]
-      rustenv = _rustenv
-
-      # The Rust tool() declarations, like C++ ones, use the output_name and
-      # output_dir, so that GN targets can override these if needed. Here we
-      # give them their default values, or allow them to be overridden.
-      if (defined(_output_dir)) {
-        output_dir = _output_dir
-      }
-      if (!defined(output_name) || output_name == "") {
-        output_name = crate_name
-      }
-
-      if (compute_inputs_for_analyze) {
-        deps += [ ":${_target_name}_analyze" ]
-      }
-
-      if (!_allow_unsafe) {
-        configs += [ "//build/rust:forbid_unsafe" ]
-      }
-    }
-
-    if (compute_inputs_for_analyze) {
-      # Find and depend on all rust files in the crate for the purpose of `gn
-      # analyze`.
-      analyze_rust("${_target_name}_analyze") {
-        forward_variables_from(invoker, "*", [ "crate_root" ])
-        crate_root = _crate_root
-      }
-    }
-
-    if (_cxx_bindings != []) {
-      rust_cxx("${_target_name}_cxx_generated") {
-        testonly = _testonly
-        visibility = [ ":${_target_name}${_main_target_suffix}" ]
-        if (defined(_visibility)) {
-          visibility += _visibility
-        }
-        sources = _cxx_bindings
-        deps = _cxx_deps + _public_deps
-
-        if (is_component_build) {
-          # In a component_build the cxx bindings may be linked into a shared
-          # library at any point up the dependency tree, so always export.
-          export_symbols = true
-        } else if (invoker.target_type == "shared_library") {
-          export_symbols = true
-        } else {
-          export_symbols = false
-        }
-      }
-    } else {
-      not_needed([ "_cxx_deps" ])
-    }
 
     if (_build_unit_tests) {
       _unit_test_target = "${_target_name}_unittests"
@@ -419,9 +313,7 @@ template("rust_target") {
         }
         if (defined(invoker.executable_configs)) {
           configs = []
-          configs = invoker.executable_configs
-        } else if (!defined(configs)) {
-          configs = []
+          configs += invoker.executable_configs
         }
         configs += _test_configs
         rustenv = _rustenv
@@ -434,15 +326,94 @@ template("rust_target") {
       not_needed([
                    "_crate_root",
                    "_crate_name",
-                   "_metadata",
+                   "_rustc_metadata",
                    "_test_configs",
                  ])
+      not_needed(invoker, [ "executable_configs" ])
+    }
+
+    target(invoker.target_type, "${_target_name}${_main_target_suffix}") {
+      forward_variables_from(invoker,
+                             "*",
+                             TESTONLY_AND_VISIBILITY + [
+                                   "features",
+                                   "deps",
+                                   "aliased_deps",
+                                   "public_deps",
+                                   "rustflags",
+                                   "rustenv",
+                                   "configs",
+                                   "unit_test_output_dir",
+                                   "unit_test_target",
+                                   "test_inputs",
+                                 ])
+
+      testonly = _testonly
+      visibility = _visibility
+      crate_name = _crate_name
+      crate_root = _crate_root
+      configs = []
+      configs = _configs
+      deps = _rust_deps
+      aliased_deps = _rust_aliased_deps
+      public_deps = _rust_public_deps
+      rustflags = _rustflags
+      if (_rustc_metadata != "") {
+        rustflags += [ "-Cmetadata=${_rustc_metadata}" ]
+      }
+      rustenv = _rustenv
+
+      # The Rust tool() declarations, like C++ ones, use the output_name and
+      # output_dir, so that GN targets can override these if needed. Here we
+      # give them their default values, or allow them to be overridden.
+      if (defined(_output_dir)) {
+        output_dir = _output_dir
+      }
+      if (!defined(output_name) || output_name == "") {
+        output_name = "${crate_name}${_output_suffix}"
+      }
+
+      if (compute_inputs_for_analyze) {
+        deps += [ ":${_target_name}_analyze" ]
+      }
+
+      if (!_allow_unsafe) {
+        configs += [ "//build/rust:forbid_unsafe" ]
+      }
+    }
+
+    if (compute_inputs_for_analyze) {
+      # Find and depend on all rust files in the crate for the purpose of `gn
+      # analyze`.
+      analyze_rust("${_target_name}_analyze") {
+        forward_variables_from(invoker, "*", [ "crate_root" ])
+        crate_root = _crate_root
+      }
+    }
+
+    if (_cxx_bindings != []) {
+      rust_cxx("${_target_name}_cxx_generated") {
+        testonly = _testonly
+        visibility = [ ":${_target_name}${_main_target_suffix}" ]
+        if (defined(_visibility)) {
+          visibility += _visibility
+        }
+        sources = _cxx_bindings
+        deps = _cxx_deps + _public_deps
+        configs = _configs
+
+        if (is_component_build) {
+          # In a component_build the cxx bindings may be linked into a shared
+          # library at any point up the dependency tree, so always export.
+          export_symbols = true
+        } else if (invoker.target_type == "shared_library") {
+          export_symbols = true
+        } else {
+          export_symbols = false
+        }
+      }
+    } else {
+      not_needed([ "_cxx_deps" ])
     }
   }
-}
-
-set_defaults("rust_target") {
-  executable_configs = default_executable_configs
-  library_configs = default_compiler_configs
-  proc_macro_configs = default_rust_proc_macro_configs
 }

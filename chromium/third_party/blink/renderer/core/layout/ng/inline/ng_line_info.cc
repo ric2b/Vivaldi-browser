@@ -6,6 +6,7 @@
 
 #include "base/containers/adapters.h"
 #include "third_party/blink/renderer/core/layout/layout_object_inlines.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
 
@@ -32,7 +33,7 @@ void NGLineInfo::Reset() {
   initial_letter_box_block_start_adjustment_ = LayoutUnit();
   initial_letter_box_block_size_ = LayoutUnit();
 
-  start_offset_ = 0;
+  start_ = {0, 0};
   end_item_index_ = 0;
   end_offset_for_justify_ = 0;
 
@@ -136,6 +137,15 @@ bool NGLineInfo::ComputeNeedsAccurateEndPosition() const {
   return false;
 }
 
+NGInlineItemTextIndex NGLineInfo::End() const {
+  return BreakToken() ? BreakToken()->Start() : ItemsData().End();
+}
+
+unsigned NGLineInfo::EndTextOffset() const {
+  return BreakToken() ? BreakToken()->StartTextOffset()
+                      : ItemsData().text_content.length();
+}
+
 unsigned NGLineInfo::InflowEndOffset() const {
   for (const auto& item_result : base::Reversed(Results())) {
     DCHECK(item_result.item);
@@ -223,6 +233,9 @@ LayoutUnit NGLineInfo::ComputeTrailingSpaceWidth(
     unsigned end_offset = item_result.EndOffset();
     DCHECK(end_offset);
     if (item.Type() == NGInlineItem::kText) {
+      if (!item_result.Length()) {
+        continue;  // Skip empty items. See `NGLineBreaker::HandleEmptyText`.
+      }
       const String& text = items_data_->text_content;
       if (end_offset && text[end_offset - 1] == kSpaceCharacter) {
         do {

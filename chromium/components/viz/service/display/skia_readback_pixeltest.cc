@@ -34,6 +34,8 @@
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/skia_utils.h"
+#include "gpu/config/gpu_finch_features.h"
+#include "media/base/media_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -81,7 +83,7 @@ base::span<const uint8_t> MakePixelSpan(const SkBitmap& bitmap) {
                          bitmap.computeByteSize());
 }
 
-void DeleteSharedImage(scoped_refptr<ContextProvider> context_provider,
+void DeleteSharedImage(scoped_refptr<RasterContextProvider> context_provider,
                        gpu::Mailbox mailbox,
                        const gpu::SyncToken& sync_token,
                        bool is_lost) {
@@ -91,15 +93,22 @@ void DeleteSharedImage(scoped_refptr<ContextProvider> context_provider,
   sii->DestroySharedImage(sync_token, mailbox);
 }
 
-void ReadbackTextureOnGpuThread(gpu::SharedImageManager* shared_image_manager,
-                                gpu::SharedContextState* context_state,
-                                const gpu::Mailbox& mailbox,
-                                const gfx::Size& texture_size,
-                                SkColorType color_type,
-                                SkBitmap& out_bitmap) {
-  DCHECK(color_type == kAlpha_8_SkColorType ||
-         color_type == kR8G8_unorm_SkColorType);
+struct ReadbackTextureInfo {
+  ReadbackTextureInfo(const gfx::Size& size,
+                      SkColorType color_type,
+                      SkBitmap& out_bitmap)
+      : size(size), color_type(color_type), out_bitmap(out_bitmap) {}
 
+  gfx::Size size;
+  SkColorType color_type;
+  SkBitmap& out_bitmap;
+};
+
+void ReadbackTexturesOnGpuThread(gpu::SharedImageManager* shared_image_manager,
+                                 gpu::SharedContextState* context_state,
+                                 const gpu::Mailbox& mailbox,
+                                 ReadbackTextureInfo readback_texture_infos[],
+                                 int num_textures) {
   if (!context_state->MakeCurrent(nullptr))
     return;
 
@@ -115,26 +124,37 @@ void ReadbackTextureOnGpuThread(gpu::SharedImageManager* shared_image_manager,
       /*final_msaa_count=*/1, surface_props, &begin_semaphores, &end_semaphores,
       gpu::SharedImageRepresentation::AllowUnclearedAccess::kYes);
 
-  auto* surface = scoped_write->surface();
+  context_state->gr_context()->wait(begin_semaphores.size(),
+                                    begin_semaphores.data());
 
-  surface->wait(begin_semaphores.size(), begin_semaphores.data());
+  for (int i = 0; i < num_textures; i++) {
+    auto* surface = scoped_write->surface(i);
 
-  size_t row_bytes =
-      texture_size.width() * (color_type == kAlpha_8_SkColorType ? 1 : 2);
-  size_t num_bytes = row_bytes * texture_size.height();
+    auto& texture_size = readback_texture_infos[i].size;
+    auto color_type = readback_texture_infos[i].color_type;
+    auto& out_bitmap = readback_texture_infos[i].out_bitmap;
 
-  DCHECK_EQ(num_bytes, out_bitmap.computeByteSize());
-  DCHECK_EQ(row_bytes, out_bitmap.rowBytes());
-  DCHECK_EQ(
-      static_cast<size_t>(out_bitmap.width() * out_bitmap.bytesPerPixel()),
-      out_bitmap.rowBytes());
+    DCHECK(color_type == kAlpha_8_SkColorType ||
+           color_type == kR8G8_unorm_SkColorType);
 
-  SkPixmap pixmap(SkImageInfo::Make(texture_size.width(), texture_size.height(),
-                                    color_type, kUnpremul_SkAlphaType),
-                  out_bitmap.getAddr(0, 0), row_bytes);
+    size_t row_bytes =
+        texture_size.width() * (color_type == kAlpha_8_SkColorType ? 1 : 2);
+    size_t num_bytes = row_bytes * texture_size.height();
 
-  bool success = surface->readPixels(pixmap, 0, 0);
-  DCHECK(success);
+    DCHECK_EQ(num_bytes, out_bitmap.computeByteSize());
+    DCHECK_EQ(row_bytes, out_bitmap.rowBytes());
+    DCHECK_EQ(
+        static_cast<size_t>(out_bitmap.width() * out_bitmap.bytesPerPixel()),
+        out_bitmap.rowBytes());
+
+    SkPixmap pixmap(
+        SkImageInfo::Make(texture_size.width(), texture_size.height(),
+                          color_type, kUnpremul_SkAlphaType),
+        out_bitmap.getAddr(0, 0), row_bytes);
+
+    bool success = surface->readPixels(pixmap, 0, 0);
+    DCHECK(success);
+  }
 
   GrFlushInfo flush_info;
   flush_info.fNumSemaphores = end_semaphores.size();
@@ -143,7 +163,10 @@ void ReadbackTextureOnGpuThread(gpu::SharedImageManager* shared_image_manager,
   gpu::AddVulkanCleanupTaskForSkiaFlush(context_state->vk_context_provider(),
                                         &flush_info);
 
-  surface->flush(SkSurface::BackendSurfaceAccess::kNoAccess, flush_info);
+  // Graphite surfaces do not need to be flushed, only Ganesh ones.
+  if (GrDirectContext* direct_context = context_state->gr_context()) {
+    direct_context->flush(flush_info);
+  }
 }
 
 // Reads back NV12 planes from textures returned in the result.
@@ -172,16 +195,35 @@ void ReadbackNV12Planes(TestGpuServiceHolder* gpu_service_holder,
                                   ->GetCompositorGpuThreadSharedContextState()
                                   .get();
 
-        ReadbackTextureOnGpuThread(shared_image_manager, context_state,
-                                   result.GetTextureResult()->planes[0].mailbox,
-                                   texture_size, kAlpha_8_SkColorType,
-                                   out_luma_plane);
-
-        ReadbackTextureOnGpuThread(
-            shared_image_manager, context_state,
-            result.GetTextureResult()->planes[1].mailbox,
+        auto luma_plane_texture_info = ReadbackTextureInfo(
+            texture_size, kAlpha_8_SkColorType, out_luma_plane);
+        auto chroma_planes_texture_info = ReadbackTextureInfo(
             gfx::Size(texture_size.width() / 2, texture_size.height() / 2),
             kR8G8_unorm_SkColorType, out_chroma_planes);
+
+        if (result.format() == CopyOutputResult::Format::NV12_MULTIPLANE) {
+          ReadbackTextureInfo texture_infos[] = {luma_plane_texture_info,
+                                                 chroma_planes_texture_info};
+          ReadbackTexturesOnGpuThread(
+              shared_image_manager, context_state,
+              result.GetTextureResult()->mailbox_holders[0].mailbox,
+              texture_infos,
+              /*num_textures=*/2);
+        } else {
+          ASSERT_EQ(result.format(), CopyOutputResult::Format::NV12_PLANES);
+
+          ReadbackTexturesOnGpuThread(
+              shared_image_manager, context_state,
+              result.GetTextureResult()->mailbox_holders[0].mailbox,
+              &luma_plane_texture_info,
+              /*num_textures=*/1);
+
+          ReadbackTexturesOnGpuThread(
+              shared_image_manager, context_state,
+              result.GetTextureResult()->mailbox_holders[1].mailbox,
+              &chroma_planes_texture_info,
+              /*num_textures=*/1);
+        }
 
         wait.Signal();
       }));
@@ -203,6 +245,29 @@ std::vector<uint8_t> GeneratePixels(size_t num_bytes,
   }
 
   return result;
+}
+
+// NV12 tests can't run with multiplanar SharedImage on certain
+// platforms/configurations.
+bool can_run_nv12_test(bool use_multiplanar_si) {
+  if (!use_multiplanar_si) {
+    return true;
+  }
+
+#if BUILDFLAG(IS_ANDROID)
+  // Android doesn't support (or use) the MultiPlane::kNV12 format.
+  return false;
+#elif BUILDFLAG(IS_CHROMEOS)
+  // On ChromeOS, multiplanar SharedImage is supported only when the
+  // passthrough decoder is used.
+  return TestGpuServiceHolder::GetInstance()
+      ->gpu_service()
+      ->gpu_preferences()
+      .use_passthrough_cmd_decoder;
+#else
+  // Multiplanar SI is supported on all other platforms.
+  return true;
+#endif
 }
 
 }  // namespace
@@ -457,19 +522,32 @@ INSTANTIATE_TEST_SUITE_P(All,
 class SkiaReadbackPixelTestNV12
     : public SkiaReadbackPixelTest,
       public testing::WithParamInterface<
-          std::tuple<bool, CopyOutputResult::Destination>> {
+          std::tuple<bool, CopyOutputResult::Destination, bool>> {
  public:
+  SkiaReadbackPixelTestNV12()
+      : should_scale_by_half_(std::get<0>(GetParam())),
+        request_destination_(std::get<1>(GetParam())),
+        use_multiplanar_si_(std::get<2>(GetParam())) {}
+
   CopyOutputResult::Destination RequestDestination() const {
-    return std::get<1>(GetParam());
+    return request_destination_;
   }
 
   CopyOutputResult::Format RequestFormat() const {
-    return CopyOutputResult::Format::NV12_PLANES;
+    return use_multiplanar_si_ ? CopyOutputResult::Format::NV12_MULTIPLANE
+                               : CopyOutputResult::Format::NV12_PLANES;
   }
 
   void SetUp() override {
-    SkiaReadbackPixelTest::SetUpReadbackPixeltest(std::get<0>(GetParam()));
+    SkiaReadbackPixelTest::SetUpReadbackPixeltest(should_scale_by_half_);
   }
+
+  bool use_multiplanar_si() { return use_multiplanar_si_; }
+
+ private:
+  bool should_scale_by_half_ = false;
+  CopyOutputResult::Destination request_destination_;
+  bool use_multiplanar_si_ = false;
 };
 
 // Test that SkiaRenderer NV12 readback works correctly.
@@ -477,6 +555,10 @@ TEST_P(SkiaReadbackPixelTestNV12, ExecutesCopyRequest) {
   // Generates a RenderPass which contains one quad that spans the full output.
   // The quad has our source image, so the framebuffer should contain the source
   // image after DrawFrame().
+
+  if (!can_run_nv12_test(use_multiplanar_si())) {
+    GTEST_SKIP();
+  }
 
   const gfx::Rect result_selection = GetRequestArea();
 
@@ -560,11 +642,13 @@ TEST_P(SkiaReadbackPixelTestNV12, ExecutesCopyRequest) {
 INSTANTIATE_TEST_SUITE_P(
     ,
     SkiaReadbackPixelTestNV12,
-    // Result scaling: Scale by half?
     testing::Combine(
+        // Result scaling: Scale by half?
         testing::Values(true, false),
         testing::Values(CopyOutputResult::Destination::kSystemMemory,
-                        CopyOutputResult::Destination::kNativeTextures)));
+                        CopyOutputResult::Destination::kNativeTextures),
+        // Use MultiplanarSharedImage?
+        testing::Values(true, false)));
 #else
 // Don't instantiate the NV12 tests when run on Android emulator, they won't
 // work since the SkiaRenderer currently does not support CopyOutputRequests
@@ -576,28 +660,45 @@ GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(SkiaReadbackPixelTestNV12);
 class SkiaReadbackPixelTestNV12WithBlit
     : public SkiaReadbackPixelTest,
       public testing::WithParamInterface<
-          std::tuple<bool, LetterboxingBehavior, bool>> {
+          std::tuple<bool, LetterboxingBehavior, bool, bool>> {
  public:
+  SkiaReadbackPixelTestNV12WithBlit()
+      : should_scale_by_half_(std::get<0>(GetParam())),
+        letterboxing_behavior_(std::get<1>(GetParam())),
+        populates_gpu_memory_buffer_(std::get<2>(GetParam())),
+        use_multiplanar_si_(std::get<3>(GetParam())) {}
+
   CopyOutputResult::Destination RequestDestination() const {
     return CopyOutputResult::Destination::kNativeTextures;
   }
 
   CopyOutputResult::Format RequestFormat() const {
+    // TODO(crbug.com/1429004): Implement necessary support in
+    // CopyOutputRequest() and pass NV12_MULTIPLANE when |use_multiplanar_si_|
+    // is true.
     return CopyOutputResult::Format::NV12_PLANES;
   }
 
   void SetUp() override {
-    SkiaReadbackPixelTest::SetUpReadbackPixeltest(std::get<0>(GetParam()));
+    SkiaReadbackPixelTest::SetUpReadbackPixeltest(should_scale_by_half_);
   }
 
   LetterboxingBehavior GetLetterboxingBehavior() const {
-    return std::get<1>(GetParam());
+    return letterboxing_behavior_;
   }
 
   // Test parameter that will return `true` if we'll claim that the textures we
   // create come from GpuMemoryBuffer, `false` otherwise. This exercises a
   // different code path in SkiaRenderer.
-  bool populates_gpu_memory_buffer() const { return std::get<2>(GetParam()); }
+  bool populates_gpu_memory_buffer() const {
+    return populates_gpu_memory_buffer_;
+  }
+
+ private:
+  bool should_scale_by_half_ = false;
+  LetterboxingBehavior letterboxing_behavior_;
+  bool populates_gpu_memory_buffer_ = false;
+  bool use_multiplanar_si_ = false;
 };
 
 // Test that SkiaRenderer NV12 readback works correctly using existing textures.
@@ -618,6 +719,9 @@ TEST_P(SkiaReadbackPixelTestNV12WithBlit, ExecutesCopyRequestWithBlit) {
   ASSERT_TRUE(result_selection.width() % 4 == 0)
       << " request width is not divisible by 4, result_selection.width()="
       << result_selection.width();
+
+  // TODO(crbug.com/1429004): Update test to create one multiplanar SharedImage
+  // when |use_multiplanar_si_| is true.
 
   // Generate 2 shared images that will be owned by us. They will be used as the
   // destination for the issued BlitRequest. The logical size of the image will
@@ -707,8 +811,8 @@ TEST_P(SkiaReadbackPixelTestNV12WithBlit, ExecutesCopyRequestWithBlit) {
 
   for (size_t i = 0; i < CopyOutputResult::kNV12MaxPlanes; ++i) {
     child_context_provider_->SharedImageInterface()->DestroySharedImage(
-        result->GetTextureResult()->planes[i].sync_token,
-        result->GetTextureResult()->planes[i].mailbox);
+        result->GetTextureResult()->mailbox_holders[i].sync_token,
+        result->GetTextureResult()->mailbox_holders[i].mailbox);
   }
 
   // Allocate new bitmap & populate it with Y & UV data.
@@ -760,7 +864,8 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Bool(),  // Result scaling: Scale by half?
         testing::Values(LetterboxingBehavior::kDoNotLetterbox,
                         LetterboxingBehavior::kLetterbox),
-        testing::Bool()  // Should behave as if COR is populating a GMB?
+        testing::Bool(),  // Should behave as if COR is populating a GMB?
+        testing::Bool()   // Use MultiplanarSI?
         ));
 #else
 // Don't instantiate the NV12 tests when run on Android emulator, they won't

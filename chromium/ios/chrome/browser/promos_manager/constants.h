@@ -33,7 +33,10 @@ enum class Promo {
       4,  // Post Restore Sign-In (fullscreen, FRE-like promo)
   PostRestoreSignInAlert = 5,  // Post Restore Sign-In (native iOS alert)
   WhatsNew = 6,                // What's New Promo
-  kMaxValue = WhatsNew,
+  Choice = 7,                  // Offer a choice
+  PostRestoreDefaultBrowserAlert =
+      8,  // Post Restore Default Browser (native iOS alert)
+  kMaxValue = PostRestoreDefaultBrowserAlert,
 };
 
 // Enum for IOS.PromosManager.Promo.ImpressionLimitEvaluation histogram.
@@ -71,7 +74,10 @@ struct Impression {
 };
 
 // Returns string representation of promos_manager::Promo `promo`.
-base::StringPiece NameForPromo(Promo promo);
+std::string NameForPromo(Promo promo);
+
+// Returns a string representation of the short name for the provided `promo`.
+base::StringPiece ShortNameForPromo(Promo promo);
 
 // Returns promos_manager::Promo for string `promo`.
 absl::optional<Promo> PromoForName(base::StringPiece promo);

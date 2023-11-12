@@ -12,13 +12,13 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/safe_browsing/core/common/features.h"
-#import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_check_manager.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_check_manager_factory.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #import "ios/chrome/browser/passwords/password_checkup_utils.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
@@ -178,9 +178,10 @@ using password_manager::WarningType;
 
 #pragma mark - SafetyCheckNavigationCommands
 
+// TODO(crbug.com/1464966): Make sure there aren't mutiple active
+// `passwordCheckupCoordinator`s at once.
 - (void)showPasswordCheckupPage {
   CHECK(password_manager::features::IsPasswordCheckupEnabled());
-  CHECK(!self.passwordCheckupCoordinator);
   self.passwordCheckupCoordinator = [[PasswordCheckupCoordinator alloc]
       initWithBaseNavigationController:self.baseNavigationController
                                browser:self.browser

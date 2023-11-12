@@ -40,9 +40,8 @@ constexpr PrefsForManagedContentSettingsMapEntry
          CONTENT_SETTING_BLOCK},
         {prefs::kManagedCookiesSessionOnlyForUrls, ContentSettingsType::COOKIES,
          CONTENT_SETTING_SESSION_ONLY},
-        {prefs::kManagedGetDisplayMediaSetSelectAllScreensAllowedForUrls,
-         ContentSettingsType::GET_DISPLAY_MEDIA_SET_SELECT_ALL_SCREENS,
-         CONTENT_SETTING_ALLOW},
+        {prefs::kManagedAccessToGetAllScreensMediaInSessionAllowedForUrls,
+         ContentSettingsType::ALL_SCREEN_CAPTURE, CONTENT_SETTING_ALLOW},
         {prefs::kManagedImagesAllowedForUrls, ContentSettingsType::IMAGES,
          CONTENT_SETTING_ALLOW},
         {prefs::kManagedImagesBlockedForUrls, ContentSettingsType::IMAGES,
@@ -123,7 +122,7 @@ constexpr const char* kManagedPrefs[] = {
     prefs::kManagedFileSystemReadBlockedForUrls,
     prefs::kManagedFileSystemWriteAskForUrls,
     prefs::kManagedFileSystemWriteBlockedForUrls,
-    prefs::kManagedGetDisplayMediaSetSelectAllScreensAllowedForUrls,
+    prefs::kManagedAccessToGetAllScreensMediaInSessionAllowedForUrls,
     prefs::kManagedImagesAllowedForUrls,
     prefs::kManagedImagesBlockedForUrls,
     prefs::kManagedInsecureContentAllowedForUrls,
@@ -275,11 +274,10 @@ PolicyProvider::~PolicyProvider() {
 std::unique_ptr<RuleIterator> PolicyProvider::GetRuleIterator(
     ContentSettingsType content_type,
     bool incognito) const {
-  return value_map_.GetRuleIterator(content_type, &lock_);
+  return value_map_.GetRuleIterator(content_type);
 }
 
-void PolicyProvider::GetContentSettingsFromPreferences(
-    OriginIdentifierValueMap* value_map) {
+void PolicyProvider::GetContentSettingsFromPreferences() {
   for (const auto& entry : kPrefsForManagedContentSettingsMap) {
     // Skip unset policies.
     if (!prefs_->HasPrefPath(entry.pref_name)) {
@@ -290,7 +288,13 @@ void PolicyProvider::GetContentSettingsFromPreferences(
     const PrefService::Preference* pref =
         prefs_->FindPreference(entry.pref_name);
     DCHECK(pref);
-    DCHECK(!pref->HasUserSetting());
+    // Prefs must not be user settings, except for the special case of
+    // kManagedGetAllScreensMediaAfterLoginAllowedForUrls. This pref is used to
+    // make sure content settings are only updated once on user login.
+    DCHECK(
+        !pref->HasUserSetting() ||
+        pref->name() ==
+            prefs::kManagedAccessToGetAllScreensMediaInSessionAllowedForUrls);
     DCHECK(!pref->HasExtensionSetting());
 
     if (!pref->GetValue()->is_list()) {
@@ -338,14 +342,13 @@ void PolicyProvider::GetContentSettingsFromPreferences(
       }
 
       // Don't set a timestamp for policy settings.
-      value_map->SetValue(pattern_pair.first, secondary_pattern,
+      value_map_.SetValue(pattern_pair.first, secondary_pattern,
                           entry.content_type, base::Value(entry.setting), {});
     }
   }
 }
 
-void PolicyProvider::GetAutoSelectCertificateSettingsFromPreferences(
-    OriginIdentifierValueMap* value_map) {
+void PolicyProvider::GetAutoSelectCertificateSettingsFromPreferences() {
   constexpr const char* pref_name = prefs::kManagedAutoSelectCertificateForUrls;
   if (!prefs_->HasPrefPath(pref_name)) {
     VLOG(2) << "Skipping unset preference: " << pref_name;
@@ -428,7 +431,7 @@ void PolicyProvider::GetAutoSelectCertificateSettingsFromPreferences(
       continue;
     }
 
-    value_map->SetValue(pattern, ContentSettingsPattern::Wildcard(),
+    value_map_.SetValue(pattern, ContentSettingsPattern::Wildcard(),
                         ContentSettingsType::AUTO_SELECT_CERTIFICATE,
                         base::Value(setting.Clone()), {});
   }
@@ -456,8 +459,8 @@ void PolicyProvider::UpdateManagedDefaultSetting(
   // MUST be managed.
   DCHECK(!prefs_->HasPrefPath(entry.pref_name) ||
          prefs_->IsManagedPreference(entry.pref_name));
-  base::AutoLock auto_lock(lock_);
   int setting = prefs_->GetInteger(entry.pref_name);
+  base::AutoLock lock(value_map_.GetLock());
   if (setting == CONTENT_SETTING_DEFAULT) {
     value_map_.DeleteValue(ContentSettingsPattern::Wildcard(),
                            ContentSettingsPattern::Wildcard(),
@@ -471,11 +474,11 @@ void PolicyProvider::UpdateManagedDefaultSetting(
 }
 
 void PolicyProvider::ReadManagedContentSettings(bool overwrite) {
-  base::AutoLock auto_lock(lock_);
+  base::AutoLock lock(value_map_.GetLock());
   if (overwrite)
     value_map_.clear();
-  GetContentSettingsFromPreferences(&value_map_);
-  GetAutoSelectCertificateSettingsFromPreferences(&value_map_);
+  GetContentSettingsFromPreferences();
+  GetAutoSelectCertificateSettingsFromPreferences();
 }
 
 // Since the PolicyProvider is a read only content settings provider, all

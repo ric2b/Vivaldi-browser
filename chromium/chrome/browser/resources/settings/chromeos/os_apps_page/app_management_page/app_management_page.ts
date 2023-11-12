@@ -6,13 +6,13 @@
 
 import './api_listener.js';
 import './main_view.js';
-import '../../../settings_shared.css.js';
+import '../../settings_shared.css.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './app_management_page.html.js';
 
-class SettingsAppManagementPageElement extends PolymerElement {
+export class SettingsAppManagementPageElement extends PolymerElement {
   static get is() {
     return 'settings-app-management-page';
   }

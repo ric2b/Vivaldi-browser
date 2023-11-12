@@ -3,6 +3,7 @@ import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/command_action.gni")
 import("//build/config/compiler/pgo/pgo.gni")
 import("//vivaldi/installer/widevine.gni")
+import("//build/util/branding.gni")
 
 assert(is_mac)
 
@@ -183,11 +184,12 @@ if (perform_signing) {
     # hardening and notarization and disabled due to VB-58183
     if (is_full_signer) {
       assert(vivaldi_notarize_account != "")
-      assert(vivaldi_notarize_password != "")
+      assert(vivaldi_notarytool_password != "")
       args += [
         "--notarize",
         "--notary-user", vivaldi_notarize_account,
-        "--notary-password", vivaldi_notarize_password
+        "--notary-password", vivaldi_notarytool_password,
+        "--notarization-tool", "notarytool",
       ]
     } else {
       args += [
@@ -211,11 +213,12 @@ if (perform_signing) {
 
     if (is_full_signer) {
       assert(vivaldi_notarize_account != "")
-      assert(vivaldi_notarize_password != "")
+      assert(vivaldi_notarytool_password != "")
       args += [
         "--notarize",
         "--notary-user", vivaldi_notarize_account,
-        "--notary-password", vivaldi_notarize_password
+        "--notary-password", vivaldi_notarytool_password,
+        "--notarize-team-id", chrome_mac_team_id,
       ]
     }
     args += [ dmg_name ]

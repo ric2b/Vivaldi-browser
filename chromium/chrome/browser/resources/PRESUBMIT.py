@@ -8,7 +8,6 @@ See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts
 for more details about the presubmit API built into depot_tools.
 """
 
-USE_PYTHON3 = True
 ACTION_XML_PATH = '../../../tools/metrics/actions/actions.xml'
 PRESUBMIT_VERSION = '2.0.0'
 
@@ -159,7 +158,6 @@ def CheckNoNewJs(input_api, output_api):
     'chrome/browser/resources/omnibox/',
     'chrome/browser/resources/settings/',
     'chrome/browser/resources/tools/',
-    'chrome/browser/resources/video_tutorials/',
   ]
 
   normalized_excluded_paths = []

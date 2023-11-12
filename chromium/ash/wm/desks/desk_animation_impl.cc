@@ -8,8 +8,6 @@
 #include "ash/shell.h"
 #include "ash/utility/haptics_util.h"
 #include "ash/wm/desks/desk.h"
-#include "ash/wm/desks/desks_controller.h"
-#include "ash/wm/desks/desks_histogram_enums.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/splitview/split_view_utils.h"
@@ -75,10 +73,15 @@ DeskActivationAnimation::DeskActivationAnimation(DesksController* controller,
           desks_util::GetSelectedCompositorForPerformanceMetrics(),
           kDeskUpdateGestureHistogramName,
           kDeskUpdateGestureMaxLatencyHistogramName)) {
+  DeskSwitchAnimationType type = DeskSwitchAnimationType::kQuickAnimation;
+  if (source == DesksSwitchSource::kDeskSwitchShortcut ||
+      source == DesksSwitchSource::kDeskSwitchTouchpad) {
+    type = DeskSwitchAnimationType::kContinuousAnimation;
+  }
   for (auto* root : Shell::GetAllRootWindows()) {
     desk_switch_animators_.emplace_back(
         std::make_unique<RootWindowDeskSwitchAnimator>(
-            root, starting_desk_index, ending_desk_index, this,
+            root, type, starting_desk_index, ending_desk_index, this,
             /*for_remove=*/false));
   }
 
@@ -325,7 +328,8 @@ DeskRemovalAnimation::DeskRemovalAnimation(DesksController* controller,
   for (auto* root : Shell::GetAllRootWindows()) {
     desk_switch_animators_.emplace_back(
         std::make_unique<RootWindowDeskSwitchAnimator>(
-            root, desk_to_remove_index_, desk_to_activate_index, this,
+            root, DeskSwitchAnimationType::kQuickAnimation,
+            desk_to_remove_index_, desk_to_activate_index, this,
             /*for_remove=*/true));
   }
 }

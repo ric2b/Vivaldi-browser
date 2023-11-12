@@ -4,20 +4,17 @@
 
 #include "components/autofill/core/browser/autofill_profile_sync_util.h"
 
-#include "base/uuid.h"
-// TODO(crbug.com/904390): Remove when the investigation is over.
-#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/uuid.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
-// TODO(crbug.com/904390): Remove when the investigation is over.
-#include "components/autofill/core/browser/data_model/autofill_profile_comparator.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_component.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/geo/country_names.h"
 #include "components/autofill/core/browser/proto/autofill_sync.pb.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
+#include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/sync/protocol/entity_data.h"
 
@@ -98,13 +95,16 @@ std::unique_ptr<EntityData> CreateEntityDataFromAutofillProfile(
       entity_data->specifics.mutable_autofill_profile();
 
   specifics->set_guid(entry.guid());
-  specifics->set_origin(entry.origin());
+  // TODO(crbug.com/1441905): Remove the origin field from
+  // AutofillProfileSpecifics. AutofillProfile::origin was already deprecated,
+  // effectively treating all profiles as unverified. However, older clients
+  // reject updates to verified profiles from unverified profiles. To retain
+  // syncing functionality, all profiles are explicitly synced as verified.
+  specifics->set_deprecated_origin(kSettingsOrigin);
 
   if (!entry.profile_label().empty())
     specifics->set_profile_label(entry.profile_label());
 
-  specifics->set_disallow_settings_visible_updates(
-      entry.disallow_settings_visible_updates());
   specifics->set_use_count(entry.use_count());
   specifics->set_use_date(entry.use_date().ToTimeT());
   specifics->set_address_home_language_code(
@@ -176,6 +176,21 @@ std::unique_ptr<EntityData> CreateEntityDataFromAutofillProfile(
       UTF16ToUTF8(entry.GetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY))));
   specifics->set_address_home_country(
       TruncateUTF8(UTF16ToUTF8(entry.GetRawInfo(ADDRESS_HOME_COUNTRY))));
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForLandmark)) {
+    specifics->set_address_home_landmark(
+        TruncateUTF8(UTF16ToUTF8(entry.GetRawInfo(ADDRESS_HOME_LANDMARK))));
+  }
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForBetweenStreets)) {
+    specifics->set_address_home_between_streets(TruncateUTF8(
+        UTF16ToUTF8(entry.GetRawInfo(ADDRESS_HOME_BETWEEN_STREETS))));
+  }
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForAdminLevel2)) {
+    specifics->set_address_home_admin_level_2(
+        TruncateUTF8(UTF16ToUTF8(entry.GetRawInfo(ADDRESS_HOME_ADMIN_LEVEL2))));
+  }
   specifics->set_address_home_street_address(
       TruncateUTF8(UTF16ToUTF8(entry.GetRawInfo(ADDRESS_HOME_STREET_ADDRESS))));
   specifics->set_address_home_line1(
@@ -216,6 +231,24 @@ std::unique_ptr<EntityData> CreateEntityDataFromAutofillProfile(
   specifics->set_address_home_country_status(
       ConvertProfileToSpecificsVerificationStatus(
           entry.GetVerificationStatus(ADDRESS_HOME_COUNTRY)));
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForLandmark)) {
+    specifics->set_address_home_landmark_status(
+        ConvertProfileToSpecificsVerificationStatus(
+            entry.GetVerificationStatus(ADDRESS_HOME_LANDMARK)));
+  }
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForBetweenStreets)) {
+    specifics->set_address_home_between_streets_status(
+        ConvertProfileToSpecificsVerificationStatus(
+            entry.GetVerificationStatus(ADDRESS_HOME_BETWEEN_STREETS)));
+  }
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForAdminLevel2)) {
+    specifics->set_address_home_admin_level_2_status(
+        ConvertProfileToSpecificsVerificationStatus(
+            entry.GetVerificationStatus(ADDRESS_HOME_ADMIN_LEVEL2)));
+  }
   specifics->set_address_home_street_address_status(
       ConvertProfileToSpecificsVerificationStatus(
           entry.GetVerificationStatus(ADDRESS_HOME_STREET_ADDRESS)));
@@ -255,8 +288,7 @@ std::unique_ptr<AutofillProfile> CreateAutofillProfileFromSpecifics(
     return nullptr;
   }
   std::unique_ptr<AutofillProfile> profile = std::make_unique<AutofillProfile>(
-      specifics.guid(), specifics.origin(),
-      AutofillProfile::Source::kLocalOrSyncable);
+      specifics.guid(), AutofillProfile::Source::kLocalOrSyncable);
 
   // Set info that has a default value (and does not distinguish whether it is
   // set or not).
@@ -267,11 +299,6 @@ std::unique_ptr<AutofillProfile> CreateAutofillProfileFromSpecifics(
   // Set the profile label if it exists.
   if (specifics.has_profile_label())
     profile->set_profile_label(specifics.profile_label());
-
-  // Set the `disallow_settings_visible_updates state` if it exists.
-  if (specifics.has_disallow_settings_visible_updates())
-    profile->set_disallow_settings_visible_updates(
-        specifics.disallow_settings_visible_updates());
 
   // Set repeated fields.
   profile->SetRawInfoWithVerificationStatus(
@@ -422,6 +449,32 @@ std::unique_ptr<AutofillProfile> CreateAutofillProfileFromSpecifics(
       ADDRESS_HOME_COUNTRY, UTF8ToUTF16(country_code),
       ConvertSpecificsToProfileVerificationStatus(
           specifics.address_home_country_status()));
+
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForLandmark)) {
+    profile->SetRawInfoWithVerificationStatus(
+        ADDRESS_HOME_LANDMARK, UTF8ToUTF16(specifics.address_home_landmark()),
+        ConvertSpecificsToProfileVerificationStatus(
+            specifics.address_home_landmark_status()));
+  }
+
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForBetweenStreets)) {
+    profile->SetRawInfoWithVerificationStatus(
+        ADDRESS_HOME_BETWEEN_STREETS,
+        UTF8ToUTF16(specifics.address_home_between_streets()),
+        ConvertSpecificsToProfileVerificationStatus(
+            specifics.address_home_between_streets_status()));
+  }
+
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForAdminLevel2)) {
+    profile->SetRawInfoWithVerificationStatus(
+        ADDRESS_HOME_ADMIN_LEVEL2,
+        UTF8ToUTF16(specifics.address_home_admin_level_2()),
+        ConvertSpecificsToProfileVerificationStatus(
+            specifics.address_home_admin_level_2_status()));
+  }
 
   // Set either the deprecated subparts (line1 & line2) or the full address
   // (street_address) if it is present. This is needed because all the address

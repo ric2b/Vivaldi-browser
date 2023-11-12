@@ -7,21 +7,27 @@ package org.chromium.chrome.browser.webapps;
 import static org.chromium.components.webapk.lib.common.WebApkConstants.WEBAPK_PACKAGE_PREFIX;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.os.Handler;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.Pair;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.AsyncTask;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.blink.mojom.DisplayMode;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
@@ -154,6 +160,81 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
         sUpdatesEnabled = enabled;
     }
 
+    /**
+     * Calculates how different two colors are, by comparing how far apart each of the RGBA channels
+     * are (in terms of percentages) and averaging that across all channels.
+     */
+    static float colorDiff(int color1, int color2) {
+        return (Math.abs(Color.red(color1) - Color.red(color2)) / 255f
+                       + Math.abs(Color.green(color1) - Color.green(color2)) / 255f
+                       + Math.abs(Color.blue(color1) - Color.blue(color2)) / 255f
+                       + Math.abs(Color.alpha(color1) - Color.alpha(color2)) / 255f)
+                / 4f;
+    }
+
+    /**
+     * Calculates a single percentage number for how different the two given bitmaps are, as
+     * calculated by comparing the color of each pixel. Returns 100 (percent) if either a) the
+     * pictures are not the same dimensions or color configuration or b) one bitmap is null and the
+     * other is a valid image.
+     */
+    static int imageDiffValue(@Nullable Bitmap before, @Nullable Bitmap after) {
+        if (before == null || after == null) {
+            return before == after ? 0 : 100;
+        }
+
+        assert before.getWidth() == after.getWidth() && before.getHeight() == after.getHeight();
+
+        if (before.getConfig() != after.getConfig()) {
+            return 100;
+        }
+
+        float difference = 0;
+        for (int y = 0; y < before.getHeight(); ++y) {
+            for (int x = 0; x < before.getWidth(); ++x) {
+                difference += colorDiff(before.getPixel(x, y), after.getPixel(x, y));
+            }
+        }
+
+        return (int) Math.floor(100f * difference / (before.getHeight() * before.getWidth()));
+    }
+
+    /**
+     * Logs how different (in percentages) two bitmaps are, scaling the images down to be the same
+     * size (if the two are of different dimensions). Does nothing if either bitmap passed in
+     * via `iconDiffPair` is null.
+     * @param iconDiffPair a pair of Bitmaps to compare to each other.
+     */
+    private void logIconDiffs(Pair<Bitmap, Bitmap> iconDiffPair) {
+        ThreadUtils.assertOnBackgroundThread();
+
+        Bitmap before = iconDiffPair.first;
+        Bitmap after = iconDiffPair.second;
+        if (before == null || after == null) return;
+
+        // Unfortunately, the install size can differ from the update size (for example, a 96x96
+        // installed icon is downscaled to size 72x72, during update -- even if the website provides
+        // a 96x96 icon replacement, as per InstallableManager::GetIdealPrimaryIconSizeInPx()).
+        boolean scaled = false;
+        if (before.getWidth() < after.getWidth() || before.getHeight() < after.getHeight()) {
+            after = Bitmap.createScaledBitmap(after, before.getWidth(), before.getHeight(), false);
+            scaled = true;
+        } else if (before.getWidth() > after.getWidth() || before.getHeight() > after.getHeight()) {
+            before = Bitmap.createScaledBitmap(before, after.getWidth(), after.getHeight(), false);
+            scaled = true;
+        }
+
+        int diffValue = imageDiffValue(before, after);
+
+        if (scaled) {
+            RecordHistogram.recordCount100Histogram(
+                    "WebApk.AppIdentityDialog.PendingImageUpdateDiffValueScaled", diffValue);
+        } else {
+            RecordHistogram.recordCount100Histogram(
+                    "WebApk.AppIdentityDialog.PendingImageUpdateDiffValue", diffValue);
+        }
+    }
+
     @Override
     public void onGotManifestData(BrowserServicesIntentDataProvider fetchedIntentDataProvider,
             String primaryIconUrl, String splashIconUrl) {
@@ -161,6 +242,16 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
         mFetchedSplashIconUrl = splashIconUrl;
         mFetchedInfo =
                 MergedWebappInfo.create(/* oldWebappInfo= */ mInfo, fetchedIntentDataProvider);
+
+        Pair<Bitmap, Bitmap> iconDiffPair = new Pair<>(
+                mInfo.icon().bitmap(), mFetchedInfo != null ? mFetchedInfo.icon().bitmap() : null);
+        List<Integer> originalUpdateReasons = generateUpdateReasons(
+                mInfo, mFetchedInfo, mFetchedPrimaryIconUrl, mFetchedSplashIconUrl);
+        // In order to determine whether to log the icon differences, we need to consult the
+        // original update reasons, before we revert to using the old icon below.
+        boolean containsIconUpdateRequest =
+                originalUpdateReasons.contains(WebApkUpdateReason.PRIMARY_ICON_HASH_DIFFERS)
+                || originalUpdateReasons.contains(WebApkUpdateReason.PRIMARY_ICON_MASKABLE_DIFFERS);
 
         if (mFetchedInfo != null) {
             // When only some/no app identity updates are permitted, the update
@@ -209,13 +300,18 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
             destroyFetcher();
         }
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_APK_UNIQUE_ID)
-                && TextUtils.isEmpty(mInfo.manifestId())) {
+        if (TextUtils.isEmpty(mInfo.manifestId())) {
             RecordHistogram.recordBooleanHistogram(
                     "WebApk.Update.UpdateEmptyUniqueId.NeedsUpgrade", needsUpgrade);
         }
 
         if (!needsUpgrade) {
+            // No updates can mean that an icon update was requested, but we blocked it. We still
+            // want to log the icon differences.
+            if (containsIconUpdateRequest) {
+                PostTask.postTask(TaskTraits.BEST_EFFORT, () -> logIconDiffs(iconDiffPair));
+            }
+
             if (!mStorage.didPreviousUpdateSucceed() || mStorage.shouldForceUpdate()) {
                 onFinishedUpdate(mStorage, WebApkInstallResult.SUCCESS, false /* relaxUpdates */);
             }
@@ -246,6 +342,13 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
                 (nameChanging || shortNameChanging) && nameUpdateDialogEnabled();
         boolean showDialogForIcon = iconChanging && iconUpdateDialogEnabled()
                 && !allowIconUpdateForShellVersion(mInfo.shellApkVersion());
+
+        // If an icon change is involved, log the numerical value of how much the icon is changing,
+        // except in cases where the user has already approved the update, because that means we
+        // have already logged it the last time around (the update is still pending).
+        if (containsIconUpdateRequest && !alreadyUserApproved) {
+            PostTask.postTask(TaskTraits.BEST_EFFORT, () -> logIconDiffs(iconDiffPair));
+        }
 
         if ((!showDialogForName && !showDialogForIcon) || alreadyUserApproved) {
             if (alreadyUserApproved) {
@@ -278,7 +381,8 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
     }
 
     protected boolean nameUpdateDialogEnabled() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.PWA_UPDATE_DIALOG_FOR_NAME);
+        // TODO(finnur): Remove this function when future of the icon flag is clear.
+        return true;
     }
 
     private boolean allowIconUpdateForShellVersion(int shellVersion) {
@@ -375,7 +479,6 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
     }
 
     private void recordWebApkUpdateUniqueIdHistogram(WebappInfo oldInfo, WebappInfo fetchedInfo) {
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_APK_UNIQUE_ID)) return;
         if (fetchedInfo == null) return;
 
         String baseName = "WebApk.Update.UniqueId"

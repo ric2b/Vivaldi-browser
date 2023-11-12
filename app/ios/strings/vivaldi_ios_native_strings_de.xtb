@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">Nach Inhalt</translation>
 <translation id="2129408066358825297">Alter</translation>
 <translation id="2148384276939959392">Auswahl synchronisieren</translation>
+<translation id="21693288559538605">Werbe- und Tracker-Blocker Zusammenfassung</translation>
 <translation id="2195713384412091023">Dadurch werden alle auf unserem Server gespeicherten Synchronisierungsdaten entfernt, Ihr Verschlüsselungskennwort zurückgesetzt und Sie abgemeldet.</translation>
 <translation id="2243210264130642074">Notiz gespeichert</translation>
 <translation id="2272338747456392228">Das Konto wurde gesperrt</translation>
 <translation id="2273327106802955778">Mehr Menü</translation>
 <translation id="2324160330092901720">Es wurde ein Verifizierungscode an <ph name="EMAIL_ID" /> gesendet</translation>
+<translation id="2336309953058658733">Papierkorb leeren</translation>
 <translation id="2359808026110333948">Fortsetzen</translation>
 <translation id="2386793615875593361">1 ausgewählt</translation>
 <translation id="2388224692799337242">Sobald Sie mit dem Surfen beginnen, wird Ihr Verlauf hier angezeigt</translation>
@@ -117,6 +119,7 @@ blockiert</translation>
 <translation id="3699026013955941879">Der Code ist abgelaufen. Bitte fordern Sie einen neuen Aktivierungscode an.</translation>
 <translation id="3700829948786686853">Willkommen bei Vivaldi</translation>
 <translation id="3766350025418769949">Sie können die im Vivaldi Passwort Manager gespeicherten Passwörter in anderen Apps auf Ihrem iPad verwenden.</translation>
+<translation id="3845564230651302310">Neue Blockereinstellungen anwenden...</translation>
 <translation id="3858860766373142691">Name</translation>
 <translation id="3866249974567520381">Beschreibung</translation>
 <translation id="3872195896030547485">Bitte geben Sie eine gültige E-Mail-Adresse ein.</translation>
@@ -174,7 +177,7 @@ blockiert</translation>
 <translation id="4852383705713307704">Werbung blockiert</translation>
 <translation id="4871370605780490696">Lesezeichen hinzufügen</translation>
 <translation id="4903325570808402486">Vivaldi-Einstellungen synchronisieren (Es sind noch nicht alle Einstellungen synchronisierbar)</translation>
-<translation id="4929196061847506605">Kraftvoll. Persönlich. Privat.</translation>
+<translation id="4929196061847506605">Leistungsstark, Persönlich, Privat.</translation>
 <translation id="4936710149174207991">Nicht synchronisiert</translation>
 <translation id="4943266325467647391">Der in Vivaldi integrierte Tracker- und Werbeblocker schützt Sie vor Malware und Werbung.</translation>
 <translation id="495421405224926623">Ich habe die Nutzungsbedingungen und die Datenschutzrichtlinie gelesen und stimme ihnen zu</translation>
@@ -225,6 +228,7 @@ blockiert</translation>
 <translation id="6406506848690869874">Synchronisation</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> ausgewählt</translation>
 <translation id="6468130661190228905">Es tut uns leid, aber es sieht so aus, dass Du noch ein wenig warten musst, bevor Du unserer Gemeinschaft beitreten kannst. Wir verlangen von unseren Mitgliedern, dass sie beim Beitritt mindestens 16 Jahre alt sind.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importieren<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Wiederherstellungsschlüssel</translation>
 <translation id="6527303717912515753">Teilen</translation>
 <translation id="6535988230515403205">Polnisch (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@ blockiert</translation>
 <translation id="7461899062138731833">QUELLEN</translation>
 <translation id="750493650310597496">0 ausgewählt</translation>
 <translation id="7525067979554623046">Erstellen</translation>
-<translation id="7541020606126512786">Werbe- und Tracker-Blocker im Überblick</translation>
 <translation id="7573518470897278603">Mobilversion anzeigen</translation>
 <translation id="7574321014880720413">Neue Domäne hinzufügen</translation>
 <translation id="7587132259180664054">E-Mail erfolgreich gesendet</translation>

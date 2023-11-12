@@ -152,7 +152,7 @@ class PersonalDataLoadedObserverMock : public PersonalDataManagerObserver {
   PersonalDataLoadedObserverMock() = default;
   ~PersonalDataLoadedObserverMock() override = default;
 
-  MOCK_METHOD0(OnPersonalDataChanged, void());
+  MOCK_METHOD(void, OnPersonalDataChanged, (), (override));
 };
 
 class LocalCardMigrationBrowserTest
@@ -187,7 +187,10 @@ class LocalCardMigrationBrowserTest
     RECEIVED_MIGRATE_CARDS_RESPONSE
   };
 
-  LocalCardMigrationBrowserTest() : SyncTest(SINGLE_CLIENT) {}
+  LocalCardMigrationBrowserTest() : SyncTest(SINGLE_CLIENT) {
+    feature_list_.InitAndDisableFeature(
+        features::kAutofillEnableNewCardArtAndNetworkImages);
+  }
 
   ~LocalCardMigrationBrowserTest() override {}
 
@@ -367,17 +370,17 @@ class LocalCardMigrationBrowserTest
 
     const std::string click_fill_button_js =
         "(function() { document.getElementById('fill_form').click(); })();";
-    ASSERT_TRUE(content::ExecuteScript(web_contents, click_fill_button_js));
+    ASSERT_TRUE(content::ExecJs(web_contents, click_fill_button_js));
 
     const std::string fill_cc_number_js =
         "(function() { document.getElementsByName(\"cc_number\")[0].value = " +
         card_number + "; })();";
-    ASSERT_TRUE(content::ExecuteScript(web_contents, fill_cc_number_js));
+    ASSERT_TRUE(content::ExecJs(web_contents, fill_cc_number_js));
 
     const std::string click_submit_button_js =
         "(function() { document.getElementById('submit').click(); })();";
     content::TestNavigationObserver nav_observer(web_contents);
-    ASSERT_TRUE(content::ExecuteScript(web_contents, click_submit_button_js));
+    ASSERT_TRUE(content::ExecJs(web_contents, click_submit_button_js));
     nav_observer.Wait();
   }
 
@@ -490,13 +493,13 @@ class LocalCardMigrationBrowserTest
     return icon;
   }
 
-  views::View* GetCloseButton() {
+  views::View* close_button() {
     LocalCardMigrationBubbleViews* local_card_migration_bubble_views =
         static_cast<LocalCardMigrationBubbleViews*>(
             GetLocalCardMigrationOfferBubbleViews());
     CHECK(local_card_migration_bubble_views);
     return local_card_migration_bubble_views->GetBubbleFrameView()
-        ->GetCloseButtonForTesting();
+        ->close_button();
   }
 
   views::View* GetCardListView() {
@@ -535,6 +538,7 @@ class LocalCardMigrationBrowserTest
   network::TestURLLoaderFactory test_url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
   std::unique_ptr<device::ScopedGeolocationOverrider> geolocation_overrider_;
+  base::test::ScopedFeatureList feature_list_;
 };
 
 class LocalCardMigrationBrowserUiTest
@@ -692,7 +696,7 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTest,
   SaveLocalCard(kFirstCardNumber);
   SaveLocalCard(kSecondCardNumber);
   UseCardAndWaitForMigrationOffer(kFirstCardNumber);
-  ClickOnDialogViewAndWait(GetCloseButton(),
+  ClickOnDialogViewAndWait(close_button(),
                            GetLocalCardMigrationOfferBubbleViews());
 
   // No bubble should be showing.
@@ -723,7 +727,7 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTest,
   SaveLocalCard(kFirstCardNumber);
   SaveLocalCard(kSecondCardNumber);
   UseCardAndWaitForMigrationOffer(kFirstCardNumber);
-  ClickOnDialogViewAndWait(GetCloseButton(),
+  ClickOnDialogViewAndWait(close_button(),
                            GetLocalCardMigrationOfferBubbleViews());
   ClickOnView(GetLocalCardMigrationIconView());
 
@@ -801,10 +805,10 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTest,
   // Cards will be added to database in a reversed order.
   EXPECT_EQ(static_cast<MigratableCardView*>(card_list_view->children()[0])
                 ->GetCardIdentifierString(),
-            second_card.CardIdentifierStringForAutofillDisplay());
+            second_card.CardNameAndLastFourDigits());
   EXPECT_EQ(static_cast<MigratableCardView*>(card_list_view->children()[1])
                 ->GetCardIdentifierString(),
-            first_card.CardIdentifierStringForAutofillDisplay());
+            first_card.CardNameAndLastFourDigits());
 }
 
 // Ensures that rejecting the main migration dialog closes the dialog.
@@ -935,7 +939,7 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTest,
   SaveLocalCard(kFirstCardNumber);
   SaveLocalCard(kSecondCardNumber);
   UseCardAndWaitForMigrationOffer(kFirstCardNumber);
-  ClickOnDialogViewAndWait(GetCloseButton(),
+  ClickOnDialogViewAndWait(close_button(),
                            GetLocalCardMigrationOfferBubbleViews());
 
   // No bubble should be showing.
@@ -958,11 +962,11 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTest,
   SaveLocalCard(kFirstCardNumber);
   SaveLocalCard(kSecondCardNumber);
   UseCardAndWaitForMigrationOffer(kFirstCardNumber);
-  ClickOnDialogViewAndWait(GetCloseButton(),
+  ClickOnDialogViewAndWait(close_button(),
                            GetLocalCardMigrationOfferBubbleViews());
   // Do it again for the same tab.
   UseCardAndWaitForMigrationOffer(kFirstCardNumber);
-  ClickOnDialogViewAndWait(GetCloseButton(),
+  ClickOnDialogViewAndWait(close_button(),
                            GetLocalCardMigrationOfferBubbleViews());
 
   // No bubble should be showing.
@@ -988,7 +992,7 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTest,
   SaveLocalCard(kFirstCardNumber);
   SaveLocalCard(kSecondCardNumber);
   UseCardAndWaitForMigrationOffer(kFirstCardNumber);
-  ClickOnDialogViewAndWait(GetCloseButton(),
+  ClickOnDialogViewAndWait(close_button(),
                            GetLocalCardMigrationOfferBubbleViews());
   base::HistogramTester histogram_tester;
   ClickOnView(GetLocalCardMigrationIconView());
@@ -999,7 +1003,7 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTest,
                            GetLocalCardMigrationOfferBubbleViews())
           ->GetVisible());
 
-  ClickOnDialogViewAndWait(GetCloseButton(),
+  ClickOnDialogViewAndWait(close_button(),
                            GetLocalCardMigrationOfferBubbleViews());
 
   // Metrics
@@ -1029,7 +1033,7 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTest,
   SaveLocalCard(kFirstCardNumber);
   SaveLocalCard(kSecondCardNumber);
   UseCardAndWaitForMigrationOffer(kFirstCardNumber);
-  ClickOnDialogViewAndWait(GetCloseButton(),
+  ClickOnDialogViewAndWait(close_button(),
                            GetLocalCardMigrationOfferBubbleViews());
 
   EXPECT_THAT(histogram_tester.GetAllSamples(

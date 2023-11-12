@@ -6,8 +6,9 @@
 
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
-#include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_memory_image_backing.h"
 #include "gpu/command_buffer/service/shared_memory_region_wrapper.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -53,6 +54,22 @@ SharedMemoryImageBackingFactory::CreateSharedImage(
 std::unique_ptr<SharedImageBacking>
 SharedMemoryImageBackingFactory::CreateSharedImage(
     const Mailbox& mailbox,
+    viz::SharedImageFormat format,
+    const gfx::Size& size,
+    const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
+    uint32_t usage,
+    std::string debug_label,
+    gfx::GpuMemoryBufferHandle handle) {
+  return CreateSharedImage(mailbox, std::move(handle), ToBufferFormat(format),
+                           gfx::BufferPlane::DEFAULT, size, color_space,
+                           surface_origin, alpha_type, usage, debug_label);
+}
+
+std::unique_ptr<SharedImageBacking>
+SharedMemoryImageBackingFactory::CreateSharedImage(
+    const Mailbox& mailbox,
     gfx::GpuMemoryBufferHandle handle,
     gfx::BufferFormat buffer_format,
     gfx::BufferPlane plane,
@@ -67,10 +84,10 @@ SharedMemoryImageBackingFactory::CreateSharedImage(
   if (!shm_wrapper.Initialize(handle, size, buffer_format, plane)) {
     return nullptr;
   }
-  const auto format = viz::GetResourceFormat(buffer_format);
+  const auto format = viz::GetSharedImageFormat(buffer_format);
   auto backing = std::make_unique<SharedMemoryImageBacking>(
-      mailbox, viz::SharedImageFormat::SinglePlane(format), size, color_space,
-      surface_origin, alpha_type, usage, std::move(shm_wrapper));
+      mailbox, format, size, color_space, surface_origin, alpha_type, usage,
+      std::move(shm_wrapper));
   return backing;
 }
 

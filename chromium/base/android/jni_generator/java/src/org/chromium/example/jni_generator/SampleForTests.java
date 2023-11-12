@@ -58,6 +58,9 @@ class SampleForTests {
         SampleForTestsJni.get().method(mNativeCPPObject, this);
     }
 
+    // Just a comment to ensure we aren't reading comments:
+    // private native void thisShouldNotExist();
+
     public void finishExample() {
         // We're done, so let's destroy nativePtr object.
         SampleForTestsJni.get().destroy(mNativeCPPObject, this);
@@ -223,7 +226,7 @@ class SampleForTests {
     // The following methods demonstrate declaring methods to call into C++ from Java.
     // The generator detects the type and name of the first parameter.
     @NativeMethods
-    interface Natives {
+    public interface Natives {
         // This declares a C++ function which the application code must implement:
         // static jint Init(JNIEnv* env, jobject caller);
         // The jobject parameter refers back to this java side object instance.
@@ -273,7 +276,9 @@ class SampleForTests {
         @NativeClassQualifiedName("CPPClass::InnerClass")
         double methodOtherP0(long nativePtr, SampleForTests caller);
 
+        // Tests passing a nested class.
         void addStructB(long nativeCPPClass, SampleForTests caller, InnerStructB b);
+
         void iterateAndDoSomethingWithStructB(long nativeCPPClass, SampleForTests caller);
         String returnAString(long nativeCPPClass, SampleForTests caller);
     }

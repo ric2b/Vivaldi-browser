@@ -22,7 +22,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 // End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)

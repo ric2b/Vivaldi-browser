@@ -34,7 +34,6 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
@@ -44,8 +43,6 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.components.signin.base.AccountInfo;
@@ -90,42 +87,12 @@ public class AccountManagementFragmentTest {
     @Test
     @MediumTest
     @Feature("RenderTest")
-    @DisableFeatures({ChromeFeatureList.ADD_EDU_ACCOUNT_FROM_ACCOUNT_SETTINGS_FOR_SUPERVISED_USERS,
-            ChromeFeatureList.HIDE_NON_DISPLAYABLE_ACCOUNT_EMAIL})
-    public void
-    testAccountManagementFragmentView() throws Exception {
+    public void testAccountManagementFragmentView() throws Exception {
         mSigninTestRule.addTestAccountThenSigninAndEnableSync();
         mSettingsActivityTestRule.startSettingsActivity();
         View view = mSettingsActivityTestRule.getFragment().getView();
         onViewWaiting(allOf(is(view), isDisplayed()));
         mRenderTestRule.render(view, "account_management_fragment_view");
-    }
-
-    @Test
-    @MediumTest
-    @Feature("RenderTest")
-    @EnableFeatures(ChromeFeatureList.ADD_EDU_ACCOUNT_FROM_ACCOUNT_SETTINGS_FOR_SUPERVISED_USERS)
-    public void testAccountManagementFragmentViewWithAddEduAccountEnabled() throws Exception {
-        mSigninTestRule.addTestAccountThenSigninAndEnableSync();
-        mSettingsActivityTestRule.startSettingsActivity();
-        View view = mSettingsActivityTestRule.getFragment().getView();
-        onViewWaiting(allOf(is(view), isDisplayed()));
-        mRenderTestRule.render(
-                view, "account_management_fragment_view_with_add_account_for_supervised_users");
-    }
-
-    @Test
-    @MediumTest
-    @Feature("RenderTest")
-    @EnableFeatures(ChromeFeatureList.HIDE_NON_DISPLAYABLE_ACCOUNT_EMAIL)
-    public void testAccountManagementFragmentViewWithHideNonDisplayableAccountEmailEnabled()
-            throws Exception {
-        mSigninTestRule.addTestAccountThenSigninAndEnableSync();
-        mSettingsActivityTestRule.startSettingsActivity();
-        View view = mSettingsActivityTestRule.getFragment().getView();
-        onViewWaiting(allOf(is(view), isDisplayed()));
-        mRenderTestRule.render(
-                view, "account_management_fragment_view_with_hide_non_displayable_account_email");
     }
 
     @Test
@@ -142,27 +109,6 @@ public class AccountManagementFragmentTest {
 
     @Test
     @MediumTest
-    @Feature("RenderTest")
-    @DisableFeatures({ChromeFeatureList.ADD_EDU_ACCOUNT_FROM_ACCOUNT_SETTINGS_FOR_SUPERVISED_USERS})
-    public void testAccountManagementViewForChildAccount() throws Exception {
-        mSigninTestRule.addAccountAndWaitForSeeding(CHILD_ACCOUNT_NAME);
-        final Profile profile = TestThreadUtils.runOnUiThreadBlockingNoException(
-                Profile::getLastUsedRegularProfile);
-        CriteriaHelper.pollUiThread(profile::isChild);
-        mSettingsActivityTestRule.startSettingsActivity();
-        CriteriaHelper.pollUiThread(() -> {
-            return mSettingsActivityTestRule.getFragment()
-                    .getProfileDataCacheForTesting()
-                    .hasProfileDataForTesting(CHILD_ACCOUNT_NAME);
-        });
-        View view = mSettingsActivityTestRule.getFragment().getView();
-        onViewWaiting(allOf(is(view), isDisplayed()));
-        mRenderTestRule.render(view, "account_management_fragment_for_child_account");
-    }
-
-    @Test
-    @MediumTest
-    @EnableFeatures({ChromeFeatureList.HIDE_NON_DISPLAYABLE_ACCOUNT_EMAIL})
     public void testAccountManagementViewForChildAccountWithNonDisplayableAccountEmail()
             throws Exception {
         AccountInfo accountInfo = mSigninTestRule.addAccount(
@@ -189,7 +135,6 @@ public class AccountManagementFragmentTest {
 
     @Test
     @MediumTest
-    @EnableFeatures({ChromeFeatureList.HIDE_NON_DISPLAYABLE_ACCOUNT_EMAIL})
     public void
     testAccountManagementViewForChildAccountWithNonDisplayableAccountEmailWithEmptyDisplayName()
             throws Exception {
@@ -215,9 +160,7 @@ public class AccountManagementFragmentTest {
     @Test
     @MediumTest
     @Feature("RenderTest")
-    @EnableFeatures(ChromeFeatureList.ADD_EDU_ACCOUNT_FROM_ACCOUNT_SETTINGS_FOR_SUPERVISED_USERS)
-    public void testAccountManagementViewForChildAccountWithAddEduAccountEnabled()
-            throws Exception {
+    public void testAccountManagementViewForChildAccount() throws Exception {
         mSigninTestRule.addAccountAndWaitForSeeding(CHILD_ACCOUNT_NAME);
         final Profile profile = TestThreadUtils.runOnUiThreadBlockingNoException(
                 Profile::getLastUsedRegularProfile);
@@ -237,34 +180,7 @@ public class AccountManagementFragmentTest {
     @Test
     @MediumTest
     @Feature("RenderTest")
-    @DisableFeatures({ChromeFeatureList.ADD_EDU_ACCOUNT_FROM_ACCOUNT_SETTINGS_FOR_SUPERVISED_USERS})
     public void testAccountManagementViewForChildAccountWithSecondaryEduAccount() throws Exception {
-        mSigninTestRule.addAccount(CHILD_ACCOUNT_NAME);
-        // The code under test doesn't care what account type this is, though in practice only
-        // EDU accounts are supported on devices where the primary account is a child account.
-        mSigninTestRule.addAccount("account@school.com");
-        mSigninTestRule.waitForSeeding();
-        final Profile profile = TestThreadUtils.runOnUiThreadBlockingNoException(
-                Profile::getLastUsedRegularProfile);
-        CriteriaHelper.pollUiThread(profile::isChild);
-        mSettingsActivityTestRule.startSettingsActivity();
-        CriteriaHelper.pollUiThread(() -> {
-            return mSettingsActivityTestRule.getFragment()
-                    .getProfileDataCacheForTesting()
-                    .hasProfileDataForTesting(CHILD_ACCOUNT_NAME);
-        });
-        View view = mSettingsActivityTestRule.getFragment().getView();
-        onViewWaiting(allOf(is(view), isDisplayed()));
-        mRenderTestRule.render(view, "account_management_fragment_for_child_and_edu_accounts");
-    }
-
-    @Test
-    @MediumTest
-    @Feature("RenderTest")
-    @EnableFeatures(ChromeFeatureList.ADD_EDU_ACCOUNT_FROM_ACCOUNT_SETTINGS_FOR_SUPERVISED_USERS)
-    public void
-    testAccountManagementViewForChildAccountWithSecondaryEduAccountAndAddEduAccountEnabled()
-            throws Exception {
         mSigninTestRule.addAccount(CHILD_ACCOUNT_NAME);
         mSigninTestRule.addAccount("account@school.com");
         mSigninTestRule.waitForSeeding();

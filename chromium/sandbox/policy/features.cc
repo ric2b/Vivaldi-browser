@@ -59,17 +59,24 @@ BASE_FEATURE(kRendererAppContainer,
              "RendererAppContainer",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Emergency "off switch" for renderer environment filtering, this feature can
-// be removed around the M113 timeline. See https://crbug.com/1403087.
-BASE_FEATURE(kRendererFilterEnvironment,
-             "RendererFilterEnvironment",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Emergency "off switch" for removal of direct system font access from
 // web renderer processes.
 BASE_FEATURE(kWinSboxAllowSystemFonts,
              "WinSboxAllowSystemFonts",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables very high job memory limits for sandboxed renderer processes. This
+// sets a limit of 1Tb, effectively removing the Job memory limits, except in
+// egregious cases.
+BASE_FEATURE(kWinSboxHighRendererJobMemoryLimits,
+             "WinSboxHighRendererJobMemoryLimits",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Emergency "off switch" for closing the KsecDD handle in cryptbase.dll just
+// before sandbox lockdown in renderers.
+BASE_FEATURE(kWinSboxRendererCloseKsecDD,
+             "WinSboxRendererCloseKsecDD",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

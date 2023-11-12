@@ -7,6 +7,7 @@
 #include "base/feature_list.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "content/public/common/content_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -29,6 +30,7 @@ class InstallableManagerUnitTest : public testing::Test {
     manifest->name = u"foo";
     manifest->short_name = u"bar";
     manifest->start_url = GURL("http://example.com");
+    manifest->id = manifest->start_url;
     manifest->display = blink::mojom::DisplayMode::kStandalone;
 
     blink::Manifest::ImageResource primary_icon;
@@ -55,6 +57,7 @@ class InstallableManagerUnitTest : public testing::Test {
   }
 
  private:
+  base::test::SingleThreadTaskEnvironment task_environment;
   std::unique_ptr<InstallableManager> manager_;
 };
 
@@ -108,10 +111,12 @@ TEST_F(InstallableManagerUnitTest, ManifestRequiresValidStartURL) {
   blink::mojom::ManifestPtr manifest = GetValidManifest();
 
   manifest->start_url = GURL();
+  manifest->id = GURL();
   EXPECT_FALSE(IsManifestValid(*manifest));
   EXPECT_EQ(START_URL_NOT_VALID, GetErrorCode());
 
   manifest->start_url = GURL("/");
+  manifest->id = GURL("/");
   EXPECT_FALSE(IsManifestValid(*manifest));
   EXPECT_EQ(START_URL_NOT_VALID, GetErrorCode());
 }

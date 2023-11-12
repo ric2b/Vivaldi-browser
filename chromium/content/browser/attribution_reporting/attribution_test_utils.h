@@ -13,18 +13,20 @@
 
 #include "base/containers/enum_set.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/function_ref.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
-#include "components/aggregation_service/aggregation_service.mojom.h"
 #include "components/attribution_reporting/aggregatable_values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
 #include "components/attribution_reporting/destination_set.h"
 #include "components/attribution_reporting/filters.h"
+#include "components/attribution_reporting/source_registration_time_config.mojom.h"
 #include "components/attribution_reporting/source_type.mojom.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/test_utils.h"
 #include "components/attribution_reporting/trigger_registration.h"
 #include "content/browser/attribution_reporting/aggregatable_histogram_contribution.h"
+#include "content/browser/attribution_reporting/attribution_config.h"
 #include "content/browser/attribution_reporting/attribution_info.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/browser/attribution_reporting/attribution_storage_delegate.h"
@@ -43,7 +45,7 @@ class SchemefulSite;
 }  // namespace net
 
 namespace network {
-class TriggerAttestation;
+class TriggerVerification;
 }  // namespace network
 
 namespace content {
@@ -65,6 +67,15 @@ base::Time GetExpiryTimeForTesting(base::TimeDelta declared_expiry,
 absl::optional<base::Time> GetReportWindowTimeForTesting(
     absl::optional<base::TimeDelta> declared_window,
     base::Time source_time);
+
+AttributionConfig::RateLimitConfig RateLimitWith(
+    base::FunctionRef<void(AttributionConfig::RateLimitConfig&)> f);
+
+AttributionConfig::EventLevelLimit EventLevelLimitWith(
+    base::FunctionRef<void(content::AttributionConfig::EventLevelLimit&)> f);
+
+AttributionConfig AttributionConfigWith(
+    base::FunctionRef<void(AttributionConfig&)> f);
 
 // Helper class to construct a StorableSource for tests using default data.
 // StorableSource members are not mutable after construction requiring a
@@ -203,11 +214,14 @@ class TriggerBuilder {
 
   TriggerBuilder& SetDebugReporting(bool debug_reporting);
 
-  TriggerBuilder& SetAggregationCoordinator(
-      ::aggregation_service::mojom::AggregationCoordinator);
+  TriggerBuilder& SetAggregationCoordinatorOrigin(
+      attribution_reporting::SuitableOrigin);
 
-  TriggerBuilder& SetAttestation(
-      absl::optional<network::TriggerAttestation> attestation);
+  TriggerBuilder& SetSourceRegistrationTimeConfig(
+      attribution_reporting::mojom::SourceRegistrationTimeConfig);
+
+  TriggerBuilder& SetVerifications(
+      std::vector<network::TriggerVerification> verifications);
 
   AttributionTrigger Build(bool generate_event_trigger_data = true) const;
 
@@ -225,10 +239,12 @@ class TriggerBuilder {
   absl::optional<uint64_t> aggregatable_dedup_key_;
   bool is_within_fenced_frame_ = false;
   bool debug_reporting_ = false;
-  ::aggregation_service::mojom::AggregationCoordinator
-      aggregation_coordinator_ =
-          ::aggregation_service::mojom::AggregationCoordinator::kDefault;
-  absl::optional<network::TriggerAttestation> attestation_;
+  absl::optional<attribution_reporting::SuitableOrigin>
+      aggregation_coordinator_origin_;
+  std::vector<network::TriggerVerification> verifications_;
+  attribution_reporting::mojom::SourceRegistrationTimeConfig
+      source_registration_time_config_ =
+          attribution_reporting::mojom::SourceRegistrationTimeConfig::kInclude;
 };
 
 // Helper class to construct an `AttributionInfo` for tests using default data.
@@ -275,11 +291,14 @@ class ReportBuilder {
   ReportBuilder& SetAggregatableHistogramContributions(
       std::vector<AggregatableHistogramContribution> contributions);
 
-  ReportBuilder& SetAggregationCoordinator(
-      ::aggregation_service::mojom::AggregationCoordinator);
+  ReportBuilder& SetAggregationCoordinatorOrigin(
+      attribution_reporting::SuitableOrigin);
 
-  ReportBuilder& SetAttestationToken(
-      absl::optional<std::string> attestation_token);
+  ReportBuilder& SetSourceRegistrationTimeConfig(
+      attribution_reporting::mojom::SourceRegistrationTimeConfig);
+
+  ReportBuilder& SetVerificationToken(
+      absl::optional<std::string> verification_token);
 
   AttributionReport Build() const;
 
@@ -297,10 +316,13 @@ class ReportBuilder {
   double randomized_trigger_rate_ = 0;
   AttributionReport::Id report_id_{0};
   std::vector<AggregatableHistogramContribution> contributions_;
-  ::aggregation_service::mojom::AggregationCoordinator
-      aggregation_coordinator_ =
-          ::aggregation_service::mojom::AggregationCoordinator::kDefault;
-  absl::optional<std::string> attestation_token_;
+  absl::optional<attribution_reporting::SuitableOrigin>
+      aggregation_coordinator_origin_;
+
+  absl::optional<std::string> verification_token_;
+  attribution_reporting::mojom::SourceRegistrationTimeConfig
+      source_registration_time_config_ =
+          attribution_reporting::mojom::SourceRegistrationTimeConfig::kInclude;
 };
 
 bool operator==(const AttributionTrigger& a, const AttributionTrigger& b);
@@ -521,12 +543,24 @@ MATCHER_P(AggregatableAttributionDataIs, matcher, "") {
       arg.data(), result_listener);
 }
 
+MATCHER_P(NullAggregatableDataIs, matcher, "") {
+  return ExplainMatchResult(
+      ::testing::VariantWith<AttributionReport::NullAggregatableData>(matcher),
+      arg.data(), result_listener);
+}
+
 MATCHER_P(AggregatableHistogramContributionsAre, matcher, "") {
   return ExplainMatchResult(matcher, arg.contributions, result_listener);
 }
 
-MATCHER_P(AggregationCoordinatorIs, matcher, "") {
-  return ExplainMatchResult(matcher, arg.common_data.aggregation_coordinator,
+MATCHER_P(AggregationCoordinatorOriginIs, matcher, "") {
+  return ExplainMatchResult(
+      matcher, arg.common_data.aggregation_coordinator_origin, result_listener);
+}
+
+MATCHER_P(SourceRegistrationTimeConfigIs, matcher, "") {
+  return ExplainMatchResult(matcher,
+                            arg.common_data.source_registration_time_config,
                             result_listener);
 }
 
@@ -627,8 +661,11 @@ struct TriggerRegistrationMatcherConfig {
       aggregatable_trigger_data = ::testing::_;
   ::testing::Matcher<const attribution_reporting::AggregatableValues&>
       aggregatable_values = ::testing::_;
-  ::testing::Matcher<::aggregation_service::mojom::AggregationCoordinator>
-      aggregation_coordinator = ::testing::_;
+  ::testing::Matcher<
+      const absl::optional<attribution_reporting::SuitableOrigin>&>
+      aggregation_coordinator_origin = ::testing::_;
+  ::testing::Matcher<attribution_reporting::mojom::SourceRegistrationTimeConfig>
+      source_registration_time_config = ::testing::_;
 
   TriggerRegistrationMatcherConfig() = delete;
   explicit TriggerRegistrationMatcherConfig(
@@ -647,8 +684,12 @@ struct TriggerRegistrationMatcherConfig {
           aggregatable_trigger_data = ::testing::_,
       ::testing::Matcher<const attribution_reporting::AggregatableValues&>
           aggregatable_values = ::testing::_,
-      ::testing::Matcher<::aggregation_service::mojom::AggregationCoordinator>
-          aggregation_coordinator = ::testing::_);
+      ::testing::Matcher<
+          const absl::optional<attribution_reporting::SuitableOrigin>&>
+          aggregation_coordinator_origin = ::testing::_,
+      ::testing::Matcher<
+          attribution_reporting::mojom::SourceRegistrationTimeConfig>
+          source_registration_time_config = ::testing::_);
   ~TriggerRegistrationMatcherConfig();
 };
 
@@ -662,8 +703,8 @@ struct AttributionTriggerMatcherConfig {
       registration = ::testing::_;
   ::testing::Matcher<const attribution_reporting::SuitableOrigin&>
       destination_origin = ::testing::_;
-  ::testing::Matcher<const absl::optional<network::TriggerAttestation>&>
-      attestation = ::testing::_;
+  ::testing::Matcher<const std::vector<network::TriggerVerification>&>
+      verifications = ::testing::_;
 
   ::testing::Matcher<bool> is_within_fenced_frame = ::testing::_;
 
@@ -700,13 +741,22 @@ std::vector<AggregatableHistogramContribution>
 DefaultAggregatableHistogramContributions(
     const std::vector<uint32_t>& histogram_values = {1});
 
-#if BUILDFLAG(IS_ANDROID)
 struct OsRegistration;
 
 bool operator==(const OsRegistration&, const OsRegistration&);
 
 std::ostream& operator<<(std::ostream&, const OsRegistration&);
-#endif
+
+void ExpectValidAttributionReportingEligibleHeaderForEventBeacon(
+    const std::string& header);
+void ExpectValidAttributionReportingEligibleHeaderForImg(
+    const std::string& header);
+void ExpectValidAttributionReportingEligibleHeaderForNavigation(
+    const std::string& header);
+
+void ExpectValidAttributionReportingSupportHeader(const std::string& header,
+                                                  bool web_expected,
+                                                  bool os_expected);
 
 }  // namespace content
 

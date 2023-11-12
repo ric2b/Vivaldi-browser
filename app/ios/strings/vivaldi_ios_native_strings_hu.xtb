@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">Tartalom szerint</translation>
 <translation id="2129408066358825297">Életkor</translation>
 <translation id="2148384276939959392">Kiválasztott szinkronizálása</translation>
+<translation id="21693288559538605">Reklám- és nyomkövetés blokkoló összegzés</translation>
 <translation id="2195713384412091023">Ezzel törlődik minden szinkronizált adat a szerverünkről, alaphelyzetbe áll a titkosítási jelszavad, és ki leszel jelentkeztetve.</translation>
 <translation id="2243210264130642074">Jegyzet elmentve</translation>
 <translation id="2272338747456392228">A fiók zárolva</translation>
 <translation id="2273327106802955778">További menü</translation>
 <translation id="2324160330092901720">Az ellenőrző kód kiküldve: <ph name="EMAIL_ID" /></translation>
+<translation id="2336309953058658733">Kuka ürítése</translation>
 <translation id="2359808026110333948">Folytatás</translation>
 <translation id="2386793615875593361">1 kiválasztott</translation>
 <translation id="2388224692799337242">Amint elkezdesz böngészni, az előzmények itt jelennek meg</translation>
@@ -117,6 +119,7 @@ blokkolva</translation>
 <translation id="3699026013955941879">A kód lejárt. Kérj egy új aktiváló kódot.</translation>
 <translation id="3700829948786686853">Üdvözöl a Vivaldi</translation>
 <translation id="3766350025418769949">A Vivaldi Jelszókezelőben tárolt jelszavakat az iPad más alkalmazásaiban is használhatod.</translation>
+<translation id="3845564230651302310">Új blokkolási beállítások alkalmazása...</translation>
 <translation id="3858860766373142691">Név</translation>
 <translation id="3866249974567520381">Leírás</translation>
 <translation id="3872195896030547485">Kérlek, adj meg egy érvényes e-mail címet.</translation>
@@ -150,7 +153,7 @@ blokkolva</translation>
 <translation id="4413780690230851155">Böngészési előzmények törlése</translation>
 <translation id="4452878871193896747">Indonéz (<ph name="ORIGIN" />)</translation>
 <translation id="4493850495402472953">és</translation>
-<translation id="4497115807425788318">Helyszín</translation>
+<translation id="4497115807425788318">Hely</translation>
 <translation id="4507213865286211606">Méret előnézet</translation>
 <translation id="4515084385531683114">A jelszavak a Jelszókezelőben vannak elmentve az eszközön.</translation>
 <translation id="4525945044609022380">Ez az e-mail cím már egy másik fiókhoz van kapcsolva.</translation>
@@ -225,6 +228,7 @@ blokkolva</translation>
 <translation id="6406506848690869874">Szinkronizálás</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> kiválasztva</translation>
 <translation id="6468130661190228905">Sajnáljuk, de úgy tűnik, kicsit még várnod kell, hogy a közösségünk tagja lehess. A csatlakozni kívánó tagunknak legalább 16 évesnek kell lennie.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importálás<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Helyreállítási kulcs</translation>
 <translation id="6527303717912515753">Megosztás</translation>
 <translation id="6535988230515403205">Lengyel (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@ blokkolva</translation>
 <translation id="7461899062138731833">FORRÁSOK</translation>
 <translation id="750493650310597496">0 kiválasztott</translation>
 <translation id="7525067979554623046">Létrehozás</translation>
-<translation id="7541020606126512786">Reklám- és nyomkövetés blokkoló összegzés</translation>
 <translation id="7573518470897278603">Mobilos verzió megjelenítése</translation>
 <translation id="7574321014880720413">Új domain hozzáadása</translation>
 <translation id="7587132259180664054">E-mail sikeresen elküldve</translation>

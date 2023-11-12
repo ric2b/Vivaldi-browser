@@ -14,6 +14,7 @@
 #include "base/time/time.h"
 #include "cc/raster/raster_buffer_provider.h"
 #include "cc/raster/raster_query_queue.h"
+#include "cc/trees/raster_capabilities.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "gpu/command_buffer/common/sync_token.h"
 
@@ -24,7 +25,6 @@ class RasterInterface;
 }  // namespace gpu
 
 namespace viz {
-class ContextProvider;
 class RasterContextProvider;
 }  // namespace viz
 
@@ -34,10 +34,10 @@ class CC_EXPORT GpuRasterBufferProvider : public RasterBufferProvider {
  public:
   static constexpr float kRasterMetricProbability = 0.01;
   GpuRasterBufferProvider(
-      viz::ContextProvider* compositor_context_provider,
+      viz::RasterContextProvider* compositor_context_provider,
       viz::RasterContextProvider* worker_context_provider,
       bool use_gpu_memory_buffer_resources,
-      viz::SharedImageFormat tile_format,
+      const RasterCapabilities& raster_caps,
       const gfx::Size& max_tile_size,
       bool unpremultiply_and_dither_low_bit_depth_tiles,
       RasterQueryQueue* const pending_raster_queries,
@@ -139,19 +139,19 @@ class CC_EXPORT GpuRasterBufferProvider : public RasterBufferProvider {
   bool ShouldUnpremultiplyAndDitherResource(
       viz::SharedImageFormat format) const;
 
-  const raw_ptr<viz::ContextProvider> compositor_context_provider_;
+  const raw_ptr<viz::RasterContextProvider> compositor_context_provider_;
   const raw_ptr<viz::RasterContextProvider> worker_context_provider_;
   const bool use_gpu_memory_buffer_resources_;
   const viz::SharedImageFormat tile_format_;
   const gfx::Size max_tile_size_;
 
-  const raw_ptr<RasterQueryQueue> pending_raster_queries_;
+  const raw_ptr<RasterQueryQueue, DanglingUntriaged> pending_raster_queries_;
 
   const double raster_metric_probability_;
   // Accessed with the worker context lock acquired.
   base::MetricsSubSampler metrics_subsampler_;
   const bool is_using_raw_draw_;
-  const bool is_using_dmsaa_;
+  bool is_using_dmsaa_ = false;
 };
 
 }  // namespace cc

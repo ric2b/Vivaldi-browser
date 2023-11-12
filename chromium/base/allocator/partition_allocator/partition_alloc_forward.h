@@ -13,6 +13,7 @@
 #include "base/allocator/partition_allocator/partition_alloc_base/compiler_specific.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/component_export.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/debug/debugging_buildflags.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/thread_annotations.h"
 #include "base/allocator/partition_allocator/partition_alloc_config.h"
 
 namespace partition_alloc {
@@ -36,15 +37,8 @@ static_assert(kAlignment <= 16,
 
 constexpr bool ThreadSafe = true;
 
-template <bool thread_safe>
 struct SlotSpanMetadata;
-
-#if (BUILDFLAG(PA_DCHECK_IS_ON) ||                    \
-     BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)) && \
-    BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
-PA_COMPONENT_EXPORT(PARTITION_ALLOC)
-void CheckThatSlotOffsetIsZero(uintptr_t address);
-#endif
+class PA_LOCKABLE Lock;
 
 // This type trait verifies a type can be used as a pointer offset.
 //
@@ -58,10 +52,15 @@ static constexpr bool is_offset_type =
 
 class PartitionStatsDumper;
 
-template <bool thread_safe = internal::ThreadSafe>
 struct PartitionRoot;
 
-using ThreadSafePartitionRoot = PartitionRoot<internal::ThreadSafe>;
+using ThreadSafePartitionRoot = PartitionRoot;
+
+namespace internal {
+// Declare PartitionRootLock() for thread analysis. Its implementation
+// is defined in partition_root.h.
+Lock& PartitionRootLock(PartitionRoot*);
+}  // namespace internal
 
 }  // namespace partition_alloc
 

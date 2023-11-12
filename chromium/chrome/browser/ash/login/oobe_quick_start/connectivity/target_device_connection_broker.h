@@ -8,14 +8,16 @@
 #include <vector>
 
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/random_session_id.h"
+#include "chromeos/ash/services/nearby/public/mojom/quick_start_decoder_types.mojom-shared.h"
+#include "chromeos/ash/services/nearby/public/mojom/quick_start_decoder_types.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash::quick_start {
 
 struct FidoAssertionInfo;
-struct WifiCredentials;
 
 // TargetDeviceConnectionBroker is the entrypoint for consuming the Quick Start
 // connectivity component. Calling code is expected to get an instance of this
@@ -42,15 +44,28 @@ class TargetDeviceConnectionBroker {
     kAuthenticationFailed,
     kConnectionLost,
     kRequestTimedOut,
+    kTargetDeviceUpdate,
+    kResponseTimeout,
     kUnknownError,
   };
 
   class AuthenticatedConnection {
    public:
     using RequestWifiCredentialsCallback =
-        base::OnceCallback<void(absl::optional<WifiCredentials>)>;
+        base::OnceCallback<void(absl::optional<mojom::WifiCredentials>)>;
+    // The ack_successful bool indicates whether the ack was successfully
+    // received by the source device. If true, then the target device will
+    // prepare to resume the Quick Start connection after it updates.
+    using NotifySourceOfUpdateCallback =
+        base::OnceCallback<void(/*ack_successful=*/bool)>;
     using RequestAccountTransferAssertionCallback =
         base::OnceCallback<void(absl::optional<FidoAssertionInfo>)>;
+    using AwaitUserVerificationCallback = base::OnceCallback<void(
+        absl::optional<mojom::UserVerificationResponse>)>;
+
+    // Close the connection.
+    virtual void Close(
+        TargetDeviceConnectionBroker::ConnectionClosedReason reason) = 0;
 
     // Request wifi credentials from target Android device. The session_id is
     // used to identify this QuickStart session and is distinct from the
@@ -60,8 +75,11 @@ class TargetDeviceConnectionBroker {
         RequestWifiCredentialsCallback callback) = 0;
 
     // Notify Android device that the Chromebook will download an update and
-    // reboot.
-    virtual void NotifySourceOfUpdate(int32_t session_id) = 0;
+    // reboot. The session_id should be the same as the one sent in
+    // RequestWifiCredentials().
+    virtual void NotifySourceOfUpdate(
+        int32_t session_id,
+        NotifySourceOfUpdateCallback callback) = 0;
 
     // Begin the account transfer process and retrieve
     // an Assertion from the source device. The user will be asked to confirm
@@ -72,9 +90,18 @@ class TargetDeviceConnectionBroker {
         const std::string& challenge_b64url,
         RequestAccountTransferAssertionCallback callback) = 0;
 
+    // Wait for the user to perform verification, and return if it succeeded
+    virtual void WaitForUserVerification(
+        AwaitUserVerificationCallback callback) = 0;
+
+    // Retrieve CryptAuth ID from BootstrapConfigurations response.
+    std::string get_phone_instance_id() { return phone_instance_id_; }
+
    protected:
     AuthenticatedConnection() = default;
     virtual ~AuthenticatedConnection() = default;
+
+    std::string phone_instance_id_;
   };
 
   // Clients of TargetDeviceConnectionBroker should implement this interface,
@@ -150,6 +177,12 @@ class TargetDeviceConnectionBroker {
   // Clients should check  GetFeatureSupportStatus()  before calling
   // StartAdvertising().
   //
+  // If the target device is attempting to resume a Quick Start connection after
+  // an update, it skips the Fast Pair advertising step and automatically
+  // begins Nearby Connections advertising. Since the source device "remembers"
+  // the target device, we don't need to require manual user confirmation with
+  // the Fast Pair half-sheet.
+  //
   // If |use_pin_authentication| is true, then the target device will
   // advertise its preference to use pin authentication instead of QR code
   // authentication. This should be false unless the user would benefit from
@@ -171,10 +204,15 @@ class TargetDeviceConnectionBroker {
   // reboots.
   virtual base::Value::Dict GetPrepareForUpdateInfo() = 0;
 
+  // Gets the 3 digits of the discoverable name. e.g.: Chromebook (123)
+  virtual std::string GetSessionIdDisplayCode() = 0;
+
  protected:
   void MaybeNotifyFeatureStatus();
   void OnConnectionAuthenticated(
       base::WeakPtr<AuthenticatedConnection> authenticated_connection);
+
+  void OnConnectionClosed(ConnectionClosedReason reason);
 
   // Returns a deep link URL as a vector of bytes that will form the QR code
   // used to authenticate the connection.
@@ -190,7 +228,8 @@ class TargetDeviceConnectionBroker {
   // request pin verification or QR code verification.
   bool use_pin_authentication_ = false;
 
-  ConnectionLifecycleListener* connection_lifecycle_listener_ = nullptr;
+  raw_ptr<ConnectionLifecycleListener, ExperimentalAsh>
+      connection_lifecycle_listener_ = nullptr;
 
  private:
   std::vector<FeatureSupportStatusCallback> feature_status_callbacks_;

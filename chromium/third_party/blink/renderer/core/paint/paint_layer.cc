@@ -91,6 +91,7 @@
 #include "third_party/blink/renderer/core/paint/rounded_border_geometry.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/reference_clip_path_operation.h"
+#include "third_party/blink/renderer/core/style/reference_offset_path_operation.h"
 #include "third_party/blink/renderer/core/style/shape_clip_path_operation.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
@@ -126,7 +127,6 @@ struct SameSizeAsPaintLayer : GarbageCollected<PaintLayer>, DisplayItemClient {
 #endif
   Member<void*> members[9];
   PhysicalOffset offset;
-  LayoutSize size;
   LayoutUnit layout_units[2];
   std::unique_ptr<void*> pointer;
 };
@@ -231,6 +231,10 @@ void PaintLayer::Destroy() {
     if (auto* reference_clip =
             DynamicTo<ReferenceClipPathOperation>(style.ClipPath()))
       reference_clip->RemoveClient(*resource_info_);
+    if (auto* reference_offset =
+            DynamicTo<ReferenceOffsetPathOperation>(style.OffsetPath())) {
+      reference_offset->RemoveClient(*resource_info_);
+    }
     resource_info_->ClearLayer();
   }
 
@@ -321,7 +325,7 @@ void PaintLayer::UpdateTransform() {
     DCHECK(box);
     transform->MakeIdentity();
     box->StyleRef().ApplyTransform(
-        *transform, box, box->Size(),
+        *transform, box, PhysicalSize(box->Size()),
         ComputedStyle::kIncludeTransformOperations,
         ComputedStyle::kIncludeTransformOrigin,
         ComputedStyle::kIncludeMotionPath,
@@ -560,11 +564,6 @@ void PaintLayer::Update3DTransformedDescendantStatus() {
 }
 
 void PaintLayer::UpdateLayerPosition() {
-  // LayoutBoxes will call UpdateSizeAndScrollingAfterLayout() from
-  // LayoutBox::UpdateAfterLayout, but LayoutInlines will still need to update
-  // their size.
-  if (GetLayoutObject().IsLayoutInline())
-    UpdateSize();
   if (RuntimeEnabledFeatures::RemoveConvertToLayerCoordsEnabled()) {
     return;
   }
@@ -593,30 +592,15 @@ void PaintLayer::UpdateLayerPosition() {
 #endif
 }
 
-bool PaintLayer::UpdateSize() {
-  LayoutSize old_size = size_;
-  if (IsRootLayer()) {
-    size_ = LayoutSize(GetLayoutObject().GetDocument().View()->Size());
-  } else if (GetLayoutObject().IsInline() &&
-             GetLayoutObject().IsLayoutInline()) {
-    auto& inline_flow = To<LayoutInline>(GetLayoutObject());
-    gfx::Rect line_box =
-        ToEnclosingRect(inline_flow.PhysicalLinesBoundingBox());
-    size_ = LayoutSize(line_box.size());
-  } else if (LayoutBox* box = GetLayoutBox()) {
-    size_ = box->Size();
-  }
-
-  return old_size != size_;
-}
-
-void PaintLayer::UpdateSizeAndScrollingAfterLayout() {
-  bool did_resize = UpdateSize();
+void PaintLayer::UpdateScrollingAfterLayout() {
   if (RequiresScrollableArea()) {
     DCHECK(scrollable_area_);
     scrollable_area_->UpdateAfterLayout();
-    if (did_resize)
+    LayoutBox* layout_box = GetLayoutBox();
+    if (layout_box->ScrollableAreaSizeChanged()) {
       scrollable_area_->VisibleSizeChanged();
+      layout_box->SetScrollableAreaSizeChanged(false);
+    }
   }
 }
 
@@ -714,7 +698,7 @@ void PaintLayer::ScrollContainerStatusChanged() {
 void PaintLayer::SetNeedsVisualOverflowRecalc() {
   DCHECK(IsSelfPaintingLayer());
 #if DCHECK_IS_ON()
-  GetLayoutObject().InvalidateVisualOverflow();
+  GetLayoutObject().InvalidateVisualOverflowForDCheck();
 #endif
   needs_visual_overflow_recalc_ = true;
   // |MarkAncestorChainForFlagsUpdate| will cause a paint property update which
@@ -1066,16 +1050,8 @@ void PaintLayer::AppendSingleFragmentForHitTesting(
 
 const LayoutBox* PaintLayer::GetLayoutBoxWithBlockFragments() const {
   const LayoutBox* layout_box = GetLayoutBox();
-  if (!layout_box)
-    return nullptr;
-  if (!layout_box->CanTraversePhysicalFragments())
-    return nullptr;
-  if (!layout_box->PhysicalFragmentCount()) {
-    // TODO(crbug.com/1273068): The box has no fragments. This is
-    // unexpected, and we must have failed a bunch of DCHECKs (if enabled)
-    // on our way here. If the LayoutBox has never been laid out, it will
-    // have no fragments. But then we shouldn't really be here. Fall back to
-    // legacy LayoutObject tree traversal for this layer.
+  if (!layout_box || !layout_box->CanTraversePhysicalFragments() ||
+      layout_box->IsFragmentLessBox()) {
     return nullptr;
   }
   return layout_box;
@@ -1390,12 +1366,8 @@ PaintLayer* PaintLayer::HitTestLayer(
     return nullptr;
   }
 
-  if (const auto* box = GetLayoutBox()) {
-    // A child layer of a <frameset> might have no physical fragments. We can
-    // skip such layer. See ClearNeedsLayoutOnHiddenFrames().
-    if (box->PhysicalFragmentCount() == 0) {
-      return nullptr;
-    }
+  if (layout_object.IsFragmentLessBox()) {
+    return nullptr;
   }
 
   if (!IsSelfPaintingLayer() && !HasSelfPaintingLayerDescendant())
@@ -1577,21 +1549,6 @@ PaintLayer* PaintLayer::HitTestLayer(
 
   if (overflow_controls_only)
     return nullptr;
-
-  // See if the hit test pos is inside the overflow controls of the child
-  // layers that have reordered the painting of the overlay overflow controls.
-  if (stacking_node_) {
-    for (auto& layer : base::Reversed(
-             stacking_node_->OverlayOverflowControlsReorderedList())) {
-      if (layer->HitTestLayer(transform_container, container_fragment, result,
-                              recursion_data, /*applied_transform*/ false,
-                              container_transform_state,
-                              z_offset_for_descendants_ptr,
-                              /*overflow_controls_only*/ true)) {
-        return layer;
-      }
-    }
-  }
 
   // This variable tracks which layer the mouse ends up being inside.
   PaintLayer* candidate_layer = nullptr;
@@ -1930,36 +1887,67 @@ PaintLayer* PaintLayer::HitTestChildren(
 
   PaintLayer* result_layer = nullptr;
   PaintLayerPaintOrderReverseIterator iterator(this, children_to_visit);
-  while (PaintLayer* child_layer = iterator.Next()) {
-    if (child_layer->IsReplacedNormalFlowStacking())
-      continue;
 
-    // Avoid the call to child_layer->HitTestLayer() if possible.
+  // Returns true if the caller should break the loop.
+  auto hit_test_child = [&](PaintLayer* child_layer,
+                            bool overflow_controls_only) -> bool {
+    if (child_layer->IsReplacedNormalFlowStacking())
+      return false;
+
+    // Avoid the call to child_layer.HitTestLayer() if possible.
     if (stop_layer == this &&
         !IsHitCandidateForStopNode(child_layer->GetLayoutObject(), stop_node)) {
-      continue;
+      return false;
     }
 
-    PaintLayer* hit_layer = nullptr;
     STACK_UNINITIALIZED HitTestResult temp_result(
         result.GetHitTestRequest(), recursion_data.original_location);
-    hit_layer = child_layer->HitTestLayer(
+    PaintLayer* hit_layer = child_layer->HitTestLayer(
         transform_container, container_fragment, temp_result, recursion_data,
         /*applied_transform*/ false, container_transform_state,
-        z_offset_for_descendants);
+        z_offset_for_descendants, overflow_controls_only);
 
     // If it is a list-based test, we can safely append the temporary result
-    // since it might had hit nodes but not necesserily had hitLayer set.
-    if (result.GetHitTestRequest().ListBased())
+    // since it might had hit nodes but not necessarily had hit_layer set.
+    if (result.GetHitTestRequest().ListBased()) {
       result.Append(temp_result);
+    }
 
     if (IsHitCandidateForDepthOrder(hit_layer, depth_sort_descendants, z_offset,
                                     local_transform_state)) {
       result_layer = hit_layer;
       if (!result.GetHitTestRequest().ListBased())
         result = temp_result;
-      if (!depth_sort_descendants)
-        break;
+      if (!depth_sort_descendants) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  while (PaintLayer* child_layer = iterator.Next()) {
+    if (stacking_node_) {
+      if (const auto* layers_painting_overlay_overflow_controls_after =
+              stacking_node_->LayersPaintingOverlayOverflowControlsAfter(
+                  child_layer)) {
+        bool break_loop = false;
+        for (auto& reparent_overflow_controls_layer :
+             base::Reversed(*layers_painting_overlay_overflow_controls_after)) {
+          DCHECK(reparent_overflow_controls_layer
+                     ->NeedsReorderOverlayOverflowControls());
+          if (hit_test_child(reparent_overflow_controls_layer, true)) {
+            break_loop = true;
+            break;
+          }
+        }
+        if (break_loop) {
+          break;
+        }
+      }
+    }
+
+    if (hit_test_child(child_layer, false)) {
+      break;
     }
   }
 
@@ -2249,6 +2237,27 @@ void PaintLayer::UpdateClipPath(const ComputedStyle* old_style,
   }
 }
 
+void PaintLayer::UpdateOffsetPath(const ComputedStyle* old_style,
+                                  const ComputedStyle& new_style) {
+  OffsetPathOperation* new_offset = new_style.OffsetPath();
+  OffsetPathOperation* old_offset =
+      old_style ? old_style->OffsetPath() : nullptr;
+  if (!new_offset && !old_offset) {
+    return;
+  }
+  const bool had_resource_info = ResourceInfo();
+  if (auto* reference_offset =
+          DynamicTo<ReferenceOffsetPathOperation>(new_offset)) {
+    reference_offset->AddClient(EnsureResourceInfo());
+  }
+  if (had_resource_info) {
+    if (auto* old_reference_offset =
+            DynamicTo<ReferenceOffsetPathOperation>(old_offset)) {
+      old_reference_offset->RemoveClient(*ResourceInfo());
+    }
+  }
+}
+
 void PaintLayer::StyleDidChange(StyleDifference diff,
                                 const ComputedStyle* old_style) {
   UpdateScrollableArea();
@@ -2330,6 +2339,7 @@ void PaintLayer::StyleDidChange(StyleDifference diff,
   UpdateFilters(old_style, new_style);
   UpdateBackdropFilters(old_style, new_style);
   UpdateClipPath(old_style, new_style);
+  UpdateOffsetPath(old_style, new_style);
 
   if (diff.ZIndexChanged()) {
     // We don't need to invalidate paint of objects when paint order

@@ -8,8 +8,8 @@ bundle that need to be signed, as well as providing utilities to sign them.
 
 import os.path
 
-from . import commands, signing
-from .model import CodeSignOptions, CodeSignedProduct, VerifyOptions
+from signing import commands, signing
+from signing.model import CodeSignOptions, CodeSignedProduct, VerifyOptions
 
 _PROVISIONPROFILE_EXT = '.provisionprofile'
 _PROVISIONPROFILE_DEST = 'embedded.provisionprofile'
@@ -128,6 +128,12 @@ def get_parts(config):
             CodeSignedProduct(
                 '{.framework_dir}/Helpers/app_mode_loader'.format(config),
                 'app_mode_loader',
+                options=full_hardened_runtime_options,
+                verify_options=verify_options),
+        'vivaldi-relayproxy':
+            CodeSignedProduct(
+                '{.framework_dir}/Helpers/relayproxy-darwin'.format(config),
+                'relayproxy-darwin',
                 options=full_hardened_runtime_options,
                 verify_options=verify_options),
         'mac-sparkle-autoupdate':

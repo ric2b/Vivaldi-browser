@@ -33,9 +33,10 @@ void PasswordManagerClient::ShowPasswordManagerErrorMessage(
     ErrorMessageFlowType flow_type,
     password_manager::PasswordStoreBackendErrorType error_type) {}
 
-void PasswordManagerClient::ShowTouchToFill(
+void PasswordManagerClient::ShowKeyboardReplacingSurface(
     PasswordManagerDriver* driver,
-    autofill::mojom::SubmissionReadinessState submission_readiness) {}
+    autofill::mojom::SubmissionReadinessState submission_readiness,
+    bool is_webauthn_form) {}
 #endif
 
 scoped_refptr<device_reauth::DeviceAuthenticator>
@@ -88,7 +89,7 @@ net::CertStatus PasswordManagerClient::GetMainFrameCertStatus() const {
 
 void PasswordManagerClient::PromptUserToEnableAutosignin() {}
 
-bool PasswordManagerClient::IsIncognito() const {
+bool PasswordManagerClient::IsOffTheRecord() const {
   return false;
 }
 
@@ -163,6 +164,14 @@ PasswordManagerClient::GetWebAuthnCredentialsDelegateForDriver(
     PasswordManagerDriver* driver) {
   return nullptr;
 }
+
+#if BUILDFLAG(IS_ANDROID)
+webauthn::WebAuthnCredManDelegate*
+PasswordManagerClient::GetWebAuthnCredManDelegateForDriver(
+    PasswordManagerDriver* driver) {
+  return nullptr;
+}
+#endif  // BUILDFLAG(IS_ANDROID)
 
 version_info::Channel PasswordManagerClient::GetChannel() const {
   return version_info::Channel::UNKNOWN;

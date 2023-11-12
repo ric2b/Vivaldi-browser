@@ -19,6 +19,7 @@
 
 namespace content {
 
+class BrowserContext;
 class PolicyContainerHost;
 
 // A service that stores bound SharedURLLoaderFactory mojo pipes and the loaders
@@ -44,7 +45,7 @@ class PolicyContainerHost;
 // https://docs.google.com/document/d/1ZzxMMBvpqn8VZBZKnb7Go8TWjnrGcXuLS_USwVVRUvY
 class CONTENT_EXPORT KeepAliveURLLoaderService {
  public:
-  explicit KeepAliveURLLoaderService();
+  explicit KeepAliveURLLoaderService(BrowserContext* browser_context);
   ~KeepAliveURLLoaderService();
 
   // Not Copyable.
@@ -61,7 +62,8 @@ class CONTENT_EXPORT KeepAliveURLLoaderService {
   // use the remote of `receiver` to load requests. It must not be null.
   void BindFactory(
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
-      std::unique_ptr<network::PendingSharedURLLoaderFactory> pending_factory,
+      scoped_refptr<network::SharedURLLoaderFactory>
+          subresource_proxying_factory_bundle,
       scoped_refptr<PolicyContainerHost> policy_container_host);
 
   // For testing only:
@@ -69,6 +71,9 @@ class CONTENT_EXPORT KeepAliveURLLoaderService {
   size_t NumDisconnectedLoadersForTesting() const;
   void SetLoaderObserverForTesting(
       scoped_refptr<KeepAliveURLLoader::TestObserver> observer);
+  void SetURLLoaderThrottlesGetterForTesting(
+      KeepAliveURLLoader::URLLoaderThrottlesGetter
+          url_loader_throttles_getter_for_testing);
 
  private:
   class KeepAliveURLLoaderFactory;
@@ -79,6 +84,9 @@ class CONTENT_EXPORT KeepAliveURLLoaderService {
   // Removes the KeepAliveURLLoader kept by this service, either from
   // `loader_receivers_` or `disconnected_loaders_`.
   void RemoveLoader(mojo::ReceiverId loader_receiver_id);
+
+  // The browsing session that owns this instance of the service.
+  const raw_ptr<BrowserContext> browser_context_;
 
   // Many-to-one mojo receiver of URLLoaderFactory.
   std::unique_ptr<KeepAliveURLLoaderFactory> factory_;
@@ -101,6 +109,8 @@ class CONTENT_EXPORT KeepAliveURLLoaderService {
   // Not owned.
   scoped_refptr<KeepAliveURLLoader::TestObserver> loader_test_observer_ =
       nullptr;
+  KeepAliveURLLoader::URLLoaderThrottlesGetter
+      url_loader_throttles_getter_for_testing_ = base::NullCallback();
 };
 
 }  // namespace content

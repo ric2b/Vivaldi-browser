@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_ASH_APP_LIST_SEARCH_LOCAL_IMAGES_ANNOTATION_STORAGE_H_
 #define CHROME_BROWSER_ASH_APP_LIST_SEARCH_LOCAL_IMAGES_ANNOTATION_STORAGE_H_
 
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -30,10 +31,13 @@ struct ImageInfo {
   base::FilePath path;
   // The image's last modified time.
   base::Time last_modified;
+  // Remove the image from further search.
+  bool is_ignored;
 
   ImageInfo(const std::set<std::string>& annotations,
             const base::FilePath& path,
-            const base::Time& last_modified);
+            const base::Time& last_modified,
+            bool is_ignored);
 
   ~ImageInfo();
   ImageInfo(const ImageInfo&);
@@ -42,17 +46,13 @@ struct ImageInfo {
 
 // A search result with `relevance` to the supplied query.
 struct FileSearchResult {
-  // THe full path to the file.
-  base::FilePath path;
   // The file's last modified time.
   base::Time last_modified;
   // The file's relevance on the scale from 0-1. It represents how closely a
   // query matches the file's annotation.
   double relevance;
 
-  FileSearchResult(const base::FilePath& path,
-                   const base::Time& last_modified,
-                   double relevance);
+  FileSearchResult(const base::Time& last_modified, double relevance);
 
   ~FileSearchResult();
   FileSearchResult(const FileSearchResult&);
@@ -64,15 +64,8 @@ struct FileSearchResult {
 // not null, it updates the database on file changes.
 class AnnotationStorage {
  public:
-  enum class TableColumnName {
-    kLabel,
-    kImagePath,
-    kLastModifiedTime,
-  };
-
   AnnotationStorage(const base::FilePath& path_to_db,
                     const std::string& histogram_tag,
-                    int current_version_number,
                     std::unique_ptr<ImageAnnotationWorker> annotation_worker);
   AnnotationStorage(const AnnotationStorage&) = delete;
   AnnotationStorage& operator=(const AnnotationStorage&) = delete;
@@ -96,10 +89,15 @@ class AnnotationStorage {
 
   // Searches for annotations using FuzzyTokenizedStringMatch with relevance to
   // `query` above a fixed threshold.
-  std::vector<FileSearchResult> LinearSearchAnnotations(
+  std::map<base::FilePath, FileSearchResult> LinearSearchAnnotations(
       const std::u16string& query);
 
  private:
+  AnnotationStorage(const base::FilePath& path_to_db,
+                    const std::string& histogram_tag,
+                    int current_version_number,
+                    std::unique_ptr<ImageAnnotationWorker> annotation_worker);
+
   std::unique_ptr<ImageAnnotationWorker> annotation_worker_;
   std::unique_ptr<SqlDatabase> sql_database_;
 

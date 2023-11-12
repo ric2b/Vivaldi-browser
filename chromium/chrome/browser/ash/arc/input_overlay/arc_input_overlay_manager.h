@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_ASH_ARC_INPUT_OVERLAY_ARC_INPUT_OVERLAY_MANAGER_H_
 
 #include "ash/components/arc/ime/arc_ime_bridge.h"
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/memory/raw_ptr.h"
@@ -131,6 +132,9 @@ class ArcInputOverlayManager : public KeyedService,
   // window destroying.
   void ResetForPendingTouchInjector(
       std::unique_ptr<TouchInjector> touch_injector);
+  // Called when data loading finished from files or mojom calls for
+  // |touch_injector|.
+  void OnLoadingFinished(std::unique_ptr<TouchInjector> touch_injector);
 
   base::ScopedObservation<aura::Env, aura::EnvObserver> env_observation_{this};
   base::ScopedMultiSourceObservation<aura::Window, aura::WindowObserver>

@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <ostream>
 #include <set>
 #include <vector>
 
@@ -140,6 +141,9 @@ class COMPONENT_EXPORT(EVDEV) EventConverterEvdev
   // (also known as garage or dock sensor, not buttons on a stylus).
   virtual bool HasStylusSwitch() const;
 
+  // Returns true if the converter is a keyboard and has an assistant key.
+  virtual bool HasAssistantKey() const;
+
   // Returns the current state of the stylus garage switch, indicating whether a
   // stylus is inserted in (or attached) to a stylus dock or garage, or has been
   // removed.
@@ -196,6 +200,8 @@ class COMPONENT_EXPORT(EVDEV) EventConverterEvdev
   // Helper to generate a base::TimeTicks from an input_event's time
   static base::TimeTicks TimeTicksFromInputEvent(const input_event& event);
 
+  static bool IsValidKeyboardKeyPress(uint64_t key);
+
   // Handle gamepad force feedback effects.
   virtual void PlayVibrationEffect(uint8_t amplitude, uint16_t duration_millis);
   virtual void StopVibration();
@@ -206,6 +212,9 @@ class COMPONENT_EXPORT(EVDEV) EventConverterEvdev
   virtual void SetHapticTouchpadEffectForNextButtonRelease(
       HapticTouchpadEffect effect,
       HapticTouchpadEffectStrength strength);
+
+  // Describe converter for system log.
+  virtual std::ostream& DescribeForLog(std::ostream& os) const;
 
  protected:
   // base::MessagePumpForUI::FdWatcher:

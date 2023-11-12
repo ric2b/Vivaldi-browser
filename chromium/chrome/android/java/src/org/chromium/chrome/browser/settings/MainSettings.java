@@ -42,7 +42,7 @@ import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.signin.SyncConsentActivityLauncherImpl;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
-import org.chromium.chrome.browser.sync.SyncService;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor;
@@ -57,6 +57,7 @@ import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
+import org.chromium.components.sync.SyncService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.text.SpanApplier;
@@ -66,11 +67,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 // Vivaldi
+import android.app.PendingIntent;
+import android.appwidget.AppWidgetManager;
+import android.content.ComponentName;
 import android.text.TextUtils;
 
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.searchwidget.SearchWidgetProvider;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.ui.base.DeviceFormFactor;
 
@@ -80,11 +85,14 @@ import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.AdsAndTrackerPreference;
 import org.vivaldi.browser.preferences.AutomaticCloseTabsMainPreference;
 import org.vivaldi.browser.preferences.NewTabPositionMainPreference;
+import org.vivaldi.browser.preferences.ScreenLockSwitch;
 import org.vivaldi.browser.preferences.StartPageModePreference;
 import org.vivaldi.browser.preferences.StatusBarVisibilityPreference;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.preferences.VivaldiPreferencesBridge;
 import org.vivaldi.browser.preferences.VivaldiSyncPreference;
+import org.vivaldi.browser.prompts.AddWidgetBottomSheet;
+import org.vivaldi.browser.prompts.AddWidgetPromptHandler;
 
 /**
  * The main settings screen, shown when the user first opens Settings.
@@ -167,7 +175,7 @@ public class MainSettings extends PreferenceFragmentCompat
         if (signinManager.isSigninSupported(/*requireUpdatedPlayServices=*/false)) {
             signinManager.addSignInStateObserver(this);
         }
-        SyncService syncService = SyncService.get();
+        SyncService syncService = SyncServiceFactory.getForProfile(mProfile);
         if (syncService != null) {
             syncService.addSyncStateChangedListener(this);
         }
@@ -181,7 +189,7 @@ public class MainSettings extends PreferenceFragmentCompat
         if (signinManager.isSigninSupported(/*requireUpdatedPlayServices=*/false)) {
             signinManager.removeSignInStateObserver(this);
         }
-        SyncService syncService = SyncService.get();
+        SyncService syncService = SyncServiceFactory.getForProfile(mProfile);
         if (syncService != null) {
             syncService.removeSyncStateChangedListener(this);
         }
@@ -221,11 +229,16 @@ public class MainSettings extends PreferenceFragmentCompat
                 // Remove if OEM runs phone UI (Mercedes co driver display).
                 removePreferenceIfPresent(VivaldiPreferences.APP_MENU_BAR_SETTING);
                 removePreferenceIfPresent(VivaldiPreferences.RATE_VIVALDI);
-                addPreferenceIfAbsent(VivaldiPreferences.SCREEN_LOCK);
+                removePreferenceIfPresent(VivaldiPreferences.ADD_VIVALDI_SEARCH_WIDGET);
+                if (BuildConfig.IS_OEM_GAS_BUILD) {
+                    // Only for generic AAOS builds for now.
+                    addPreferenceIfAbsent(VivaldiPreferences.SCREEN_LOCK);
+                }
             }
             // Remove for Mercedes. Ref. VAB-7254.
             if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
                 removePreferenceIfPresent(PREF_VIVALDI_GAME);
+                removePreferenceIfPresent(VivaldiPreferences.SET_AS_DEFAULT_BROWSER);
             }
         }
 
@@ -237,6 +250,10 @@ public class MainSettings extends PreferenceFragmentCompat
 
         setManagedPreferenceDelegateForPreference(PREF_SEARCH_ENGINE);
 
+        // Vivaldi: Ref. VAB-7740, remove notifications settings for Mercedes.
+        if (BuildConfig.IS_OEM_MERCEDES_BUILD)
+            removePreferenceIfPresent(PREF_NOTIFICATIONS);
+        else
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // If we are on Android O+ the Notifications preference should lead to the Android
             // Settings notifications page.
@@ -395,8 +412,10 @@ public class MainSettings extends PreferenceFragmentCompat
         pref.setSummary(AutomaticCloseTabsMainPreference.updateSummary());
         updateSummary();
         pref = findPreference(VivaldiPreferences.SET_AS_DEFAULT_BROWSER);
-        ((ChromeSwitchPreference)pref).setChecked(
+        if (pref != null) {
+            ((ChromeSwitchPreference) pref).setChecked(
                     VivaldiDefaultBrowserUtils.checkIfVivaldiDefaultBrowser(getActivity()));
+        }
 
         // Vivaldi: Set toggle for background media.
         pref = findPreference(PREF_ALLOW_BACKGROUND_MEDIA);
@@ -404,6 +423,12 @@ public class MainSettings extends PreferenceFragmentCompat
             VivaldiPreferencesBridge vivaldiPrefs = new VivaldiPreferencesBridge();
             ((ChromeSwitchPreference) pref)
                     .setChecked(vivaldiPrefs.isBackgroundMediaPlaybackAllowed());
+        }
+
+        // Vivaldi
+        ScreenLockSwitch screenLockSwitch = findPreference(VivaldiPreferences.SCREEN_LOCK);
+        if (screenLockSwitch != null) {
+            screenLockSwitch.updateSwitch();
         }
 
         // Handling the home button here.
@@ -415,6 +440,49 @@ public class MainSettings extends PreferenceFragmentCompat
             getPreferenceScreen()
                     .findPreference(homeButton)
                     .setEnabled(HomepageManager.isHomepageEnabled());
+
+        // Handling adding Vivaldi search widget to home screen
+        pref = findPreference(VivaldiPreferences.ADD_VIVALDI_SEARCH_WIDGET);
+        if (pref != null) {
+            // Don't show setting if below Android O OS or if the widget is already added
+            if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD
+                    || Build.VERSION.SDK_INT < Build.VERSION_CODES.O
+                    || AddWidgetPromptHandler.hasVivaldiSearchWidget(getContext()))
+                removePreferenceIfPresent(VivaldiPreferences.ADD_VIVALDI_SEARCH_WIDGET);
+            else {
+                pref.setOnPreferenceClickListener(preference -> {
+                    AppWidgetManager appWidgetManager =
+                            getContext().getSystemService(AppWidgetManager.class);
+                    ComponentName appWidgetProvider =
+                            new ComponentName(getContext(), SearchWidgetProvider.class);
+                    if (appWidgetManager != null
+                            && appWidgetManager.isRequestPinAppWidgetSupported()) {
+                        Bundle bundle = new Bundle();
+                        bundle.putBoolean(AddWidgetBottomSheet.SHOW_REPLY, true);
+                        Intent pinnedWidgetCallbackIntent =
+                                new Intent(getContext(), SearchWidgetProvider.class);
+                        pinnedWidgetCallbackIntent.putExtras(bundle);
+                        PendingIntent successCallback = PendingIntent.getBroadcast(getContext(), 0,
+                                pinnedWidgetCallbackIntent,
+                                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
+                        appWidgetManager.requestPinAppWidget(
+                                appWidgetProvider, null, successCallback);
+                    }
+                    return true;
+                });
+            }
+        }
+
+        // Handling set as default browser promo card view
+        pref = findPreference("default_browser_promo");
+        if (pref != null) {
+            if (VivaldiDefaultBrowserUtils.checkIfVivaldiDefaultBrowser(getContext())
+                    || BuildConfig.IS_OEM_AUTOMOTIVE_BUILD
+                    || VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                    VivaldiPreferences.DEFAULT_BROWSER_PROMO_CANCELLED, false))
+                removePreferenceIfPresent("default_browser_promo");
+        }
     }
 
     private Preference addPreferenceIfAbsent(String key) {
@@ -444,7 +512,7 @@ public class MainSettings extends PreferenceFragmentCompat
         mManageSync.setSummary(SyncSettingsUtils.getSyncStatusSummary(getActivity()));
         mManageSync.setOnPreferenceClickListener(pref -> {
             Context context = getContext();
-            if (SyncService.get().isSyncDisabledByEnterprisePolicy()) {
+            if (SyncServiceFactory.getForProfile(mProfile).isSyncDisabledByEnterprisePolicy()) {
                 SyncSettingsUtils.showSyncDisabledByAdministratorToast(context);
             } else if (isSyncConsentAvailable) {
                 SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
@@ -493,7 +561,8 @@ public class MainSettings extends PreferenceFragmentCompat
     }
 
     private boolean shouldShowNewLabelForPasswordsPreference() {
-        return usesUnifiedPasswordManagerUI() && hasChosenToSyncPasswords(SyncService.get())
+        return usesUnifiedPasswordManagerUI()
+                && hasChosenToSyncPasswords(SyncServiceFactory.getForProfile(mProfile))
                 && !UserPrefs.get(mProfile).getBoolean(Pref.PASSWORDS_PREF_WITH_NEW_LABEL_USED);
     }
 

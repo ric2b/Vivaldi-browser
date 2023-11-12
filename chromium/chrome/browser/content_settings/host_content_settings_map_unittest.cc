@@ -13,6 +13,8 @@
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
@@ -26,6 +28,7 @@
 #include "components/client_hints/common/client_hints.h"
 #include "components/content_settings/core/browser/content_settings_pref_provider.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
+#include "components/content_settings/core/browser/content_settings_uma_util.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -36,8 +39,10 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/content_settings/core/test/content_settings_test_utils.h"
+#include "components/permissions/features.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -47,6 +52,7 @@
 #include "net/cookies/static_cookie_policy.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "url/gurl.h"
 
 using ::testing::_;
@@ -67,7 +73,7 @@ base::Time GetSettingLastModifiedDate(HostContentSettingsMap* map,
                                       ContentSettingsType type) {
   content_settings::SettingInfo info;
   map->GetWebsiteSetting(primary_url, secondary_url, type, &info);
-  return info.metadata.last_modified;
+  return info.metadata.last_modified();
 }
 }  // namespace
 
@@ -1934,9 +1940,11 @@ TEST_F(HostContentSettingsMapTest, MixedScopeSettings) {
                                      persistent_type, CONTENT_SETTING_BLOCK);
   // Set a Session only permission for our second url and we expect it should
   // co-exist with the other permission just fine.
-  map->SetContentSettingDefaultScope(
-      example_url2, example_url2, persistent_type, CONTENT_SETTING_ALLOW,
-      {base::Time(), content_settings::SessionModel::UserSession});
+  content_settings::ContentSettingConstraints constraints;
+  constraints.set_session_model(content_settings::SessionModel::UserSession);
+  map->SetContentSettingDefaultScope(example_url2, example_url2,
+                                     persistent_type, CONTENT_SETTING_ALLOW,
+                                     constraints);
 
   EXPECT_EQ(
       CONTENT_SETTING_BLOCK,
@@ -1987,12 +1995,15 @@ TEST_F(HostContentSettingsMapTest, GetSettingsForOneTypeWithSessionModel) {
       map->GetContentSetting(example_url2, example_url2, persistent_type));
 
   // Set permissions in two different scopes.
-  map->SetContentSettingDefaultScope(
-      example_url1, example_url1, persistent_type, CONTENT_SETTING_BLOCK,
-      {base::Time(), content_settings::SessionModel::Durable});
-  map->SetContentSettingDefaultScope(
-      example_url2, example_url2, persistent_type, CONTENT_SETTING_ALLOW,
-      {base::Time(), content_settings::SessionModel::UserSession});
+  content_settings::ContentSettingConstraints constraints;
+  constraints.set_session_model(content_settings::SessionModel::Durable);
+  map->SetContentSettingDefaultScope(example_url1, example_url1,
+                                     persistent_type, CONTENT_SETTING_BLOCK,
+                                     constraints);
+  constraints.set_session_model(content_settings::SessionModel::UserSession);
+  map->SetContentSettingDefaultScope(example_url2, example_url2,
+                                     persistent_type, CONTENT_SETTING_ALLOW,
+                                     constraints);
 
   // Validate that if we retrieve all our settings we should see both settings
   // and the default values returned.
@@ -2025,19 +2036,51 @@ TEST_F(HostContentSettingsMapTest, GetSettingsForOneTypeWithSessionModel) {
   ASSERT_EQ(0u, settings.size());
 }
 
+class HostContentSettingsMapActiveExpirationTest
+    : public HostContentSettingsMapTest,
+      public ::testing::WithParamInterface<bool> {
+ public:
+  HostContentSettingsMapActiveExpirationTest() {
+    feature_list_.InitWithFeatureState(
+        content_settings::features::kActiveContentSettingExpiry, GetParam());
+  }
+  HostContentSettingsMapActiveExpirationTest(
+      const HostContentSettingsMapActiveExpirationTest&) = delete;
+  HostContentSettingsMapActiveExpirationTest& operator=(
+      const HostContentSettingsMapActiveExpirationTest&) = delete;
+
+  void RunExpirationMechanismIfFeatureEnabled(HostContentSettingsMap* map,
+                                              ContentSettingsType type) {
+    if (GetParam()) {
+      map->DeleteNearlyExpiredSettingsAndMaybeScheduleNextRun(type);
+    }
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         HostContentSettingsMapActiveExpirationTest,
+                         testing::Bool());
+
 // Validate that the settings array retrieved correctly carries the expiry data
 // for settings and they can detect if and when they expire.
 // GetSettingsForOneType should also omit any settings that are already expired.
-TEST_F(HostContentSettingsMapTest, GetSettingsForOneTypeWithExpiry) {
+TEST_P(HostContentSettingsMapActiveExpirationTest,
+       GetSettingsForOneTypeWithExpiryAndVerifyUmaHistograms) {
+  base::HistogramTester t;
   TestingProfile profile;
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(&profile);
 
   content_settings::ContentSettingsRegistry::GetInstance()->ResetForTest();
   ReloadProviders(profile.GetPrefs(), map);
+  const std::string kActiveExpiryHistogramName =
+      "ContentSettings.ActiveExpiry.PrefProvider.ContentSettingsType";
 
-  // The following type is used as a sample of the persistent permission type.
-  // It can be replaced with any other type if required.
+  // The following type is used as a sample of the persistent permission
+  // type. It can be replaced with any other type if required.
   const ContentSettingsType persistent_type =
       ContentSettingsType::STORAGE_ACCESS;
 
@@ -2059,17 +2102,20 @@ TEST_F(HostContentSettingsMapTest, GetSettingsForOneTypeWithExpiry) {
 
   // Set permissions with our first two urls with different expiry times and our
   // third with no expiration.
-  map->SetContentSettingDefaultScope(
-      example_url1, example_url1, persistent_type, CONTENT_SETTING_BLOCK,
-      {content_settings::GetConstraintExpiration(base::Seconds(100)),
-       content_settings::SessionModel::UserSession});
-  map->SetContentSettingDefaultScope(
-      example_url2, example_url2, persistent_type, CONTENT_SETTING_ALLOW,
-      {content_settings::GetConstraintExpiration(base::Seconds(200)),
-       content_settings::SessionModel::UserSession});
-  map->SetContentSettingDefaultScope(
-      example_url3, example_url3, persistent_type, CONTENT_SETTING_ALLOW,
-      {base::Time(), content_settings::SessionModel::UserSession});
+  content_settings::ContentSettingConstraints constraints;
+  constraints.set_lifetime(base::Seconds(100));
+  constraints.set_session_model(content_settings::SessionModel::UserSession);
+  map->SetContentSettingDefaultScope(example_url1, example_url1,
+                                     persistent_type, CONTENT_SETTING_BLOCK,
+                                     constraints);
+  constraints.set_lifetime(base::Seconds(200));
+  map->SetContentSettingDefaultScope(example_url2, example_url2,
+                                     persistent_type, CONTENT_SETTING_ALLOW,
+                                     constraints);
+  constraints.set_lifetime(base::TimeDelta());
+  map->SetContentSettingDefaultScope(example_url3, example_url3,
+                                     persistent_type, CONTENT_SETTING_ALLOW,
+                                     constraints);
 
   // Validate that we can retrieve all our settings and none of them are
   // expired.
@@ -2095,9 +2141,15 @@ TEST_F(HostContentSettingsMapTest, GetSettingsForOneTypeWithExpiry) {
     }
   }
 
+  RunExpirationMechanismIfFeatureEnabled(map,
+                                         ContentSettingsType::STORAGE_ACCESS);
+  t.ExpectTotalCount(kActiveExpiryHistogramName, 0);
+
   // If we Fastforward by 101 seconds we should see only our first setting is
   // expired, we now retrieve 1 less setting and the rest are okay.
   FastForwardTime(base::Seconds(101));
+  RunExpirationMechanismIfFeatureEnabled(map,
+                                         ContentSettingsType::STORAGE_ACCESS);
   ASSERT_TRUE(url1_setting.IsExpired());
   ASSERT_FALSE(url2_setting.IsExpired());
   ASSERT_FALSE(url3_setting.IsExpired());
@@ -2105,9 +2157,18 @@ TEST_F(HostContentSettingsMapTest, GetSettingsForOneTypeWithExpiry) {
                              content_settings::SessionModel::UserSession);
   ASSERT_EQ(2u, settings.size());
 
+  t.ExpectTotalCount(kActiveExpiryHistogramName, GetParam() ? 1 : 0);
+  t.ExpectUniqueSample(
+      kActiveExpiryHistogramName,
+      content_settings_uma_util::ContentSettingTypeToHistogramValue(
+          ContentSettingsType::STORAGE_ACCESS),
+      GetParam() ? 1 : 0);
+
   // If we fast forward again we should expire our second setting and drop if
   // from our retrieval list now.
   FastForwardTime(base::Seconds(101));
+  RunExpirationMechanismIfFeatureEnabled(map,
+                                         ContentSettingsType::STORAGE_ACCESS);
   ASSERT_TRUE(url1_setting.IsExpired());
   ASSERT_TRUE(url2_setting.IsExpired());
   ASSERT_FALSE(url3_setting.IsExpired());
@@ -2115,13 +2176,61 @@ TEST_F(HostContentSettingsMapTest, GetSettingsForOneTypeWithExpiry) {
                              content_settings::SessionModel::UserSession);
   ASSERT_EQ(1u, settings.size());
 
+  t.ExpectTotalCount(kActiveExpiryHistogramName, GetParam() ? 2 : 0);
+
+  t.ExpectUniqueSample(
+      kActiveExpiryHistogramName,
+      content_settings_uma_util::ContentSettingTypeToHistogramValue(
+          ContentSettingsType::STORAGE_ACCESS),
+      GetParam() ? 2 : 0);
+
   // If we fast forwarding much further it shouldn't make a difference as our
   // last setting and the default setting should never expire.
   FastForwardTime(base::Minutes(100));
+  RunExpirationMechanismIfFeatureEnabled(map,
+                                         ContentSettingsType::STORAGE_ACCESS);
   ASSERT_TRUE(url1_setting.IsExpired());
   ASSERT_TRUE(url2_setting.IsExpired());
   ASSERT_FALSE(url3_setting.IsExpired());
   map->GetSettingsForOneType(persistent_type, &settings,
                              content_settings::SessionModel::UserSession);
   ASSERT_EQ(1u, settings.size());
+
+  t.ExpectTotalCount(kActiveExpiryHistogramName, GetParam() ? 2 : 0);
+  t.ExpectUniqueSample(
+      kActiveExpiryHistogramName,
+      content_settings_uma_util::ContentSettingTypeToHistogramValue(
+          ContentSettingsType::STORAGE_ACCESS),
+      GetParam() ? 2 : 0);
+}
+
+TEST_F(HostContentSettingsMapTest, StorageAccessMetrics) {
+  const ContentSettingsType type = ContentSettingsType::STORAGE_ACCESS;
+  const GURL url1("https://example1.com");
+  const GURL url2("https://example2.com");
+  const GURL url3("https://example3.com");
+  const GURL url4("https://example4.com");
+
+  TestingProfile profile;
+  auto* map = HostContentSettingsMapFactory::GetForProfile(&profile);
+  map->SetContentSettingDefaultScope(url1, url1, type, CONTENT_SETTING_ALLOW);
+  map->SetContentSettingDefaultScope(url2, url1, type, CONTENT_SETTING_ALLOW);
+  map->SetContentSettingDefaultScope(url2, url2, type, CONTENT_SETTING_ALLOW);
+  map->SetContentSettingDefaultScope(url3, url1, type, CONTENT_SETTING_ALLOW);
+  map->SetContentSettingDefaultScope(url3, url2, type, CONTENT_SETTING_ALLOW);
+  map->SetContentSettingDefaultScope(url3, url3, type, CONTENT_SETTING_BLOCK);
+  map->SetContentSettingDefaultScope(url4, url1, type, CONTENT_SETTING_BLOCK);
+
+  base::HistogramTester t;
+  auto map2 = base::MakeRefCounted<HostContentSettingsMap>(
+      profile.GetPrefs(), false, true, true, true);
+  map2->ShutdownOnUIThread();
+
+  std::string base_histogram =
+      "ContentSettings.RegularProfile.Exceptions.storage-access";
+  t.ExpectUniqueSample(base_histogram, 7, 1);
+  t.ExpectUniqueSample(base_histogram + ".Allow", 5, 1);
+  t.ExpectUniqueSample(base_histogram + ".Block", 2, 1);
+  t.ExpectUniqueSample(base_histogram + ".MaxRequester", 3, 1);
+  t.ExpectUniqueSample(base_histogram + ".MaxTopLevel", 4, 1);
 }

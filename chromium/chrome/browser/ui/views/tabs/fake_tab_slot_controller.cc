@@ -43,6 +43,12 @@ bool FakeTabSlotController::IsFocusInTabs() const {
   return false;
 }
 
+TabSlotController::Liveness FakeTabSlotController::ContinueDrag(
+    views::View* view,
+    const ui::LocatedEvent& event) {
+  return Liveness::kAlive;
+}
+
 bool FakeTabSlotController::EndDrag(EndDragReason reason) {
   return false;
 }
@@ -65,10 +71,6 @@ bool FakeTabSlotController::HoverCardIsShowingForTab(Tab* tab) {
 
 int FakeTabSlotController::GetBackgroundOffset() const {
   return 0;
-}
-
-bool FakeTabSlotController::ShouldPaintAsActiveFrame() const {
-  return true;
 }
 
 int FakeTabSlotController::GetStrokeThickness() const {

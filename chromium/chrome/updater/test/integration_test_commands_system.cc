@@ -88,11 +88,14 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
 
   void EnterTestMode(const GURL& update_url,
                      const GURL& crash_upload_url,
-                     const GURL& device_management_url) const override {
+                     const GURL& device_management_url,
+                     const base::TimeDelta& idle_timeout) const override {
     RunCommand("enter_test_mode",
                {Param("update_url", update_url.spec()),
                 Param("crash_upload_url", crash_upload_url.spec()),
-                Param("device_management_url", device_management_url.spec())});
+                Param("device_management_url", device_management_url.spec()),
+                Param("idle_timeout",
+                      base::NumberToString(idle_timeout.InSeconds()))});
   }
 
   void ExitTestMode() const override { RunCommand("exit_test_mode"); }
@@ -218,6 +221,12 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
 
   void RunCrashMe() const override { RunCommand("run_crash_me", {}); }
 
+  void RunServer(int expected_exit_code, bool internal) const override {
+    RunCommand("run_server",
+               {Param("internal", internal ? "true" : "false"),
+                Param("exit_code", base::NumberToString(expected_exit_code))});
+  }
+
   void CheckForUpdate(const std::string& app_id) const override {
     RunCommand("check_for_update", {Param("app_id", app_id)});
   }
@@ -230,8 +239,20 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
 
   void UpdateAll() const override { RunCommand("update_all", {}); }
 
+  void GetAppStates(
+      const base::Value::Dict& expected_app_states) const override {
+    RunCommand(
+        "get_app_states",
+        {Param("expected_app_states",
+               StringFromValue(base::Value(expected_app_states.Clone())))});
+  }
+
   void DeleteUpdaterDirectory() const override {
     RunCommand("delete_updater_directory", {});
+  }
+
+  void DeleteFile(const base::FilePath& path) const override {
+    RunCommand("delete_file", {Param("path", path.MaybeAsASCII())});
   }
 
   void InstallApp(const std::string& app_id) const override {
@@ -292,27 +313,16 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     RunCommand("run_uninstall_cmd_line");
   }
 
-  void SetUpTestService() const override {
-    updater::test::RunTestServiceCommand("setup");
-  }
-
-  void TearDownTestService() const override {
-    updater::test::RunTestServiceCommand("teardown");
-  }
-
   void RunHandoff(const std::string& app_id) const override {
     RunCommand("run_handoff", {Param("app_id", app_id)});
   }
 #endif  // BUILDFLAG(IS_WIN)
 
   base::FilePath GetDifferentUserPath() const override {
-#if BUILDFLAG(IS_MAC)
-    // The updater_tests executable is owned by non-root.
-    return base::PathService::CheckedGet(base::FILE_EXE);
-#else
+    // On POSIX, the path may be chowned; so do not use a file not owned by the
+    // test, nor the test executable itself.
     NOTREACHED() << __func__ << ": not implemented.";
     return base::FilePath();
-#endif
   }
 
   void StressUpdateService() const override {
@@ -368,6 +378,16 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
                {Param("legacy_install", is_legacy_install ? "true" : "false"),
                 Param("silent", is_silent_install ? "true" : "false")});
   }
+
+  void RunOfflineInstallOsNotSupported(bool is_legacy_install,
+                                       bool is_silent_install) override {
+    RunCommand("run_offline_install_os_not_supported",
+               {Param("legacy_install", is_legacy_install ? "true" : "false"),
+                Param("silent", is_silent_install ? "true" : "false")});
+  }
+
+  void DMDeregisterDevice() override { RunCommand("dm_deregister_device"); }
+  void DMCleanup() override { RunCommand("dm_cleanup"); }
 
  private:
   ~IntegrationTestCommandsSystem() override = default;

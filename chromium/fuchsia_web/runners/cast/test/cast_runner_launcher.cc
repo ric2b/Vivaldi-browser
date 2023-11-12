@@ -10,6 +10,7 @@
 #include <fuchsia/component/decl/cpp/fidl.h>
 #include <fuchsia/fonts/cpp/fidl.h>
 #include <fuchsia/intl/cpp/fidl.h>
+#include <fuchsia/kernel/cpp/fidl.h>
 #include <fuchsia/legacymetrics/cpp/fidl.h>
 #include <fuchsia/logger/cpp/fidl.h>
 #include <fuchsia/media/cpp/fidl.h>
@@ -21,6 +22,7 @@
 #include <fuchsia/ui/composition/cpp/fidl.h>
 #include <fuchsia/ui/scenic/cpp/fidl.h>
 #include <fuchsia/web/cpp/fidl.h>
+#include <lib/vfs/cpp/pseudo_dir.h>
 #include <lib/vfs/cpp/remote_dir.h>
 
 #include <memory>
@@ -127,6 +129,7 @@ CastRunnerLauncher::CastRunnerLauncher(CastRunnerFeatures runner_features) {
                         .subdir = "web_engine"},
               Directory{.name = "root-ssl-certificates"},
               Protocol{fuchsia::buildinfo::Provider::Name_},
+              Protocol{fuchsia::kernel::VmexResource::Name_},
               Protocol{fuchsia::intl::PropertyProvider::Name_},
               Protocol{fuchsia::media::ProfileProvider::Name_},
               Protocol{fuchsia::memorypressure::Provider::Name_},

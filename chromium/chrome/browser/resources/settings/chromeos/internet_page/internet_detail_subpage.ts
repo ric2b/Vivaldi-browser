@@ -28,15 +28,18 @@ import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
-import '../../controls/controlled_button.js';
-import '../../controls/settings_toggle_button.js';
+import '/shared/settings/controls/controlled_button.js';
+import '/shared/settings/controls/settings_toggle_button.js';
 import './cellular_roaming_toggle_button.js';
 import './internet_shared.css.js';
 import './network_proxy_section.js';
+import './passpoint_remove_dialog.js';
 import './settings_traffic_counters.js';
 import './tether_connection_dialog.js';
 
-import {isActiveSim, processDeviceState} from 'chrome://resources/ash/common/network/cellular_utils.js';
+import {MojoConnectivityProvider} from 'chrome://resources/ash/common/connectivity/mojo_connectivity_provider.js';
+import {PasspointServiceInterface, PasspointSubscription} from 'chrome://resources/ash/common/connectivity/passpoint.mojom-webui.js';
+import {getApnDisplayName, isActiveSim, processDeviceState} from 'chrome://resources/ash/common/network/cellular_utils.js';
 import {CrPolicyNetworkBehaviorMojo, CrPolicyNetworkBehaviorMojoInterface} from 'chrome://resources/ash/common/network/cr_policy_network_behavior_mojo.js';
 import {MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
 import {NetworkListenerBehavior, NetworkListenerBehaviorInterface} from 'chrome://resources/ash/common/network/network_listener_behavior.js';
@@ -46,7 +49,7 @@ import {CrToggleElement} from 'chrome://resources/cr_elements/cr_toggle/cr_toggl
 import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {ActivationStateType, ApnProperties, ConfigProperties, CrosNetworkConfigRemote, GlobalPolicy, HiddenSsidMode, IPConfigProperties, ManagedProperties, MatchType, NetworkStateProperties, ProxySettings, SecurityType, VpnType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
+import {ActivationStateType, ApnProperties, ConfigProperties, CrosNetworkConfigInterface, GlobalPolicy, HiddenSsidMode, IPConfigProperties, ManagedProperties, MatchType, NetworkStateProperties, ProxySettings, SecurityType, VpnType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {ConnectionStateType, DeviceStateType, IPConfigType, NetworkType, OncSource, PolicySource, PortalState} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {afterNextRender, flush, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -57,12 +60,12 @@ import {recordSettingChange} from '../metrics_recorder.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import {OsSyncBrowserProxy, OsSyncBrowserProxyImpl, OsSyncPrefs} from '../os_people_page/os_sync_browser_proxy.js';
 import {OsSettingsSubpageElement} from '../os_settings_page/os_settings_subpage.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin, RouteObserverMixinInterface} from '../route_observer_mixin.js';
-import {Route, Router} from '../router.js';
+import {Route, Router, routes} from '../router.js';
 
 import {getTemplate} from './internet_detail_subpage.html.js';
 import {InternetPageBrowserProxy, InternetPageBrowserProxyImpl} from './internet_page_browser_proxy.js';
+import {PasspointRemoveDialogElement} from './passpoint_remove_dialog.js';
 import {TetherConnectionDialogElement} from './tether_connection_dialog.js';
 
 const SettingsInternetDetailPageElementBase =
@@ -307,6 +310,20 @@ class SettingsInternetDetailPageElement extends
         },
       },
 
+      isPasspointSettingsEnabled_: {
+        type: Boolean,
+        readOnly: true,
+        value() {
+          return loadTimeData.valueExists('isPasspointSettingsEnabled') &&
+              loadTimeData.getBoolean('isPasspointSettingsEnabled');
+        },
+      },
+
+      passpointSubscription_: {
+        type: Object,
+        notify: true,
+      },
+
       advancedExpanded_: Boolean,
 
       networkExpanded_: Boolean,
@@ -381,15 +398,18 @@ class SettingsInternetDetailPageElement extends
   private ipAddress_: string;
   private isApnRevampEnabled_: boolean;
   private isPasspointEnabled_: boolean;
+  private isPasspointSettingsEnabled_: boolean;
   private isSecondaryUser_: boolean;
   private isTrafficCountersEnabled_: boolean;
   private isWifiSyncEnabled_: boolean;
   private managedProperties_: ManagedProperties|undefined;
   private meteredOverride_: boolean;
-  private networkConfig_: CrosNetworkConfigRemote;
+  private networkConfig_: CrosNetworkConfigInterface;
   private networkExpanded_: boolean;
   private osSyncBrowserProxy_: OsSyncBrowserProxy;
   private outOfRange_: boolean;
+  private passpointService_: PasspointServiceInterface;
+  private passpointSubscription_: PasspointSubscription|null;
   private pendingSimLockDeepLink_: boolean;
   private preferNetwork_: boolean;
   private primaryUserEmail_: string;
@@ -436,6 +456,11 @@ class SettingsInternetDetailPageElement extends
 
     this.networkConfig_ =
         MojoInterfaceProviderImpl.getInstance().getMojoServiceRemote();
+
+    if (this.isPasspointSettingsEnabled_) {
+      this.passpointService_ =
+          MojoConnectivityProvider.getInstance().getPasspointService();
+    }
 
     this.osSyncBrowserProxy_ = OsSyncBrowserProxyImpl.getInstance();
   }
@@ -623,7 +648,9 @@ class SettingsInternetDetailPageElement extends
       this.managedProperties_ = undefined;
       this.propertiesReceived_ = false;
 
-      Router.getInstance().navigateToPreviousRoute();
+      if (Router.getInstance().currentRoute === routes.NETWORK_DETAIL) {
+        Router.getInstance().navigateToPreviousRoute();
+      }
     });
   }
 
@@ -946,6 +973,12 @@ class SettingsInternetDetailPageElement extends
       const response =
           await this.networkConfig_.getManagedProperties(this.guid);
       this.getPropertiesCallback_(response.result);
+      if (this.isPasspointSettingsEnabled_ &&
+          this.isPasspointWifi_(this.managedProperties_)) {
+        const response = await this.passpointService_.getPasspointSubscription(
+            this.managedProperties_!.typeProperties.wifi!.passpointId!);
+        this.passpointSubscription_ = response.result;
+      }
     }
   }
 
@@ -1305,6 +1338,13 @@ class SettingsInternetDetailPageElement extends
          ConnectionStateType.kNotConnected)) {
       return false;
     }
+    if (this.isPasspointSettingsEnabled_ &&
+        this.isPasspointWifi_(managedProperties)) {
+      // Passpoint networks are automatically configured using Passpoint
+      // subscriptions. We don't want the user to change the configuration
+      // (b/282114074).
+      return false;
+    }
     if (this.isArcVpn_(managedProperties) &&
         !this.isConnectedState_(managedProperties)) {
       return false;
@@ -1477,9 +1517,10 @@ class SettingsInternetDetailPageElement extends
             '#tetherDialog'));
   }
 
-  private getPasspointRemovalDialog_(): HTMLDialogElement {
-    return castExists(this.shadowRoot!.querySelector<HTMLDialogElement>(
-        '#passpointRemovalDialog'));
+  private getPasspointRemovalDialog_(): PasspointRemoveDialogElement {
+    return castExists(
+        this.shadowRoot!.querySelector<PasspointRemoveDialogElement>(
+            '#passpointRemovalDialog'));
   }
 
   private handleConnectClick_(): void {
@@ -1575,7 +1616,7 @@ class SettingsInternetDetailPageElement extends
     if (this.isPasspointWifi_(this.managedProperties_)) {
       // Ask user confirmation before removing a Passpoint Wi-Fi and the
       // associated subscription.
-      this.getPasspointRemovalDialog_().showModal();
+      this.getPasspointRemovalDialog_().open();
       return;
     }
     return this.forgetNetwork_();
@@ -1694,8 +1735,8 @@ class SettingsInternetDetailPageElement extends
       return '';
     }
 
-    return this.managedProperties_!.typeProperties.cellular!.connectedApn
-        .accessPointName;
+    return getApnDisplayName(
+        this.managedProperties_!.typeProperties.cellular!.connectedApn);
   }
 
 
@@ -2135,12 +2176,40 @@ class SettingsInternetDetailPageElement extends
         MatchType.kNoMatch;
   }
 
-  private onPasspointRemovalDialogCancel_(): void {
-    this.getPasspointRemovalDialog_().close();
+  private shouldShowPasspointProviderRow_(managedProperties: ManagedProperties|
+                                          undefined): boolean {
+    return this.isPasspointSettingsEnabled_ &&
+        this.isPasspointWifi_(managedProperties);
+  }
+
+  private getPasspointSubscriptionName_(subscription: PasspointSubscription|
+                                        null): string {
+    if (!subscription) {
+      return '';
+    }
+    if (subscription.friendlyName && subscription.friendlyName !== '') {
+      return subscription.friendlyName;
+    }
+    return subscription.domains[0];
+  }
+
+  private onPasspointRowClicked_(): void {
+    const showPasspointEvent = new CustomEvent(
+        'show-passpoint-detail',
+        {bubbles: true, composed: true, detail: this.passpointSubscription_});
+    this.dispatchEvent(showPasspointEvent);
   }
 
   private onPasspointRemovalDialogConfirm_(): void {
     this.getPasspointRemovalDialog_().close();
+
+    if (this.isPasspointSettingsEnabled_) {
+      // When Passpoint settings page is enabled, the removal dialog leads the
+      // user to the subscription page.
+      this.onPasspointRowClicked_();
+      return;
+    }
+
     this.forgetNetwork_();
   }
 

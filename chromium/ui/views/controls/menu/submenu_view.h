@@ -8,6 +8,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -62,19 +63,20 @@ class VIEWS_EXPORT SubmenuView : public View,
 
   ~SubmenuView() override;
 
-  // Returns true if the submenu has at least one empty menu item.
-  bool HasEmptyMenuItemView() const;
-
-  // Returns true if the submenu has at least one visible child item.
-  bool HasVisibleChildren() const;
-
   // Returns the children which are menu items.
   MenuItems GetMenuItems() const;
 
   // Returns the MenuItemView at the specified index.
   MenuItemView* GetMenuItemAt(size_t index);
 
+  // The preferred height, in DIPs, of a "standard" (i.e. empty) menu item.
+  int GetPreferredItemHeight() const;
+
   PrefixSelector* GetPrefixSelector();
+
+  // Sets various menu metrics based on the current children. For example, this
+  // reserves space for menu icons iff any children have icons.
+  void UpdateMenuPartSizes();
 
   // Positions and sizes the child views. This tiles the views vertically,
   // giving each child the available width.
@@ -143,7 +145,10 @@ class VIEWS_EXPORT SubmenuView : public View,
   bool SkipDefaultKeyEventProcessing(const ui::KeyEvent& e) override;
 
   // Returns the parent menu item we're showing children for.
-  MenuItemView* GetMenuItem();
+  const MenuItemView* GetMenuItem() const;
+  MenuItemView* GetMenuItem() {
+    return const_cast<MenuItemView*>(std::as_const(*this).GetMenuItem());
+  }
 
   // Set the drop item and position.
   void SetDropMenuItem(MenuItemView* item, MenuDelegate::DropPosition position);
@@ -163,6 +168,10 @@ class VIEWS_EXPORT SubmenuView : public View,
   // closes while the menu is shown. If invoked the SubmenuView must drop all
   // references to the MenuHost as the MenuHost is about to be deleted.
   void MenuHostDestroyed();
+
+  int icon_area_width() const { return icon_area_width_; }
+  int label_start() const { return label_start_; }
+  int trailing_padding() const { return trailing_padding_; }
 
   // Max width of minor text (accelerator or subtitle) in child menu items. This
   // doesn't include children's children, only direct children.
@@ -212,13 +221,23 @@ class VIEWS_EXPORT SubmenuView : public View,
 
   // If non-null, indicates a drop is in progress and drop_item is the item
   // the drop is over.
-  raw_ptr<MenuItemView> drop_item_;
+  raw_ptr<MenuItemView, DanglingUntriaged> drop_item_;
 
   // Position of the drop.
   MenuDelegate::DropPosition drop_position_ = MenuDelegate::DropPosition::kNone;
 
   // Ancestor of the SubmenuView, lazily created.
   raw_ptr<MenuScrollViewContainer, DanglingUntriaged> scroll_view_container_;
+
+  // Width of a menu icon area.
+  int icon_area_width_ = 0;
+
+  // X-coordinate of where the label starts.
+  int label_start_ = 0;
+
+  // The width of the padding after the minor text. If there is a dedicated
+  // submenu arrow column, it fits inside this.
+  int trailing_padding_ = 0;
 
   // See description above getter.
   mutable int max_minor_text_width_ = 0;

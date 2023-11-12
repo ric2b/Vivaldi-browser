@@ -34,7 +34,6 @@ namespace extensions {
 namespace {
 
 using vivaldi::history_private::HistoryPrivateItem;
-namespace DBSearch = vivaldi::history_private::DbSearch;
 namespace Search = vivaldi::history_private::Search;
 namespace OnVisitModified = vivaldi::history_private::OnVisitModified;
 
@@ -51,21 +50,6 @@ namespace VisitSearch = vivaldi::history_private::VisitSearch;
 typedef std::vector<vivaldi::history_private::TopUrlItem> TopSitesPerDayList;
 
 using bookmarks::BookmarkModel;
-
-std::unique_ptr<HistoryPrivateItem> GetHistoryItem(const history::URLRow& row) {
-  std::unique_ptr<HistoryPrivateItem> history_item(new HistoryPrivateItem());
-
-  history_item->id = base::NumberToString(row.id());
-  history_item->url = row.url().spec();
-  history_item->title = base::UTF16ToUTF8(row.title());
-  history_item->last_visit_time = MilliSecondsFromTime(row.last_visit());
-  history_item->typed_count = row.typed_count();
-  history_item->visit_count = row.visit_count();
-  history_item->transition_type =
-      vivaldi::history_private::TRANSITION_TYPE_LINK;
-
-  return history_item;
-}
 
 history::HistoryService* GetFunctionCallerHistoryService(
     ExtensionFunction& fun) {
@@ -216,51 +200,6 @@ void HistoryPrivateEventRouter::DispatchEvent(Profile* profile,
   }
 }
 
-ExtensionFunction::ResponseAction HistoryPrivateDbSearchFunction::Run() {
-  absl::optional<DBSearch::Params> params(DBSearch::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  int max_hits = 100;
-
-  if (params->query.max_results.has_value())
-    max_hits = params->query.max_results.value();
-
-  const char* sql_statement =
-      "SELECT urls.id, urls.url, urls.title, urls.visit_count, "
-      "urls.typed_count, urls.last_visit_time, urls.hidden "
-      "FROM urls WHERE hidden = 0 "
-      "AND urls.url LIKE ? OR urls.title LIKE ? "
-      "ORDER BY urls.last_visit_time DESC LIMIT ?";
-  const std::string search_text = "%" + params->query.text + "%";
-
-  history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
-  if (!hs) {
-    NOTREACHED();
-    return RespondNow(NoArguments());
-  }
-
-  hs->QueryHistoryWStatement(
-      sql_statement, search_text, max_hits,
-      base::BindOnce(&HistoryPrivateDbSearchFunction::SearchComplete, this),
-      &task_tracker_);
-  return RespondLater();
-}
-
-void HistoryPrivateDbSearchFunction::SearchComplete(
-    history::QueryResults results) {
-  HistoryItemList history_item_vec;
-  if (!results.empty()) {
-    for (history::QueryResults::URLResultVector::const_iterator iterator =
-             results.begin();
-         iterator != results.end(); ++iterator) {
-      history_item_vec.push_back(
-          std::move(*base::WrapUnique(GetHistoryItem(*iterator).release())));
-    }
-  }
-  // This must be revisited since it is slow!
-  Respond(ArgumentList(DBSearch::Results::Create(history_item_vec)));
-}
-
 ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
   absl::optional<Search::Params> params(Search::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -336,7 +275,7 @@ void HistoryPrivateSearchFunction::SearchComplete(
     for (const auto& item : results)
       history_item_vec.push_back(GetHistoryAndVisitItem(item, model));
   }
-  Respond(ArgumentList(DBSearch::Results::Create(history_item_vec)));
+  Respond(ArgumentList(Search::Results::Create(history_item_vec)));
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
@@ -544,6 +483,71 @@ HistoryPrivateMigrateOldTypedUrlFunction::Run() {
       history::SOURCE_BROWSED, false);
 
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+HistoryPrivateGetDetailedHistoryFunction::Run() {
+  absl::optional<Search::Params> params(Search::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  int max_hits = 100;
+
+  if (params->query.max_results.has_value())
+    max_hits = params->query.max_results.value();
+
+  const char* sql_statement =
+      "SELECT urls.id, urls.url, urls.title, urls.visit_count, "
+      "urls.typed_count, urls.last_visit_time, visits.transition "
+      "FROM urls "
+      "JOIN visits "
+      "ON (visits.url = urls.id AND visits.visit_time = urls.last_visit_time) "
+      "WHERE hidden = 0 "
+      "AND urls.url LIKE ? OR urls.title LIKE ? "
+      "ORDER BY urls.last_visit_time DESC LIMIT ?";
+  const std::string search_text = "%" + params->query.text + "%";
+
+  history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
+  if (!hs) {
+    NOTREACHED();
+    return RespondNow(NoArguments());
+  }
+
+  hs->QueryDetailedHistoryWStatement(
+      sql_statement, search_text, max_hits,
+      base::BindOnce(
+        &HistoryPrivateGetDetailedHistoryFunction::SearchComplete, this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void HistoryPrivateGetDetailedHistoryFunction::SearchComplete(
+    const history::DetailedHistory::DetailedHistoryList& results) {
+  std::vector<vivaldi::history_private::DetailedHistoryItem> response;
+  for (const auto& result : results) {
+    vivaldi::history_private::DetailedHistoryItem item;
+    bool has_chain_start = ui::PAGE_TRANSITION_CHAIN_START &
+                        ui::PageTransitionGetQualifier(result.transition_type);
+    bool has_chain_end = ui::PAGE_TRANSITION_CHAIN_END &
+                        ui::PageTransitionGetQualifier(result.transition_type);
+
+    item.id.assign(result.id);
+    item.url.assign(result.url.spec());
+    item.title.assign(result.title);
+    item.last_visit_time = MilliSecondsFromTime(result.last_visit_time);
+    item.visit_count = result.visit_count;
+    item.typed_count = result.typed_count;
+    item.is_bookmarked = result.is_bookmarked;
+    item.transition_type =
+      HistoryPrivateAPI::UiTransitionToPrivateHistoryTransition(
+        result.transition_type);
+    item.is_redirect = ui::PageTransitionIsRedirect(result.transition_type) &&
+                        !(has_chain_start || has_chain_end);
+
+    response.push_back(std::move(item));
+  }
+
+  Respond(ArgumentList(
+      vivaldi::history_private::GetDetailedHistory::Results::Create(response)));
 }
 
 }  // namespace extensions

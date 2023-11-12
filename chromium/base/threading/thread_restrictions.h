@@ -395,6 +395,7 @@ class SelectFileDialogBridge;
 
 namespace remoting {
 class AutoThread;
+class ScopedAllowBlockingForCrashReporting;
 class ScopedBypassIOThreadRestrictions;
 namespace protocol {
 class ScopedAllowSyncPrimitivesForWebRtcDataStreamAdapter;
@@ -490,7 +491,9 @@ class StackSamplingProfiler;
 class TestCustomDisallow;
 class Thread;
 
-void GetNSExecutablePath(base::FilePath* path);
+namespace apple::internal {
+base::FilePath GetExecutablePath();
+}
 
 #if DCHECK_IS_ON()
 // NOT_TAIL_CALLED if dcheck-is-on so it's always evident who irrevocably
@@ -640,6 +643,7 @@ class BASE_EXPORT [[maybe_unused, nodiscard]] ScopedAllowBlocking {
   friend class remote_cocoa::SelectFileDialogBridge;
   friend class remoting::
       ScopedBypassIOThreadRestrictions;  // http://crbug.com/1144161
+  friend class remoting::ScopedAllowBlockingForCrashReporting;
   friend class ui::DrmDisplayHostManager;
   friend class ui::ScopedAllowBlockingForGbmSurface;
   friend class ui::SelectFileDialogLinux;
@@ -663,7 +667,7 @@ class BASE_EXPORT [[maybe_unused, nodiscard]] ScopedAllowBlocking {
   friend bool ::HasWaylandDisplay(
       base::Environment* env);  // http://crbug.com/1246928
   friend bool ash::CameraAppUIShouldEnableLocalOverride(const std::string&);
-  friend void base::GetNSExecutablePath(base::FilePath*);
+  friend base::FilePath base::apple::internal::GetExecutablePath();
   friend bool base::internal::ReadProcFile(const FilePath& file,
                                            std::string* buffer);
   friend bool chrome::PathProvider(int,

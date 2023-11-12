@@ -22,7 +22,8 @@ enum AccountType {
   ACCOUNT_TYPE_VIVALDINET = 1,
   ACCOUNT_TYPE_GOOGLE = 2,
   ACCOUNT_TYPE_CALDAV = 3,
-  ACCOUNT_TYPE_ICAL = 4
+  ACCOUNT_TYPE_ICAL = 4,
+  ACCOUNT_TYPE_FASTMAIL = 5
 };
 
 // Bit flags determing which fields should be updated in the

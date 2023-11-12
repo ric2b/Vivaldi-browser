@@ -7,7 +7,7 @@
 #import <UIKit/UIKit.h>
 
 #import "base/mac/foundation_util.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/ui/history/history_ui_delegate.h"
 #import "ios/chrome/browser/ui/history/public/history_presentation_delegate.h"
@@ -81,6 +81,7 @@
                              // needs to be nil, otherwise stopWithCompletion:
                              // will call dismiss with nothing to dismiss and
                              // therefore not trigger its own completionHandler.
+                             [self.clearBrowsingDataTableViewController stop];
                              self.clearBrowsingDataTableViewController = nil;
                              self.historyClearBrowsingDataNavigationController =
                                  nil;

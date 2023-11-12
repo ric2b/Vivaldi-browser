@@ -155,6 +155,11 @@ class CORE_EXPORT WindowPerformance final : public Performance,
 
   void OnBodyLoadFinished(int64_t encoded_body_size, int64_t decoded_body_size);
   void ReportLongAnimationFrameTiming(AnimationFrameTimingInfo*);
+  // PerformanceMonitor::Client implementation.
+  void ReportLongTask(base::TimeTicks start_time,
+                      base::TimeTicks end_time,
+                      ExecutionContext* task_context,
+                      bool has_multiple_contexts) override;
 
   void AddLayoutShiftEntry(LayoutShift*);
   void AddVisibilityStateEntry(bool is_visible, base::TimeTicks start_time);
@@ -196,12 +201,6 @@ class CORE_EXPORT WindowPerformance final : public Performance,
       ExecutionContext*,
       bool has_multiple_contexts,
       LocalFrame* observer_frame);
-
-  // PerformanceMonitor::Client implementation.
-  void ReportLongTask(base::TimeTicks start_time,
-                      base::TimeTicks end_time,
-                      ExecutionContext* task_context,
-                      bool has_multiple_contexts) override;
 
   void BuildJSONValue(V8ObjectBuilder&) const override;
 
@@ -263,6 +262,7 @@ class CORE_EXPORT WindowPerformance final : public Performance,
   mutable Member<PerformanceNavigation> navigation_;
   mutable Member<PerformanceTiming> timing_;
   mutable Member<PerformanceTimingForReporting> timing_for_reporting_;
+  DOMHighResTimeStamp pending_pointer_down_start_time_;
   absl::optional<base::TimeDelta> pending_pointer_down_input_delay_;
   absl::optional<base::TimeDelta> pending_pointer_down_processing_time_;
   absl::optional<base::TimeDelta> pending_pointer_down_time_to_next_paint_;

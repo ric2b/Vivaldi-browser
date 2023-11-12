@@ -140,6 +140,7 @@ FeedStream::FeedStream(RefreshTaskScheduler* refresh_task_scheduler,
                        ImageFetcher* image_fetcher,
                        FeedStore* feed_store,
                        PersistentKeyValueStoreImpl* persistent_key_value_store,
+                       TemplateURLService* template_url_service,
                        const ChromeInfo& chrome_info)
     : refresh_task_scheduler_(refresh_task_scheduler),
       metrics_reporter_(metrics_reporter),
@@ -149,6 +150,7 @@ FeedStream::FeedStream(RefreshTaskScheduler* refresh_task_scheduler,
       image_fetcher_(image_fetcher),
       store_(feed_store),
       persistent_key_value_store_(persistent_key_value_store),
+      template_url_service_(template_url_service),
       chrome_info_(chrome_info),
       task_queue_(this),
       request_throttler_(profile_prefs),
@@ -205,6 +207,7 @@ const FeedStream::Stream* FeedStream::FindStream(
 }
 
 FeedStream::Stream& FeedStream::GetStream(const StreamType& stream_type) {
+  CHECK(stream_type.IsValid());
   auto iter = streams_.find(stream_type);
   if (iter != streams_.end())
     return iter->second;
@@ -332,14 +335,17 @@ void FeedStream::StreamLoadComplete(LoadStreamTask::Result result) {
     stream_metadata =
         feedstore::MetadataForStream(metadata, result.stream_type);
   }
-  const MetricsReporter::LoadStreamResultSummary result_summary = {
-      result.load_from_store_status,
-      result.final_status,
-      result.load_type == LoadType::kInitialLoad,
-      result.loaded_new_content_from_network,
-      result.stored_content_age,
-      GetContentOrder(result.stream_type),
-      stream_metadata};
+
+  MetricsReporter::LoadStreamResultSummary result_summary;
+  result_summary.load_from_store_status = result.load_from_store_status;
+  result_summary.final_status = result.final_status;
+  result_summary.is_initial_load = result.load_type == LoadType::kInitialLoad;
+  result_summary.loaded_new_content_from_network =
+      result.loaded_new_content_from_network;
+  result_summary.stored_content_age = result.stored_content_age;
+  result_summary.content_order = GetContentOrder(result.stream_type);
+  result_summary.stream_metadata = stream_metadata;
+
   metrics_reporter_->OnLoadStream(stream.type, result_summary, content_stats,
                                   std::move(result.latencies));
 
@@ -385,12 +391,16 @@ void FeedStream::StreamLoadComplete(LoadStreamTask::Result result) {
 void FeedStream::OnEnterBackground() {
   metrics_reporter_->OnEnterBackground();
   if (GetFeedConfig().upload_actions_on_enter_background) {
-    task_queue_.AddTask(FROM_HERE,
-                        std::make_unique<UploadActionsTask>(
-                            this,
-                            /*launch_reliability_logger=*/nullptr,
-                            base::BindOnce(&FeedStream::UploadActionsComplete,
-                                           base::Unretained(this))));
+    task_queue_.AddTask(
+        FROM_HERE,
+        std::make_unique<UploadActionsTask>(
+            // Pass empty list to read pending actions from the store.
+            std::vector<feedstore::StoredAction>(),
+            /*from_load_more=*/false,
+            // Pass unknown stream type to skip logging upload actions events.
+            StreamType(), this,
+            base::BindOnce(&FeedStream::UploadActionsComplete,
+                           base::Unretained(this))));
   }
 }
 
@@ -554,11 +564,13 @@ void FeedStream::EnabledPreferencesChanged() {
 
 void FeedStream::LoadMore(const FeedStreamSurface& surface,
                           base::OnceCallback<void(bool)> callback) {
-  Stream& stream = GetStream(surface.GetStreamType());
+  StreamType stream_type = surface.GetStreamType();
+  Stream& stream = GetStream(stream_type);
   if (!stream.model) {
     DLOG(ERROR) << "Ignoring LoadMore() before the model is loaded";
     return std::move(callback).Run(false);
   }
+
   // We want to abort early to avoid showing a loading spinner if it's not
   // necessary.
   if (ShouldMakeFeedQueryRequest(surface.GetStreamType(), LoadType::kLoadMore,
@@ -566,6 +578,8 @@ void FeedStream::LoadMore(const FeedStreamSurface& surface,
           .load_stream_status != LoadStreamStatus::kNoStatus) {
     return std::move(callback).Run(false);
   }
+
+  stream.surface_updater->launch_reliability_logger().LogLoadMoreStarted();
 
   metrics_reporter_->OnLoadMoreBegin(surface.GetStreamType(),
                                      surface.GetSurfaceId());
@@ -612,6 +626,12 @@ void FeedStream::ManualRefresh(const StreamType& stream_type,
   if (stream.model_loading_in_progress || stream.surfaces.empty()) {
     return std::move(callback).Run(false);
   }
+
+  // The user has manually refreshed. In this case we allow resetting
+  // the request throttler. Without this, it's likely the user will hit a
+  // request limit.
+  feed::prefs::SetThrottlerRequestCounts({}, *profile_prefs_);
+
   stream.model_loading_in_progress = true;
 
   stream.surface_updater->LoadStreamStarted(/*manual_refreshing=*/true);
@@ -729,6 +749,12 @@ bool FeedStream::WasUrlRecentlyNavigatedFromFeed(const GURL& url) {
 void FeedStream::InvalidateContentCacheFor(StreamKind stream_kind) {
   if (stream_kind != StreamKind::kUnknown)
     SetStreamStale(StreamType(stream_kind), true);
+}
+void FeedStream::RecordContentViewed(uint64_t docid) {
+  if (!store_) {
+    return;
+  }
+  WriteDocViewIfEnabled(*this, docid);
 }
 
 DebugStreamData FeedStream::GetDebugStreamData() {
@@ -972,12 +998,6 @@ LaunchResult FeedStream::ShouldMakeFeedQueryRequest(
           feedwire::DiscoverLaunchResult::CARDS_UNSPECIFIED};
 }
 
-bool FeedStream::ShouldForceSignedOutFeedQueryRequest(
-    const StreamType& stream_type) const {
-  return stream_type.IsForYou() &&
-         base::TimeTicks::Now() < signed_out_for_you_refreshes_until_;
-}
-
 feedwire::ChromeSignInStatus::SignInStatus FeedStream::GetSignInStatus() const {
   if (IsSyncOn()) {
     return feedwire::ChromeSignInStatus::SYNCED;
@@ -991,6 +1011,20 @@ feedwire::ChromeSignInStatus::SignInStatus FeedStream::GetSignInStatus() const {
   return feedwire::ChromeSignInStatus::NOT_SIGNED_IN;
 }
 
+feedwire::DefaultSearchEngine::SearchEngine FeedStream::GetDefaultSearchEngine()
+    const {
+  const TemplateURL* template_url =
+      template_url_service_->GetDefaultSearchProvider();
+  if (template_url) {
+    SearchEngineType engine_type =
+        template_url->GetEngineType(template_url_service_->search_terms_data());
+    if (engine_type == SEARCH_ENGINE_GOOGLE) {
+      return feedwire::DefaultSearchEngine::ENGINE_GOOGLE;
+    }
+  }
+  return feedwire::DefaultSearchEngine::ENGINE_OTHER;
+}
+
 RequestMetadata FeedStream::GetCommonRequestMetadata(
     bool signed_in_request,
     bool allow_expired_session_id) const {
@@ -1000,7 +1034,6 @@ RequestMetadata FeedStream::GetCommonRequestMetadata(
   result.language_tag = delegate_->GetLanguageTag();
   result.notice_card_acknowledged =
       privacy_notice_card_tracker_.HasAcknowledgedNoticeCard();
-  result.autoplay_enabled = delegate_->IsAutoplayEnabled();
   result.tab_group_enabled_state = delegate_->GetTabGroupEnabledState();
 
   if (signed_in_request) {
@@ -1042,9 +1075,8 @@ RequestMetadata FeedStream::GetRequestMetadata(const StreamType& stream_type,
     // The request is for the first page of the feed. Use client_instance_id
     // for signed in requests and session_id token (if any, and not expired)
     // for signed-out.
-    result = GetCommonRequestMetadata(
-        IsSignedIn() && !ShouldForceSignedOutFeedQueryRequest(stream_type),
-        /*allow_expired_session_id =*/false);
+    result = GetCommonRequestMetadata(IsSignedIn(),
+                                      /*allow_expired_session_id =*/false);
   }
 
   result.content_order = GetContentOrder(stream_type);
@@ -1058,6 +1090,8 @@ RequestMetadata FeedStream::GetRequestMetadata(const StreamType& stream_type,
   }
   // Set sign in status for request metadata
   result.sign_in_status = GetSignInStatus();
+
+  result.default_search_engine = GetDefaultSearchEngine();
 
   return result;
 }
@@ -1073,10 +1107,6 @@ void FeedStream::OnEulaAccepted() {
 }
 
 void FeedStream::OnAllHistoryDeleted() {
-  // Give sync the time to propagate the changes in history to the server.
-  // In the interim, only send signed-out FeedQuery requests.
-  signed_out_for_you_refreshes_until_ =
-      base::TimeTicks::Now() + kSuppressRefreshDuration;
   // We don't really need to delete StreamType(StreamKind::kFollowing) data
   // here, but clearing all data because it's easy.
   ClearAll();
@@ -1262,10 +1292,14 @@ void FeedStream::UploadAction(
     const LoggingParameters& logging_parameters,
     bool upload_now,
     base::OnceCallback<void(UploadActionsTask::Result)> callback) {
+  UploadActionsTask::WireAction wire_action(action, logging_parameters,
+                                            upload_now);
   task_queue_.AddTask(
-      FROM_HERE, std::make_unique<UploadActionsTask>(
-                     std::move(action), upload_now, logging_parameters, this,
-                     std::move(callback)));
+      FROM_HERE,
+      std::make_unique<UploadActionsTask>(
+          std::move(wire_action),
+          // Pass unknown string type to skip logging upload actions events.
+          StreamType(), this, std::move(callback)));
 }
 
 void FeedStream::LoadModel(const StreamType& stream_type,

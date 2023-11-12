@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/protocol/loopback_server.pb.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -38,7 +38,7 @@ std::unique_ptr<LoopbackServerEntity> PersistentNotesEntity::CreateNew(
   CHECK(IsNotes(client_entity)) << "The given entity must be a notes.";
 
   string id =
-      LoopbackServerEntity::CreateId(syncer::NOTES, base::GenerateGUID());
+      LoopbackServerEntity::CreateId(syncer::NOTES, base::Uuid::GenerateRandomV4().AsLowercaseString());
   string originator_cache_guid = client_guid;
   string originator_client_item_id = client_entity.id_string();
 

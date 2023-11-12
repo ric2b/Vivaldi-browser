@@ -30,6 +30,14 @@ namespace {
 constexpr char kOriginString[] = "https://origin.test/";
 constexpr char kNameString[] = "name";
 
+mojom::blink::InterestGroupAdPtr MakeAdWithUrl(const KURL& url) {
+  return mojom::blink::InterestGroupAd::New(
+      url, /*size_group=*/String(),
+      /*buyer_reporting_id=*/String(),
+      /*buyer_and_seler_reporting_id=*/String(),
+      /*metadata=*/String(), /*ad_render_id=*/String());
+}
+
 }  // namespace
 
 // Test fixture for testing both ValidateBlinkInterestGroup() and
@@ -123,6 +131,7 @@ class ValidateBlinkInterestGroupTest : public testing::Test {
         KURL(String::FromUTF8("https://origin.test/foo?bar#baz"));
     mojo_ad1->metadata =
         String::FromUTF8("\"This field isn't actually validated\"");
+    mojo_ad1->ad_render_id = String::FromUTF8("\"NotTooLong\"");
     blink_interest_group->ads->push_back(std::move(mojo_ad1));
     auto mojo_ad2 = mojom::blink::InterestGroupAd::New();
     mojo_ad2->render_url =
@@ -136,6 +145,7 @@ class ValidateBlinkInterestGroupTest : public testing::Test {
         KURL(String::FromUTF8("https://origin.test/components?bar#baz"));
     mojo_ad_component1->metadata =
         String::FromUTF8("\"This field isn't actually validated\"");
+    mojo_ad_component1->ad_render_id = String::FromUTF8("\"NotTooLong\"");
     blink_interest_group->ad_components->push_back(
         std::move(mojo_ad_component1));
     auto mojo_ad_component2 = mojom::blink::InterestGroupAd::New();
@@ -247,16 +257,16 @@ TEST_F(ValidateBlinkInterestGroupTest,
 TEST_F(ValidateBlinkInterestGroupTest, RejectedUrls) {
   // Strings when each field has a bad URL, copied from cc file.
   const char kBadBiddingUrlError[] =
-      "biddingUrl must have the same origin as the InterestGroup owner "
+      "biddingLogicURL must have the same origin as the InterestGroup owner "
       "and have no fragment identifier or embedded credentials.";
   const char kBadBiddingWasmHelperUrlError[] =
-      "biddingWasmHelperUrl must have the same origin as the InterestGroup "
+      "biddingWasmHelperURL must have the same origin as the InterestGroup "
       "owner and have no fragment identifier or embedded credentials.";
   const char kBadUpdateUrlError[] =
-      "updateUrl must have the same origin as the InterestGroup owner "
+      "updateURL must have the same origin as the InterestGroup owner "
       "and have no fragment identifier or embedded credentials.";
   const char kBadTrustedBiddingSignalsUrlError[] =
-      "trustedBiddingSignalsUrl must have the same origin as the "
+      "trustedBiddingSignalsURL must have the same origin as the "
       "InterestGroup owner and have no query string, fragment identifier "
       "or embedded credentials.";
 
@@ -305,7 +315,7 @@ TEST_F(ValidateBlinkInterestGroupTest, RejectedUrls) {
         CreateMinimalInterestGroup();
     blink_interest_group->bidding_url = rejected_url;
     ExpectInterestGroupIsNotValid(
-        blink_interest_group, /*expected_error_field_name=*/"biddingUrl",
+        blink_interest_group, /*expected_error_field_name=*/"biddingLogicURL",
         /*expected_error_field_value=*/rejected_url.GetString().Utf8(),
         /*expected_error=*/kBadBiddingUrlError);
 
@@ -314,7 +324,7 @@ TEST_F(ValidateBlinkInterestGroupTest, RejectedUrls) {
     blink_interest_group->bidding_wasm_helper_url = rejected_url;
     ExpectInterestGroupIsNotValid(
         blink_interest_group,
-        /*expected_error_field_name=*/"biddingWasmHelperUrl",
+        /*expected_error_field_name=*/"biddingWasmHelperURL",
         /*expected_error_field_value=*/rejected_url.GetString().Utf8(),
         /*expected_error=*/kBadBiddingWasmHelperUrlError);
 
@@ -322,7 +332,7 @@ TEST_F(ValidateBlinkInterestGroupTest, RejectedUrls) {
     blink_interest_group = CreateMinimalInterestGroup();
     blink_interest_group->update_url = rejected_url;
     ExpectInterestGroupIsNotValid(
-        blink_interest_group, /*expected_error_field_name=*/"updateUrl",
+        blink_interest_group, /*expected_error_field_name=*/"updateURL",
         /*expected_error_field_value=*/rejected_url.GetString().Utf8(),
         /*expected_error=*/kBadUpdateUrlError);
 
@@ -331,7 +341,7 @@ TEST_F(ValidateBlinkInterestGroupTest, RejectedUrls) {
     blink_interest_group->trusted_bidding_signals_url = rejected_url;
     ExpectInterestGroupIsNotValid(
         blink_interest_group,
-        /*expected_error_field_name=*/"trustedBiddingSignalsUrl",
+        /*expected_error_field_name=*/"trustedBiddingSignalsURL",
         /*expected_error_field_value=*/rejected_url.GetString().Utf8(),
         /*expected_error=*/kBadTrustedBiddingSignalsUrlError);
   }
@@ -343,7 +353,7 @@ TEST_F(ValidateBlinkInterestGroupTest, RejectedUrls) {
   blink_interest_group->trusted_bidding_signals_url = rejected_url;
   ExpectInterestGroupIsNotValid(
       blink_interest_group,
-      /*expected_error_field_name=*/"trustedBiddingSignalsUrl",
+      /*expected_error_field_name=*/"trustedBiddingSignalsURL",
       /*expected_error_field_value=*/rejected_url.GetString().Utf8(),
       /*expected_error=*/kBadTrustedBiddingSignalsUrlError);
 }
@@ -351,7 +361,7 @@ TEST_F(ValidateBlinkInterestGroupTest, RejectedUrls) {
 // Tests valid and invalid ad render URLs.
 TEST_F(ValidateBlinkInterestGroupTest, AdRenderUrlValidation) {
   const char kBadAdUrlError[] =
-      "renderUrls must be HTTPS and have no embedded credentials.";
+      "renderURLs must be HTTPS and have no embedded credentials.";
 
   const struct {
     bool expect_allowed;
@@ -391,14 +401,13 @@ TEST_F(ValidateBlinkInterestGroupTest, AdRenderUrlValidation) {
     mojom::blink::InterestGroupPtr blink_interest_group =
         CreateMinimalInterestGroup();
     blink_interest_group->ads.emplace();
-    blink_interest_group->ads->emplace_back(mojom::blink::InterestGroupAd::New(
-        test_case_url, /*size_group=*/String(), /*metadata=*/String()));
+    blink_interest_group->ads->emplace_back(MakeAdWithUrl(test_case_url));
     if (test_case.expect_allowed) {
       ExpectInterestGroupIsValid(blink_interest_group);
     } else {
       ExpectInterestGroupIsNotValid(
           blink_interest_group,
-          /*expected_error_field_name=*/"ads[0].renderUrl",
+          /*expected_error_field_name=*/"ads[0].renderURL",
           /*expected_error_field_value=*/test_case_url.GetString().Utf8(),
           /*expected_error=*/kBadAdUrlError);
     }
@@ -406,17 +415,15 @@ TEST_F(ValidateBlinkInterestGroupTest, AdRenderUrlValidation) {
     // Add an InterestGroup with the test cases's URL as the second ad's URL.
     blink_interest_group = CreateMinimalInterestGroup();
     blink_interest_group->ads.emplace();
-    blink_interest_group->ads->emplace_back(mojom::blink::InterestGroupAd::New(
-        KURL(String::FromUTF8("https://origin.test/")),
-        /*size_group=*/String(), /*metadata=*/String()));
-    blink_interest_group->ads->emplace_back(mojom::blink::InterestGroupAd::New(
-        test_case_url, /*size_group=*/String(), /*metadata=*/String()));
+    blink_interest_group->ads->emplace_back(
+        MakeAdWithUrl(KURL(String::FromUTF8("https://origin.test/"))));
+    blink_interest_group->ads->emplace_back(MakeAdWithUrl(test_case_url));
     if (test_case.expect_allowed) {
       ExpectInterestGroupIsValid(blink_interest_group);
     } else {
       ExpectInterestGroupIsNotValid(
           blink_interest_group,
-          /*expected_error_field_name=*/"ads[1].renderUrl",
+          /*expected_error_field_name=*/"ads[1].renderURL",
           /*expected_error_field_value=*/test_case_url.GetString().Utf8(),
           /*expected_error=*/kBadAdUrlError);
     }
@@ -426,7 +433,7 @@ TEST_F(ValidateBlinkInterestGroupTest, AdRenderUrlValidation) {
 // Tests valid and invalid ad render URLs.
 TEST_F(ValidateBlinkInterestGroupTest, AdComponentRenderUrlValidation) {
   const char kBadAdUrlError[] =
-      "renderUrls must be HTTPS and have no embedded credentials.";
+      "renderURLs must be HTTPS and have no embedded credentials.";
 
   const struct {
     bool expect_allowed;
@@ -468,15 +475,13 @@ TEST_F(ValidateBlinkInterestGroupTest, AdComponentRenderUrlValidation) {
         CreateMinimalInterestGroup();
     blink_interest_group->ad_components.emplace();
     blink_interest_group->ad_components->emplace_back(
-        mojom::blink::InterestGroupAd::New(test_case_url,
-                                           /*size_group=*/String(),
-                                           /*metadata=*/String()));
+        MakeAdWithUrl(test_case_url));
     if (test_case.expect_allowed) {
       ExpectInterestGroupIsValid(blink_interest_group);
     } else {
       ExpectInterestGroupIsNotValid(
           blink_interest_group,
-          /*expected_error_field_name=*/"adComponents[0].renderUrl",
+          /*expected_error_field_name=*/"adComponents[0].renderURL",
           /*expected_error_field_value=*/test_case_url.GetString().Utf8(),
           /*expected_error=*/kBadAdUrlError);
     }
@@ -486,19 +491,15 @@ TEST_F(ValidateBlinkInterestGroupTest, AdComponentRenderUrlValidation) {
     blink_interest_group = CreateMinimalInterestGroup();
     blink_interest_group->ad_components.emplace();
     blink_interest_group->ad_components->emplace_back(
-        mojom::blink::InterestGroupAd::New(
-            KURL(String::FromUTF8("https://origin.test/")),
-            /*size_group=*/String(), /*metadata=*/String()));
+        MakeAdWithUrl(KURL(String::FromUTF8("https://origin.test/"))));
     blink_interest_group->ad_components->emplace_back(
-        mojom::blink::InterestGroupAd::New(test_case_url,
-                                           /*size_group=*/String(),
-                                           /*metadata=*/String()));
+        MakeAdWithUrl(test_case_url));
     if (test_case.expect_allowed) {
       ExpectInterestGroupIsValid(blink_interest_group);
     } else {
       ExpectInterestGroupIsNotValid(
           blink_interest_group,
-          /*expected_error_field_name=*/"adComponents[1].renderUrl",
+          /*expected_error_field_name=*/"adComponents[1].renderURL",
           /*expected_error_field_value=*/test_case_url.GetString().Utf8(),
           /*expected_error=*/kBadAdUrlError);
     }
@@ -517,21 +518,19 @@ TEST_F(ValidateBlinkInterestGroupTest, MalformedUrl) {
 
   // First, check against mojom::blink::InterestGroup.
   constexpr char kBadAdUrlError[] =
-      "renderUrls must be HTTPS and have no embedded credentials.";
+      "renderURLs must be HTTPS and have no embedded credentials.";
   mojom::blink::InterestGroupPtr blink_interest_group =
       mojom::blink::InterestGroup::New();
   blink_interest_group->owner = kOrigin;
   blink_interest_group->name = kName;
   blink_interest_group->ads.emplace();
-  blink_interest_group->ads->emplace_back(mojom::blink::InterestGroupAd::New(
-      KURL(kMalformedUrl), /*size_group=*/String(),
-      /*metadata=*/String()));
+  blink_interest_group->ads->emplace_back(MakeAdWithUrl(KURL(kMalformedUrl)));
   String error_field_name;
   String error_field_value;
   String error;
   EXPECT_FALSE(ValidateBlinkInterestGroup(
       *blink_interest_group, error_field_name, error_field_value, error));
-  EXPECT_EQ(error_field_name, String::FromUTF8("ads[0].renderUrl"));
+  EXPECT_EQ(error_field_name, String::FromUTF8("ads[0].renderURL"));
   // The invalid ^ gets escaped.
   EXPECT_EQ(error_field_value, String::FromUTF8("https://invalid%5E/"));
   EXPECT_EQ(error, String::FromUTF8(kBadAdUrlError));
@@ -943,7 +942,9 @@ TEST_F(ValidateBlinkInterestGroupTest, AdSizeGroupEmptyNameOrNotInSizeGroups) {
     blink_interest_group->ads->emplace_back(mojom::blink::InterestGroupAd::New(
         KURL("https://origin.test/foo?bar"),
         /*size_group=*/test_case.ad_size_group,
-        /*metadata=*/String()));
+        /*buyer_reporting_id=*/String(),
+        /*buyer_and_seler_reporting_id=*/String(),
+        /*metadata=*/String(), /*ad_render_id=*/String()));
     blink_interest_group->ad_sizes.emplace();
     blink_interest_group->ad_sizes->insert(
         "size_name", blink::mojom::blink::AdSize::New(
@@ -981,7 +982,9 @@ TEST_F(ValidateBlinkInterestGroupTest,
         mojom::blink::InterestGroupAd::New(
             KURL("https://origin.test/foo?bar"),
             /*size_group=*/test_case.ad_component_size_group,
-            /*metadata=*/String()));
+            /*buyer_reporting_id=*/String(),
+            /*buyer_and_seler_reporting_id=*/String(),
+            /*metadata=*/String(), /*ad_render_id=*/String()));
     blink_interest_group->ad_sizes.emplace();
     blink_interest_group->ad_sizes->insert(
         "size_name", blink::mojom::blink::AdSize::New(
@@ -995,6 +998,37 @@ TEST_F(ValidateBlinkInterestGroupTest,
         /*expected_error_field_name=*/"adComponents[0].sizeGroup",
         test_case.expected_error_field_value, test_case.expected_error);
   }
+}
+
+TEST_F(ValidateBlinkInterestGroupTest, AdRenderIdTooLong) {
+  mojom::blink::InterestGroupPtr blink_interest_group =
+      CreateMinimalInterestGroup();
+  blink_interest_group->ads.emplace();
+  auto ad = mojom::blink::InterestGroupAd::New();
+  ad->render_url = KURL(String::FromUTF8("https://origin.test/foo?bar"));
+  ad->ad_render_id = String::FromUTF8("ThisIsTooLong");
+  blink_interest_group->ads->emplace_back(std::move(ad));
+  ExpectInterestGroupIsNotValid(
+      blink_interest_group, /*expected_error_field_name=*/"ads[0].adRenderId",
+      /*expected_error_field_value=*/"ThisIsTooLong",
+      /*expected_error=*/"The adRenderId is too long.");
+}
+
+TEST_F(ValidateBlinkInterestGroupTest, AdComponentRenderIdTooLong) {
+  mojom::blink::InterestGroupPtr blink_interest_group =
+      CreateMinimalInterestGroup();
+  blink_interest_group->ad_components.emplace();
+  auto mojo_ad_component = mojom::blink::InterestGroupAd::New();
+  mojo_ad_component->render_url =
+      KURL(String::FromUTF8("https://origin.test/foo?bar"));
+  mojo_ad_component->ad_render_id = String::FromUTF8("ThisIsTooLong");
+  blink_interest_group->ad_components->emplace_back(
+      std::move(mojo_ad_component));
+  ExpectInterestGroupIsNotValid(
+      blink_interest_group,
+      /*expected_error_field_name=*/"adComponents[0].adRenderId",
+      /*expected_error_field_value=*/"ThisIsTooLong",
+      /*expected_error=*/"The adRenderId is too long.");
 }
 
 }  // namespace blink

@@ -10,7 +10,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi

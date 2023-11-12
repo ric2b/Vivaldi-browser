@@ -294,6 +294,7 @@ void HistoryService::SetOnCloseContextAnnotationsForVisit(
 
 base::CancelableTaskTracker::TaskId HistoryService::GetAnnotatedVisits(
     const QueryOptions& options,
+    bool compute_redirect_chain_start_properties,
     GetAnnotatedVisitsCallback callback,
     base::CancelableTaskTracker* tracker) const {
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
@@ -301,7 +302,7 @@ base::CancelableTaskTracker::TaskId HistoryService::GetAnnotatedVisits(
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&HistoryBackend::GetAnnotatedVisits, history_backend_,
-                     options, nullptr),
+                     options, compute_redirect_chain_start_properties, nullptr),
       std::move(callback));
 }
 
@@ -1089,6 +1090,21 @@ void HistoryService::GetDomainDiversity(
       base::BindOnce(&HistoryBackend::GetDomainDiversity, history_backend_,
                      report_time, number_of_days_to_report,
                      metric_type_bitmask),
+      std::move(callback));
+}
+
+void HistoryService::GetUniqueDomainsVisited(
+    const base::Time begin_time,
+    const base::Time end_time,
+    GetUniqueDomainsVisitedCallback callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "History service being called after cleanup";
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  tracker->PostTaskAndReplyWithResult(
+      backend_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&HistoryBackend::GetUniqueDomainsVisited, history_backend_,
+                     begin_time, end_time),
       std::move(callback));
 }
 

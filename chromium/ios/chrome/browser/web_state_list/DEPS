@@ -1,7 +1,6 @@
-specific_include_rules = {
-  # TODO(crbug.com/1294160): Remove this dependency.
-  "^web_state_list_metrics_browser_agent.mm": [
-    "+ios/chrome/browser/ui/util/uikit_ui_util.h",
-  ],
-}
-
+include_rules = [
+  "+ios/chrome/browser/shared/ui/util",
+  "+ios/chrome/browser/sessions",
+  "+ios/chrome/browser/crash_report",
+  "+ios/chrome/browser/ntp/new_tab_page_tab_helper.h",
+]

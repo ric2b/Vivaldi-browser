@@ -16,6 +16,10 @@ namespace autofill {
 // The origin of an AutofillDataModel created or modified in the settings page.
 extern const char kSettingsOrigin[];
 
+// The maximum number of Autofill fill operations that Autofill is allowed to
+// store in history so that they can be undone later.
+constexpr size_t kMaxStorableFieldFillHistory = 400;
+
 // The number of fields required by Autofill to execute its heuristic and
 // crowd-sourcing query/upload routines.
 constexpr size_t kMinRequiredFieldsForHeuristics = 3;
@@ -26,17 +30,17 @@ constexpr size_t kMinRequiredFieldsForUpload = 1;
 // cache, simply to prevent unbounded memory consumption.
 constexpr size_t kAutofillManagerMaxFormCacheSize = 100;
 
-// The maximum number of form fields we are willing to parse, due to
+// The maximum number of form fields we are willing to extract, due to
 // computational costs. Several examples of forms with lots of fields that are
 // not relevant to Autofill: (1) the Netflix queue; (2) the Amazon wishlist;
 // (3) router configuration pages; and (4) other configuration pages, e.g. for
 // Google code project settings.
 // Copied to components/autofill/ios/form_util/resources/fill.js.
-constexpr size_t kMaxParseableFields = 200;
+constexpr size_t kMaxExtractableFields = 200;
 
-// The maximum number of form fields we are willing to parse, due to
+// The maximum number of form fields we are willing to extract, due to
 // computational costs.
-constexpr size_t kMaxParseableChildFrames = 20;
+constexpr size_t kMaxExtractableChildFrames = 20;
 
 // The maximum string length supported by Autofill. In particular, this is used
 // for the length of field values.
@@ -55,7 +59,7 @@ constexpr size_t kMaxListSize = 512;
 // AutofillProfile::GetMatchingTypeAndValidities().
 // If #fields * (#profiles + #credit-cards) exceeds this number, type matching
 // and voting is omitted.
-// The rationale is that for a form with |kMaxParseableFields| = 200 fields,
+// The rationale is that for a form with |kMaxExtractableFields| = 200 fields,
 // this still allows for 25 profiles plus credit cars.
 constexpr size_t kMaxTypeMatchingCalls = 5000;
 
@@ -95,7 +99,7 @@ constexpr base::TimeDelta kAutocompleteRetentionPolicyPeriod =
 // form.
 // Credit card numbers are sometimes distributed between up to 19 individual
 // fields. Therefore, credit cards need a higher limit.
-// State fields are effecectively unlimited because there are sometimes hidden
+// State fields are effectively unlimited because there are sometimes hidden
 // fields select boxes, each with a list of states for one specific countries,
 // which are displayed only upon country selection.
 constexpr size_t kTypeValueFormFillingLimit = 9;

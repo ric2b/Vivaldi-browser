@@ -34,7 +34,8 @@ class COMPONENT_EXPORT(AX_PLATFORM) __declspec(uuid(
   // Creates an instance of the class.
   static ITextRangeProvider* CreateTextRangeProvider(
       AXNodePosition::AXPositionInstance start,
-      AXNodePosition::AXPositionInstance end);
+      AXNodePosition::AXPositionInstance end,
+      bool add_ref = true);
 
   // Creates an instance of the class for unit tests, where AXPlatformNodes
   // cannot be queried automatically from endpoints.
@@ -194,6 +195,8 @@ class COMPONENT_EXPORT(AX_PLATFORM) __declspec(uuid(
 
   void SetStart(AXPositionInstance start);
   void SetEnd(AXPositionInstance end);
+
+  void SnapStartAndEndToMaxTextOffsetIfBeyond();
 
   static bool TextAttributeIsArrayType(TEXTATTRIBUTEID attribute_id);
   static bool TextAttributeIsUiaReservedValue(

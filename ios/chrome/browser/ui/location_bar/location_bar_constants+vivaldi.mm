@@ -34,3 +34,8 @@ const CGFloat vBadgeViewBottomPaddingFSDisabled = -11.f;
 const CGSize vBadgeViewSizeFSEnabled = CGSizeMake(12.f, 12.f);
 // Top padding for the location bar on new tab page desktop style tab.
 const CGFloat vLocationBarTopPaddingDesktopTab = 6.f;
+// Space between the location icon and the location label.
+const CGFloat vLocationBarSteadyViewLocationImageToLabelSpacing = -6;
+// Trailing space between the trailing button and the trailing edge of the
+// location bar.
+const CGFloat vLocationBarSteadyViewShareButtonTrailingSpacing = -8;

@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/base64.h"
-#include "base/guid.h"
 #include "base/i18n/string_search.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"

@@ -42,8 +42,6 @@ class PageInfoMainView : public views::View,
                          public PermissionToggleRowViewObserver,
                          public ChosenObjectViewObserver {
  public:
-  // The width of the column size for permissions and chosen object icons.
-  static constexpr int kIconColumnWidth = 16;
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kCookieButtonElementId);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kMainLayoutElementId);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kPermissionsElementId);
@@ -182,7 +180,7 @@ class PageInfoMainView : public views::View,
 
   raw_ptr<views::View> security_container_view_ = nullptr;
 
-  raw_ptr<views::LabelButton> reset_button_ = nullptr;
+  raw_ptr<views::LabelButton, DanglingUntriaged> reset_button_ = nullptr;
 
   base::WeakPtrFactory<PageInfoMainView> weak_factory_{this};
 };

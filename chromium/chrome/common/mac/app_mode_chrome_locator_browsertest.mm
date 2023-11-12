@@ -14,6 +14,10 @@
 #include "components/version_info/version_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 
 // This needs to be a browser test because it expects to find a Chrome.app
@@ -68,8 +72,8 @@ TEST(ChromeLocatorTest, GetChromeBundleInfoWithLatestVersion) {
   base::FilePath framework_path;
   base::FilePath framework_dylib_path;
   EXPECT_TRUE(app_mode::GetChromeBundleInfo(
-      chrome_bundle_path, version_info::GetVersionNumber(), &executable_path,
-      &framework_path, &framework_dylib_path));
+      chrome_bundle_path, std::string(version_info::GetVersionNumber()),
+      &executable_path, &framework_path, &framework_dylib_path));
   EXPECT_TRUE(base::PathExists(executable_path));
   EXPECT_TRUE(base::DirectoryExists(framework_path));
   EXPECT_TRUE(base::PathExists(framework_dylib_path));

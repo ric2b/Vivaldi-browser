@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/time/time.h"
 #include "content/public/browser/notification_observer.h"
@@ -30,15 +30,15 @@ class NoteNode : public ui::TreeNode<NoteNode> {
  public:
   enum Type { NOTE, FOLDER, MAIN, OTHER, TRASH, SEPARATOR, ATTACHMENT };
 
-  static const char kRootNodeGuid[];
-  static const char kMainNodeGuid[];
-  static const char kOtherNotesNodeGuid[];
-  static const char kTrashNodeGuid[];
+  static const char kRootNodeUuid[];
+  static const char kMainNodeUuid[];
+  static const char kOtherNotesNodeUuid[];
+  static const char kTrashNodeUuid[];
 
-  // A bug in sync caused some problematic GUIDs to be produced.
-  static const char kBannedGuidDueToPastSyncBug[];
+  // A bug in sync caused some problematic UUIDs to be produced.
+  static const char kBannedUuidDueToPastSyncBug[];
 
-  NoteNode(int64_t id, const base::GUID& guid, Type type);
+  NoteNode(int64_t id, const base::Uuid& uuid, Type type);
   ~NoteNode() override;
 
   // Returns true if the node is a NotePermanentNode (which does not include
@@ -60,11 +60,11 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   int64_t id() const { return id_; }
   void set_id(int64_t id) { id_ = id; }
 
-  // Returns this node's GUID, which is guaranteed to be valid.
-  // For note nodes that are managed by the notes model, the GUIDs are
+  // Returns this node's UUID, which is guaranteed to be valid.
+  // For note nodes that are managed by the notes model, the UUIDs are
   // persisted across sessions and stable throughout the lifetime of the
   // note.
-  const base::GUID& guid() const { return guid_; }
+  const base::Uuid& uuid() const { return uuid_; }
 
   // Get the creation time for the node.
   base::Time GetCreationTime() const { return creation_time_; }
@@ -87,7 +87,7 @@ class NoteNode : public ui::TreeNode<NoteNode> {
 
  protected:
   NoteNode(int64_t id,
-           const base::GUID& guid,
+           const base::Uuid& uuid,
            Type type,
            bool is_permanent_node);
   NoteNode(const NoteNode&) = delete;
@@ -107,10 +107,10 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   // List of attached data. Deprecated. Only used for migration.
   DeprecatedNoteAttachments deprecated_attachments_;
 
-  // The GUID for this node. A NoteNode GUID is immutable and differs from
+  // The UUID for this node. A NoteNode UUID is immutable and differs from
   // the |id_| in that it is consistent across different clients and
   // stable throughout the lifetime of the bookmark.
-  const base::GUID guid_;
+  const base::Uuid uuid_;
 
   // The unique identifier for this node.
   int64_t id_;
@@ -135,7 +135,7 @@ class PermanentNoteNode : public NoteNode {
   // other than the well-known ones, see factory methods.
   PermanentNoteNode(int64_t id,
                     Type type,
-                    const base::GUID& guid,
+                    const base::Uuid& uuid,
                     const std::u16string& title);
   PermanentNoteNode(const PermanentNoteNode&) = delete;
   PermanentNoteNode& operator=(const PermanentNoteNode&) = delete;

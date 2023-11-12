@@ -5,12 +5,12 @@
 #include "components/autofill/core/browser/form_structure.h"
 
 #include <stdint.h>
-#include <utility>
 
 #include <algorithm>
 #include <deque>
 #include <map>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -376,12 +376,13 @@ void FormStructure::DetermineHeuristicTypes(
   UpdateAutofillCount();
   IdentifySections(/*ignore_autocomplete=*/false);
 
-  FormStructureRationalizer rationalizer(&fields_, form_signature_);
+  FormStructureRationalizer rationalizer(&fields_);
+  rationalizer.RationalizeAutocompleteAttributes(log_manager);
   if (base::FeatureList::IsEnabled(features::kAutofillPageLanguageDetection)) {
-    rationalizer.RationalizeRepeatedFields(form_interactions_ukm_logger,
-                                           log_manager);
+    rationalizer.RationalizeRepeatedFields(
+        form_signature_, form_interactions_ukm_logger, log_manager);
   }
-  rationalizer.RationalizeFieldTypePredictions(log_manager);
+  rationalizer.RationalizeFieldTypePredictions(main_frame_origin_, log_manager);
 
   // Log the field type predicted by rationalization.
   // The sections are mapped to consecutive natural numbers starting at 1.
@@ -414,7 +415,7 @@ std::vector<AutofillUploadContents> FormStructure::EncodeUploadRequest(
   AutofillUploadContents upload;
   upload.set_submission(observed_submission);
   upload.set_client_version(
-      version_info::GetProductNameAndVersionForUserAgent());
+      std::string(version_info::GetProductNameAndVersionForUserAgent()));
   upload.set_form_signature(form_signature().value());
   upload.set_autofill_used(form_was_autofilled);
   upload.set_data_present(data_present);
@@ -500,7 +501,7 @@ std::vector<AutofillUploadContents> FormStructure::EncodeUploadRequest(
        base::flat_map<FormGlobalId, FormSignature>(std::move(subforms))) {
     uploads.emplace_back();
     uploads.back().set_client_version(
-        version_info::GetProductNameAndVersionForUserAgent());
+        std::string(version_info::GetProductNameAndVersionForUserAgent()));
     uploads.back().set_form_signature(subform_signature.value());
     uploads.back().set_autofill_used(form_was_autofilled);
     uploads.back().set_data_present(data_present);
@@ -521,7 +522,7 @@ bool FormStructure::EncodeQueryRequest(
   queried_form_signatures->reserve(forms.size());
 
   query->set_client_version(
-      version_info::GetProductNameAndVersionForUserAgent());
+      std::string(version_info::GetProductNameAndVersionForUserAgent()));
 
   // If a page contains repeated forms, detect that and encode only one form as
   // the returned data would be the same for all the repeated forms.
@@ -638,8 +639,7 @@ void FormStructure::ProcessQueryResponse(
       };
       if (field->host_form_signature &&
           field->host_form_signature != form->form_signature() &&
-          !is_override(current_field) &&
-          base::FeatureList::IsEnabled(features::kAutofillAcrossIframes)) {
+          !is_override(current_field)) {
         // Retrieves the alternative prediction even if it is not used so that
         // the alternative predictions are popped.
         absl::optional<FieldSuggestion> alternative_field = GetPrediction(
@@ -698,11 +698,12 @@ void FormStructure::ProcessQueryResponse(
         &AutofillField::server_type));
 
     form->UpdateAutofillCount();
-    FormStructureRationalizer rationalizer(&(form->fields_),
-                                           form->form_signature_);
-    rationalizer.RationalizeRepeatedFields(form_interactions_ukm_logger,
-                                           log_manager);
-    rationalizer.RationalizeFieldTypePredictions(log_manager);
+    FormStructureRationalizer rationalizer(&form->fields_);
+    rationalizer.RationalizeAutocompleteAttributes(log_manager);
+    rationalizer.RationalizeRepeatedFields(
+        form->form_signature_, form_interactions_ukm_logger, log_manager);
+    rationalizer.RationalizeFieldTypePredictions(form->main_frame_origin_,
+                                                 log_manager);
     // TODO(crbug.com/1154080): By calling this with true, autocomplete section
     // attributes will be ignored.
     form->IdentifySections(/*ignore_autocomplete=*/true);
@@ -876,7 +877,7 @@ bool FormStructure::ShouldBeParsed(ShouldBeParsedParams params,
   }
 
   bool has_text_field = base::ranges::any_of(*this, [](const auto& field) {
-    return field->form_control_type != "select-one";
+    return !field->IsSelectOrSelectMenuElement();
   });
   if (!has_text_field) {
     LOG_AF(log_manager) << LoggingScope::kAbortParsing
@@ -957,7 +958,7 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
         // During form parsing (as in "assigning field types to fields")
         // the `value` represents the initial value found at page load and needs
         // to be preserved.
-        if (field->form_control_type != "select-one") {
+        if (!field->IsSelectOrSelectMenuElement()) {
           field->value = cached_field->value;
           value_from_dynamic_change_form_ = true;
         }
@@ -974,7 +975,7 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
         const bool field_is_neither_state_nor_country =
             field->server_type() != ADDRESS_HOME_COUNTRY &&
             field->server_type() != ADDRESS_HOME_STATE;
-        if (field->form_control_type != "select-one" &&
+        if (!field->IsSelectOrSelectMenuElement() &&
             same_value_as_on_page_load && field_is_neither_state_nor_country) {
           field->value = std::u16string();
         }
@@ -1243,13 +1244,11 @@ void FormStructure::EncodeFormForQuery(
 
   AddFormIf(form_signature(), [](auto& f) { return true; });
 
-  if (base::FeatureList::IsEnabled(features::kAutofillAcrossIframes)) {
-    for (const auto& field : fields_) {
-      if (field->host_form_signature) {
-        AddFormIf(field->host_form_signature, [&](const auto& f) {
-          return f->host_form_signature == field->host_form_signature;
-        });
-      }
+  for (const auto& field : fields_) {
+    if (field->host_form_signature) {
+      AddFormIf(field->host_form_signature, [&](const auto& f) {
+        return f->host_form_signature == field->host_form_signature;
+      });
     }
   }
 }
@@ -1704,7 +1703,7 @@ void FormStructure::set_randomized_encoder(
 void FormStructure::RationalizePhoneNumbersInSection(const Section& section) {
   if (base::Contains(phone_rationalized_, section))
     return;
-  FormStructureRationalizer rationalizer(&fields_, form_signature_);
+  FormStructureRationalizer rationalizer(&fields_);
   rationalizer.RationalizePhoneNumbersInSection(section);
   phone_rationalized_.insert(section);
 }

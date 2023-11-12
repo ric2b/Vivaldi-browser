@@ -35,10 +35,12 @@ enum TestSyncServiceState {
   SYNC_FEATURE_NOT_ENABLED,
   SYNC_FEATURE_ENABLED,
   SYNC_FEATURE_ENABLED_BUT_PAUSED,
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Represents the user clearing sync data via dashboard. On all platforms
   // except ChromeOS (Ash), this clears the primary account (which is basically
   // SYNC_FEATURE_NOT_ENABLED). On ChromeOS Ash, Sync enters a special state.
   SYNC_FEATURE_DISABLED_ON_CHROMEOS_ASH_VIA_DASHBOARD,
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 };
 
 // Profile client for testing that gets fake Profile information and services.
@@ -64,7 +66,7 @@ class TestProfileClient : public DemographicMetricsProvider::ProfileClient {
         // Set an arbitrary disable reason to mimic sync feature being unable to
         // start.
         sync_service_->SetDisableReasons(
-            syncer::SyncService::DISABLE_REASON_UNRECOVERABLE_ERROR);
+            {syncer::SyncService::DISABLE_REASON_UNRECOVERABLE_ERROR});
         break;
 
       case SYNC_FEATURE_ENABLED:
@@ -86,19 +88,21 @@ class TestProfileClient : public DemographicMetricsProvider::ProfileClient {
                  sync_service_->GetTransportState());
         break;
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       case SYNC_FEATURE_DISABLED_ON_CHROMEOS_ASH_VIA_DASHBOARD:
         sync_service_ = std::make_unique<syncer::TestSyncService>();
-        sync_service_->SetDisableReasons(syncer::SyncService::DisableReasonSet(
-            syncer::SyncService::DISABLE_REASON_USER_CHOICE));
+        sync_service_->SetSyncFeatureDisabledViaDashboard(true);
 
-        // On ChromeOS Ash, IsFirstSetupComplete gets cleared temporarily but
-        // immediately afterwards, it gets set again with
+        // On ChromeOS Ash, IsInitialSyncFeatureSetupComplete gets cleared
+        // temporarily but immediately afterwards, it gets set again with
         // ENGINE_INITIALIZED_WITH_AUTO_START. And yet, IsSyncFeatureEnabled()
         // stays false because the user needs to manually resume sync the
         // feature.
-        CHECK(sync_service_->GetUserSettings()->IsFirstSetupComplete());
+        CHECK(sync_service_->GetUserSettings()
+                  ->IsInitialSyncFeatureSetupComplete());
         CHECK(!sync_service_->IsSyncFeatureEnabled());
         break;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     }
   }
 
@@ -205,6 +209,7 @@ TEST(DemographicMetricsProviderTest,
                                UserDemographicsStatus::kSyncNotEnabled, 1);
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST(
     DemographicMetricsProviderTest,
     ProvideSyncedUserNoisedBirthYearAndGender_SyncFeatureDisabledOnChromeOsAshViaSyncDashboard) {
@@ -228,6 +233,7 @@ TEST(
   histogram.ExpectUniqueSample("UMA.UserDemographics.Status",
                                UserDemographicsStatus::kSyncNotEnabled, 1);
 }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 TEST(DemographicMetricsProviderTest,
      ProvideSyncedUserNoisedBirthYearAndGender_SyncNotEnabled) {

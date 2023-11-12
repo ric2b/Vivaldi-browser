@@ -10,6 +10,7 @@
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
+#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 
 namespace ash {
 
@@ -24,9 +25,10 @@ SigninErrorNotifierFactory::SigninErrorNotifierFactory()
               .Build()) {
   DependsOn(SigninErrorControllerFactory::GetInstance());
   DependsOn(NotificationDisplayServiceFactory::GetInstance());
+  DependsOn(SupervisedUserServiceFactory::GetInstance());
 }
 
-SigninErrorNotifierFactory::~SigninErrorNotifierFactory() {}
+SigninErrorNotifierFactory::~SigninErrorNotifierFactory() = default;
 
 // static
 SigninErrorNotifier* SigninErrorNotifierFactory::GetForProfile(
@@ -37,7 +39,8 @@ SigninErrorNotifier* SigninErrorNotifierFactory::GetForProfile(
 
 // static
 SigninErrorNotifierFactory* SigninErrorNotifierFactory::GetInstance() {
-  return base::Singleton<SigninErrorNotifierFactory>::get();
+  static base::NoDestructor<SigninErrorNotifierFactory> instance;
+  return instance.get();
 }
 
 KeyedService* SigninErrorNotifierFactory::BuildServiceInstanceFor(

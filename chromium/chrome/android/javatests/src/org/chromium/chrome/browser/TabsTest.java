@@ -20,11 +20,11 @@ import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.View;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.espresso.Espresso;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -124,9 +124,6 @@ public class TabsTest {
     private float mTabsViewWidthDp;
 
     private boolean mNotifyChangedCalled;
-
-    private static final int SWIPE_TO_RIGHT_DIRECTION = 1;
-    private static final int SWIPE_TO_LEFT_DIRECTION = -1;
 
     private static final long WAIT_RESIZE_TIMEOUT_MS = 3000;
 

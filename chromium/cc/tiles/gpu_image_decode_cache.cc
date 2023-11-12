@@ -41,7 +41,6 @@
 #include "cc/tiles/raster_dark_mode_filter.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "gpu/command_buffer/client/context_support.h"
-#include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/config/gpu_finch_features.h"
@@ -76,6 +75,13 @@ BASE_FEATURE(kPurgeOldCacheEntriesOnTimer,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 namespace {
+
+constexpr base::FeatureParam<int> kPurgeInterval{&kPurgeOldCacheEntriesOnTimer,
+                                                 "seconds", 30};
+
+constexpr base::FeatureParam<int> kPurgeMaxAge{&kPurgeOldCacheEntriesOnTimer,
+                                               "seconds", 30};
+
 // The number or entries to keep in the cache, depending on the memory state of
 // the system. This limit can be breached by in-use cache items, which cannot
 // be deleted.
@@ -1218,6 +1224,10 @@ GpuImageDecodeCache::GpuImageDecodeCache(
       max_working_set_bytes_(max_working_set_bytes),
       max_working_set_items_(kMaxItemsInWorkingSet),
       dark_mode_filter_(dark_mode_filter) {
+  if (base::SequencedTaskRunner::HasCurrentDefault()) {
+    task_runner_ = base::SequencedTaskRunner::GetCurrentDefault();
+  }
+
   DCHECK_NE(generator_client_id_, PaintImage::kDefaultGeneratorClientId);
   // Note that to compute |allow_accelerated_jpeg_decodes_| and
   // |allow_accelerated_webp_decodes_|, the last thing we check is the feature
@@ -1233,10 +1243,6 @@ GpuImageDecodeCache::GpuImageDecodeCache(
       use_transfer_cache &&
       context_->ContextSupport()->IsWebPDecodeAccelerationSupported() &&
       base::FeatureList::IsEnabled(features::kVaapiWebPImageDecodeAcceleration);
-
-  // The timer needs to run its task on the same thread that it is destroyed on,
-  // so we explicitly set the TaskRunner here.
-  timer_.SetTaskRunner(base::SequencedTaskRunner::GetCurrentDefault());
 
   {
     // TODO(crbug.com/1110007): We shouldn't need to lock to get capabilities.
@@ -1512,7 +1518,7 @@ DecodedDrawImage GpuImageDecodeCache::GetDecodedImageForDraw(
   // in DrawWithImageFinished.
   UnrefImageDecode(draw_image, cache_key);
 
-  sk_sp<SkColorFilter> dark_mode_color_filter = nullptr;
+  sk_sp<ColorFilter> dark_mode_color_filter = nullptr;
   if (draw_image.use_dark_mode()) {
     auto it = image_data->decode.dark_mode_color_filter_cache.find(
         draw_image.src_rect());
@@ -1729,7 +1735,9 @@ void GpuImageDecodeCache::MaybePurgeOldCacheEntries() {
 
 void GpuImageDecodeCache::PurgeOldCacheEntriesCallback() {
   base::AutoLock locker(lock_);
-  DoPurgeOldCacheEntries(kPurgeMaxAge);
+  DoPurgeOldCacheEntries(get_max_purge_age());
+
+  has_pending_purge_task_ = false;
 
   // If the cache is empty, we stop posting the task, to avoid endless wakeups.
   if (persistent_cache_.empty()) {
@@ -1744,14 +1752,14 @@ void GpuImageDecodeCache::PostPurgeOldCacheEntriesTask() {
     return;
   }
 
-  // |base::Unretained(this)| is fine in this case, since |timer_| is a member
-  // of |this|, (so destroying |this| will also destroy |timer_| and cancel the
-  // task), and the task will be run on the same thread that |this| is destroyed
-  // on.
-  timer_.Start(
-      FROM_HERE, GpuImageDecodeCache::kPurgeInterval,
-      base::BindOnce(&GpuImageDecodeCache::PurgeOldCacheEntriesCallback,
-                     base::Unretained(this)));
+  if (task_runner_) {
+    task_runner_->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&GpuImageDecodeCache::PurgeOldCacheEntriesCallback,
+                       weak_ptr_factory_.GetWeakPtr()),
+        get_purge_interval());
+    has_pending_purge_task_ = true;
+  }
 }
 
 size_t GpuImageDecodeCache::GetMaximumMemoryLimitBytes() const {
@@ -3188,7 +3196,7 @@ std::tuple<SkImageInfo, int> GpuImageDecodeCache::CreateImageInfoForDrawImage(
     const DrawImage& draw_image,
     AuxImage aux_image) const {
   const int upload_scale_mip_level =
-      CalculateUploadScaleMipLevel(draw_image, AuxImage::kDefault);
+      CalculateUploadScaleMipLevel(draw_image, aux_image);
   gfx::Size mip_size =
       CalculateSizeForMipLevel(draw_image, aux_image, upload_scale_mip_level);
 
@@ -3703,6 +3711,14 @@ scoped_refptr<TileTask> GpuImageDecodeCache::GetTaskFromMapForClientId(
   if (task_it != task_map.end())
     return task_it->second;
   return nullptr;
+}
+
+base::TimeDelta GpuImageDecodeCache::get_purge_interval() {
+  return base::Seconds(kPurgeInterval.Get());
+}
+
+base::TimeDelta GpuImageDecodeCache::get_max_purge_age() {
+  return base::Seconds(kPurgeMaxAge.Get());
 }
 
 }  // namespace cc

@@ -37,8 +37,6 @@ import org.vivaldi.browser.common.VivaldiUrlConstants;
  */
 @JNINamespace("embedder_support")
 public class UrlUtilities {
-    private static final String TAG = "UrlUtilities";
-
     /** Regular expression for prefixes to strip from publisher hostnames. */
     private static final Pattern HOSTNAME_PREFIX_PATTERN =
             Pattern.compile("^(www[0-9]*|web|ftp|wap|home|mobile|amp)\\.");

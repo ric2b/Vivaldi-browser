@@ -36,12 +36,33 @@ constexpr int kDeskBarDeskPreviewViewFocusRingThicknessAndPadding = 4;
 
 // The minimum horizontal padding of the scroll view. This is set to make sure
 // there is enough space for the scroll buttons.
-constexpr int kDeskBarScrollViewMinimumHorizontalPadding = 32;
+constexpr int kDeskBarScrollViewMinimumHorizontalPaddingOverview = 32;
+constexpr int kDeskBarScrollViewMinimumHorizontalPaddingDeskButton = 16;
+
+// The corner radius of the desk bar.
+constexpr float kDeskBarCornerRadiusOverview = 0.f;
+constexpr float kDeskBarCornerRadiusOverviewDeskButton = 16.f;
 
 constexpr int kDeskBarScrollButtonWidth = 36;
 
 // The duration of scrolling one page.
 constexpr base::TimeDelta kDeskBarScrollDuration = base::Milliseconds(250);
+
+constexpr int kDeskBarMiniViewsY = 16;
+
+// Spacing between mini views.
+constexpr int kDeskBarMiniViewsSpacing = 12;
+
+// Spacing between zero state default desk button and new desk button.
+constexpr int kDeskBarZeroStateButtonSpacing = 8;
+
+// The local Y coordinate of the zero state desk buttons.
+constexpr int kDeskBarZeroStateY = 6;
+
+constexpr int kDeskBarDeskIconButtonAndLabelSpacing = 8;
+
+// For desk button desk bar, the spacing between shelf and desk bar.
+constexpr int kDeskBarShelfAndBarSpacing = 8;
 
 }  // namespace ash
 

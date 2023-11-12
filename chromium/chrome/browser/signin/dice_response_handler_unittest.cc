@@ -22,6 +22,7 @@
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/public/base/signin_buildflags.h"
+#include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/test_signin_client.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
@@ -32,6 +33,7 @@
 
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 #include "chrome/browser/signin/bound_session_credentials/registration_token_helper.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/unexportable_keys/fake_unexportable_key_service.h"
 #include "components/unexportable_keys/unexportable_key_id.h"
 #include "components/unexportable_keys/unexportable_key_service.h"
@@ -254,6 +256,8 @@ class DiceResponseHandlerTest : public testing::Test,
   GoogleServiceAuthError auth_error_;
   std::string auth_error_email_;
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+  base::test::ScopedFeatureList feature_list_{
+      switches::kEnableBoundSessionCrendentials};
   StrictMock<
       base::MockCallback<DiceResponseHandler::RegistrationTokenHelperFactory>>
       mock_registration_token_helper_factory_;
@@ -284,6 +288,10 @@ class TestProcessDiceHeaderDelegate : public ProcessDiceHeaderDelegate {
       const std::string& email,
       const GoogleServiceAuthError& error) override {
     owner_->HandleTokenExchangeFailure(email, error);
+  }
+
+  signin_metrics::AccessPoint GetAccessPoint() override {
+    return signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS;
   }
 
  private:
@@ -319,9 +327,12 @@ TEST_F(DiceResponseHandlerTest, Signin) {
   EXPECT_EQ(1, reconcilor_blocked_count_);
   EXPECT_EQ(1, reconcilor_unblocked_count_);
   // Check that the AccountInfo::is_under_advanced_protection is set.
-  EXPECT_TRUE(identity_manager()
-                  ->FindExtendedAccountInfoByAccountId(account_id)
-                  .is_under_advanced_protection);
+  AccountInfo extended_account_info =
+      identity_manager()->FindExtendedAccountInfoByAccountId(account_id);
+  EXPECT_TRUE(extended_account_info.is_under_advanced_protection);
+  // Check that the AccessPoint was propagated from the delegate.
+  EXPECT_EQ(extended_account_info.access_point,
+            signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
 }
 
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
@@ -339,9 +350,9 @@ TEST_F(DiceResponseHandlerTest, SigninWithBoundToken) {
   // Token fetch should be blocked on the binding registration token generation.
   ASSERT_THAT(signin_client_.GetAndClearConsumer(), testing::IsNull());
   // Simulate successful token generation.
-  SimulateRegistrationTokenHelperResult(RegistrationTokenHelper::Result{
-      .binding_key_id = unexportable_keys::UnexportableKeyId(),
-      .registration_token = "test_registration_token"});
+  SimulateRegistrationTokenHelperResult(RegistrationTokenHelper::Result(
+      unexportable_keys::UnexportableKeyId(), std::vector<uint8_t>{1, 2, 3},
+      "test_registration_token"));
 
   // Check that a GaiaAuthFetcher has been created.
   GaiaAuthConsumer* consumer = signin_client_.GetAndClearConsumer();

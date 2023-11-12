@@ -54,9 +54,6 @@ export class Options implements CameraUI {
    */
   private audioTrack: MediaStreamTrack|null = null;
 
-  /**
-   * @param cameraManager Camera manager instance.
-   */
   constructor(private readonly cameraManager: CameraManager) {
     this.cameraManager.registerCameraUI(this);
     this.switchDeviceButton.addEventListener('click', async () => {
@@ -86,7 +83,7 @@ export class Options implements CameraUI {
       element: HTMLElement, titleLabel: I18nString,
       stateOptions: StateOption[]) {
     element.setAttribute('i18n-label', titleLabel);
-    for (const {ariaLabel, state: targetState, isDisableOption} of
+    for (const {ariaLabel, state: targetState, isDisableOption = false} of
              stateOptions) {
       const stateEnabled = state.get(targetState);
       if ((stateEnabled && !isDisableOption) ||
@@ -309,7 +306,7 @@ export class Options implements CameraUI {
    * option.
    */
   private updateAudioByMic() {
-    if (this.audioTrack) {
+    if (this.audioTrack !== null) {
       this.audioTrack.enabled = state.get(state.State.MIC);
     }
   }

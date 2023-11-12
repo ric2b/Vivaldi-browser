@@ -58,6 +58,9 @@ int GetAddESimTooltipMessageId() {
       return IDS_ASH_STATUS_TRAY_INHIBITED_CELLULAR_RESETTING_ESIM;
     case chromeos::network_config::mojom::InhibitReason::kDisablingProfile:
       return IDS_ASH_STATUS_TRAY_INHIBITED_CELLULAR_DISABLING_PROFILE;
+    case chromeos::network_config::mojom::InhibitReason::
+        kRequestingAvailableProfiles:
+      return IDS_ASH_STATUS_TRAY_INHIBITED_CELLULAR_REQUESTING_AVAILABLE_PROFILES;
   }
 }
 
@@ -93,6 +96,21 @@ void NetworkListMobileHeaderViewImpl::AddExtraButtons() {
     container()->AddViewAt(TriView::Container::END, add_esim_button.release(),
                            /*index=*/0);
   }
+}
+
+void NetworkListMobileHeaderViewImpl::SetToggleState(bool enabled,
+                                                     bool is_on,
+                                                     bool animate_toggle) {
+  if (features::IsQsRevampEnabled()) {
+    std::u16string tooltip_text = l10n_util::GetStringFUTF16(
+        IDS_ASH_STATUS_TRAY_NETWORK_TOGGLE_MOBILE,
+        l10n_util::GetStringUTF16(
+            is_on ? IDS_ASH_STATUS_TRAY_NETWORK_MOBILE_ENABLED
+                  : IDS_ASH_STATUS_TRAY_NETWORK_MOBILE_DISABLED));
+    entry_row()->SetTooltipText(tooltip_text);
+    qs_toggle()->SetTooltipText(tooltip_text);
+  }
+  NetworkListMobileHeaderView::SetToggleState(enabled, is_on, animate_toggle);
 }
 
 void NetworkListMobileHeaderViewImpl::OnToggleToggled(bool is_on) {

@@ -22,7 +22,6 @@
 #include "app/vivaldi_apptools.h"
 #include "browser/menus/vivaldi_bookmark_context_menu.h"
 
-using base::UserMetricsAction;
 using bookmarks::BookmarkNode;
 using content::PageNavigator;
 using views::MenuItemView;

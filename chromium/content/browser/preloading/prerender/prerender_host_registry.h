@@ -12,11 +12,13 @@
 
 #include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
+#include "base/feature_list.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
+#include "base/sequence_checker.h"
 #include "base/timer/timer.h"
 #include "base/types/pass_key.h"
 #include "content/browser/preloading/prerender/prerender_final_status.h"
@@ -51,6 +53,10 @@ class PrerenderNewTabHandle;
 class RenderFrameHostImpl;
 class StoredPage;
 struct PrerenderAttributes;
+
+CONTENT_EXPORT BASE_DECLARE_FEATURE(
+    kPrerender2IgnoreFailureOnMemoryFootprintQuery);
+CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrerender2BypassMemoryLimitCheck);
 
 // PrerenderHostRegistry creates and retains a prerender host, and reserves it
 // for NavigationRequest to activate the prerendered page. This is created per
@@ -298,7 +304,6 @@ class CONTENT_EXPORT PrerenderHostRegistry : public WebContentsObserver {
   // Tracks only the host id of speculation rules triggers and ignores requests
   // from embedder because embedder requests are more urgent and we'd like to
   // handle embedder prerender independently from speculation rules requests.
-  // This is valid only when kPrerender2SequentialPrerendering is enabled.
   int running_prerender_host_id_ = RenderFrameHost::kNoFrameTreeNodeId;
 
   // Holds the ids of upcoming prerender requests. The requests from embedder
@@ -306,7 +311,6 @@ class CONTENT_EXPORT PrerenderHostRegistry : public WebContentsObserver {
   // requests from the speculation rules are appended to the back. This may
   // contain ids of cancelled requests. You can identify cancelled requests by
   // checking if an id is in `prerender_host_by_frame_tree_node_id_`.
-  // This is valid only when kPrerender2SequentialPrerendering is enabled.
   base::circular_deque<int> pending_prerenders_;
 
   // Hosts that are not reserved for activation yet. This map also includes the
@@ -345,6 +349,9 @@ class CONTENT_EXPORT PrerenderHostRegistry : public WebContentsObserver {
   base::MemoryPressureListener memory_pressure_listener_;
 
   base::ObserverList<Observer> observers_;
+
+  // Ensures this instance lives on the UI thread.
+  SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<PrerenderHostRegistry> weak_factory_{this};
 };

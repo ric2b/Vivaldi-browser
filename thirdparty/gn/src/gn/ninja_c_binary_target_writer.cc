@@ -83,7 +83,9 @@ const SourceFile* GetModuleMapFromTargetSources(const Target* target) {
   return nullptr;
 }
 
-std::vector<ModuleDep> GetModuleDepsInformation(const Target* target) {
+std::vector<ModuleDep> GetModuleDepsInformation(
+    const Target* target,
+    const ResolvedTargetData& resolved) {
   std::vector<ModuleDep> ret;
 
   auto add = [&ret](const Target* t, bool is_self) {
@@ -107,10 +109,10 @@ std::vector<ModuleDep> GetModuleDepsInformation(const Target* target) {
     add(target, true);
   }
 
-  for (const auto& pair: target->GetDeps(Target::DEPS_LINKED)) {
+  for (const Target* dep : resolved.GetLinkedDeps(target)) {
     // Having a .modulemap source means that the dependency is modularized.
-    if (pair.ptr->source_types_used().Get(SourceFile::SOURCE_MODULEMAP)) {
-      add(pair.ptr, false);
+    if (dep->source_types_used().Get(SourceFile::SOURCE_MODULEMAP)) {
+      add(dep, false);
     }
   }
 
@@ -127,7 +129,8 @@ NinjaCBinaryTargetWriter::NinjaCBinaryTargetWriter(const Target* target,
 NinjaCBinaryTargetWriter::~NinjaCBinaryTargetWriter() = default;
 
 void NinjaCBinaryTargetWriter::Run() {
-  std::vector<ModuleDep> module_dep_info = GetModuleDepsInformation(target_);
+  std::vector<ModuleDep> module_dep_info =
+      GetModuleDepsInformation(target_, resolved());
 
   WriteCompilerVars(module_dep_info);
 
@@ -561,7 +564,8 @@ void NinjaCBinaryTargetWriter::WriteSwiftSources(
     swift_order_only_deps.Append(order_only_deps.begin(),
                                  order_only_deps.end());
 
-    for (const Target* swiftmodule : target_->swift_values().modules())
+    for (const Target* swiftmodule :
+         resolved().GetSwiftModuleDependencies(target_))
       swift_order_only_deps.push_back(swiftmodule->dependency_output_file());
 
     WriteCompilerBuildLine(target_->sources(), input_deps,
@@ -639,7 +643,7 @@ void NinjaCBinaryTargetWriter::WriteLinkerStuff(
   }
 
   // Libraries specified by paths.
-  for (const auto& lib : target_->all_libs()) {
+  for (const auto& lib : resolved().GetLinkedLibraries(target_)) {
     if (lib.is_source_file()) {
       implicit_deps.push_back(
           OutputFile(settings_->build_settings(), lib.source_file()));
@@ -665,7 +669,8 @@ void NinjaCBinaryTargetWriter::WriteLinkerStuff(
   // rlibs only depended on inside a shared library dependency).
   std::vector<OutputFile> transitive_rustlibs;
   if (target_->IsFinal()) {
-    for (const auto* dep : target_->inherited_libraries().GetOrdered()) {
+    for (const auto& inherited : resolved().GetInheritedLibraries(target_)) {
+      const Target* dep = inherited.target();
       if (dep->output_type() == Target::RUST_LIBRARY) {
         transitive_rustlibs.push_back(dep->dependency_output_file());
         implicit_deps.push_back(dep->dependency_output_file());

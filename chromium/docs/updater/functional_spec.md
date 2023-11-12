@@ -59,10 +59,10 @@ The bundle installer allows installation of more than one application. The
 bundle installer is typically used in software distribution scenarios.
 
 ### Standalone Installer
-TODO(crbug.com/1281688): Implement standalone installers.
+TODO(crbug.com/1281688): Add scripts to build standalone installers.
 
-TODO(crbug.com/1035895): Document the standalone installer, including building
-a standalone installer for a given application.
+TODO(crbug.com/1035895): Document building a standalone installer for a given
+application.
 
 Standalone installers embed all data required to install the application,
 including the payload and various configuration data needed by the application
@@ -74,6 +74,18 @@ Standalone installers are used:
 deployments in an enterprise.
 2. when downloading the application payload is not desirable for any reason.
 3. during OEM installation.
+
+On Windows, a standalone installer can be created by embedding a manifest file
+and application installer inside of the metainstaller (UpdaterSetup). These
+files must be embedded in the metainstaller's `updater.7z` archive at the
+following paths:
+* `bin\Offline\{GUID}\OfflineManifest.gup`
+* `bin\Offline\{GUID}\{app_id}\installer.exe`
+
+Standalone installers may use any `{GUID}` value as long as it is a valid
+Windows GUID in the format `{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}`. See the
+"Offline installs" section below for more information on the manifest file and
+application installer.
 
 Applications on macOS frequently install via "drag-install", and then install
 the updater using a standalone installer on the application's first-run. The
@@ -208,6 +220,10 @@ To maintain backwards compatibility with
 [Omaha](https://github.com/google/omaha) and
 [Keystone](https://code.google.com/archive/p/update-engine/), the updater
 installs small versions of those programs that implement a subset of their APIs.
+
+The updater also imports the properties and state of the apps that have been
+registered with Omaha and Keystone, so they show up as registered with the
+updater.
 
 #### Keystone Shims
 The updater installs a Keystone-like application that contains these shims:
@@ -553,7 +569,7 @@ server.
 By default, if enrollment fails, for example if the enrollment token is invalid
 or revoked, the updater will start in an unmanaged state. Instead, if you want
 to prevent the updater from starting if enrollment fails, set
-`EnrollmentMandatory` to `1`.
+`EnrollmentMandatory` to `1` (Windows only).
 
 After the updater sets itself up, the `FetchPolicies` RPC is invoked on the
 updater server to register with device management and fetch policies.
@@ -602,19 +618,29 @@ for any policy value. When a policy value is configured in multiple providers,
 the service always returns the first active valid value.
 
 The policy searching order:
-#### Windows
+##### Windows
 * Policy dictionary defined in
  [External constants](#external-constants-overrides)(testing overrides)
 * Group Policy
 * Device Management policy
 * Policy from default value provider
 
-#### macOS
+##### macOS
 * Policy dictionary defined in
  [External constants](#external-constants-overrides)(testing overrides)
 * Device management policy
 * Policy from Managed Preferences
 * Policy from default value provider
+
+#### COM interfaces (Windows only)
+The updater exposes
+[IPolicyStatus3](https://source.chromium.org/chromium/chromium/src/+/main:chrome/updater/app/server/win/updater_legacy_idl.template;l=555?q=IPolicyStatus3&ss=chromium)
+and the corresponding `IDispatch` implementation to provide clients such as
+Chrome the ability to query the updater enterprise policies.
+
+A client can `CoCreateInstance` the `PolicyStatusUserClass` or the
+`PolicyStatusSystemClass` to get the corresponding policy status object and
+query it via the `IPolicyStatus3` methods.
 
 #### Deploying enterprise applications via updater policy
 For each application that needs to be deployed via the updater, the policy for
@@ -845,13 +871,31 @@ millisecond of each second).
 Background updates can be disabled entirely through policy.
 
 #### Windows Scheduling of Updates
-The update tasks are scheduled using the OS task scheduler.
+The update wake task is scheduled using the OS task scheduler.
 
-The time resolution for tasks is 1 minute. Tasks are set to run 5 minutes after
-they've been created. If a task execution is missed, it will run as soon as the
-system is able to.
+The time resolution for tasks is 1 minute. The update wake task is set to run 5
+minutes after creation. If a task execution is missed, it will run as soon as
+the system is able to.
 
-The updater also runs at user login.
+The updater runs the wake task at system startup for system installs, via the
+system service, which is set to Automatic Start.
+
+The updater also runs at user login. For system installs, this is done via a
+logon trigger on the scheduled task. For user installs, this is done via both
+the logon trigger on the scheduled task, as well as the "Run" registry entry in
+`HKCU` for redundancy.
+
+### Server Lifetime
+The updater's RPC server starts and waits for incoming RPCs. The server
+considers itself idle if it has not been processing any RPC in the last ten
+seconds. Every five minutes, the updater will check itself for idleness and
+shut down if idle.
+
+Additionally, on macOS, after answering at least one RPC, the server will shut
+itself down as soon as it becomes idle.
+
+Additionally, on Windows, the updater will shut itself down if all clients
+release their references to the server.
 
 ### On-Demand Updates
 The updater exposes an RPC interface for any user to trigger an update check.
@@ -888,6 +932,14 @@ not permitted.
 If the application is already installed, it is registered with the version
 present on disk. If it has not yet been installed, a version of `0` is used.
 
+User-scope updaters will update any application registered with them, except
+apps that are managed by a system-scope updater.
+
+System-scope updaters will update any application registered with them. On
+POSIX platforms, they will additionally lchown the existence checker path
+registered by the application to be owned by the root user. User-scope updaters
+use this as a signal that the application is managed by a system-scope updater.
+
 ### App Activity Reporting
 Applications can report whether they are actively used or not through the
 updater. Update servers can then aggregate this information to produce user
@@ -917,10 +969,13 @@ any piece of software it manages is permitted to send usage stats.
 
 #### Windows:
 *   Applications enable usage stats by writing:
-    `HKCU\SOFTWARE\{Company}\Update\ClientState\{APPID}` → usagestats (DWORD): 1
-    or
+    `HKCU\SOFTWARE\{Company}\Update\ClientState\{APPID}` → usagestats
+    (DWORD): 1 for user install,
+    and either
     `HKLM\SOFTWARE\{Company}\Update\ClientStateMedium\{APPID}` → usagestats
-    (DWORD): 1
+    (DWORD): 1 or
+    `HKLM\SOFTWARE\{Company}\Update\ClientState\{APPID}` → usagestats
+    (DWORD): 1 for system install.
 *   Applications rescind this permission by writing a value of 0.
 
 #### macOS:
@@ -1130,9 +1185,9 @@ functionality that can be queried and shown in chrome://policy.
 
 ## Uninstallation
 On Mac and Linux, if the application was registered with an existence path
-checker and no file at that path exists (or if the file at that path is owned
-by another user), the updater considers the application uninstalled, sends
-the ping, and stops trying to keep it up to date.
+checker and no file at that path exists, the updater considers the application
+uninstalled, sends the ping, and stops trying to keep it up to date. User-scope
+updaters will also do this if the file is owned by the root user.
 
 On Windows, if the ClientState entry for for the application is deleted, the
 app is considered uninstalled.
@@ -1155,10 +1210,15 @@ small log file in its data directory.
 ### External Constants Overrides
 Building the updater produces both a production-ready updater executable and a
 version of the executable used for the purposes of testing. The test executable
-is identical to the production one except that it allows cetain constants to be
+is identical to the production one except that it allows certain constants to be
 overridden by the execution environment:
 
-*   `url`: Update check & ping-back URL.
+*   `url`: List of URLs for update check & ping-back.
+*   `crash_upload_url`: Crash reporting URL.
+*   `device_management_url`: URL to fetch device management policies.
+*   `initial_delay`: Time to delay the start of the automated background tasks.
+*   `overinstall_timeout`: Over-install timeout.
+*   `server_keep_alive`: Minimum amount of time the server needs to stay alive.
 *   `use_cup`: Whether CUP is used at all.
 *   `cup_public_key`: An unarmored PEM-encoded ASN.1 SubjectPublicKeyInfo with
     the ecPublicKey algorithm and containing a named elliptic curve.

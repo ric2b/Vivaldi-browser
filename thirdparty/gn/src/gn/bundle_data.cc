@@ -62,13 +62,25 @@ BundleData::BundleData() = default;
 
 BundleData::~BundleData() = default;
 
-void BundleData::AddBundleData(const Target* target) {
+void BundleData::AddBundleData(const Target* target, bool is_create_bundle) {
   DCHECK_EQ(target->output_type(), Target::BUNDLE_DATA);
   for (const auto& pattern : bundle_deps_filter_) {
     if (pattern.Matches(target->label()))
       return;
   }
-  bundle_deps_.push_back(target);
+  if (transparent_) {
+    DCHECK(is_create_bundle);
+    if (target->bundle_data().product_type() == product_type_) {
+      bundle_deps_.push_back(target);
+    } else {
+      forwarded_bundle_deps_.push_back(target);
+    }
+    return;
+  }
+  if (is_create_bundle) {
+    bundle_deps_.push_back(target);
+  }
+  forwarded_bundle_deps_.push_back(target);
 }
 
 void BundleData::OnTargetResolved(Target* owning_target) {

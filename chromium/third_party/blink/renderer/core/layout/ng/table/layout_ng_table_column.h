@@ -45,6 +45,11 @@ class CORE_EXPORT LayoutNGTableColumn : public LayoutBox {
 
   // LayoutObject methods start.
 
+  void UpdateLayout() final {
+    NOT_DESTROYED();
+    NOTREACHED_NORETURN();
+  }
+
   const char* GetName() const override {
     NOT_DESTROYED();
     if (IsColumn())
@@ -88,6 +93,12 @@ class CORE_EXPORT LayoutNGTableColumn : public LayoutBox {
   bool IsOfType(LayoutObjectType type) const override {
     NOT_DESTROYED();
     return type == kLayoutObjectTableCol || LayoutBox::IsOfType(type);
+  }
+
+  // Table row doesn't paint background by itself.
+  bool ComputeCanCompositeBackgroundAttachmentFixed() const override {
+    NOT_DESTROYED();
+    return false;
   }
 
  private:

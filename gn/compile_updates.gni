@@ -1,5 +1,6 @@
 import("//build/config/chrome_build.gni")
 import("//vivaldi/gn/config/version.gni")
+import("//vivaldi/testing/testing.gni")
 
 if (is_win) {
   if (is_official_build) {
@@ -22,21 +23,23 @@ if (is_mac) {
     ]
   }
 
-  foreach(_target,
-          [
-            "//chrome/test:browser_tests",
-            "//chrome/test:interactive_ui_tests",
-            "//chrome/test:sync_integration_tests",
-            "//chrome/test:unit_tests",
-            "//components:components_unittests",
-          ]) {
-    update_template_instance(_target) {
-      if (!defined(ldflags)) {
-        ldflags = []
+  if (vivaldi_build_tests) {
+    foreach(_target,
+            [
+              "//chrome/test:browser_tests",
+              "//chrome/test:interactive_ui_tests",
+              "//chrome/test:sync_integration_tests",
+              "//chrome/test:unit_tests",
+              "//components:components_unittests",
+            ]) {
+      update_template_instance(_target) {
+        if (!defined(ldflags)) {
+          ldflags = []
+        }
+        ldflags += [
+          "-Wl,-rpath,@executable_path/sparkle_lib/Build/Products/Release/",
+        ]
       }
-      ldflags += [
-        "-Wl,-rpath,@executable_path/sparkle_lib/Build/Products/Release/",
-      ]
     }
   }
 }

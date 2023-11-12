@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/memory/raw_ptr.h"
 #include "remoting/host/input_monitor/local_pointer_input_monitor.h"
 
 #import <AppKit/AppKit.h>
@@ -14,12 +13,17 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
 #include "base/synchronization/lock.h"
 #import "base/task/single_thread_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace remoting {
 namespace {
@@ -30,7 +34,7 @@ class LocalMouseInputMonitorMac : public LocalPointerInputMonitor {
   // Invoked by LocalInputMonitorManager.
   class EventHandler {
    public:
-    virtual ~EventHandler() {}
+    virtual ~EventHandler() = default;
 
     virtual void OnLocalMouseMoved(const webrtc::DesktopVector& position) = 0;
   };
@@ -59,7 +63,7 @@ class LocalMouseInputMonitorMac : public LocalPointerInputMonitor {
 
 @interface LocalInputMonitorManager : NSObject {
  @private
-  CFRunLoopSourceRef _mouseRunLoopSource;
+  base::ScopedCFTypeRef<CFRunLoopSourceRef> _mouseRunLoopSource;
   base::ScopedCFTypeRef<CFMachPortRef> _mouseMachPort;
   raw_ptr<remoting::LocalMouseInputMonitorMac::EventHandler> _monitor;
 }
@@ -84,7 +88,7 @@ static CGEventRef LocalMouseMoved(CGEventTapProxy proxy,
   if (pid == 0) {
     CGPoint cgMousePos = CGEventGetLocation(event);
     webrtc::DesktopVector mousePos(cgMousePos.x, cgMousePos.y);
-    [static_cast<LocalInputMonitorManager*>(context) localMouseMoved:mousePos];
+    [(__bridge LocalInputMonitorManager*)context localMouseMoved:mousePos];
   }
   return nullptr;
 }
@@ -98,15 +102,15 @@ static CGEventRef LocalMouseMoved(CGEventTapProxy proxy,
 
     _mouseMachPort.reset(CGEventTapCreate(
         kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionListenOnly,
-        1 << kCGEventMouseMoved, LocalMouseMoved, self));
+        1 << kCGEventMouseMoved, LocalMouseMoved, (__bridge void*)self));
     if (_mouseMachPort) {
-      _mouseRunLoopSource =
-          CFMachPortCreateRunLoopSource(nullptr, _mouseMachPort, 0);
+      _mouseRunLoopSource.reset(
+          CFMachPortCreateRunLoopSource(nullptr, _mouseMachPort, 0));
       CFRunLoopAddSource(CFRunLoopGetMain(), _mouseRunLoopSource,
                          kCFRunLoopCommonModes);
     } else {
       LOG(ERROR) << "CGEventTapCreate failed.";
-      [self release];
+      self = nil;
       return nil;
     }
   }
@@ -122,9 +126,8 @@ static CGEventRef LocalMouseMoved(CGEventTapProxy proxy,
     CFMachPortInvalidate(_mouseMachPort);
     CFRunLoopRemoveSource(CFRunLoopGetMain(), _mouseRunLoopSource,
                           kCFRunLoopCommonModes);
-    CFRelease(_mouseRunLoopSource);
-    _mouseMachPort.reset(0);
-    _mouseRunLoopSource = nullptr;
+    _mouseMachPort.reset();
+    _mouseRunLoopSource.reset();
   }
 }
 
@@ -162,7 +165,7 @@ class LocalMouseInputMonitorMac::Core : public base::RefCountedThreadSafe<Core>,
   // Task runner on which |window_| is created.
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
 
-  LocalInputMonitorManager* manager_;
+  LocalInputMonitorManager* __strong manager_ = nil;
 
   // Invoked in the |caller_task_runner_| thread to report local mouse events.
   LocalInputMonitor::PointerMoveCallback on_mouse_move_;
@@ -191,7 +194,6 @@ LocalMouseInputMonitorMac::Core::Core(
     LocalInputMonitor::PointerMoveCallback on_mouse_move)
     : caller_task_runner_(caller_task_runner),
       ui_task_runner_(ui_task_runner),
-      manager_(nil),
       on_mouse_move_(std::move(on_mouse_move)) {}
 
 void LocalMouseInputMonitorMac::Core::Start() {
@@ -222,7 +224,6 @@ void LocalMouseInputMonitorMac::Core::StopOnUiThread() {
   DCHECK(ui_task_runner_->BelongsToCurrentThread());
 
   [manager_ invalidate];
-  [manager_ release];
   manager_ = nil;
 }
 

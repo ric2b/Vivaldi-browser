@@ -23,7 +23,9 @@ import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.Promise;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.back_press.SecondaryActivityBackPressUma.SecondaryActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.fonts.FontPreloader;
 import org.chromium.chrome.browser.metrics.UmaUtils;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -32,6 +34,7 @@ import org.chromium.chrome.browser.signin.SigninCheckerProvider;
 import org.chromium.chrome.browser.signin.SigninFirstRunFragment;
 import org.chromium.chrome.browser.signin.services.FREMobileIdentityConsistencyFieldTrial;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
+import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.metrics.LowEntropySource;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.LocalizationUtils;
@@ -44,6 +47,10 @@ import java.util.List;
 import java.util.function.BooleanSupplier;
 
 // Vivaldi
+import android.app.AlarmManager;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Intent;
 import android.os.Build;
 
@@ -51,8 +58,10 @@ import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.ui.widget.Toast;
 import org.vivaldi.browser.adblock.AdblockManager;
+import org.vivaldi.browser.common.VivaldiDefaultBrowserUtils;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.firstrun.VivaldiFirstRunFragment;
+import org.vivaldi.browser.prompts.DefaultBrowserNotificationReceiver;
 
 /**
  * Handles the First Run Experience sequences shown to the user launching Chrome for the first time.
@@ -301,12 +310,12 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         };
         TemplateUrlServiceFactory.getForProfile(Profile.getLastUsedRegularProfile())
                 .runWhenLoaded(onNativeFinished);
+        // Notify feature engagement that FRE occurred.
+        TrackerFactory.getTrackerForProfile(Profile.getLastUsedRegularProfile())
+                .notifyEvent(EventConstants.RESTORE_TABS_ON_FIRST_RUN_SHOW_PROMO);
     }
 
     private void onNativeDependenciesFullyInitialized() {
-        // Vivaldi
-        mIsNativeInitialized = true;
-
         mNativeInitializationPromise.fulfill(null);
 
         onInternalStateChanged();
@@ -427,6 +436,11 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         return BackPressResult.SUCCESS;
     }
 
+    @Override
+    public int getSecondaryActivity() {
+        return SecondaryActivity.FIRST_RUN;
+    }
+
     // FirstRunPageDelegate:
     @Override
     public Bundle getProperties() {
@@ -436,6 +450,15 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
     @Override
     public boolean advanceToNextPage() {
         mFirstRunFlowSequencer.updateFirstRunProperties(mFreProperties);
+
+        // Vivaldi - Schedule set as default browser notification
+        if (!BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+            createNotificationChannel();
+            long timeStampNow = System.currentTimeMillis();
+            for (int i =1; i<=3; i++) {
+                schedulePushNotification(i, timeStampNow);
+            }
+        }
 
         int position = mPager.getCurrentItem() + 1;
         while (position < mPagerAdapter.getItemCount() && !mPages.get(position).shouldShow()) {
@@ -457,6 +480,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
 
     @Override
     public void completeFirstRunExperience() {
+        acceptTermsOfService(false); // Vivaldi
         RecordHistogram.recordMediumTimesHistogram("MobileFre.FromLaunch.FreCompleted",
                 SystemClock.elapsedRealtime() - mIntentCreationElapsedRealtimeMs);
 
@@ -530,9 +554,9 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
 
         if (sObserver != null) sObserver.onAcceptTermsOfService(this);
 
-
-        // Vivaldi - Initialize Ad-blocker JNI
+        // Vivaldi: Set default prefs & initialize adblocker
         if (ChromeApplicationImpl.isVivaldi()) {
+            VivaldiUtils.setDefaultPreferencesOnFirstRun();
             AdblockManager.getInstance().initialize();
         }
     }
@@ -646,17 +670,38 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
                 this, /* listenToActivityState= */ true, getIntentRequestTracker());
     }
 
-    // Vivaldi
-    public boolean mIsNativeInitialized;
+    /** Vivaldi - Schedules push notification for set as default browser */
+    private void schedulePushNotification(int count, long timeStampNow) {
+        Intent intent =
+                new Intent(getApplicationContext(), DefaultBrowserNotificationReceiver.class);
+        intent.putExtra("notification_count", count);
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                this, count, intent, PendingIntent.FLAG_IMMUTABLE);
+        long showNotificationAtTime = timeStampNow + getShowNotificationAtTime(count);
+        AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
+        alarmManager.set(AlarmManager.RTC_WAKEUP, showNotificationAtTime, pendingIntent);
+    }
 
-    /** Vivaldi - Default browser support **/
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == VivaldiUtils.DEFAULT_BROWSER_ROLE_REQUEST_CODE) {
-            // We don't allow sending usage statistics or crash report to Google
-            acceptTermsOfService(false);
-            advanceToNextPage();
+    /** Vivaldi */
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            int importance = NotificationManager.IMPORTANCE_DEFAULT;
+            NotificationChannel channel =
+                    new NotificationChannel(
+                            VivaldiDefaultBrowserUtils.DEFAULT_BROWSER_NOTIFICATION_CHANNEL_ID,
+                            "VivaldiNotificationChannel", importance);
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
         }
-        super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    /** Vivaldi */
+    private long getShowNotificationAtTime(int count) {
+        long oneDayInMs = 24 * 60 * 60 * 1000;
+        switch (count) {
+            case 1: return oneDayInMs; // 1 Day
+            case 2: return oneDayInMs * 3; // 3 Days
+            default: return oneDayInMs * 30; // 30 Days
+        }
     }
 }

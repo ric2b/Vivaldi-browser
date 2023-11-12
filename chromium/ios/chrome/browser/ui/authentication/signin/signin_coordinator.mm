@@ -8,9 +8,9 @@
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
 #import "components/signin/public/base/signin_metrics.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
@@ -21,6 +21,7 @@
 #import "ios/chrome/browser/ui/authentication/signin/forced_signin/forced_signin_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_screen_provider.h"
 #import "ios/chrome/browser/ui/authentication/signin/trusted_vault_reauthentication/trusted_vault_reauthentication_coordinator.h"
+#import "ios/chrome/browser/ui/authentication/signin/two_screens_signin/two_screens_signin_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/logging/first_run_signin_logger.h"
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/logging/upgrade_signin_logger.h"
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/logging/user_signin_logger.h"
@@ -72,6 +73,19 @@ using signin_metrics::PromoAction;
 }
 
 + (instancetype)
+    twoScreensSigninCoordinatorWithBaseViewController:
+        (UIViewController*)viewController
+                                              browser:(Browser*)browser
+                                          accessPoint:(AccessPoint)accessPoint
+                                          promoAction:(PromoAction)promoAction {
+  return [[TwoScreensSigninCoordinator alloc]
+      initWithBaseViewController:viewController
+                         browser:browser
+                     accessPoint:accessPoint
+                     promoAction:promoAction];
+}
+
++ (instancetype)
     upgradeSigninPromoCoordinatorWithBaseViewController:
         (UIViewController*)viewController
                                                 browser:(Browser*)browser {
@@ -111,21 +125,39 @@ using signin_metrics::PromoAction;
                          browser:browser
                      accessPoint:accessPoint
                      promoAction:PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO
-                    signinIntent:AddAccountSigninIntentAddSecondaryAccount];
+                    signinIntent:AddAccountSigninIntent::kAddNewAccount];
 }
 
 + (instancetype)
-    reAuthenticationCoordinatorWithBaseViewController:
+    primaryAccountReauthCoordinatorWithBaseViewController:
         (UIViewController*)viewController
-                                              browser:(Browser*)browser
-                                          accessPoint:(AccessPoint)accessPoint
-                                          promoAction:(PromoAction)promoAction {
+                                                  browser:(Browser*)browser
+                                              accessPoint:
+                                                  (AccessPoint)accessPoint
+                                              promoAction:
+                                                  (PromoAction)promoAction {
   return [[AddAccountSigninCoordinator alloc]
       initWithBaseViewController:viewController
                          browser:browser
                      accessPoint:accessPoint
                      promoAction:promoAction
-                    signinIntent:AddAccountSigninIntentReauthPrimaryAccount];
+                    signinIntent:AddAccountSigninIntent::kPrimaryAccountReauth];
+}
+
++ (instancetype)
+    signinAndSyncReauthCoordinatorWithBaseViewController:
+        (UIViewController*)viewController
+                                                 browser:(Browser*)browser
+                                             accessPoint:
+                                                 (AccessPoint)accessPoint
+                                             promoAction:
+                                                 (PromoAction)promoAction {
+  return [[AddAccountSigninCoordinator alloc]
+      initWithBaseViewController:viewController
+                         browser:browser
+                     accessPoint:accessPoint
+                     promoAction:promoAction
+                    signinIntent:AddAccountSigninIntent::kSigninAndSyncReauth];
 }
 
 + (instancetype)
@@ -158,8 +190,10 @@ using signin_metrics::PromoAction;
   ChromeBrowserState* browserState = browser->GetBrowserState();
   ChromeAccountManagerService* accountManagerService =
       ChromeAccountManagerServiceFactory::GetForBrowserState(browserState);
-  if (!IsConsistencyNewAccountInterfaceEnabled() &&
-      !accountManagerService->HasIdentities()) {
+  BOOL canShowWithZeroIdentities =
+      accessPoint != signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN &&
+      IsConsistencyNewAccountInterfaceEnabled();
+  if (!accountManagerService->HasIdentities() && !canShowWithZeroIdentities) {
     RecordConsistencyPromoUserAction(
         signin_metrics::AccountConsistencyPromoAction::SUPPRESSED_NO_ACCOUNTS,
         accessPoint);

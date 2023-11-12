@@ -27,8 +27,7 @@ public interface ProcessScopeDependencyProvider {
     }
 
     /** @return the context associated with the application. */
-    @Nullable
-    default Context getContext() {
+    default @Nullable Context getContext() {
         return null;
     }
 
@@ -51,6 +50,15 @@ public interface ProcessScopeDependencyProvider {
 
     /**
      * Provides experimental feature state to xsurface implementations.
+     *
+     * Must be called on the UI thread.
+     *
+     * WARNING: These methods can crash Chrome!
+     *
+     * You must add the feature to kFeaturesExposedToJava in
+     * chrome/browser/flags/android/chrome_feature_list.cc before
+     * querying for the feature with these methods. Chrome will
+     * crash if it doesn't find the feature.
      */
     public interface FeatureStateProvider {
         boolean isFeatureActive(String featureName);
@@ -61,9 +69,7 @@ public interface ProcessScopeDependencyProvider {
     }
 
     /**
-     * Returns whether a feature is active.
-     *
-     * The returned function must be called on the UI thread.
+     * Returns the FeatureStateProvider.
      */
     default FeatureStateProvider getFeatureStateProvider() {
         return new FeatureStateProvider() {
@@ -101,13 +107,11 @@ public interface ProcessScopeDependencyProvider {
     /**
      * Returns an ImageFetchClient. ImageFetchClient should only be used for fetching images.
      */
-    @Nullable
-    default ImageFetchClient getImageFetchClient() {
+    default @Nullable ImageFetchClient getImageFetchClient() {
         return null;
     }
 
-    @Nullable
-    default PersistentKeyValueCache getPersistentKeyValueCache() {
+    default @Nullable PersistentKeyValueCache getPersistentKeyValueCache() {
         return null;
     }
 
@@ -129,8 +133,7 @@ public interface ProcessScopeDependencyProvider {
      * Returns a LibraryResolver to be used for resolving native library paths. If null is
      * returned, the default library loading mechanism should be used.
      */
-    @Nullable
-    default LibraryResolver getLibraryResolver() {
+    default @Nullable LibraryResolver getLibraryResolver() {
         return null;
     }
 
@@ -212,4 +215,11 @@ public interface ProcessScopeDependencyProvider {
      * @param enabled - whether logging is enabled
      */
     default void reportVisibilityLoggingEnabled(boolean enabled) {}
+
+    /**
+     * Must return true to enable ReliabilityLoggingTestUtil.
+     */
+    default boolean enableAppFlowDebugging() {
+        return false;
+    }
 }

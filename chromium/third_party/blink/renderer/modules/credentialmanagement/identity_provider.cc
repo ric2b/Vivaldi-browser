@@ -31,13 +31,6 @@ void OnRequestUserInfo(ScriptPromiseResolver* resolver,
                        absl::optional<Vector<mojom::blink::IdentityUserInfoPtr>>
                            all_user_info_ptr) {
   switch (status) {
-    case RequestUserInfoStatus::kErrorTooManyRequests: {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kAbortError,
-          "Only one IdentityCredential.getUserInfo request may be outstanding "
-          "at one time."));
-      return;
-    }
     case RequestUserInfoStatus::kError: {
       resolver->Reject(MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kNetworkError, "Error retrieving user info."));
@@ -147,6 +140,12 @@ void IdentityProvider::logout(ScriptState* script_state) {
                               mojom::blink::IdpSigninStatus::kSignedOut);
 }
 
+void IdentityProvider::close(ScriptState* script_state) {
+  auto* request =
+      CredentialManagerProxy::From(script_state)->FederatedAuthRequest();
+  request->CloseModalDialogView();
+}
+
 void OnRegisterIdP(ScriptPromiseResolver* resolver, bool accepted) {
   if (!accepted) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -192,6 +191,28 @@ ScriptPromise IdentityProvider::unregisterIdentityProvider(
   request->UnregisterIdP(
       KURL(configURL),
       WTF::BindOnce(&OnUnregisterIdP, WrapPersistent(resolver)));
+
+  return promise;
+}
+
+void OnResolveTokenRequest(ScriptPromiseResolver* resolver, bool accepted) {
+  if (!accepted) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kNotAllowedError, "Not allowed to provide a token."));
+    return;
+  }
+  resolver->Resolve();
+}
+
+ScriptPromise IdentityProvider::resolve(ScriptState* script_state,
+                                        const String& token) {
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  ScriptPromise promise = resolver->Promise();
+
+  auto* request =
+      CredentialManagerProxy::From(script_state)->FederatedAuthRequest();
+  request->ResolveTokenRequest(
+      token, WTF::BindOnce(&OnResolveTokenRequest, WrapPersistent(resolver)));
 
   return promise;
 }

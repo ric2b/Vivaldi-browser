@@ -6,8 +6,10 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import 'chrome://resources/cr_elements/cr_lottie/cr_lottie.js';
 
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import type {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
-import {UserAction} from './cloud_upload.mojom-webui.js';
+import type {CrLottieElement} from 'chrome://resources/cr_elements/cr_lottie/cr_lottie.js';
+import {MetricsRecordedSetupPage, OperationType, UserAction} from './cloud_upload.mojom-webui.js';
 import {CloudUploadBrowserProxy} from './cloud_upload_browser_proxy.js';
 import {getTemplate} from './move_confirmation_page.html.js';
 
@@ -25,6 +27,7 @@ export class MoveConfirmationPageElement extends HTMLElement {
   private proxy: CloudUploadBrowserProxy =
       CloudUploadBrowserProxy.getInstance();
   private cloudProvider: CloudProvider|undefined;
+  private playPauseButton: HTMLElement|undefined;
 
   constructor() {
     super();
@@ -32,88 +35,99 @@ export class MoveConfirmationPageElement extends HTMLElement {
     const shadowRoot = this.attachShadow({mode: 'open'});
 
     shadowRoot.innerHTML = getTemplate();
-    const moveButton = this.$('.action-button')!;
+    const actionButton = this.$('.action-button')!;
     const cancelButton = this.$('.cancel-button')!;
+    this.playPauseButton = this.$('#playPauseIcon')!;
 
-    moveButton.addEventListener('click', () => this.onMoveButtonClick());
+    actionButton.addEventListener('click', () => this.onActionButtonClick());
     cancelButton.addEventListener('click', () => this.onCancelButtonClick());
+    this.playPauseButton.addEventListener(
+        'click', () => this.onPlayPauseButtonClick());
   }
 
   $<T extends HTMLElement>(query: string): T {
     return this.shadowRoot!.querySelector(query)!;
   }
 
-  private getProviderText(cloudProvider: CloudProvider) {
-    if (cloudProvider === CloudProvider.ONE_DRIVE) {
-      return {
-        name: 'Microsoft OneDrive',
-        shortName: 'OneDrive',
-      };
-    }
-    // TODO(b/260141250): Display Slides or Sheets when appropriate instead or
-    // remove shortName?
-    return {name: 'Google Drive', shortName: 'Drive'};
-  }
+  async setDialogAttributes(
+      numFiles: number, operationType: OperationType,
+      cloudProvider: CloudProvider) {
+    const [
+      {moveConfirmationShown: officeMoveConfirmationShownForDrive},
+      {alwaysMove: alwaysMoveToDrive},
+      {moveConfirmationShown: officeMoveConfirmationShownForOneDrive},
+      {alwaysMove: alwaysMoveToOneDrive},
+    ] = await Promise.all([
+      this.proxy.handler.getOfficeMoveConfirmationShownForDrive(),
+      this.proxy.handler.getAlwaysMoveOfficeFilesToDrive(),
+      this.proxy.handler.getOfficeMoveConfirmationShownForOneDrive(),
+      this.proxy.handler.getAlwaysMoveOfficeFilesToOneDrive(),
+    ]);
 
-  setNumFiles(numFiles: number) {
-    this.shadowRoot!.getElementById('number-of-files')!.innerText =
-        numFiles.toString();
-    this.shadowRoot!.getElementById('files-text')!.innerText = 'files';
-    if (numFiles == 1) {
-      this.shadowRoot!.getElementById('files-text')!.innerText = 'file';
-    }
-  }
-
-  // Sets the text and animation based on the |cloudProvider|. Only show the
-  // checkbox if the dialog has been shown before for the |cloudProvider|.
-  async setCloudProvider(cloudProvider: CloudProvider) {
     this.cloudProvider = cloudProvider;
 
-    const {name} = this.getProviderText(this.cloudProvider);
-    this.shadowRoot!.getElementById('provider-name')!.innerText = name;
+    const operationTypeText =
+        operationType === OperationType.kCopy ? 'Copy' : 'Move';
+    const filesText = numFiles > 1 ? 'files' : 'file';
+    const name = this.getProviderName(this.cloudProvider);
 
-    const bodyText = this.$('#body-text');
-    const checkbox = this.$<CrCheckboxElement>('#always-move-checkbox');
-    if (this.cloudProvider === CloudProvider.ONE_DRIVE) {
-      bodyText.innerText =
-          'Microsoft 365 requires files to be stored in OneDrive. ' +
-          'You can move files to OneDrive at any time.';
-
-      const {moveConfirmationShown: officeMoveConfirmationShownForOneDrive} =
-          await this.proxy.handler.getOfficeMoveConfirmationShownForOneDrive();
-
-      // Only show checkbox if the confirmation has been shown before for
-      // OneDrive.
-      if (officeMoveConfirmationShownForOneDrive) {
-        checkbox.innerText = 'Move to OneDrive without asking each time';
-      } else {
-        checkbox!.remove();
-        this.proxy.handler.setOfficeMoveConfirmationShownForOneDriveTrue();
-      }
-    } else {
-      bodyText.innerText =
-          'Google Docs, Sheets, and Slides require files to be stored in ' +
-          'Google Drive. You can move files to Google Drive at any time.';
-
-      const {moveConfirmationShown: officeMoveConfirmationShownForDrive} =
-          await this.proxy.handler.getOfficeMoveConfirmationShownForDrive();
-
-      // Only show checkbox if the confirmation has been shown before for
-      // Drive.
-      if (officeMoveConfirmationShownForDrive) {
-        checkbox.innerText = 'Move to Google Drive without asking each time';
-      } else {
-        checkbox!.remove();
-        this.proxy.handler.setOfficeMoveConfirmationShownForDriveTrue();
-      }
-    }
-
+    // Animation.
     this.updateAnimation(
         window.matchMedia('(prefers-color-scheme: dark)').matches);
     window.matchMedia('(prefers-color-scheme: dark)')
         .addEventListener('change', event => {
           this.updateAnimation(event.matches);
         });
+
+    // Title.
+    const titleElement = this.$<HTMLElement>('#title')!;
+    titleElement.innerText = `${operationTypeText} ${numFiles.toString()} ${
+        filesText} to ${name} to open?`;
+
+    // Checkbox and Body.
+    const bodyText = this.$('#body-text');
+    const checkbox = this.$<CrCheckboxElement>('#always-copy-or-move-checkbox');
+    checkbox.innerText = 'Don\'t ask again';
+    if (this.cloudProvider === CloudProvider.ONE_DRIVE) {
+      bodyText.innerText =
+          'Microsoft 365 requires files to be stored in OneDrive. ' +
+          'Local files will move and files from other locations will copy. ' +
+          'Your files can be found in the Microsoft OneDrive folder in the ' +
+          'Files app.';
+
+      // Only show checkbox if the confirmation has been shown before for
+      // OneDrive.
+      if (officeMoveConfirmationShownForOneDrive) {
+        checkbox.checked = alwaysMoveToOneDrive;
+      } else {
+        checkbox!.remove();
+      }
+    } else {
+      bodyText.innerText =
+          'Google Docs, Sheets, and Slides require files to be stored in ' +
+          'Google Drive. Local files will move and files from other ' +
+          'locations will copy. Your files can be found in the Google Drive ' +
+          'folder in the Files app.';
+
+      // Only show checkbox if the confirmation has been shown before for
+      // Drive.
+      if (officeMoveConfirmationShownForDrive) {
+        checkbox.checked = alwaysMoveToDrive;
+      } else {
+        checkbox!.remove();
+      }
+    }
+
+    // Action button.
+    const actionButton = this.$<HTMLElement>('.action-button')!;
+    actionButton.innerText = `${operationTypeText} and open`;
+  }
+
+  private getProviderName(cloudProvider: CloudProvider) {
+    if (cloudProvider === CloudProvider.ONE_DRIVE) {
+      return 'Microsoft OneDrive';
+    }
+    return 'Google Drive';
   }
 
   private updateAnimation(isDarkMode: boolean) {
@@ -126,8 +140,8 @@ export class MoveConfirmationPageElement extends HTMLElement {
         'animation-url', animationUrl);
   }
 
-  private onMoveButtonClick(): void {
-    const checkbox = this.$<CrCheckboxElement>('#always-move-checkbox');
+  private onActionButtonClick(): void {
+    const checkbox = this.$<CrCheckboxElement>('#always-copy-or-move-checkbox');
     const setAlwaysMove = !!(checkbox && checkbox.checked);
     if (this.cloudProvider === CloudProvider.ONE_DRIVE) {
       this.proxy.handler.setAlwaysMoveOfficeFilesToOneDrive(setAlwaysMove);
@@ -141,7 +155,32 @@ export class MoveConfirmationPageElement extends HTMLElement {
   }
 
   private onCancelButtonClick(): void {
+    if (this.cloudProvider === CloudProvider.ONE_DRIVE) {
+      this.proxy.handler.recordCancel(
+          MetricsRecordedSetupPage.kMoveConfirmationOneDrive);
+    } else {
+      this.proxy.handler.recordCancel(
+          MetricsRecordedSetupPage.kMoveConfirmationGoogleDrive);
+    }
     this.proxy.handler.respondWithUserActionAndClose(UserAction.kCancel);
+  }
+
+  private onPlayPauseButtonClick(): void {
+    const animation = this.$<CrLottieElement>('#animation')!;
+    const shouldPlay = this.playPauseButton!.className === 'play';
+    if (shouldPlay) {
+      animation.setPlay(true);
+      // Update button to Pause.
+      this.playPauseButton!.className = 'pause';
+      this.playPauseButton!.ariaLabel =
+          loadTimeData.getString('animationPauseText');
+    } else {
+      animation.setPlay(false);
+      // Update button to Play.
+      this.playPauseButton!.className = 'play';
+      this.playPauseButton!.ariaLabel =
+          loadTimeData.getString('animationPlayText');
+    }
   }
 }
 

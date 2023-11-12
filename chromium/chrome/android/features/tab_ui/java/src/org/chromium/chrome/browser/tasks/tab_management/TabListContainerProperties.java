@@ -46,6 +46,15 @@ class TabListContainerProperties {
     public static final PropertyModel.WritableIntPropertyKey MODE =
             new PropertyModel.WritableIntPropertyKey();
 
+    /**
+     * A property which is set to focus on the passed tab index for accessibility. Integer, but not
+     * {@link PropertyModel.WritableIntPropertyKey} so that we can focus on the same tab index which
+     * may have lost focus in between.
+     */
+    public static final PropertyModel
+            .WritableObjectPropertyKey<Integer> FOCUS_TAB_INDEX_FOR_ACCESSIBILITY =
+            new PropertyModel.WritableObjectPropertyKey<>(/*skipEquality=*/true);
+
 
     // Vivaldi
     public static final PropertyModel.WritableObjectPropertyKey<Integer> SCROLL_INDEX_NORMAL =
@@ -55,8 +64,9 @@ class TabListContainerProperties {
     public static final PropertyModel.WritableObjectPropertyKey<Integer> SCROLL_INDEX_PRIVATE =
             new PropertyModel.WritableObjectPropertyKey<>(true);
 
-    public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {IS_VISIBLE, IS_INCOGNITO,
-            VISIBILITY_LISTENER, INITIAL_SCROLL_INDEX, ANIMATE_VISIBILITY_CHANGES, TOP_MARGIN,
-            BOTTOM_CONTROLS_HEIGHT, SHADOW_TOP_OFFSET, BOTTOM_PADDING, MODE,
+    public static final PropertyKey[] ALL_KEYS =
+            new PropertyKey[] {IS_VISIBLE, IS_INCOGNITO, VISIBILITY_LISTENER, INITIAL_SCROLL_INDEX,
+                    ANIMATE_VISIBILITY_CHANGES, TOP_MARGIN, BOTTOM_CONTROLS_HEIGHT,
+                    SHADOW_TOP_OFFSET, BOTTOM_PADDING, MODE, FOCUS_TAB_INDEX_FOR_ACCESSIBILITY,
             SCROLL_INDEX_NORMAL, SCROLL_INDEX_PRIVATE}; // Vivaldi
 }

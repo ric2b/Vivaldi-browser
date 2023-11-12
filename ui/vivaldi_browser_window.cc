@@ -303,6 +303,14 @@ class VivaldiBrowserWindow::InterfaceHelper final
     return nullptr;
   }
 
+  autofill::AutofillBubbleBase* ShowMandatoryReauthBubble(
+      content::WebContents* web_contents,
+      autofill::MandatoryReauthBubbleController* controller,
+      bool is_user_gesture,
+      autofill::MandatoryReauthBubbleType bubble_type) override {
+    return nullptr;
+  }
+
   void OnPasswordSaved() override {}
 
   // ExtensionFunctionDispatcher::Delegate overrides
@@ -335,8 +343,8 @@ class VivaldiBrowserWindow::InterfaceHelper final
   // VivaldiRootDocumentHandlerObserver
 
   void OnRootDocumentDidFinishNavigation() override {
-    if (!vivaldi_runtime_feature::IsEnabled(GetProfile(),
-                                           "portal_browserwindow")) {
+    if (vivaldi_runtime_feature::IsEnabled(GetProfile(),
+                                           "portal_browserwindow2")) {
       GURL resource_url =
           window_.extension_->GetResourceURL(window_.resource_relative_url_);
       window_.web_contents()->GetController().LoadURL(
@@ -628,7 +636,11 @@ VivaldiBrowserWindow::VivaldiBrowserWindow()
 }
 
 VivaldiBrowserWindow::~VivaldiBrowserWindow() {
-  vivaldi::WindowRegistryService::Get(GetProfile())->RemoveWindow(window_key_);
+  // The WindowRegistryService can return null.
+  if (vivaldi::WindowRegistryService::Get(GetProfile())) {
+    vivaldi::WindowRegistryService::Get(GetProfile())
+        ->RemoveWindow(window_key_);
+  }
   DCHECK(root_doc_handler_);
   root_doc_handler_->RemoveObserver(interface_helper_.get());
   OnDidFinishNavigation(false);
@@ -685,8 +697,8 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
 
   VivaldiBrowserWindow* window = new VivaldiBrowserWindow();
 
-  if (vivaldi_runtime_feature::IsEnabled(browser->profile(),
-                                         "portal_browserwindow")) {
+  if (!vivaldi_runtime_feature::IsEnabled(browser->profile(),
+                                         "portal_browserwindow2")) {
     params.resource_relative_url = VIVALDI_WINDOW_DOCUMENT;
     window->SetWindowURL(params.resource_relative_url);
     window->CreateWebContents(std::move(browser), params);
@@ -798,8 +810,8 @@ void VivaldiBrowserWindow::CreateWebContents(
 
   DCHECK(root_doc_handler_);
   root_doc_handler_->AddObserver(interface_helper_.get());
-  if (vivaldi_runtime_feature::IsEnabled(GetProfile(),
-                                         "portal_browserwindow")) {
+  if (!vivaldi_runtime_feature::IsEnabled(GetProfile(),
+                                         "portal_browserwindow2")) {
     GURL resource_url = extension_->GetResourceURL(params.resource_relative_url);
     web_contents()->GetController().LoadURL(
         resource_url, content::Referrer(), ui::PAGE_TRANSITION_LINK,
@@ -964,6 +976,12 @@ void VivaldiBrowserWindow::Show() {
   if (browser()) {
     BrowserList::SetLastActive(browser());
   }
+#endif
+
+#if BUILDFLAG(IS_MAC)
+  // VB-97912 Opening a new Window there is no focus on this window.
+  ui::WindowShowState current_state = GetRestoredState();
+  widget_->SetInitialFocus(current_state);
 #endif
 }
 
@@ -1433,7 +1451,7 @@ bool VivaldiBrowserWindow::IsActive() const {
 
 gfx::NativeWindow VivaldiBrowserWindow::GetNativeWindow() const {
   if (!widget_)
-    return gfx::kNullNativeWindow;
+    return gfx::NativeWindow();
   return widget_->GetNativeWindow();
 }
 
@@ -1810,7 +1828,7 @@ views::View* VivaldiBrowserWindow::GetContentsView() const {
 
 gfx::NativeView VivaldiBrowserWindow::GetNativeView() {
   if (!widget_)
-    return gfx::kNullNativeView;
+    return gfx::NativeView();
   return widget_->GetNativeView();
 }
 

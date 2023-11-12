@@ -13,6 +13,7 @@
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/content_settings/core/test/content_settings_mock_provider.h"
 #include "components/content_settings/core/test/content_settings_test_utils.h"
+#include "components/privacy_sandbox/privacy_sandbox_attestations/privacy_sandbox_attestations.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/privacy_sandbox/privacy_sandbox_prefs.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -23,6 +24,8 @@
 namespace privacy_sandbox_test_util {
 
 namespace {
+
+constexpr int kTestTaxonomyVersion = 1;
 
 // Convenience function that unpacks a map keyed on both MultipleXKeys, and
 // single keys (e.g. keyed on the TestKey variant type), into a map key _only_
@@ -76,6 +79,7 @@ void ApplyTestState(
     MockPrivacySandboxSettingsDelegate* mock_delegate,
     PrivacySandboxServiceTestInterface* privacy_sandbox_service,
     browsing_topics::MockBrowsingTopicsService* mock_browsing_topics_service,
+    privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings,
     content_settings::MockProvider* user_content_setting_provider,
     content_settings::MockProvider* managed_content_setting_provider) {
   switch (key) {
@@ -148,7 +152,7 @@ void ApplyTestState(
       }
       const auto kTopic = privacy_sandbox::CanonicalTopic(
           browsing_topics::Topic(24),  // "Blues"
-          privacy_sandbox::CanonicalTopic::AVAILABLE_TAXONOMY);
+          kTestTaxonomyVersion);
       const std::vector<privacy_sandbox::CanonicalTopic> topics = {kTopic};
 
       EXPECT_CALL(*mock_browsing_topics_service, GetTopTopicsForDisplay())
@@ -163,7 +167,7 @@ void ApplyTestState(
       }
       const auto kTopic = privacy_sandbox::CanonicalTopic(
           browsing_topics::Topic(25),  // "Classical Music"
-          privacy_sandbox::CanonicalTopic::AVAILABLE_TAXONOMY);
+          kTestTaxonomyVersion);
       privacy_sandbox_service->SetTopicAllowed(kTopic, false);
       return;
     }
@@ -229,6 +233,13 @@ void ApplyTestState(
           base::Value(GetItemValue<bool>(value)));
       return;
     }
+    case (StateKey::kM1RestrictedNoticeAcknowledged): {
+      SCOPED_TRACE("State Setup: M1 restricted notice acknowledged");
+      testing_pref_service->SetUserPref(
+          prefs::kPrivacySandboxM1RestrictedNoticeAcknowledged,
+          base::Value(GetItemValue<bool>(value)));
+      return;
+    }
     case (StateKey::kM1PromptSuppressedReason): {
       SCOPED_TRACE("State Setup: M1 prompt suppressed value");
       testing_pref_service->SetUserPref(
@@ -273,6 +284,14 @@ void ApplyTestState(
       SCOPED_TRACE("State Setup: Appropriate Topics Consent");
       mock_delegate->SetUpHasAppropriateTopicsConsentResponse(
           GetItemValue<bool>(value));
+      return;
+    }
+    case (StateKey::kAttestationsMap): {
+      SCOPED_TRACE("State Setup: Attestations Map");
+      privacy_sandbox::PrivacySandboxAttestations::GetInstance()
+          ->SetAttestationsForTesting(
+              GetItemValue<absl::optional<
+                  privacy_sandbox::PrivacySandboxAttestationsMap>>(value));
       return;
     }
     default:
@@ -335,6 +354,33 @@ void CheckOutput(
       ASSERT_EQ(return_value,
                 privacy_sandbox_settings->IsFledgeAllowed(
                     top_frame_origin, fledge_auction_party_origin));
+      return;
+    }
+    case (OutputKey::kIsEventReportingDestinationAttestedForFledge): {
+      SCOPED_TRACE(
+          "Check Output: IsEventReportingDestinationAttestedForFledge()");
+      auto event_reporting_origin = GetItemValueForKey<url::Origin>(
+          InputKey::kEventReportingDestinationOrigin, input);
+      auto return_value = GetItemValue<bool>(output_value);
+      ASSERT_EQ(return_value,
+                privacy_sandbox_settings->IsEventReportingDestinationAttested(
+                    event_reporting_origin,
+                    privacy_sandbox::PrivacySandboxAttestationsGatedAPI::
+                        kProtectedAudience));
+      return;
+    }
+    case (OutputKey::kIsEventReportingDestinationAttestedForSharedStorage): {
+      SCOPED_TRACE(
+          "Check Output: "
+          "IsEventReportingDestinationAttestedForSharedStorage()");
+      auto event_reporting_origin = GetItemValueForKey<url::Origin>(
+          InputKey::kEventReportingDestinationOrigin, input);
+      auto return_value = GetItemValue<bool>(output_value);
+      ASSERT_EQ(return_value,
+                privacy_sandbox_settings->IsEventReportingDestinationAttested(
+                    event_reporting_origin,
+                    privacy_sandbox::PrivacySandboxAttestationsGatedAPI::
+                        kSharedStorage));
       return;
     }
     case (OutputKey::kIsAttributionReportingAllowed): {
@@ -618,6 +664,14 @@ void CheckOutput(
                               prefs::kPrivacySandboxM1RowNoticeAcknowledged));
       return;
     }
+    case (OutputKey::kM1RestrictedNoticeAcknowledged): {
+      SCOPED_TRACE("Check Output: M1 restricted notice acknowledged");
+      bool expected = GetItemValue<bool>(output_value);
+      EXPECT_EQ(expected,
+                testing_pref_service->GetBoolean(
+                    prefs::kPrivacySandboxM1RestrictedNoticeAcknowledged));
+      return;
+    }
     case (OutputKey::kM1TopicsEnabled): {
       SCOPED_TRACE("Check Output: M1 topics enabled");
       bool expected = GetItemValue<bool>(output_value);
@@ -751,7 +805,7 @@ void RunTestCase(
     ApplyTestState(key, value, task_environment, testing_pref_service,
                    host_content_settings_map, mock_delegate,
                    privacy_sandbox_service, mock_browsing_topics_service_,
-                   user_content_setting_provider,
+                   privacy_sandbox_settings, user_content_setting_provider,
                    managed_content_setting_provider);
   }
 

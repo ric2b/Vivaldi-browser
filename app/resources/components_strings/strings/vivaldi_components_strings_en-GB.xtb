@@ -193,7 +193,6 @@
 <translation id="8150722005171944719">The file at <ph name="URL" /> is not readable.  It may have been removed, moved or file permissions may be preventing access.</translation>
 <translation id="8184538546369750125">Use global default (Allow)</translation>
 <translation id="8211406090763984747">Connection is secure</translation>
-<translation id="8225771182978767009">The person who set up this computer has chosen to block this site.</translation>
 <translation id="8241707690549784388">The page that you're looking for used information that you entered. Returning to that page might cause any action you took to be repeated. Do you want to continue?</translation>
 <translation id="8241712895048303527">Block on this site</translation>
 <translation id="8286036467436129157">Sign In</translation>
@@ -214,7 +213,6 @@
 <translation id="9062620674789239642">It may have been moved, edited, or deleted.</translation>
 <translation id="9069693763241529744">Blocked by an extension</translation>
 <translation id="9073799351042754113">You have chosen to turn off security warnings for this site.</translation>
-<translation id="910924428752220542">Vivaldi Passwords</translation>
 <translation id="9169664750068251925">Always block on this site</translation>
 <translation id="9180553614777056266">Ad Blocker</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> uses an unsupported protocol.</translation>

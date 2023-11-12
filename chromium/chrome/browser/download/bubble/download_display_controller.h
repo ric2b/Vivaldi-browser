@@ -58,6 +58,10 @@ class DownloadDisplayController : public FullscreenObserver,
     int in_progress_count = 0;
     // Count of in-progress downloads (by the above definition) that are paused.
     int paused_count = 0;
+
+    // Returns a reference to a singleton empty struct. This is for callers who
+    // return references but don't have anything to return in some cases.
+    static const AllDownloadUIModelsInfo& EmptyInfo();
   };
 
   struct ProgressInfo {
@@ -168,11 +172,11 @@ class DownloadDisplayController : public FullscreenObserver,
   base::OneShotTimer icon_inactive_timer_;
   IconInfo icon_info_;
   bool fullscreen_notification_shown_ = false;
-  bool details_shown_while_fullscreen_ = false;
+  bool should_show_details_on_exit_fullscreen_ = false;
   // DownloadDisplayController and DownloadBubbleUIController have the same
   // lifetime. Both are owned, constructed together, and destructed together by
   // DownloadToolbarButtonView. If one is valid, so is the other.
-  raw_ptr<DownloadBubbleUIController> bubble_controller_;
+  raw_ptr<DownloadBubbleUIController, DanglingUntriaged> bubble_controller_;
 
   base::WeakPtrFactory<DownloadDisplayController> weak_factory_{this};
 };

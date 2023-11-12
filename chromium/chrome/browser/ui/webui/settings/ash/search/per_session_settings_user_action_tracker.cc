@@ -5,6 +5,10 @@
 #include "chrome/browser/ui/webui/settings/ash/search/per_session_settings_user_action_tracker.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/string_number_conversions.h"
+#include "chrome/browser/ash/login/login_pref_names.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/scoped_user_pref_update.h"
 
 namespace ash::settings {
 
@@ -25,6 +29,10 @@ constexpr base::TimeDelta kMinSubsequentChange = base::Milliseconds(200);
 constexpr base::TimeDelta kMinDurationMetric = base::Milliseconds(100);
 constexpr base::TimeDelta kMaxDurationMetric = base::Minutes(10);
 
+// Used to check whether it has been one week since the user has finished OOBE
+// onboarding.
+constexpr base::TimeDelta kOneWeek = base::Days(7);
+
 void LogDurationMetric(const char* metric_name, base::TimeDelta duration) {
   base::UmaHistogramCustomTimes(metric_name, duration, kMinDurationMetric,
                                 kMaxDurationMetric, /*buckets=*/50);
@@ -32,19 +40,91 @@ void LogDurationMetric(const char* metric_name, base::TimeDelta duration) {
 
 }  // namespace
 
-PerSessionSettingsUserActionTracker::PerSessionSettingsUserActionTracker()
-    : metric_start_time_(base::TimeTicks::Now()) {}
+PerSessionSettingsUserActionTracker::PerSessionSettingsUserActionTracker(
+    PrefService* pref_service)
+    : metric_start_time_(base::TimeTicks::Now()),
+      window_last_active_timestamp_(base::TimeTicks::Now()),
+      pref_service_(pref_service) {}
 
-PerSessionSettingsUserActionTracker::~PerSessionSettingsUserActionTracker() =
-    default;
+PerSessionSettingsUserActionTracker::~PerSessionSettingsUserActionTracker() {
+  RecordPageActiveTime();
+  LogDurationMetric("ChromeOS.Settings.WindowTotalActiveDuration",
+                    total_time_session_active_);
+
+  base::UmaHistogramCounts1000(
+      "ChromeOS.Settings.NumUniqueSettingsChanged.PerSession",
+      changed_settings_.size());
+
+  // The pref kHasResetFirst7DaysSettingsUsedCount indicates whether the pref
+  // kTotalUniqueOsSettingsChanged has been cleared once after 1 week has passed
+  // since OOBE. If the pref kHasResetFirst7DaysSettingsUsedCount is False and
+  // it has been over 7 days since the user has taken OOBE, it means that this
+  // is the first time since one week after OOBE that the user has opened and
+  // changed Settings. In this case, clear the pref
+  // kTotalUniqueOsSettingsChanged to prepare it for the
+  // ChromeOS.Settings.NumUniqueSettingsChanged.DeviceLifetime.SubsequentWeeks
+  // histogram.
+  // NOTE: prefs::kOobeOnboardingTime does not exist for users in guest mode.
+  if (!pref_service_->GetBoolean(
+          ::prefs::kHasResetFirst7DaysSettingsUsedCount) &&
+      pref_service_->HasPrefPath(prefs::kOobeOnboardingTime) &&
+      !IsTodayInFirst7Days()) {
+    pref_service_->SetBoolean(::prefs::kHasResetFirst7DaysSettingsUsedCount,
+                              true);
+    ClearTotalUniqueSettingsChangedPref();
+  }
+
+  // Record number of unique settings changed in this session.
+  absl::optional<int> total_unique_settings_changed_count =
+      UpdateSettingsPrefTotalUniqueChanged();
+
+  // If the number of total unique setting used increased, flagged by the
+  // optional variable total_unique_settings_changed_count having a value, add
+  // the datapoint to the histogram.
+  // NOTE: prefs::kOobeOnboardingTime does not exist for users in guest mode.
+  if (pref_service_->HasPrefPath(prefs::kOobeOnboardingTime) &&
+      total_unique_settings_changed_count.has_value()) {
+    if (IsTodayInFirst7Days()) {
+      base::UmaHistogramCounts1000(
+          "ChromeOS.Settings.NumUniqueSettingsChanged.DeviceLifetime.FirstWeek",
+          total_unique_settings_changed_count.value());
+    } else {
+      base::UmaHistogramCounts1000(
+          "ChromeOS.Settings.NumUniqueSettingsChanged.DeviceLifetime."
+          "SubsequentWeeks",
+          total_unique_settings_changed_count.value());
+    }
+    // Store the total unique Settings changed in .DeviceLifetime histogram.
+    base::UmaHistogramCounts1000(
+        "ChromeOS.Settings.NumUniqueSettingsChanged.DeviceLifetime.Total",
+        total_unique_settings_changed_count.value());
+  }
+}
+
+bool PerSessionSettingsUserActionTracker::IsTodayInFirst7Days() {
+  // The pref kOobeOnboardingTime does not get set for users in guest mode.
+  // Because we are accessing the value of the pref, we must ensure that it does
+  // exist.
+  DCHECK(pref_service_->HasPrefPath(prefs::kOobeOnboardingTime));
+  return base::Time::Now() -
+             pref_service_->GetTime(::ash::prefs::kOobeOnboardingTime) <=
+         kOneWeek;
+}
+
+void PerSessionSettingsUserActionTracker::
+    ClearTotalUniqueSettingsChangedPref() {
+  pref_service_->ClearPref(::prefs::kTotalUniqueOsSettingsChanged);
+}
 
 void PerSessionSettingsUserActionTracker::RecordPageFocus() {
+  const base::TimeTicks now = base::TimeTicks::Now();
+  window_last_active_timestamp_ = now;
+
   if (last_blur_timestamp_.is_null())
     return;
 
   // Log the duration of being blurred.
-  const base::TimeDelta blurred_duration =
-      base::TimeTicks::Now() - last_blur_timestamp_;
+  const base::TimeDelta blurred_duration = now - last_blur_timestamp_;
   LogDurationMetric("ChromeOS.Settings.BlurredWindowDuration",
                     blurred_duration);
 
@@ -57,8 +137,17 @@ void PerSessionSettingsUserActionTracker::RecordPageFocus() {
   }
 }
 
+void PerSessionSettingsUserActionTracker::RecordPageActiveTime() {
+  if (window_last_active_timestamp_ != base::TimeTicks()) {
+    total_time_session_active_ +=
+        base::TimeTicks::Now() - window_last_active_timestamp_;
+  }
+  window_last_active_timestamp_ = base::TimeTicks();
+}
+
 void PerSessionSettingsUserActionTracker::RecordPageBlur() {
   last_blur_timestamp_ = base::TimeTicks::Now();
+  RecordPageActiveTime();
 }
 
 void PerSessionSettingsUserActionTracker::RecordClick() {
@@ -73,7 +162,12 @@ void PerSessionSettingsUserActionTracker::RecordSearch() {
   ++num_searches_since_start_time_;
 }
 
-void PerSessionSettingsUserActionTracker::RecordSettingChange() {
+void PerSessionSettingsUserActionTracker::RecordSettingChange(
+    absl::optional<chromeos::settings::mojom::Setting> setting) {
+  if (setting.has_value()) {
+    changed_settings_.insert(
+        base::NumberToString(static_cast<int>(setting.value())));
+  }
   base::TimeTicks now = base::TimeTicks::Now();
 
   if (!last_record_setting_changed_timestamp_.is_null()) {
@@ -117,6 +211,36 @@ void PerSessionSettingsUserActionTracker::ResetMetricsCountersAndTimestamp() {
   num_clicks_since_start_time_ = 0u;
   num_navigations_since_start_time_ = 0u;
   num_searches_since_start_time_ = 0u;
+}
+
+absl::optional<int>
+PerSessionSettingsUserActionTracker::UpdateSettingsPrefTotalUniqueChanged() {
+  // Fetch the dictionary from the pref.
+  ScopedDictPrefUpdate total_unique_settings_changed_(
+      pref_service_, ::prefs::kTotalUniqueOsSettingsChanged);
+  base::Value::Dict& pref_data = total_unique_settings_changed_.Get();
+  int current_count = pref_data.size();
+
+  // Set the dictionary.
+  // Value is a constant 1 since we only want to know which Setting has been
+  // used, not how many times it has been used.
+  constexpr int value = 1;
+  for (const std::string& setting_string : changed_settings_) {
+    if (!pref_data.contains(setting_string)) {
+      pref_data.Set(setting_string, value);
+    }
+  }
+
+  int new_count = pref_data.size();
+
+  // If the new size of the pref dictionary is the same as before, we do not
+  // want to record that in UMA so we will return a nullopt to flag not to add
+  // to histogram bucket.
+  //
+  // The value of pref_data will automatically get stored to pref_service_ upon
+  // destruction.
+  return current_count == new_count ? absl::nullopt
+                                    : absl::optional<int>{new_count};
 }
 
 }  // namespace ash::settings

@@ -3,7 +3,6 @@
 #include "browser/vivaldi_child_process_flags.h"
 
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "build/build_config.h"
 
 #include "app/vivaldi_apptools.h"

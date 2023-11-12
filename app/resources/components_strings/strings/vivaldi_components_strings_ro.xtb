@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ro">
 <translation id="1089439967362294234">Schimbă parola</translation>
+<translation id="1110994991967754504">Selectați permisiunea pentru <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> a închis conexiunea în mod neașteptat.</translation>
 <translation id="1161325031994447685">Reconectarea la Wi-Fi</translation>
 <translation id="1175364870820465910">Ti&amp;părește...</translation>
@@ -141,7 +142,6 @@
 <translation id="8037357227543935929">Întreabă (implicit)</translation>
 <translation id="808894953321890993">Schimbă parola</translation>
 <translation id="8150722005171944719">Fișierul de la <ph name="URL" /> nu poate fi citit.  Este posibil să fi fost eliminat ori mutat sau ca permisiunile pentru fișiere să împiedice accesarea acestuia.</translation>
-<translation id="8225771182978767009">Persoana care a configurat acest calculator a ales să blocheze acest site.</translation>
 <translation id="8241712895048303527">Blochează pe acest site web</translation>
 <translation id="8289355894181816810">Dacă nu știți sigur ce înseamnă aceasta, contactați administratorul de rețea.</translation>
 <translation id="8332188693563227489">Accesul la <ph name="HOST_NAME" /> nu este permis</translation>

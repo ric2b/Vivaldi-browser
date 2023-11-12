@@ -10,7 +10,6 @@ import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.hamcrest.Matchers.equalTo;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.espresso.Espresso;
 import androidx.test.filters.MediumTest;
@@ -42,6 +41,7 @@ import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
+import org.chromium.net.test.ServerCertificate;
 
 import java.util.ArrayList;
 
@@ -61,8 +61,8 @@ public class DownloadLocationChangeEnd2EndTest implements CustomMainActivityStar
 
     @Before
     public void setUp() {
-        mTestServer = EmbeddedTestServer.createAndStartServer(
-                ApplicationProvider.getApplicationContext());
+        mTestServer = EmbeddedTestServer.createAndStartHTTPSServer(
+                ApplicationProvider.getApplicationContext(), ServerCertificate.CERT_OK);
 
         // Show the location dialog for the first time.
         promptDownloadLocationDialog(DownloadPromptStatus.SHOW_INITIAL);
@@ -146,8 +146,8 @@ public class DownloadLocationChangeEnd2EndTest implements CustomMainActivityStar
 
         // Wait for data to feed into the DownloadDirectoryAdapter.
         String defaultOptionName =
-                InstrumentationRegistry.getTargetContext().getString(R.string.menu_downloads);
-        String sdCardOptionName = InstrumentationRegistry.getTargetContext().getString(
+                ApplicationProvider.getApplicationContext().getString(R.string.menu_downloads);
+        String sdCardOptionName = ApplicationProvider.getApplicationContext().getString(
                 R.string.downloads_location_sd_card);
         onData(new DirectoryOptionMatcher(equalTo(defaultOptionName))).atPosition(0);
         onData(new DirectoryOptionMatcher(equalTo(sdCardOptionName))).atPosition(1);

@@ -5,10 +5,11 @@
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/user_signin_coordinator.h"
 
 #import "base/ios/block_types.h"
-#import "components/sync/driver/sync_service.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/sync/service/sync_service.h"
 #import "ios/chrome/browser/consent_auditor/consent_auditor_factory.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -114,8 +115,13 @@ using signin_metrics::PromoAction;
 
   self.signinStateOnStart =
       signin::GetPrimaryIdentitySigninState(self.browser->GetBrowserState());
-  DCHECK_NE(IdentitySigninStateSignedInWithSyncEnabled,
-            self.signinStateOnStart);
+  if (IdentitySigninStateSignedInWithSyncEnabled == self.signinStateOnStart) {
+    // TODO(crbug.com/1410747): This needs to be converted to a CHECK() once
+    // the bug is fixed.
+    NOTREACHED() << "The user is currently signed in while opening open the "
+                    "sign-in dialog."
+                 << base::SysNSStringToUTF8([self description]);
+  }
   self.signinIdentityOnStart =
       authenticationService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
 
@@ -558,6 +564,7 @@ using signin_metrics::PromoAction;
   AuthenticationFlow* authenticationFlow = [[AuthenticationFlow alloc]
                initWithBrowser:self.browser
                       identity:self.unifiedConsentCoordinator.selectedIdentity
+                   accessPoint:self.logger.accessPoint
               postSignInAction:postSignInAction
       presentingViewController:self.viewController];
   authenticationFlow.dispatcher = HandlerForProtocol(
@@ -623,13 +630,20 @@ using signin_metrics::PromoAction;
 #pragma mark - NSObject
 
 - (NSString*)description {
-  return [NSString stringWithFormat:@"<%@: %p, addAccountSigninCoordinator: "
-                                    @"%p, advancedSettingsSigninCoordinator: "
-                                    @"%p, signinIntent: %lu, accessPoint %d>",
-                                    self.class.description, self,
-                                    self.addAccountSigninCoordinator,
-                                    self.advancedSettingsSigninCoordinator,
-                                    self.signinIntent, self.logger.accessPoint];
+  return [NSString
+      stringWithFormat:@"<%@: %p, addAccountSigninCoordinator: "
+                       @"%p, advancedSettingsSigninCoordinator: "
+                       @"%p, signinIntent: %lu, accessPoint: %d, "
+                       @"viewController: %p, beingPresented: %d, "
+                       @"baseViewController: %@, window: %p>",
+                       self.class.description, self,
+                       self.addAccountSigninCoordinator,
+                       self.advancedSettingsSigninCoordinator,
+                       self.signinIntent, self.logger.accessPoint,
+                       self.viewController,
+                       self.viewController.isBeingPresented,
+                       NSStringFromClass([self.baseViewController class]),
+                       self.baseViewController.view.window];
 }
 
 #pragma mark - Methods for unittests

@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/layout/ng/grid/ng_grid_item.h"
 
 #include "third_party/blink/renderer/core/layout/ng/grid/ng_grid_placement.h"
+#include "third_party/blink/renderer/platform/text/writing_mode_utils.h"
 
 namespace blink {
 
@@ -121,6 +122,7 @@ AxisEdge AxisEdgeFromItemPosition(bool is_inline_axis,
 GridItemData::GridItemData(
     NGBlockNode node,
     const ComputedStyle& root_grid_style,
+    FontBaseline parent_grid_font_baseline,
     bool parent_must_consider_grid_items_for_column_sizing,
     bool parent_must_consider_grid_items_for_row_sizing)
     : node(node),
@@ -131,7 +133,8 @@ GridItemData::GridItemData(
       is_sizing_dependent_on_block_size(false),
       is_subgridded_to_parent_grid(false),
       must_consider_grid_items_for_column_sizing(false),
-      must_consider_grid_items_for_row_sizing(false) {
+      must_consider_grid_items_for_row_sizing(false),
+      parent_grid_font_baseline(parent_grid_font_baseline) {
   const auto& style = node.Style();
 
   const bool is_replaced = node.IsReplaced();
@@ -194,6 +197,23 @@ GridItemData::GridItemData(
                               : style.GridTemplateColumns().IsSubgriddedAxis();
   }
 
+  // The `false, true, false, true` parameters get the converter to calculate
+  // whether the subgrids and its root grid are opposite direction in all cases.
+  const LogicalToLogical<bool> direction_converter(
+      style.GetWritingDirection(), root_grid_writing_direction,
+      /* inline_start */ false, /* inline_end */ true,
+      /* block_start */ false, /* block_end */ true);
+
+  is_opposite_direction_in_root_grid_columns =
+      direction_converter.InlineStart();
+  is_opposite_direction_in_root_grid_rows = direction_converter.BlockStart();
+
+  // From https://drafts.csswg.org/css-grid-2/#subgrid-size-contribution:
+  //   The subgrid itself [...] acts as if it was completely empty for track
+  //   sizing purposes in the subgridded dimension.
+  //
+  // Mark any subgridded axis as not considered for sizing, effectively ignoring
+  // its contribution in `NGGridLayoutAlgorithm::ResolveIntrinsicTrackSizes`.
   if (parent_must_consider_grid_items_for_column_sizing) {
     must_consider_grid_items_for_column_sizing = has_subgridded_columns;
     is_considered_for_column_sizing = !has_subgridded_columns;
@@ -209,8 +229,9 @@ void GridItemData::SetAlignmentFallback(
     GridTrackSizingDirection track_direction,
     bool has_synthesized_baseline) {
   // Alignment fallback is only possible when baseline alignment is specified.
-  if (!IsBaselineSpecifiedForDirection(track_direction))
+  if (!IsBaselineSpecified(track_direction)) {
     return;
+  }
 
   auto CanParticipateInBaselineAlignment = [&]() -> bool {
     // "If baseline alignment is specified on a grid item whose size in that

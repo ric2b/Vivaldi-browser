@@ -6,10 +6,10 @@
 
 #include "base/logging.h"
 #include "components/viz/common/gpu/vulkan_context_provider.h"
-#include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/shared_image/gl_texture_image_backing_helper.h"
-#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/shared_image/skia_gl_image_representation.h"
 #include "gpu/command_buffer/service/skia_utils.h"
@@ -20,8 +20,9 @@
 #include "gpu/vulkan/vulkan_util.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
-#include "third_party/skia/include/core/SkPromiseImageTexture.h"
 #include "third_party/skia/include/gpu/GrBackendSurfaceMutableState.h"
+#include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "third_party/skia/include/private/chromium/GrPromiseImageTexture.h"
 #include "ui/gl/egl_util.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/scoped_egl_image.h"
@@ -74,7 +75,7 @@ class AngleVulkanImageBacking::SkiaAngleVulkanImageRepresentation
   ~SkiaAngleVulkanImageRepresentation() override = default;
 
   // SkiaImageRepresentation implementation.
-  std::vector<sk_sp<SkPromiseImageTexture>> BeginReadAccess(
+  std::vector<sk_sp<GrPromiseImageTexture>> BeginReadAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override {
@@ -87,7 +88,7 @@ class AngleVulkanImageBacking::SkiaAngleVulkanImageRepresentation
 
   void EndReadAccess() override { backing_impl()->EndAccessSkia(); }
 
-  std::vector<sk_sp<SkPromiseImageTexture>> BeginWriteAccess(
+  std::vector<sk_sp<GrPromiseImageTexture>> BeginWriteAccess(
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores,
       std::unique_ptr<GrBackendSurfaceMutableState>* end_state) override {
@@ -124,7 +125,7 @@ class AngleVulkanImageBacking::SkiaAngleVulkanImageRepresentation
           final_msaa_count != backing_impl()->surface_msaa_count_) {
         SkColorType sk_color_type = viz::ToClosestSkColorType(
             /*gpu_compositing=*/true, format(), plane);
-        surface = SkSurface::MakeFromBackendTexture(
+        surface = SkSurfaces::WrapBackendTexture(
             backing_impl()->gr_context(), promise_texture->backendTexture(),
             surface_origin(), final_msaa_count, sk_color_type,
             backing_impl()->color_space().ToSkColorSpace(), &surface_props);
@@ -171,7 +172,7 @@ class AngleVulkanImageBacking::SkiaAngleVulkanImageRepresentation
 };
 
 AngleVulkanImageBacking::AngleVulkanImageBacking(
-    const raw_ptr<SharedContextState>& context_state,
+    SharedContextState* context_state,
     const Mailbox& mailbox,
     viz::SharedImageFormat format,
     const gfx::Size& size,
@@ -270,7 +271,10 @@ bool AngleVulkanImageBacking::Initialize(
   if (!data.empty()) {
     DCHECK(format().is_single_plane());
     auto image_info = AsSkImageInfo();
-    DCHECK_EQ(data.size(), image_info.computeMinByteSize());
+    if (data.size() != image_info.computeMinByteSize()) {
+      DLOG(ERROR) << "Invalid initial pixel data size";
+      return false;
+    }
     SkPixmap pixmap(image_info, data.data(), image_info.minRowBytes());
     UploadFromMemory({pixmap});
     SetCleared();
@@ -458,9 +462,9 @@ void AngleVulkanImageBacking::GLTextureImageRepresentationEndAccess(
   ReleaseTextureANGLE();
 }
 
-std::vector<sk_sp<SkPromiseImageTexture>>
+std::vector<sk_sp<GrPromiseImageTexture>>
 AngleVulkanImageBacking::GetPromiseTextures() {
-  std::vector<sk_sp<SkPromiseImageTexture>> promise_textures;
+  std::vector<sk_sp<GrPromiseImageTexture>> promise_textures;
   promise_textures.reserve(vk_textures_.size());
   for (auto& vk_texture : vk_textures_) {
     DCHECK(vk_texture.promise_texture);

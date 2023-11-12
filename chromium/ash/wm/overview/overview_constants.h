@@ -19,10 +19,20 @@ constexpr base::TimeDelta kTransition = base::Milliseconds(300);
 constexpr base::TimeDelta kWindowRestoreDurationCrOSNext =
     base::Milliseconds(350);
 
-// In the conceptual overview table, the window margin is the space reserved
-// around the window within the cell. This margin does not overlap so the
-// closest distance between adjacent windows will be twice this amount.
-constexpr int kWindowMargin = 5;
+// Number of overview items needed to trigger the overview scroll layout.
+constexpr int kMinimumItemsForNewLayoutInTablet = 6;
+// TODO(b/286568408): Get clamshell layout number from UX.
+constexpr int kMinimumItemsForNewLayoutInClamshell = 10;
+
+// In the conceptual overview table, the horizontal space between two adjacent
+// items.
+constexpr int kHorizontalSpaceBetweenItemsDp = 10;
+
+// The vertical space between two adjacent items.
+constexpr int kVerticalSpaceBetweenItemsDp = 15;
+
+// The amount we want to enlarge the dragged overview window.
+constexpr int kDraggingEnlargeDp = 10;
 
 // Height of an item header.
 constexpr int kHeaderHeightDp = WindowMiniView::kHeaderHeightDp;

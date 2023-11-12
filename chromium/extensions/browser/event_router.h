@@ -17,6 +17,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
+#include "base/strings/string_piece.h"
 #include "base/values.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/render_process_host_observer.h"
@@ -124,7 +125,6 @@ class EventRouter : public KeyedService,
                                     const std::string& extension_id,
                                     events::HistogramValue histogram_value,
                                     const std::string& event_name,
-                                    int render_process_id,
                                     int worker_thread_id,
                                     int64_t service_worker_version_id,
                                     base::Value::List event_args,
@@ -328,6 +328,11 @@ class EventRouter : public KeyedService,
   bool HasLazyEventListenerForTesting(const std::string& event_name);
   bool HasNonLazyEventListenerForTesting(const std::string& event_name);
 
+  void BindServiceWorkerEventDispatcher(
+      int render_process_id,
+      int worker_thread_id,
+      mojo::PendingAssociatedRemote<mojom::EventDispatcher> event_dispatcher);
+
  private:
   friend class EventRouterFilterTest;
   friend class EventRouterTest;
@@ -355,6 +360,12 @@ class EventRouter : public KeyedService,
                            StorageAreaOnChangedOtherListener);
   FRIEND_TEST_ALL_PREFIXES(StorageApiUnittest,
                            StorageAreaOnChangedOnlyOneListener);
+  FRIEND_TEST_ALL_PREFIXES(WMDesksPrivateEventsUnitTest,
+                           DispatchEventOnDeskAdded);
+  FRIEND_TEST_ALL_PREFIXES(WMDesksPrivateEventsUnitTest,
+                           DispatchEventOnDeskRemoved);
+  FRIEND_TEST_ALL_PREFIXES(WMDesksPrivateEventsUnitTest,
+                           DispatchEventOnDeskSwitched);
 
   enum class RegisteredEventType {
     kLazy,
@@ -362,17 +373,17 @@ class EventRouter : public KeyedService,
   };
 
   // TODO(gdk): Document this.
-  static void DispatchExtensionMessage(
-      content::RenderProcessHost* rph,
-      int worker_thread_id,
-      content::BrowserContext* browser_context,
-      const std::string& extension_id,
-      int event_id,
-      const std::string& event_name,
-      base::Value::List event_args,
-      UserGestureState user_gesture,
-      extensions::mojom::EventFilteringInfoPtr info);
+  void DispatchExtensionMessage(content::RenderProcessHost* rph,
+                                int worker_thread_id,
+                                content::BrowserContext* browser_context,
+                                const std::string& extension_id,
+                                int event_id,
+                                const std::string& event_name,
+                                base::Value::List event_args,
+                                UserGestureState user_gesture,
+                                extensions::mojom::EventFilteringInfoPtr info);
 
+  void ObserveProcess(content::RenderProcessHost* process);
   content::RenderProcessHost* GetRenderProcessHostForCurrentReceiver();
 
   // Gets off-the-record browser context if
@@ -493,6 +504,9 @@ class EventRouter : public KeyedService,
       const content::ChildProcessTerminationInfo& info) override;
   void RenderProcessHostDestroyed(content::RenderProcessHost* host) override;
 
+  void UnbindServiceWorkerEventDispatcher(content::RenderProcessHost* host,
+                                          int worker_thread_id);
+
   const raw_ptr<content::BrowserContext> browser_context_;
 
   // The ExtensionPrefs associated with |browser_context_|. May be NULL in
@@ -518,9 +532,10 @@ class EventRouter : public KeyedService,
 
   EventAckData event_ack_data_;
 
-  std::map<content::RenderProcessHost*,
-           mojo::AssociatedRemote<mojom::EventDispatcher>>
-      rph_dispatcher_map_;
+  using DispatcherMap =
+      std::map<int /*worker_thread_id*/,
+               mojo::AssociatedRemote<mojom::EventDispatcher>>;
+  std::map<content::RenderProcessHost*, DispatcherMap> rph_dispatcher_map_;
 
   // All the Mojo receivers for the EventRouter. Keeps track of the render
   // process id.
@@ -605,16 +620,16 @@ struct Event {
   // option to a constructor version for clients that need to disptach events to
   // related browser_contexts. See https://crbug.com/726022.
   Event(events::HistogramValue histogram_value,
-        const std::string& event_name,
+        base::StringPiece event_name,
         base::Value::List event_args);
 
   Event(events::HistogramValue histogram_value,
-        const std::string& event_name,
+        base::StringPiece event_name,
         base::Value::List event_args,
         content::BrowserContext* restrict_to_browser_context);
 
   Event(events::HistogramValue histogram_value,
-        const std::string& event_name,
+        base::StringPiece event_name,
         base::Value::List event_args,
         content::BrowserContext* restrict_to_browser_context,
         const GURL& event_url,

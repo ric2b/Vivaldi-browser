@@ -128,7 +128,7 @@ class FileSystemAccessFileHandleImplTest : public testing::Test {
     return handle;
   }
 
-  storage::BucketLocator CreateBucketForTesting() {
+  storage::QuotaErrorOr<storage::BucketLocator> CreateBucketForTesting() {
     base::test::TestFuture<storage::QuotaErrorOr<storage::BucketInfo>>
         bucket_future;
     quota_manager_proxy_->CreateBucketForTesting(
@@ -136,9 +136,8 @@ class FileSystemAccessFileHandleImplTest : public testing::Test {
         blink::mojom::StorageType::kTemporary,
         base::SequencedTaskRunner::GetCurrentDefault(),
         bucket_future.GetCallback());
-    auto bucket = bucket_future.Take();
-    EXPECT_TRUE(bucket.has_value());
-    return bucket->ToBucketLocator();
+    return bucket_future.Take().transform(
+        &storage::BucketInfo::ToBucketLocator);
   }
 
  protected:
@@ -179,7 +178,9 @@ class FileSystemAccessFileHandleImplTest : public testing::Test {
     test_file_url_ = file_system_context_->CreateCrackedFileSystemURL(
         test_src_storage_key_, type, test_file_path);
     if (type == storage::kFileSystemTypeTemporary) {
-      test_file_url_.SetBucket(CreateBucketForTesting());
+      auto bucket = CreateBucketForTesting();
+      ASSERT_TRUE(bucket.has_value());
+      test_file_url_.SetBucket(*std::move(bucket));
     }
 
     ASSERT_EQ(base::File::FILE_OK,
@@ -193,7 +194,7 @@ class FileSystemAccessFileHandleImplTest : public testing::Test {
     manager_ = base::MakeRefCounted<FileSystemAccessManagerImpl>(
         file_system_context_, chrome_blob_context_,
         /*permission_context=*/nullptr,
-        /*off_the_record=*/false);
+        /*off_the_record=*/is_incognito);
 
     handle_ = std::make_unique<FileSystemAccessFileHandleImpl>(
         manager_.get(),
@@ -357,39 +358,6 @@ TEST_F(FileSystemAccessFileHandleImplTest, Remove_HasWriteAccess) {
   EXPECT_FALSE(base::PathExists(file));
 }
 
-TEST_F(FileSystemAccessFileHandleImplTest, GetSwapURL) {
-  const base::FilePath test_path =
-      base::FilePath::FromUTF8Unsafe("test.crswap");
-
-  // Default case (empty bucket).
-  auto default_handle = GetHandleWithPermissions(test_path, true, true);
-  storage::FileSystemURL swap_url =
-      default_handle->get_swap_url_for_testing(test_path);
-  EXPECT_EQ(swap_url.bucket(), absl::nullopt);
-
-  // Custom bucket case.
-  const auto custom_bucket = storage::BucketLocator(
-      storage::BucketId(1),
-      blink::StorageKey::CreateFromStringForTesting("test.crswap"),
-      blink::mojom::StorageType::kTemporary, /*is_default=*/false);
-  FileSystemURL base_url = file_system_context_->CreateCrackedFileSystemURL(
-      test_src_storage_key_, storage::kFileSystemTypeTest, test_path);
-  base_url.SetBucket(custom_bucket);
-  // Create a custom FileSystemAccessFileHandleImpl for the modified
-  // FileSystemURL.
-  const auto bucket_handle = std::make_unique<FileSystemAccessFileHandleImpl>(
-      manager_.get(),
-      FileSystemAccessManagerImpl::BindingContext(
-          test_src_storage_key_, test_src_url_,
-          web_contents_->GetPrimaryMainFrame()->GetGlobalId()),
-      base_url,
-      FileSystemAccessManagerImpl::SharedHandleState(
-          /*read_grant=*/allow_grant_,
-          /*write_grant=*/allow_grant_));
-  swap_url = bucket_handle->get_swap_url_for_testing(test_path);
-  ASSERT_EQ(swap_url.bucket(), custom_bucket);
-}
-
 TEST_F(FileSystemAccessAccessHandleTest, OpenAccessHandle) {
   base::test::TestFuture<
       blink::mojom::FileSystemAccessErrorPtr,
@@ -545,10 +513,46 @@ TEST_F(FileSystemAccessFileHandleImplTest, Move_HasDestWriteAccess) {
 class FileSystemAccessFileHandleSwapFileCloningTest
     : public FileSystemAccessFileHandleImplTest {
  public:
+  enum class CloneFileResult {
+    kDidNotAttempt,
+    kAttemptedAndAborted,
+    kAttemptedAndCompletedUnexpectedly,
+    kAttemptedAndCompletedAsExpected
+  };
+
   FileSystemAccessFileHandleSwapFileCloningTest()
       : scoped_feature_list_(features::kFileSystemAccessCowSwapFile) {}
   void SetUp() override {
     SetupHelper(storage::kFileSystemTypeLocal, /*is_incognito=*/false);
+  }
+
+  CloneFileResult GetCloneFileResult(
+      const std::unique_ptr<FileSystemAccessFileHandleImpl>& handle) {
+    auto maybe_clone_result = handle->get_swap_file_clone_result_for_testing();
+
+    if (!maybe_clone_result.has_value()) {
+      return CloneFileResult::kDidNotAttempt;
+    }
+
+    if (maybe_clone_result.value() == base::File::Error::FILE_ERROR_ABORT) {
+      return CloneFileResult::kAttemptedAndAborted;
+    }
+
+    // We should not attempt to clone the file if the swap file exists. Other
+    // errors are okay.
+    if (maybe_clone_result.value() == base::File::Error::FILE_ERROR_EXISTS) {
+      return CloneFileResult::kAttemptedAndCompletedUnexpectedly;
+    }
+
+    // TODO(https://crbug.com/1439179): Remove this expectation once we have a
+    // better idea of what's causing the spurious failures.
+    EXPECT_EQ(maybe_clone_result.value(), base::File::Error::FILE_OK);
+
+    // Ideally we could just check that the result is FILE_OK, but
+    // clonefile() may spuriously fail. See https://crbug.com/1439179. For the
+    // purposes of these tests, we'll consider these spurious errors as
+    // "expected".
+    return CloneFileResult::kAttemptedAndCompletedAsExpected;
   }
 
  protected:
@@ -568,8 +572,8 @@ TEST_F(FileSystemAccessFileHandleSwapFileCloningTest, BasicClone) {
   std::tie(result, writer_remote) = future.Take();
   EXPECT_EQ(result->status, blink::mojom::FileSystemAccessStatus::kOk);
   EXPECT_TRUE(writer_remote.is_valid());
-  EXPECT_TRUE(handle_->get_did_attempt_swap_file_cloning_for_testing());
-  EXPECT_TRUE(handle_->get_did_create_cloned_swap_file_for_testing());
+  EXPECT_EQ(GetCloneFileResult(handle_),
+            CloneFileResult::kAttemptedAndCompletedAsExpected);
 }
 
 TEST_F(FileSystemAccessFileHandleSwapFileCloningTest,
@@ -586,8 +590,7 @@ TEST_F(FileSystemAccessFileHandleSwapFileCloningTest,
   std::tie(result, writer_remote) = future.Take();
   EXPECT_EQ(result->status, blink::mojom::FileSystemAccessStatus::kOk);
   EXPECT_TRUE(writer_remote.is_valid());
-  EXPECT_FALSE(handle_->get_did_attempt_swap_file_cloning_for_testing());
-  EXPECT_FALSE(handle_->get_did_create_cloned_swap_file_for_testing());
+  EXPECT_EQ(GetCloneFileResult(handle_), CloneFileResult::kDidNotAttempt);
 }
 
 TEST_F(FileSystemAccessFileHandleSwapFileCloningTest, HandleExistingSwapFile) {
@@ -614,8 +617,8 @@ TEST_F(FileSystemAccessFileHandleSwapFileCloningTest, HandleExistingSwapFile) {
   std::tie(result, writer_remote) = future.Take();
   EXPECT_EQ(result->status, blink::mojom::FileSystemAccessStatus::kOk);
   EXPECT_TRUE(writer_remote.is_valid());
-  EXPECT_TRUE(handle_->get_did_attempt_swap_file_cloning_for_testing());
-  EXPECT_TRUE(handle_->get_did_create_cloned_swap_file_for_testing());
+  EXPECT_EQ(GetCloneFileResult(handle_),
+            CloneFileResult::kAttemptedAndCompletedAsExpected);
 }
 
 TEST_F(FileSystemAccessFileHandleSwapFileCloningTest, HandleCloneFailure) {
@@ -634,8 +637,7 @@ TEST_F(FileSystemAccessFileHandleSwapFileCloningTest, HandleCloneFailure) {
   std::tie(result, writer_remote) = future.Take();
   EXPECT_EQ(result->status, blink::mojom::FileSystemAccessStatus::kOk);
   EXPECT_TRUE(writer_remote.is_valid());
-  EXPECT_TRUE(handle_->get_did_attempt_swap_file_cloning_for_testing());
-  EXPECT_FALSE(handle_->get_did_create_cloned_swap_file_for_testing());
+  EXPECT_EQ(GetCloneFileResult(handle_), CloneFileResult::kAttemptedAndAborted);
 }
 #endif  // BUILDFLAG(IS_MAC)
 

@@ -9,14 +9,6 @@
 #import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/components/ui_util/dynamic_type_util.h"
 
-// Vivaldi
-#include "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
-#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
-
-using vivaldi::IsVivaldiRunning;
-// End Vivaldi
-
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -53,23 +45,12 @@ CGFloat ToolbarClampedFontSizeMultiplier(UIContentSizeCategory category) {
 
 CGFloat ToolbarCollapsedHeight(UIContentSizeCategory category) {
   category = NormalizedCategory(category);
-
-  if (IsVivaldiRunning())
-    return Interpolate(category, vivaldiToolbarHeightFullscreen,
-                       vivaldiNonDynamicToolbarHeightFullscreen); // End Vivaldi
-
   return Interpolate(category, kToolbarHeightFullscreen,
                      kNonDynamicToolbarHeightFullscreen);
 }
 
 CGFloat ToolbarExpandedHeight(UIContentSizeCategory category) {
   category = NormalizedCategory(category);
-
-  if (IsVivaldiRunning())
-    return Interpolate(category,
-                       vNTPSearchBarHeight,
-                       kNonDynamicToolbarHeight); // End Vivaldi
-
   return Interpolate(category, kPrimaryToolbarHeight, kNonDynamicToolbarHeight);
 }
 

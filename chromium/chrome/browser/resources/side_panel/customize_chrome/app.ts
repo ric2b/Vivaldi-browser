@@ -1,6 +1,9 @@
 // Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+import 'chrome://customize-chrome-side-panel.top-chrome/shared/sp_heading.js';
+import 'chrome://customize-chrome-side-panel.top-chrome/shared/sp_shared_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-pages/iron-pages.js';
 import './appearance.js';
 import './cards.js';
@@ -9,7 +12,7 @@ import './chrome_colors.js';
 import './shortcuts.js';
 import './themes.js';
 
-import {startColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
+import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 import {HelpBubbleMixin, HelpBubbleMixinInterface} from 'chrome://resources/cr_components/help_bubble/help_bubble_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
@@ -80,7 +83,7 @@ export class AppElement extends AppElementBase {
 
   override ready() {
     super.ready();
-    startColorChangeUpdater();
+    ColorChangeUpdater.forDocument().start();
     this.registerHelpBubble(
         CHANGE_CHROME_THEME_BUTTON_ELEMENT_ID,
         ['#appearanceElement', '#editThemeButton']);

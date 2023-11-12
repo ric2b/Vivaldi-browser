@@ -11,7 +11,7 @@
 #include "app/vivaldi_apptools.h"
 #include "base/base64.h"
 #include "base/containers/cxx20_erase.h"
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "base/hash/sha1.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -61,13 +61,13 @@ std::unordered_map<int64_t, const vivaldi::NoteNode*> BuildIdToNoteNodeMap(
 }  // namespace
 
 // static
-syncer::ClientTagHash SyncedNoteTracker::GetClientTagHashFromGUID(
-    const base::GUID& guid) {
+syncer::ClientTagHash SyncedNoteTracker::GetClientTagHashFromUuid(
+    const base::Uuid& uuid) {
   // Earlier vivaldi versions were mistakenly using the BOOKMARKS type to verify
   // the type, so we temporarily produce tags using the BOOKMARKS type.
   // Change this to NOTES in a few version. 07-2021
   return syncer::ClientTagHash::FromUnhashed(syncer::BOOKMARKS,
-                                             guid.AsLowercaseString());
+                                             uuid.AsLowercaseString());
 }
 
 // static
@@ -160,9 +160,9 @@ const SyncedNoteTrackerEntity* SyncedNoteTracker::GetEntityForClientTagHash(
   return it != client_tag_hash_to_entities_map_.end() ? it->second : nullptr;
 }
 
-const SyncedNoteTrackerEntity* SyncedNoteTracker::GetEntityForGUID(
-    const base::GUID& guid) const {
-  return GetEntityForClientTagHash(GetClientTagHashFromGUID(guid));
+const SyncedNoteTrackerEntity* SyncedNoteTracker::GetEntityForUuid(
+    const base::Uuid& uuid) const {
+  return GetEntityForClientTagHash(GetClientTagHashFromUuid(uuid));
 }
 
 SyncedNoteTrackerEntity* SyncedNoteTracker::AsMutableEntity(
@@ -195,7 +195,7 @@ const SyncedNoteTrackerEntity* SyncedNoteTracker::Add(
 
   // Note that this gets computed for permanent nodes too.
   syncer::ClientTagHash client_tag_hash =
-      GetClientTagHashFromGUID(note_node->guid());
+      GetClientTagHashFromUuid(note_node->uuid());
 
   sync_pb::EntityMetadata metadata;
   metadata.set_is_deleted(false);
@@ -500,22 +500,22 @@ bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
     }
 
     // The client-tag-hash is expected to be equal to the hash of the note's
-    // GUID. This can be hit for example if local note GUIDs were
+    // UUID. This can be hit for example if local note UUIDs were
     // reassigned upon startup due to duplicates (which is a NoteModel
     // invariant violation and should be impossible).
     const syncer::ClientTagHash client_tag_hash =
-        GetClientTagHashFromGUID(node->guid());
+        GetClientTagHashFromUuid(node->uuid());
     if (client_tag_hash != syncer::ClientTagHash::FromHashed(
                                note_metadata.metadata().client_tag_hash())) {
       if (node->is_permanent_node()) {
         // For permanent nodes the client tag hash is irrelevant and subject to
         // change if the constants in notes change and adopt
-        // different GUID constants. To avoid treating such state as corrupt
+        // different UUID constants. To avoid treating such state as corrupt
         // metadata, let's fix it automatically.
         note_metadata.mutable_metadata()->set_client_tag_hash(
             client_tag_hash.value());
       } else {
-        DLOG(ERROR) << "Note GUID does not match the client tag.";
+        DLOG(ERROR) << "Note Uuid does not match the client tag.";
         return false;
       }
     }
@@ -718,7 +718,7 @@ void SyncedNoteTracker::UndeleteTombstoneForNoteNode(
   DCHECK(node);
   DCHECK(entity->metadata().is_deleted());
   const syncer::ClientTagHash client_tag_hash =
-      GetClientTagHashFromGUID(node->guid());
+      GetClientTagHashFromUuid(node->uuid());
   // The same entity must be used only for the same note node.
   DCHECK_EQ(entity->metadata().client_tag_hash(), client_tag_hash.value());
   DCHECK(note_node_to_entities_map_.find(node) ==

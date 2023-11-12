@@ -37,6 +37,8 @@
 #include "ui/display/display_util.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
 
+#include "ui/content/vivaldi_tab_check.h"
+
 using blink::DragOperationsMask;
 using remote_cocoa::mojom::DraggingInfoPtr;
 using remote_cocoa::mojom::SelectionDirection;
@@ -79,7 +81,7 @@ void WebContentsViewMac::InstallCreateHookForTests(
 std::unique_ptr<WebContentsView> CreateWebContentsView(
     WebContentsImpl* web_contents,
     std::unique_ptr<WebContentsViewDelegate> delegate,
-    RenderViewHostDelegateView** render_view_host_delegate_view) {
+    raw_ptr<RenderViewHostDelegateView>* render_view_host_delegate_view) {
   auto rv =
       std::make_unique<WebContentsViewMac>(web_contents, std::move(delegate));
   *render_view_host_delegate_view = rv.get();
@@ -161,6 +163,14 @@ void WebContentsViewMac::StartDragging(
     const gfx::Rect& drag_obj_rect,
     const blink::mojom::DragEventSourceInfo& event_info,
     RenderWidgetHostImpl* source_rwh) {
+  // We need to use the webcontents for tabs when dragging from that.
+  // |web_contents_| is here the ui-document in Vivaldi. VB-97745.
+  dragowner_webcontents_ = web_contents_;
+  if (auto* contents = WebContentsImpl::FromRenderWidgetHostImpl(source_rwh)) {
+    if (VivaldiTabCheck::IsOwnedByTabStripOrDevTools(contents)) {
+      dragowner_webcontents_ = contents;
+    }
+  }
   // By allowing nested tasks, the code below also allows Close(),
   // which would deallocate |this|.  The same problem can occur while
   // processing -sendEvent:, so Close() is deferred in that case.
@@ -409,8 +419,9 @@ void WebContentsViewMac::SetOverscrollControllerEnabled(bool enabled) {
 // would fire when the event-tracking loop polls for events.  So we need to
 // bounce the message via Cocoa, instead.
 bool WebContentsViewMac::CloseTabAfterEventTrackingIfNeeded() {
-  if (!base::MessagePumpMac::IsHandlingSendEvent())
+  if (!base::message_pump_mac::IsHandlingSendEvent()) {
     return false;
+  }
 
   deferred_close_weak_ptr_factory_.InvalidateWeakPtrs();
   auto weak_ptr = deferred_close_weak_ptr_factory_.GetWeakPtr();
@@ -525,12 +536,12 @@ bool WebContentsViewMac::DragPromisedFileTo(const base::FilePath& file_path,
     return true;
   }
 
-  if (download_url.is_valid() && web_contents_) {
+  if (download_url.is_valid() && dragowner_webcontents_) {
     auto drag_file_downloader = std::make_unique<DragDownloadFile>(
         *out_file_path, std::move(file), download_url,
-        content::Referrer(web_contents_->GetLastCommittedURL(),
+        content::Referrer(dragowner_webcontents_->GetLastCommittedURL(),
                           drop_data.referrer_policy),
-        web_contents_->GetEncoding(), web_contents_);
+        dragowner_webcontents_->GetEncoding(), dragowner_webcontents_);
 
     DragDownloadFile* downloader = drag_file_downloader.get();
     // The finalizer will take care of closing and deletion.

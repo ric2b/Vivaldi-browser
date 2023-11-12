@@ -364,7 +364,6 @@ class WebSocketHandshakeStreamCreateHelperTest
             ASYNC,
             client_maker.MakeRequestHeadersPacket(
                 packet_number++, client_data_stream_id,
-                /*should_include_version=*/true,
                 /*fin=*/false, ConvertRequestPriorityToQuicPriority(LOWEST),
                 std::move(request_header_block), nullptr));
 
@@ -374,18 +373,16 @@ class WebSocketHandshakeStreamCreateHelperTest
         mock_quic_data_.AddRead(
             ASYNC, server_maker.MakeResponseHeadersPacket(
                        /*packet_number=*/1, client_data_stream_id,
-                       /*should_include_version=*/true, /*fin=*/false,
-                       std::move(response_header_block),
+                       /*fin=*/false, std::move(response_header_block),
                        /*spdy_headers_frame_length=*/nullptr));
 
         mock_quic_data_.AddRead(SYNCHRONOUS, ERR_IO_PENDING);
 
-        mock_quic_data_.AddWrite(
-            SYNCHRONOUS,
-            client_maker.MakeAckAndRstPacket(
-                packet_number++, /*include_version=*/false,
-                client_data_stream_id, quic::QUIC_STREAM_CANCELLED, 1, 0,
-                /*include_stop_sending_if_v99=*/true));
+        mock_quic_data_.AddWrite(SYNCHRONOUS,
+                                 client_maker.MakeAckAndRstPacket(
+                                     packet_number++, client_data_stream_id,
+                                     quic::QUIC_STREAM_CANCELLED, 1, 0,
+                                     /*include_stop_sending_if_v99=*/true));
         auto socket = std::make_unique<MockUDPClientSocket>(
             mock_quic_data_.InitializeAndGetSequencedSocketData(),
             NetLog::Get());
@@ -446,7 +443,7 @@ class WebSocketHandshakeStreamCreateHelperTest
                 kQuicYieldAfterDurationMilliseconds),
             /*cert_verify_flags=*/0, quic::test::DefaultQuicConfig(),
             std::make_unique<TestQuicCryptoClientConfigHandle>(&crypto_config),
-            "CONNECTION_UNKNOWN", dns_start, dns_end,
+            dns_start, dns_end,
             std::make_unique<quic::QuicClientPushPromiseIndex>(), nullptr,
             base::DefaultTickClock::GetInstance(),
             base::SingleThreadTaskRunner::GetCurrentDefault().get(),

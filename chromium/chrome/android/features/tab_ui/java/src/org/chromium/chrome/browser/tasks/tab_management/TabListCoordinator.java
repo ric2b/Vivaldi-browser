@@ -17,7 +17,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnLayoutChangeListener;
 import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 
 import androidx.annotation.IntDef;
@@ -41,7 +40,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardPropert
 import org.chromium.chrome.browser.tasks.tab_management.TabListRecyclerView.RecyclerViewPosition;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.UiType;
 import org.chromium.chrome.tab_ui.R;
-import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -95,7 +94,6 @@ public class TabListCoordinator
     private final ViewGroup mRootView;
 
     private boolean mIsInitialized;
-    private ViewTreeObserver.OnGlobalLayoutListener mGlobalLayoutListener;
     private OnLayoutChangeListener mListLayoutListener;
     private boolean mLayoutListenerRegistered;
     private @Nullable TabStripSnapshotter mTabStripSnapshotter;
@@ -158,11 +156,6 @@ public class TabListCoordinator
             mAdapter.registerType(UiType.CLOSABLE, parent -> {
                 ViewGroup group = (ViewGroup) LayoutInflater.from(context).inflate(
                         R.layout.closable_tab_grid_card_item, parentView, false);
-                if (mMode == TabListMode.CAROUSEL) {
-                    group.getLayoutParams().width = context.getResources().getDimensionPixelSize(
-                            R.dimen.tab_carousel_card_width);
-                }
-
                 group.setClickable(true);
                 return group;
             }, TabGridViewBinder::bindClosableTab);
@@ -246,6 +239,10 @@ public class TabListCoordinator
                 ViewGroup.LayoutParams layoutParams = mRecyclerView.getLayoutParams();
                 layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
                 mRecyclerView.setLayoutParams(layoutParams);
+                final int cardWidthPx = context.getResources().getDimensionPixelSize(
+                        R.dimen.tab_carousel_card_width);
+                final int cardHeightPx = TabUtils.deriveGridCardHeight(cardWidthPx, mContext);
+                mMediator.setDefaultGridCardSize(new Size(cardWidthPx, cardHeightPx));
             }
 
             mRecyclerView.setAdapter(mAdapter);
@@ -254,15 +251,13 @@ public class TabListCoordinator
 
             if (mMode == TabListMode.GRID) {
                 // Note(david@vivaldi.com): Calculate grid span count depending on screen size.
-                int spanCount = mMediator.calculateGridSpanCount(
-                        context.getResources().getConfiguration().orientation);
+                int spanCount = mMediator.calculateGridSpanCount();
                 GridLayoutManager gridLayoutManager =
                         new GridLayoutManager(context, spanCount); // Vivaldi: consider new span count.
                 mRecyclerView.setLayoutManager(gridLayoutManager);
                 mMediator.registerOrientationListener(gridLayoutManager);
-                mMediator.updateSpanCount(gridLayoutManager,
-                        context.getResources().getConfiguration().orientation,
-                        context.getResources().getConfiguration().screenWidthDp);
+                mMediator.updateSpanCount(
+                        gridLayoutManager, context.getResources().getConfiguration().screenWidthDp);
                 mMediator.setupAccessibilityDelegate(mRecyclerView);
             } else if (mMode == TabListMode.STRIP || mMode == TabListMode.CAROUSEL
                     || mMode == TabListMode.LIST) {
@@ -274,11 +269,8 @@ public class TabListCoordinator
         }
 
         if (mMode == TabListMode.GRID) {
-            mGlobalLayoutListener = this::updateThumbnailLocation;
-            if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext)) {
-                mListLayoutListener = (view, left, top, right, bottom, oldLeft, oldTop, oldRight,
-                        oldBottom) -> updateGridCardLayout(right - left);
-            }
+            mListLayoutListener = (view, left, top, right, bottom, oldLeft, oldTop, oldRight,
+                    oldBottom) -> updateGridCardLayout(right - left);
         } else if (mMode == TabListMode.STRIP) {
             mTabStripSnapshotter =
                     new TabStripSnapshotter(onModelTokenChange, mModel, mRecyclerView);
@@ -395,6 +387,7 @@ public class TabListCoordinator
             }
         }
     }
+
     /**
      * Update the location of the selected thumbnail.
      * @return Whether a valid {@link Rect} is obtained.
@@ -412,12 +405,23 @@ public class TabListCoordinator
         // Determine and set span count
         final GridLayoutManager layoutManager =
                 (GridLayoutManager) mRecyclerView.getLayoutManager();
-        mMediator.updateSpanCount(layoutManager,
-                mContext.getResources().getConfiguration().orientation,
-                mContext.getResources().getConfiguration().screenWidthDp);
+        boolean updatedSpan = mMediator.updateSpanCount(
+                layoutManager, mContext.getResources().getConfiguration().screenWidthDp);
+        if (updatedSpan) {
+            // Update the cards for the span change.
+            ViewUtils.requestLayout(mRecyclerView, "TabListCoordinator#updateGridCardLayout");
+        }
         // Determine grid card width and account for margins on left and right.
-        final int cardWidthPx = (viewWidth / layoutManager.getSpanCount());
+        final int cardWidthPx =
+                ((viewWidth - mRecyclerView.getPaddingStart() - mRecyclerView.getPaddingEnd())
+                        / layoutManager.getSpanCount());
         final int cardHeightPx = TabUtils.deriveGridCardHeight(cardWidthPx, mContext);
+
+        final Size oldDefaultSize = mMediator.getDefaultGridCardSize();
+        final Size newDefaultSize = new Size(cardWidthPx, cardHeightPx);
+        if (oldDefaultSize != null && newDefaultSize.equals(oldDefaultSize)) return;
+
+        mMediator.setDefaultGridCardSize(newDefaultSize);
         for (int i = 0; i < mModel.size(); i++) {
             PropertyModel tabPropertyModel = mModel.get(i).model;
             // Other GTS items might intentionally have different dimensions. For example, the
@@ -509,12 +513,8 @@ public class TabListCoordinator
     }
 
     void prepareTabSwitcherView() {
-        if (mGlobalLayoutListener != null) {
-            mRecyclerView.getViewTreeObserver().addOnGlobalLayoutListener(mGlobalLayoutListener);
-        }
         registerLayoutChangeListener();
         mRecyclerView.prepareTabSwitcherView();
-        mMediator.prepareTabSwitcherView();
         mMediator.registerOnScrolledListener(mRecyclerView);
     }
 
@@ -527,9 +527,6 @@ public class TabListCoordinator
     }
 
     void postHiding() {
-        if (mGlobalLayoutListener != null) {
-            mRecyclerView.getViewTreeObserver().removeOnGlobalLayoutListener(mGlobalLayoutListener);
-        }
         unregisterLayoutChangeListener();
         mRecyclerView.postHiding();
         mMediator.postHiding();
@@ -541,9 +538,6 @@ public class TabListCoordinator
     @Override
     public void onDestroy() {
         mMediator.destroy();
-        if (mGlobalLayoutListener != null) {
-            mRecyclerView.getViewTreeObserver().removeOnGlobalLayoutListener(mGlobalLayoutListener);
-        }
         if (mListLayoutListener != null) {
             mRecyclerView.removeOnLayoutChangeListener(mListLayoutListener);
             mLayoutListenerRegistered = false;

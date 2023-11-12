@@ -23,19 +23,19 @@
 #import "ios/chrome/app/spotlight/actions_spotlight_manager.h"
 #import "ios/chrome/app/spotlight/spotlight_util.h"
 #import "ios/chrome/app/startup/chrome_app_startup_parameters.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/main/browser_list.h"
-#import "ios/chrome/browser/main/browser_list_factory.h"
-#import "ios/chrome/browser/main/browser_provider_interface.h"
 #import "ios/chrome/browser/metrics/first_user_action_recorder.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/scene/connection_information.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/url_loading/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/common/intents/OpenInChromeIncognitoIntent.h"
 #import "ios/chrome/common/intents/OpenInChromeIntent.h"
 #import "ios/chrome/common/intents/SearchInChromeIntent.h"
@@ -55,7 +55,9 @@ NSString* const kShortcutNewSearch = @"OpenNewSearch";
 NSString* const kShortcutNewIncognitoSearch = @"OpenIncognitoSearch";
 NSString* const kShortcutVoiceSearch = @"OpenVoiceSearch";
 NSString* const kShortcutQRScanner = @"OpenQRScanner";
-NSString* const kShortcutLens = @"OpenLens";
+NSString* const kShortcutLensFromAppIconLongPress =
+    @"OpenLensFromAppIconLongPress";
+NSString* const kShortcutLensFromSpotlight = @"OpenLensFromSpotlight";
 
 // Constants for Siri shortcut.
 NSString* const kSiriShortcutOpenInChrome = @"OpenInChromeIntent";
@@ -80,7 +82,8 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
       [activityType isEqualToString:kShortcutNewSearch] ||
       [activityType isEqualToString:kShortcutVoiceSearch] ||
       [activityType isEqualToString:kShortcutQRScanner] ||
-      [activityType isEqualToString:kShortcutLens] ||
+      [activityType isEqualToString:kShortcutLensFromAppIconLongPress] ||
+      [activityType isEqualToString:kShortcutLensFromSpotlight] ||
       [activityType isEqualToString:kSiriShortcutSearchInChrome] ||
       [activityType isEqualToString:NSUserActivityTypeBrowsingWeb]) {
     return @[ kRegularMode, kIncognitoMode ];
@@ -630,12 +633,17 @@ NSArray* CompatibleModeForActivityType(NSString* activityType) {
     startupParams.postOpeningAction = START_QR_CODE_SCANNER;
     connectionInformation.startupParameters = startupParams;
     return YES;
-  } else if ([shortcutItem.type isEqualToString:kShortcutLens]) {
-    // Use a specific action id, as other Lens startup entry points may be added
-    // in the future (e.g. Spotlight).
+  } else if ([shortcutItem.type
+                 isEqualToString:kShortcutLensFromAppIconLongPress]) {
     base::RecordAction(UserMetricsAction(
-        "ApplicationShortcut.LensPressedFromHomeScreenWidget"));
-    startupParams.postOpeningAction = START_LENS;
+        "ApplicationShortcut.LensPressedFromAppIconLongPress"));
+    startupParams.postOpeningAction = START_LENS_FROM_APP_ICON_LONG_PRESS;
+    connectionInformation.startupParameters = startupParams;
+    return YES;
+  } else if ([shortcutItem.type isEqualToString:kShortcutLensFromSpotlight]) {
+    base::RecordAction(
+        UserMetricsAction("ApplicationShortcut.LensPressedFromSpotlight"));
+    startupParams.postOpeningAction = START_LENS_FROM_SPOTLIGHT;
     connectionInformation.startupParameters = startupParams;
     return YES;
   }

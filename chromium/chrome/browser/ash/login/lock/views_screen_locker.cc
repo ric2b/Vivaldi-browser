@@ -17,7 +17,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "chrome/browser/ash/authpolicy/authpolicy_helper.h"
 #include "chrome/browser/ash/lock_screen_apps/state_controller.h"
 #include "chrome/browser/ash/login/challenge_response_auth_keys_loader.h"
 #include "chrome/browser/ash/login/lock_screen_utils.h"
@@ -154,10 +153,6 @@ void ViewsScreenLocker::HandleOnFocusPod(const AccountId& account_id) {
   user_selection_screen_->HandleFocusPod(account_id);
 
   WallpaperControllerClientImpl::Get()->ShowUserWallpaper(account_id);
-}
-
-void ViewsScreenLocker::HandleOnNoPodFocused() {
-  user_selection_screen_->HandleNoPodFocused();
 }
 
 bool ViewsScreenLocker::HandleFocusLockScreenApps(bool reverse) {

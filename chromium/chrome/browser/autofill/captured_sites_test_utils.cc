@@ -364,25 +364,20 @@ std::vector<CapturedSiteParams> GetCapturedSites(
       replay_files_dir_path.AppendASCII("testcases.json");
 
   std::string json_text;
-  {
-    if (!base::ReadFileToString(config_file_path, &json_text)) {
-      LOG(WARNING) << "Could not read json file: " << config_file_path;
-      return sites;
-    }
+  if (!base::ReadFileToString(config_file_path, &json_text)) {
+    LOG(WARNING) << "Could not read json file: " << config_file_path;
+    return sites;
   }
   // Parse json text content to json value node.
-  base::Value::Dict root_node;
-  {
-    auto value_with_error = JSONReader::ReadAndReturnValueWithError(
-        json_text, JSONParserOptions::JSON_PARSE_RFC);
-    if (!value_with_error.has_value()) {
-      LOG(WARNING) << "Could not load test config from json file: "
-                   << "`testcases.json` because: "
-                   << value_with_error.error().message;
-      return sites;
-    }
-    root_node = std::move(*value_with_error).TakeDict();
+  auto value_with_error = JSONReader::ReadAndReturnValueWithError(
+      json_text, JSONParserOptions::JSON_PARSE_RFC);
+  if (!value_with_error.has_value()) {
+    LOG(WARNING) << "Could not load test config from json file: "
+                 << "`testcases.json` because: "
+                 << value_with_error.error().message;
+    return sites;
   }
+  base::Value::Dict root_node = std::move(*value_with_error).TakeDict();
   const base::Value::List* list_node = root_node.FindList("tests");
   if (!list_node) {
     LOG(WARNING) << "No tests found in `testcases.json` config";
@@ -1289,9 +1284,9 @@ bool TestRecipeReplayer::InitializeBrowserToExecuteRecipe(
   }
 
   // Navigate to the starting URL, wait for the page to complete loading.
-  if (!content::ExecuteScript(GetWebContents(),
-                              base::StringPrintf("window.location.href = '%s';",
-                                                 starting_url->c_str()))) {
+  if (!content::ExecJs(GetWebContents(),
+                       base::StringPrintf("window.location.href = '%s';",
+                                          starting_url->c_str()))) {
     ADD_FAILURE() << "Failed to navigate Chrome to '" << *starting_url << "!";
     return false;
   }
@@ -1513,7 +1508,7 @@ bool TestRecipeReplayer::ExecuteRunCommandAction(base::Value::Dict action) {
 
   // Execute the commands.
   for (const std::string& command : commands) {
-    if (!content::ExecuteScript(frame, command)) {
+    if (!content::ExecJs(frame, command)) {
       ADD_FAILURE() << "Failed to execute JavaScript command `" << command
                     << "`!";
       return false;
@@ -2030,19 +2025,14 @@ bool TestRecipeReplayer::AllAssertionsPassed(
     const content::ToRenderFrameHost& frame,
     const std::vector<std::string>& assertions) {
   for (const std::string& assertion : assertions) {
-    bool assertion_passed = false;
-    EXPECT_TRUE(ExecuteScriptAndExtractBool(
-        frame,
-        base::StringPrintf("window.domAutomationController.send("
-                           "    (function() {"
-                           "      try {"
-                           "        %s"
-                           "      } catch (ex) {}"
-                           "      return false;"
-                           "    })());",
-                           assertion.c_str()),
-        &assertion_passed));
-    if (!assertion_passed) {
+    if (!EvalJs(frame, base::StringPrintf("(function() {"
+                                          "  try {"
+                                          "    %s"
+                                          "  } catch (ex) {}"
+                                          "  return false;"
+                                          "})();",
+                                          assertion.c_str()))
+             .ExtractBool()) {
       VLOG(1) << "'" << assertion << "' failed!";
       return false;
     }
@@ -2061,7 +2051,7 @@ bool TestRecipeReplayer::ExecuteJavaScriptOnElementByXpath(
       "  (function(target) { %s })(element);"
       "} catch(ex) {}",
       element_xpath.c_str(), execute_function_body.c_str()));
-  return ExecuteScript(frame, js);
+  return ExecJs(frame, js);
 }
 
 bool TestRecipeReplayer::GetElementProperty(
@@ -2069,21 +2059,20 @@ bool TestRecipeReplayer::GetElementProperty(
     const std::string& element_xpath,
     const std::string& get_property_function_body,
     std::string* property) {
-  *property =
-      content::EvalJs(
-          frame, base::StringPrintf(
-                     "(function() {"
-                     "  try {"
-                     "    var element = function() {"
-                     "      return automation_helper.getElementByXpath(`%s`);"
-                     "    }();"
-                     "    return function(target){%s}(element);"
-                     "  } catch (ex) {}"
-                     "  return 'Exception encountered';"
-                     "})();",
-                     element_xpath.c_str(), get_property_function_body.c_str()))
-          .ExtractString();
-  return true;
+  content::EvalJsResult result = content::EvalJs(
+      frame, base::StringPrintf(
+                 "(function() {"
+                 "    var element = function() {"
+                 "      return automation_helper.getElementByXpath(`%s`);"
+                 "    }();"
+                 "    return function(target){%s}(element);})();",
+                 element_xpath.c_str(), get_property_function_body.c_str()));
+  if (result.error.empty() && result.value.is_string()) {
+    *property = result.ExtractString();
+    return true;
+  }
+  *property = result.error;
+  return false;
 }
 
 bool TestRecipeReplayer::ExpectElementPropertyEqualsAnyOf(
@@ -2128,18 +2117,13 @@ bool TestRecipeReplayer::ScrollElementIntoView(
       "  const element = automation_helper.getElementByXpath(`%s`);"
       "  element.scrollIntoView({"
       "    block: 'center', inline: 'center'});"
-      "  window.domAutomationController.send(true);"
+      "  true;"
       "} catch(ex) {"
-      "  window.domAutomationController.send(false);"
+      "  false;"
       "}",
       element_xpath.c_str()));
 
-  bool succeeded = false;
-  if (!ExecuteScriptAndExtractBool(frame, scroll_target_js, &succeeded)) {
-    ADD_FAILURE() << "Failed to scroll the element into view with JavaScript!";
-    return false;
-  }
-  return true;
+  return EvalJs(frame, scroll_target_js).ExtractBool();
 }
 
 bool TestRecipeReplayer::PlaceFocusOnElement(
@@ -2149,37 +2133,26 @@ bool TestRecipeReplayer::PlaceFocusOnElement(
   if (!ScrollElementIntoView(element_xpath, frame))
     return false;
 
-  const std::string focus_on_target_field_js(base::StringPrintf(
-      "try {"
-      "  function onFocusHandler(event) {"
-      "    event.target.removeEventListener(event.type, arguments.callee);"
-      "    window.domAutomationController.send(true);"
-      "  }"
-      "  const element = automation_helper.getElementByXpath(`%s`);"
-      "  if (document.activeElement === element) {"
-      "    window.domAutomationController.send(true);"
-      "  } else {"
-      "    element.addEventListener('focus', onFocusHandler);"
-      "    element.focus();"
-      "  }"
-      "  setTimeout(() => {"
-      "    element.removeEventListener('focus', onFocusHandler);"
-      "    window.domAutomationController.send(false);"
-      "  }, 1000);"
-      "} catch(ex) {"
-      "  window.domAutomationController.send(false);"
-      "}",
-      element_xpath.c_str()));
+  const std::string focus_on_target_field_js(
+      base::StringPrintf("(function() {const element = "
+                         "automation_helper.getElementByXpath(`%s`);"
+                         "    if (document.activeElement !== element) {"
+                         "      element.focus();"
+                         "    }"
+                         "    return document.activeElement === element;})();",
+                         element_xpath.c_str()));
 
-  bool focused = false;
-  if (!ExecuteScriptAndExtractBool(frame, focus_on_target_field_js, &focused)) {
-    ADD_FAILURE() << "Failed to place focus on the element with JavaScript!";
-    return false;
-  }
-
-  if (focused) {
+  content::EvalJsResult result =
+      content::EvalJs(frame, focus_on_target_field_js);
+  if (result.error.empty() && result.value.is_bool() && result.ExtractBool()) {
     return true;
   } else {
+    VLOG(1) << "Failed to focus element through script:"
+            << (result.error.empty()
+                    ? (result.value.is_bool() ? "Not a valid bool"
+                                              : "Returned false")
+                    : result.error);
+
     // Failing focusing on an element through script, use the less preferred
     // method of left mouse clicking the element.
     gfx::Rect rect;
@@ -2330,7 +2303,7 @@ void TestRecipeReplayer::NavigateAwayAndDismissBeforeUnloadDialog() {
   content::PrepContentsForBeforeUnloadTest(GetWebContents());
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL(url::kAboutBlankURL), WindowOpenDisposition::CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_NONE);
+      ui_test_utils::BROWSER_TEST_NO_WAIT);
   javascript_dialogs::AppModalDialogController* alert =
       ui_test_utils::WaitForAppModalDialog();
   alert->view()->AcceptAppModalDialog();

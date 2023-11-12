@@ -6,6 +6,10 @@
 
 namespace prefs {
 
+// A bool pref that keeps whether the child status for this profile was already
+// successfully checked via ChildAccountService.
+const char kChildAccountStatusKnown[] = "child_account_status_known";
+
 // Stores the email address associated with the google account of the custodian
 // of the supervised user, set when the supervised user is created.
 const char kSupervisedUserCustodianEmail[] = "profile.managed.custodian_email";
@@ -64,6 +68,13 @@ const char kSupervisedUserSecondCustodianProfileURL[] =
 const char kSupervisedUserExtensionsMayRequestPermissions[] =
     "profile.managed.extensions_may_request_permissions";
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+// DictionaryValue that maps extension ids to the approved version of this
+// extension for a supervised user. Missing extensions are not approved.
+const char kSupervisedUserApprovedExtensions[] =
+    "profile.managed.approved_extensions";
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
 // The supervised user ID.
 const char kSupervisedUserId[] = "profile.managed_user_id";
 
@@ -93,5 +104,12 @@ const char kSupervisedUserSharedSettings[] = "profile.managed.shared_settings";
 // 3: Invalid
 const char kDefaultSupervisedUserFilteringBehavior[] =
     "profile.managed.default_filtering_behavior";
+
+// An integer pref that stores the current state of the interstitial banner for
+// a supervised user (SupervisedUserFilter::FirstTimeInterstitialBannerState):
+// 0: kNeedToShow
+// 1: kSetupComplete
+// 2: kUnknown
+const char kFirstTimeInterstitialBannerState[] = "profile.managed.banner_state";
 
 }  // namespace prefs

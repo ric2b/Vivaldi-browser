@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">За вмістом</translation>
 <translation id="2129408066358825297">Вік</translation>
 <translation id="2148384276939959392">Вибране</translation>
+<translation id="21693288559538605">Статистика блокування реклами та трекерів</translation>
 <translation id="2195713384412091023">Ця дія спричинить видалення даних із сервера, скидання пароля для шифрування та вихід з облікового запису.</translation>
 <translation id="2243210264130642074">Нотатку збережено</translation>
 <translation id="2272338747456392228">Обліковий запис заблоковано</translation>
 <translation id="2273327106802955778">Більше</translation>
 <translation id="2324160330092901720">Код підтвердження надіслано на <ph name="EMAIL_ID" /></translation>
+<translation id="2336309953058658733">Спорожнити кошик</translation>
 <translation id="2359808026110333948">Далі</translation>
 <translation id="2386793615875593361">Вибрано 1 нотатку</translation>
 <translation id="2388224692799337242">Історія перегляду буде тут</translation>
@@ -117,6 +119,7 @@
 <translation id="3699026013955941879">Код уже не дійсний. Запитайте новий код активації.</translation>
 <translation id="3700829948786686853">Вітаємо у Vivaldi</translation>
 <translation id="3766350025418769949">Ви можете використовувати паролі, збережені у менеджері паролів Vivaldi, в інших додатках на iPad.</translation>
+<translation id="3845564230651302310">Застосовуємо нові налаштування блокувальника...</translation>
 <translation id="3858860766373142691">Назва</translation>
 <translation id="3866249974567520381">Опис</translation>
 <translation id="3872195896030547485">Введіть адресу електронної пошти.</translation>
@@ -225,6 +228,7 @@
 <translation id="6406506848690869874">Синхронізація</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> вибрано</translation>
 <translation id="6468130661190228905">На жаль, вам треба трохи почекати. Наші учасники спільноти мають бути доросліші за 16 років.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Імпорт<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Зберегти ключ шифрування</translation>
 <translation id="6527303717912515753">Поділитися</translation>
 <translation id="6535988230515403205">Польська (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@
 <translation id="7461899062138731833">ДЖЕРЕЛА</translation>
 <translation id="750493650310597496">Вибрано 0 нотаток</translation>
 <translation id="7525067979554623046">Створити</translation>
-<translation id="7541020606126512786">Статистика блокування</translation>
 <translation id="7573518470897278603">Показати мобільну версію</translation>
 <translation id="7574321014880720413">Додати новий домен</translation>
 <translation id="7587132259180664054">Листа надіслано</translation>

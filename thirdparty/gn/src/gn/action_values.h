@@ -44,6 +44,10 @@ class ActionValues {
   bool has_depfile() const { return !depfile_.ranges().empty(); }
   void set_depfile(const SubstitutionPattern& depfile) { depfile_ = depfile; }
 
+  // prefix to the ninja output description for this action.
+  std::string& mnemonic() { return mnemonic_; }
+  const std::string& mnemonic() const { return mnemonic_; }
+
   // Response file contents. Empty means no response file.
   SubstitutionList& rsp_file_contents() { return rsp_file_contents_; }
   const SubstitutionList& rsp_file_contents() const {
@@ -57,6 +61,7 @@ class ActionValues {
   SubstitutionList outputs_;
   SubstitutionPattern depfile_;
   SubstitutionList rsp_file_contents_;
+  std::string mnemonic_;
 
   ActionValues(const ActionValues&) = delete;
   ActionValues& operator=(const ActionValues&) = delete;

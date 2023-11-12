@@ -13,13 +13,14 @@ import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
-import '../controls/settings_toggle_button.js';
+import '/shared/settings/controls/settings_toggle_button.js';
 import '../settings_page/settings_animated_pages.js';
 import '../settings_page/settings_subpage.js';
 import '../settings_shared.css.js';
 import '../site_settings/settings_category_default_radio_group.js';
 import './privacy_guide/privacy_guide_dialog.js';
 
+import {SettingsToggleButtonElement} from '/shared/settings/controls/settings_toggle_button.js';
 import {PrivacyPageBrowserProxy, PrivacyPageBrowserProxyImpl} from '/shared/settings/privacy_page/privacy_page_browser_proxy.js';
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
@@ -30,15 +31,15 @@ import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BaseMixin} from '../base_mixin.js';
-import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
 import {FocusConfig} from '../focus_config.js';
 import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../hats_browser_proxy.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyGuideInteractions} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
 import {RouteObserverMixin, Router} from '../router.js';
+import {NotificationPermission, SafetyHubBrowserProxy, SafetyHubBrowserProxyImpl} from '../safety_hub/safety_hub_browser_proxy.js';
 import {ChooserType, ContentSettingsTypes, CookieControlsMode, NotificationSetting} from '../site_settings/constants.js';
-import {NotificationPermission, SiteSettingsPrefsBrowserProxy, SiteSettingsPrefsBrowserProxyImpl} from '../site_settings/site_settings_prefs_browser_proxy.js';
+import {SiteSettingsPrefsBrowserProxy, SiteSettingsPrefsBrowserProxyImpl} from '../site_settings/site_settings_prefs_browser_proxy.js';
 
 import {PrivacyGuideAvailabilityMixin} from './privacy_guide/privacy_guide_availability_mixin.js';
 import {getTemplate} from './privacy_page.html.js';
@@ -182,6 +183,12 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         value: () => loadTimeData.getBoolean('privateStateTokensEnabled'),
       },
 
+      enablePermissionStorageAccessApi_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('enablePermissionStorageAccessApi'),
+      },
+
       /**
        * Whether the File System Access Persistent Permissions UI should be
        * displayed.
@@ -204,12 +211,12 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
           }
 
           if (routes.COOKIES) {
-            map.set(
-                `${routes.COOKIES.path}_${routes.PRIVACY.path}`,
-                '#cookiesLinkRow');
-            map.set(
-                `${routes.COOKIES.path}_${routes.BASIC.path}`,
-                '#cookiesLinkRow');
+            const selector =
+                loadTimeData.getBoolean('isPrivacySandboxSettings4') ?
+                '#thirdPartyCookiesLinkRow' :
+                '#cookiesLinkRow';
+            map.set(`${routes.COOKIES.path}_${routes.PRIVACY.path}`, selector);
+            map.set(`${routes.COOKIES.path}_${routes.BASIC.path}`, selector);
           }
 
           if (routes.SITE_SETTINGS) {
@@ -267,6 +274,13 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         computed:
             'computeNotificationsDefaultBehaviorLabel_(safetyCheckNotificationPermissionsEnabled_)',
       },
+
+      enableSafetyHub_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('enableSafetyHub');
+        },
+      },
     };
   }
 
@@ -290,14 +304,18 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private isPrivacySandboxSettings4_: boolean;
   private privateStateTokensEnabled_: boolean;
   private safetyCheckNotificationPermissionsEnabled_: boolean;
+  private enablePermissionStorageAccessApi_: boolean;
+  private enableSafetyHub_: boolean;
   private focusConfig_: FocusConfig;
   private searchFilter_: string;
   private browserProxy_: PrivacyPageBrowserProxy =
       PrivacyPageBrowserProxyImpl.getInstance();
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
-  private siteSettingsBrowserProxy_: SiteSettingsPrefsBrowserProxy =
+  private siteSettingsPrefsBrowserProxy_: SiteSettingsPrefsBrowserProxy =
       SiteSettingsPrefsBrowserProxyImpl.getInstance();
+  private safetyHubBrowserProxy_: SafetyHubBrowserProxy =
+      SafetyHubBrowserProxyImpl.getInstance();
 
   override ready() {
     super.ready();
@@ -316,7 +334,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         (status: BlockAutoplayStatus) =>
             this.onBlockAutoplayStatusChanged_(status));
 
-    this.siteSettingsBrowserProxy_.getCookieSettingDescription().then(
+    this.siteSettingsPrefsBrowserProxy_.getCookieSettingDescription().then(
         (description: string) => this.cookieSettingDescription_ = description);
 
     this.addWebUiListener(
@@ -328,7 +346,7 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         (sites: NotificationPermission[]) =>
             this.onReviewNotificationPermissionListChanged_(sites));
 
-    this.siteSettingsBrowserProxy_.getNotificationPermissionReview().then(
+    this.safetyHubBrowserProxy_.getNotificationPermissionReview().then(
         (sites: NotificationPermission[]) =>
             this.onReviewNotificationPermissionListChanged_(sites));
   }
@@ -451,6 +469,15 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     const enabled = this.getPref('privacy_sandbox.apis_enabled_v2').value;
     return enabled ? this.i18n('privacySandboxTrialsEnabled') :
                      this.i18n('privacySandboxTrialsDisabled');
+  }
+
+  private computeAdPrivacySublabel_(): string {
+    // When the privacy sandbox is restricted with a notice, the sublabel
+    // wording indicates measurement only, rather than general ad privacy.
+    const restricted = this.isPrivacySandboxRestricted_ &&
+        this.isPrivacySandboxRestrictedNoticeEnabled_;
+    return restricted ? this.i18n('adPrivacyRestrictedLinkRowSubLabel') :
+                        this.i18n('adPrivacyLinkRowSubLabel');
   }
 
   private computeNotificationsDefaultBehaviorLabel_(): string {

@@ -294,11 +294,8 @@ CtapGetAssertionRequest SpecializeRequestForAuthenticator(
     const FidoAuthenticator& authenticator) {
   CtapGetAssertionRequest specialized_request(request);
 
-  if (request.allow_list.empty() &&
-      (authenticator.AuthenticatorTransport() !=
-           FidoTransportProtocol::kInternal ||
-       !base::FeatureList::IsEnabled(
-           kWebAuthnMacPlatformAuthenticatorOptionalUv))) {
+  if (request.allow_list.empty() && authenticator.AuthenticatorTransport() !=
+                                        FidoTransportProtocol::kInternal) {
     // Resident credential requests on external authenticators always require
     // user verification.
     specialized_request.user_verification =
@@ -383,6 +380,8 @@ GetAssertionRequestHandler::GetAssertionRequestHandler(
       options_(std::move(options)),
       allow_skipping_pin_touch_(allow_skipping_pin_touch) {
   transport_availability_info().request_type = FidoRequestType::kGetAssertion;
+  transport_availability_info().user_verification_requirement =
+      request_.user_verification;
   transport_availability_info().has_empty_allow_list =
       request_.allow_list.empty();
   transport_availability_info().is_only_hybrid_or_internal =
@@ -563,7 +562,7 @@ void GetAssertionRequestHandler::GetPlatformCredentialStatus(
       request_, options_,
       base::BindOnce(
           &GetAssertionRequestHandler::OnHavePlatformCredentialStatus,
-          weak_factory_.GetWeakPtr()));
+          weak_factory_.GetWeakPtr(), platform_authenticator->GetType()));
 }
 
 bool GetAssertionRequestHandler::AuthenticatorSelectedForPINUVAuthToken(
@@ -747,6 +746,13 @@ void GetAssertionRequestHandler::HandleResponse(
       std::move(completion_callback_)
           .Run(GetAssertionStatus::kAuthenticatorResponseInvalid,
                absl::nullopt);
+    } else if (authenticator->GetType() == AuthenticatorType::kPhone &&
+               base::FeatureList::IsEnabled(kWebAuthnNewHybridUI)) {
+      FIDO_LOG(ERROR) << "Status " << static_cast<int>(status) << " from "
+                      << authenticator->GetDisplayName()
+                      << " is fatal to the request";
+      std::move(completion_callback_)
+          .Run(GetAssertionStatus::kHybridTransportError, absl::nullopt);
     } else {
       FIDO_LOG(ERROR) << "Ignoring status " << static_cast<int>(status)
                       << " from " << authenticator->GetDisplayName();

@@ -31,8 +31,8 @@
 #include "sql/statement.h"
 #include "sql/transaction.h"
 
-#if BUILDFLAG(IS_MAC)
-#include "base/mac/backup_util.h"
+#if BUILDFLAG(IS_APPLE)
+#include "base/apple/backup_util.h"
 #endif
 
 namespace mail_client {
@@ -94,9 +94,9 @@ sql::InitStatus MailClientDatabase::Init(
   if (!committer.Begin())
     return sql::INIT_FAILURE;
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   // Exclude the mail db file from backups.
-  base::mac::SetBackupExclusion(mail_client_name);
+  base::apple::SetBackupExclusion(mail_client_name);
 #endif
 
   // Prime the cache.

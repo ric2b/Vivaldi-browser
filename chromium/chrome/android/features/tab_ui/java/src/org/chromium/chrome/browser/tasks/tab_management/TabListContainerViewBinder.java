@@ -4,9 +4,12 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
+import static android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED;
+
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.ANIMATE_VISIBILITY_CHANGES;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.BOTTOM_CONTROLS_HEIGHT;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.BOTTOM_PADDING;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.FOCUS_TAB_INDEX_FOR_ACCESSIBILITY;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.INITIAL_SCROLL_INDEX;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.IS_INCOGNITO;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.IS_VISIBLE;
@@ -17,10 +20,12 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerP
 
 import android.app.Activity;
 import android.graphics.Rect;
+import android.view.View;
 import android.widget.FrameLayout;
 
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.theme.ThemeUtils;
@@ -47,6 +52,7 @@ class TabListContainerViewBinder {
     public static void bind(
             PropertyModel model, TabListRecyclerView view, PropertyKey propertyKey) {
         if (IS_VISIBLE == propertyKey) {
+            updateMargins(model, view);
             if (model.get(IS_VISIBLE)) {
                 view.startShowing(model.get(ANIMATE_VISIBILITY_CHANGES));
             } else {
@@ -73,30 +79,25 @@ class TabListContainerViewBinder {
             // params
             if (!(view.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
 
-            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
-            final int newTopMargin = model.get(TOP_MARGIN);
-            if (newTopMargin == params.topMargin) return;
-
-            params.topMargin = newTopMargin;
-            ViewUtils.requestLayout(view, "TabListContainerViewBinder.bind TOP_MARGIN");
+            updateMargins(model, view);
         } else if (BOTTOM_CONTROLS_HEIGHT == propertyKey) {
             // NOTE(david@vivaldi.com): In Vivaldi the layout params can be RecycleView layout
             // params
             if (!(view.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
 
-            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
-            // Note(david@vivaldi.com): In the tab switcher view the bottom toolbar has always a
-            // fixed height (VAB-3531).
-            if (ChromeApplicationImpl.isVivaldi())
-                params.bottomMargin = view.getResources().getDimensionPixelSize(
-                        org.chromium.chrome.tab_ui.R.dimen.bottom_toolbar_height);
-            else
-            params.bottomMargin = model.get(BOTTOM_CONTROLS_HEIGHT);
-            ViewUtils.requestLayout(view, "TabListContainerViewBinder.bind BOTTOM_CONTROLS_HEIGHT");
+            updateMargins(model, view);
         } else if (SHADOW_TOP_OFFSET == propertyKey) {
             view.setShadowTopOffset(model.get(SHADOW_TOP_OFFSET));
         } else if (BOTTOM_PADDING == propertyKey) {
             view.setBottomPadding(model.get(BOTTOM_PADDING));
+        } else if (FOCUS_TAB_INDEX_FOR_ACCESSIBILITY == propertyKey) {
+            int index = model.get(FOCUS_TAB_INDEX_FOR_ACCESSIBILITY);
+            RecyclerView.ViewHolder selectedViewHolder =
+                    view.findViewHolderForAdapterPosition(index);
+            if (selectedViewHolder == null) return;
+            View focusView = selectedViewHolder.itemView;
+            focusView.requestFocus();
+            focusView.sendAccessibilityEvent(TYPE_VIEW_FOCUSED);
             // Vivaldi: Set the scroll index for the correct recycler view.
         } else if (TabListContainerProperties.SCROLL_INDEX_NORMAL == propertyKey) {
             if (view.getCurrentTabViewInstance() == TabSwitcherView.PAGE.NORMAL) {
@@ -110,6 +111,33 @@ class TabListContainerViewBinder {
                 scrollView(view, index);
             }
         }
+    }
+
+    private static void updateMargins(PropertyModel model, TabListRecyclerView view) {
+        // Vivaldi
+        if (!(view.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
+        final int oldTopMargin = params.topMargin;
+        final int oldBottomMargin = params.bottomMargin;
+        if (model.get(IS_VISIBLE)) {
+            params.topMargin = model.get(TOP_MARGIN);
+            params.bottomMargin = model.get(BOTTOM_CONTROLS_HEIGHT);
+        } else {
+            // Treat the bottom margin as 0 to avoid layout shift in tab shrink animations.
+            // IS_VISIBLE will be set to true after the tab shrink animation see
+            // {@link TabSwitcherMediator#showTabSwitcherView(boolean)}.
+            params.bottomMargin = 0;
+
+            // Leave the top margin unchanged to avoid relayouts during scrolls and for top
+            // toolbar indicators while the view is not visible. Once visible the offset will
+            // adjust accordingly.
+        }
+        if (!model.get(IS_VISIBLE)
+                || (oldTopMargin == params.topMargin && oldBottomMargin == params.bottomMargin)) {
+            return;
+        }
+
+        ViewUtils.requestLayout(view, "TabListContainerViewBinder.bind updateMargins");
     }
 
     private static int computeOffset(TabListRecyclerView view, PropertyModel model) {

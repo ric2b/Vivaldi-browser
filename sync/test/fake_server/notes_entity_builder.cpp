@@ -8,10 +8,10 @@
 #include <memory>
 #include <string>
 
-#include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/unique_position.h"
@@ -75,7 +75,7 @@ std::unique_ptr<LoopbackServerEntity> NotesEntityBuilder::Build() {
   unique_position = syncer::UniquePosition::FromInt64(0, suffix).ToProto();
 
   const string id =
-      LoopbackServerEntity::CreateId(syncer::NOTES, base::GenerateGUID());
+      LoopbackServerEntity::CreateId(syncer::NOTES, base::Uuid::GenerateRandomV4().AsLowercaseString());
 
   return base::WrapUnique<LoopbackServerEntity>(
       new syncer::PersistentNotesEntity(
@@ -88,7 +88,7 @@ NotesEntityBuilder EntityBuilderFactory::NewNotesEntityBuilder(
     const string& title,
     const GURL& url,
     const string& content) {
-  std::string originator_client_item_id = base::GenerateGUID();
+  std::string originator_client_item_id = base::Uuid::GenerateRandomV4().AsLowercaseString();
   NotesEntityBuilder builder(title, url, content, cache_guid_,
                              originator_client_item_id);
   return builder;

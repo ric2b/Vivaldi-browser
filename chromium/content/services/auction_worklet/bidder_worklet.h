@@ -132,6 +132,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
       const absl::optional<GURL>& direct_from_seller_auction_signals,
       const url::Origin& browser_signal_seller_origin,
       const absl::optional<url::Origin>& browser_signal_top_level_seller_origin,
+      const base::TimeDelta browser_signal_recency,
       mojom::BiddingBrowserSignalsPtr bidding_browser_signals,
       base::Time auction_start_time,
       uint64_t trace_id,
@@ -141,12 +142,14 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
           bid_finalizer) override;
   void SendPendingSignalsRequests() override;
   void ReportWin(
-      const std::string& interest_group_name,
+      mojom::ReportingIdField reporting_id_field,
+      const std::string& reporting_id,
       const absl::optional<std::string>& auction_signals_json,
       const absl::optional<std::string>& per_buyer_signals_json,
       const absl::optional<GURL>& direct_from_seller_per_buyer_signals,
       const absl::optional<GURL>& direct_from_seller_auction_signals,
       const std::string& seller_signals_json,
+      mojom::KAnonymityBidMode kanon_mode,
       const GURL& browser_signal_render_url,
       double browser_signal_bid,
       const absl::optional<blink::AdCurrency>& browser_signal_bid_currency,
@@ -194,6 +197,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
     absl::optional<blink::AdCurrency> expected_buyer_currency;
     url::Origin browser_signal_seller_origin;
     absl::optional<url::Origin> browser_signal_top_level_seller_origin;
+    base::TimeDelta browser_signal_recency;
     mojom::BiddingBrowserSignalsPtr bidding_browser_signals;
     base::Time auction_start_time;
     uint64_t trace_id;
@@ -250,10 +254,12 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
     ReportWinTask();
     ~ReportWinTask();
 
-    std::string interest_group_name;
+    mojom::ReportingIdField reporting_id_field;
+    std::string reporting_id;
     absl::optional<std::string> auction_signals_json;
     absl::optional<std::string> per_buyer_signals_json;
     std::string seller_signals_json;
+    mojom::KAnonymityBidMode kanon_mode;
     GURL browser_signal_render_url;
     double browser_signal_bid;
     absl::optional<blink::AdCurrency> browser_signal_bid_currency;
@@ -328,11 +334,13 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
         PrivateAggregationRequests pa_requests,
         PrivateAggregationRequests non_kanon_pa_requests,
         base::TimeDelta bidding_latency,
+        mojom::RejectReason reject_reason,
         std::vector<std::string> error_msgs)>;
     using ReportWinCallbackInternal =
         base::OnceCallback<void(absl::optional<GURL> report_url,
                                 base::flat_map<std::string, GURL> ad_beacon_map,
                                 PrivateAggregationRequests pa_requests,
+                                base::TimeDelta reporting_latency,
                                 std::vector<std::string> errors)>;
 
     // Matches GenerateBidCallbackInternal, but with only one
@@ -349,6 +357,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
           base::flat_map<std::string, mojom::PrioritySignalsDoublePtr>
               update_priority_signals_overrides,
           PrivateAggregationRequests pa_requests,
+          mojom::RejectReason reject_reason,
           std::vector<std::string> error_msgs);
 
       SingleGenerateBidResult(const SingleGenerateBidResult&) = delete;
@@ -372,11 +381,13 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
           update_priority_signals_overrides;
       PrivateAggregationRequests pa_requests;
       PrivateAggregationRequests non_kanon_pa_requests;
+      mojom::RejectReason reject_reason;
       std::vector<std::string> error_msgs;
     };
 
     void ReportWin(
-        const std::string& interest_group_name,
+        mojom::ReportingIdField reporting_id_field,
+        const std::string& reporting_id,
         const absl::optional<std::string>& auction_signals_json,
         const absl::optional<std::string>& per_buyer_signals_json,
         DirectFromSellerSignalsRequester::Result
@@ -384,6 +395,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
         DirectFromSellerSignalsRequester::Result
             direct_from_seller_result_auction_signals,
         const std::string& seller_signals_json,
+        mojom::KAnonymityBidMode kanon_mode,
         const GURL& browser_signal_render_url,
         double browser_signal_bid,
         const absl::optional<blink::AdCurrency>& browser_signal_bid_currency,
@@ -417,6 +429,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
         const url::Origin& browser_signal_seller_origin,
         const absl::optional<url::Origin>&
             browser_signal_top_level_seller_origin,
+        const base::TimeDelta browser_signal_recency,
         mojom::BiddingBrowserSignalsPtr bidding_browser_signals,
         base::Time auction_start_time,
         scoped_refptr<TrustedSignals::Result> trusted_bidding_signals_result,
@@ -448,6 +461,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
         const absl::optional<blink::AdCurrency>& expected_buyer_currency,
         const url::Origin& browser_signal_seller_origin,
         const url::Origin* browser_signal_top_level_seller_origin,
+        const base::TimeDelta browser_signal_recency,
         const mojom::BiddingBrowserSignalsPtr& bidding_browser_signals,
         base::Time auction_start_time,
         const scoped_refptr<TrustedSignals::Result>&
@@ -471,6 +485,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
         const absl::optional<GURL>& report_url,
         base::flat_map<std::string, GURL> ad_beacon_map,
         PrivateAggregationRequests pa_requests,
+        base::TimeDelta reporting_latency,
         std::vector<std::string> errors);
 
     void PostErrorBidCallbackToUserThread(
@@ -589,6 +604,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
       PrivateAggregationRequests pa_requests,
       PrivateAggregationRequests non_kanon_pa_requests,
       base::TimeDelta bidding_latency,
+      mojom::RejectReason reject_reason,
       std::vector<std::string> error_msgs);
 
   // Removes `task` from `generate_bid_tasks_` only. Used in case where the
@@ -603,6 +619,7 @@ class CONTENT_EXPORT BidderWorklet : public mojom::BidderWorklet,
       absl::optional<GURL> report_url,
       base::flat_map<std::string, GURL> ad_beacon_map,
       PrivateAggregationRequests pa_requests,
+      base::TimeDelta reporting_latency,
       std::vector<std::string> errors);
 
   // Returns true if unpaused and the script and WASM helper (if needed) have

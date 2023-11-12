@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">ページの読み込みに必要なデータを再送信するため、再読み込みボタンを押してください。</translation>
 <translation id="3234666976984236645">このサイトの重要なコンテンツを常に検出</translation>
 <translation id="3308738399950580893">広告</translation>
+<translation id="3384522979010096022">あなたの所属組織では、このサイトの表示を許可していません</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> は現在アクセスできません。</translation>
 <translation id="3427092606871434483">許可（デフォルト）</translation>
 <translation id="3447661539832366887">このデバイスの所有者が恐竜ゲームを無効にしています。</translation>
@@ -193,7 +194,6 @@
 <translation id="8150722005171944719"><ph name="URL" /> のファイルを読むことができません。削除されたか移動された可能性があります。ファイルに対するアクセス権がない場合もあります。</translation>
 <translation id="8184538546369750125">グローバルのデフォルト値（[許可]）を使用</translation>
 <translation id="8211406090763984747">この接続は保護されています</translation>
-<translation id="8225771182978767009">このサイトは、このパソコンを設定したユーザーによってブロックされています。</translation>
 <translation id="8241707690549784388">あなたが戻ろうとしているページは、入力した情報を使用しています。このページに戻った場合、操作のやり直しが発生する可能性があります。続行しますか？</translation>
 <translation id="8241712895048303527">このサイトでブロック</translation>
 <translation id="8286036467436129157">ログイン</translation>
@@ -214,7 +214,6 @@
 <translation id="9062620674789239642">移動、編集または削除された可能性があります。</translation>
 <translation id="9069693763241529744">拡張機能によってブロック</translation>
 <translation id="9073799351042754113">このサイトではセキュリティの警告をオフにしました。</translation>
-<translation id="910924428752220542">Vivaldi パスワード</translation>
 <translation id="9169664750068251925">このサイトでは常にブロック</translation>
 <translation id="9180553614777056266">広告ブロッカー</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> ではサポートされていないプロトコルが使用されています。</translation>

@@ -1025,6 +1025,8 @@ public class TabGroupModelFilter extends TabModelFilter {
      * @return The root id for the given tab. The root id is shared for tabs in the same group.
      */
     public int getRootId(Tab tab) {
+        // Vivaldi
+        if (tab == null) return Tab.INVALID_TAB_ID;
         return CriticalPersistedTabData.from(tab).getRootId();
     }
 

@@ -40,7 +40,6 @@ import org.chromium.ui.resources.ResourceManager;
 import org.chromium.url.GURL;
 
 import java.util.Collections;
-import java.util.List;
 
 // Vivaldi
 import org.vivaldi.browser.preferences.VivaldiPreferences;
@@ -93,14 +92,11 @@ public class StaticLayout extends Layout {
     private final Handler mHandler;
     private boolean mUnstalling;
 
-    private TabModelSelector mTabModelSelector;
     private TabModelSelectorTabModelObserver mTabModelSelectorTabModelObserver;
     private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
 
     private BrowserControlsStateProvider mBrowserControlsStateProvider;
     private BrowserControlsStateProvider.Observer mBrowserControlsStateProviderObserver;
-
-    private TabContentManager mTabContentManager;
 
     private final CompositorAnimationHandler mAnimationHandler;
     private final Supplier<TopUiThemeColorProvider> mTopUiThemeColorProvider;
@@ -108,7 +104,6 @@ public class StaticLayout extends Layout {
     private boolean mIsActive;
 
     private static Integer sToolbarTextBoxBackgroundColorForTesting;
-    private static Float sToolbarTextBoxAlphaForTesting;
 
     private float mPxToDp;
 
@@ -149,11 +144,8 @@ public class StaticLayout extends Layout {
         mHandlesTabLifecycles = DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext);
         mViewHost = viewHost;
         mRequestSupplier = requestSupplier;
-        assert tabContentManager != null;
-        mTabContentManager = tabContentManager;
 
-        assert tabModelSelector != null;
-        setTabModelSelector(tabModelSelector);
+        setTabModelSelector(tabModelSelector, tabContentManager);
 
         mModel = new PropertyModel.Builder(LayoutTab.ALL_KEYS)
                          .with(LayoutTab.TAB_ID, Tab.INVALID_TAB_ID)
@@ -164,7 +156,6 @@ public class StaticLayout extends Layout {
                          .with(LayoutTab.RENDER_Y, 0.0f)
                          .with(LayoutTab.SATURATION, 1.0f)
                          .with(LayoutTab.STATIC_TO_VIEW_BLEND, 0.0f)
-                         .with(LayoutTab.BRIGHTNESS, 1.0f)
                          .build();
 
         mAnimationHandler = updateHost.getAnimationHandler();
@@ -195,17 +186,20 @@ public class StaticLayout extends Layout {
         } else {
             mSceneLayer = new StaticTabSceneLayer();
         }
-        mSceneLayer.setTabContentManager(mTabContentManager);
+        mSceneLayer.setTabContentManager(tabContentManager);
 
         mMcp = CompositorModelChangeProcessor.create(
                 mModel, mSceneLayer, StaticTabSceneLayer::bind, mRequestSupplier);
     }
 
-    private void setTabModelSelector(TabModelSelector tabModelSelector) {
+    @Override
+    public void setTabModelSelector(
+            TabModelSelector tabModelSelector, TabContentManager tabContentManager) {
         assert tabModelSelector != null;
+        assert tabContentManager != null;
         assert mTabModelSelector == null : "The TabModelSelector should set at most once";
+        super.setTabModelSelector(tabModelSelector, tabContentManager);
 
-        mTabModelSelector = tabModelSelector;
         // TODO(crbug.com/1070281): Investigating to use ActivityTabProvider instead.
         mTabModelSelectorTabModelObserver = new TabModelSelectorTabModelObserver(tabModelSelector) {
             @Override
@@ -301,11 +295,6 @@ public class StaticLayout extends Layout {
         // Intentional no-op.
     }
 
-    @Override
-    public void setTabModelSelector(TabModelSelector modelSelector, TabContentManager manager) {
-        // Intentional no-op.
-    }
-
     private void setPreHideState() {
         mHandler.removeCallbacks(mUnstallRunnable);
         mModel.set(LayoutTab.STATIC_TO_VIEW_BLEND, 1.0f);
@@ -326,23 +315,23 @@ public class StaticLayout extends Layout {
     }
 
     private void updateVisibleIdsLiveLayerOnly() {
+        // May be called when inactive. Prevent this from updating until the layout is shown.
+        if (!isActive()) return;
+
         // Check if we can use the live texture as frozen or native pages don't support live layer.
         if (mModel.get(LayoutTab.CAN_USE_LIVE_TEXTURE)) {
-            updateVisibleIds(Collections.emptyList(), mModel.get(LayoutTab.TAB_ID));
+            updateCacheVisibleIdsAndPrimary(Collections.emptyList(), mModel.get(LayoutTab.TAB_ID));
         } else {
             updateVisibleIds();
         }
     }
 
     private void updateVisibleIds() {
-        final int tabId = mModel.get(LayoutTab.TAB_ID);
-        updateVisibleIds(Collections.singletonList(tabId), tabId);
-    }
+        // May be called when inactive. Prevent this from updating until the layout is shown.
+        if (!isActive()) return;
 
-    private void updateVisibleIds(List<Integer> tabIds, int primaryTabId) {
-        if (mTabContentManager != null) {
-            mTabContentManager.updateVisibleIds(tabIds, primaryTabId);
-        }
+        final int tabId = mModel.get(LayoutTab.TAB_ID);
+        updateCacheVisibleIdsAndPrimary(Collections.singletonList(tabId), tabId);
     }
 
     private void setStaticTab(Tab tab) {
@@ -377,7 +366,6 @@ public class StaticLayout extends Layout {
         TopUiThemeColorProvider topUiTheme = mTopUiThemeColorProvider.get();
         mModel.set(LayoutTab.BACKGROUND_COLOR, topUiTheme.getBackgroundColor(tab));
         mModel.set(LayoutTab.TOOLBAR_BACKGROUND_COLOR, topUiTheme.getSceneLayerBackground(tab));
-        mModel.set(LayoutTab.TEXT_BOX_ALPHA, getTextBoxAlphaForToolbarBackground(tab));
         mModel.set(LayoutTab.SHOULD_STALL, shouldStall(tab));
         mModel.set(LayoutTab.TEXT_BOX_BACKGROUND_COLOR, getToolbarTextBoxBackgroundColor(tab));
 
@@ -411,16 +399,6 @@ public class StaticLayout extends Layout {
     @VisibleForTesting
     void setTextBoxBackgroundColorForTesting(Integer color) {
         sToolbarTextBoxBackgroundColorForTesting = color;
-    }
-
-    private float getTextBoxAlphaForToolbarBackground(Tab tab) {
-        if (sToolbarTextBoxAlphaForTesting != null) return sToolbarTextBoxAlphaForTesting;
-        return mTopUiThemeColorProvider.get().getTextBoxBackgroundAlpha(tab);
-    }
-
-    @VisibleForTesting
-    void setToolbarTextBoxAlphaForTesting(Float alpha) {
-        sToolbarTextBoxAlphaForTesting = alpha;
     }
 
     // Whether the tab is ready to display or it should be faded in as it loads.

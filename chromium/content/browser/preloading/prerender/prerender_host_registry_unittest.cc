@@ -8,6 +8,8 @@
 
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "content/browser/preloading/preloading.h"
+#include "content/browser/preloading/preloading_config.h"
 #include "content/browser/preloading/prerender/prerender_final_status.h"
 #include "content/browser/preloading/prerender/prerender_host.h"
 #include "content/browser/preloading/speculation_rules/speculation_host_impl.h"
@@ -39,21 +41,18 @@ blink::mojom::SpeculationCandidatePtr CreatePrerenderCandidate(
   return candidate;
 }
 
-void SendCandidates(const base::UnguessableToken& devtools_navigation_token,
-                    const std::vector<GURL>& urls,
+void SendCandidates(const std::vector<GURL>& urls,
                     mojo::Remote<blink::mojom::SpeculationHost>& remote) {
   std::vector<blink::mojom::SpeculationCandidatePtr> candidates;
   candidates.resize(urls.size());
   base::ranges::transform(urls, candidates.begin(), &CreatePrerenderCandidate);
-  remote->UpdateSpeculationCandidates(devtools_navigation_token,
-                                      std::move(candidates));
+  remote->UpdateSpeculationCandidates(std::move(candidates));
   remote.FlushForTesting();
 }
 
-void SendCandidate(const base::UnguessableToken& devtools_navigation_token,
-                   const GURL& url,
+void SendCandidate(const GURL& url,
                    mojo::Remote<blink::mojom::SpeculationHost>& remote) {
-  SendCandidates(devtools_navigation_token, {url}, remote);
+  SendCandidates({url}, remote);
 }
 
 // This definition is needed because this constant is odr-used in gtest macros.
@@ -302,6 +301,33 @@ TEST_F(PrerenderHostRegistryTest, CreateAndStartHost_Embedder_DirectURLInput) {
       "Navigation.TimeToActivatePrerender.Embedder_DirectURLInput", 1u);
 }
 
+TEST_F(PrerenderHostRegistryTest, CreateAndStartHost_PreloadingConfigHoldback) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeatureWithParameters(features::kPreloadingConfig,
+                                              {{"preloading_config", R"(
+  [{
+    "preloading_type": "Prerender",
+    "preloading_predictor": "SpeculationRules",
+    "holdback": true
+  }]
+  )"}});
+  PreloadingConfig& config = PreloadingConfig::GetInstance();
+  config.ParseConfig();
+  const GURL kPrerenderingUrl("https://example.com/next");
+  auto* preloading_data = PreloadingData::GetOrCreateForWebContents(contents());
+  PreloadingURLMatchCallback same_url_matcher =
+      PreloadingData::GetSameURLMatcher(kPrerenderingUrl);
+  PreloadingAttempt* preloading_attempt = preloading_data->AddPreloadingAttempt(
+      content_preloading_predictor::kSpeculationRules,
+      PreloadingType::kPrerender, std::move(same_url_matcher));
+  const int prerender_frame_tree_node_id = registry().CreateAndStartHost(
+      GeneratePrerenderAttributes(kPrerenderingUrl,
+                                  PrerenderTriggerType::kSpeculationRule, "",
+                                  contents()->GetPrimaryMainFrame()),
+      preloading_attempt);
+  ASSERT_EQ(prerender_frame_tree_node_id, kNoFrameTreeNodeId);
+}
+
 TEST_F(PrerenderHostRegistryTest, CreateAndStartHostForSameURL) {
   const GURL kPrerenderingUrl("https://example.com/next");
 
@@ -380,10 +406,7 @@ TEST_F(PrerenderHostRegistryTest, NumberLimit_SameOriginNavigateAway) {
   ASSERT_TRUE(remote1.is_connected());
   const GURL kPrerenderingUrl1("https://example.com/next1");
   const GURL kPrerenderingUrl2("https://example.com/next2");
-  base::UnguessableToken devtools_navigation_token =
-      base::UnguessableToken::Create();
-  SendCandidates(devtools_navigation_token,
-                 {kPrerenderingUrl1, kPrerenderingUrl2}, remote1);
+  SendCandidates({kPrerenderingUrl1, kPrerenderingUrl2}, remote1);
 
   // PrerenderHostRegistry should only start prerendering for kPrerenderingUrl1.
   ASSERT_NE(registry().FindHostByUrlForTesting(kPrerenderingUrl1), nullptr);
@@ -401,7 +424,7 @@ TEST_F(PrerenderHostRegistryTest, NumberLimit_SameOriginNavigateAway) {
   mojo::Remote<blink::mojom::SpeculationHost> remote2;
   SpeculationHostImpl::Bind(render_frame_host,
                             remote2.BindNewPipeAndPassReceiver());
-  SendCandidate(devtools_navigation_token, kPrerenderingUrl2, remote2);
+  SendCandidate(kPrerenderingUrl2, remote2);
 
   EXPECT_NE(registry().FindHostByUrlForTesting(kPrerenderingUrl2), nullptr);
   ExpectBucketCountOfFinalStatus(
@@ -421,10 +444,7 @@ TEST_F(PrerenderHostRegistryTest, NumberLimit_CrossOriginNavigateAway) {
   ASSERT_TRUE(remote1.is_connected());
   const GURL kPrerenderingUrl1("https://example.com/next1");
   const GURL kPrerenderingUrl2("https://example.com/next2");
-  base::UnguessableToken devtools_navigation_token =
-      base::UnguessableToken::Create();
-  SendCandidates(devtools_navigation_token,
-                 {kPrerenderingUrl1, kPrerenderingUrl2}, remote1);
+  SendCandidates({kPrerenderingUrl1, kPrerenderingUrl2}, remote1);
 
   // PrerenderHostRegistry should only start prerendering for kPrerenderingUrl1.
   ASSERT_NE(registry().FindHostByUrlForTesting(kPrerenderingUrl1), nullptr);
@@ -443,7 +463,7 @@ TEST_F(PrerenderHostRegistryTest, NumberLimit_CrossOriginNavigateAway) {
   SpeculationHostImpl::Bind(render_frame_host,
                             remote2.BindNewPipeAndPassReceiver());
   const GURL kPrerenderingUrl3("https://example.org/next1");
-  SendCandidate(devtools_navigation_token, kPrerenderingUrl3, remote2);
+  SendCandidate(kPrerenderingUrl3, remote2);
   EXPECT_NE(registry().FindHostByUrlForTesting(kPrerenderingUrl3), nullptr);
   ExpectBucketCountOfFinalStatus(
       PrerenderFinalStatus::kMaxNumOfRunningPrerendersExceeded);
@@ -660,22 +680,29 @@ TEST_F(PrerenderHostRegistryTest,
   EXPECT_NE(registry().FindHostByUrlForTesting(kPrerenderingUrl), nullptr);
 }
 
+// Tests that prerendering should be canceled if the trigger is in the
+// background and its type is kEmbedder.
+// For the case where the trigger type is speculation rules,
+// browsertests `TestSequentialPrerenderingInBackground` covers it.
 TEST_F(PrerenderHostRegistryTest,
-       DontStartPrerenderWhenTriggerIsAlreadyHidden) {
-  // The visibility state to be HIDDEN will cause prerendering not started.
+       DontStartPrerenderWhenEmbedderTriggerIsAlreadyHidden) {
+  // The visibility state to be HIDDEN will cause prerendering not started when
+  // trigger type is kEmbedder.
   contents()->WasHidden();
 
   const GURL kPrerenderingUrl = GURL("https://example.com/empty.html");
   RenderFrameHostImpl* initiator_rfh = contents()->GetPrimaryMainFrame();
   const int prerender_frame_tree_node_id =
       registry().CreateAndStartHost(GeneratePrerenderAttributes(
-          kPrerenderingUrl, PrerenderTriggerType::kSpeculationRule, "",
+          kPrerenderingUrl, PrerenderTriggerType::kEmbedder, "DirectURLInput",
           initiator_rfh));
   EXPECT_EQ(prerender_frame_tree_node_id, RenderFrameHost::kNoFrameTreeNodeId);
   PrerenderHost* prerender_host =
       registry().FindNonReservedHostById(prerender_frame_tree_node_id);
   EXPECT_EQ(prerender_host, nullptr);
-  ExpectUniqueSampleOfFinalStatus(PrerenderFinalStatus::kTriggerBackgrounded);
+  histogram_tester().ExpectUniqueSample(
+      "Prerender.Experimental.PrerenderHostFinalStatus.Embedder_DirectURLInput",
+      PrerenderFinalStatus::kTriggerBackgrounded, 1u);
 }
 
 // -------------------------------------------------
@@ -858,6 +885,10 @@ TEST_F(PrerenderHostRegistryTest,
       })));
   ExpectUniqueSampleOfActivationNavigationParamsMatch(
       PrerenderHost::ActivationNavigationParamsMatch::kTransition);
+
+  histogram_tester().ExpectUniqueSample(
+      "Prerender.Experimental.ActivationTransitionMismatch.SpeculationRule",
+      ui::PAGE_TRANSITION_FORM_SUBMIT, 1);
 }
 
 TEST_F(PrerenderHostRegistryTest,

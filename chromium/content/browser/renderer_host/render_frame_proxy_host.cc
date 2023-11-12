@@ -122,7 +122,7 @@ RenderFrameProxyHost::RenderFrameProxyHost(
     FrameTreeNode* frame_tree_node,
     const blink::RemoteFrameToken& frame_token)
     : routing_id_(site_instance->GetProcess()->GetNextRoutingID()),
-      site_instance_(site_instance),
+      site_instance_deprecated_(site_instance),
       site_instance_group_(site_instance->group()),
       process_(site_instance->GetProcess()),
       frame_tree_node_(frame_tree_node),
@@ -216,8 +216,7 @@ bool RenderFrameProxyHost::OnMessageReceived(const IPC::Message& msg) {
 }
 
 std::string RenderFrameProxyHost::ToDebugString() {
-  return "RFPH:" +
-         GetRenderViewHost()->GetDelegate()->GetCreatorLocation().ToString();
+  return "RFPH:" + frame_tree_node_->current_frame_host()->ToDebugString();
 }
 
 bool RenderFrameProxyHost::InitRenderFrameProxy(
@@ -369,9 +368,21 @@ void RenderFrameProxyHost::VisibilityChanged(
 }
 
 void RenderFrameProxyHost::UpdateOpener() {
-  // Another frame in this proxy's SiteInstance may reach the new opener by
+  // Another frame in this proxy's SiteInstanceGroup may reach the new opener by
   // first reaching this proxy and then referencing its window.opener.  Ensure
-  // the new opener's proxy exists in this case.
+  // the new opener's proxy exists in this case. If this is already a proxy for
+  // a frame in another BrowsingInstance in the same CoopRelatedGroup, we should
+  // not add extra proxies, as these are not discoverable via window.opener
+  // because property access is restricted.
+  SiteInstanceGroup* current_group =
+      frame_tree_node_->current_frame_host()->GetSiteInstance()->group();
+  bool is_coop_rp_proxy =
+      current_group->IsCoopRelatedSiteInstanceGroup(site_instance_group()) &&
+      !current_group->IsRelatedSiteInstanceGroup(site_instance_group());
+  if (is_coop_rp_proxy) {
+    return;
+  }
+
   if (frame_tree_node_->opener()) {
     bool create_proxies_in_opener = true;
     if (::vivaldi::IsVivaldiRunning() &&
@@ -389,7 +400,7 @@ void RenderFrameProxyHost::UpdateOpener() {
       //
       // Until Chromium confirms/provides a generic fix for the bug, apply the
       // fix only to the Vivaldi windows, not an arbitrary Chrome app.
-      SiteInstance* site = GetSiteInstance();
+      SiteInstance* site = GetSiteInstanceDeprecated();
       if (site && site->GetSiteURL().possibly_invalid_spec() ==
                       ::vivaldi::kVivaldiAppURLDomain) {
         create_proxies_in_opener = false;
@@ -398,7 +409,7 @@ void RenderFrameProxyHost::UpdateOpener() {
     if (create_proxies_in_opener) {
       // clang-format off
     frame_tree_node_->opener()->render_manager()->CreateOpenerProxies(
-        GetSiteInstance(), frame_tree_node_,
+        GetSiteInstanceDeprecated(), frame_tree_node_,
         frame_tree_node_->current_frame_host()->browsing_context_state());
       // clang-format on
     }
@@ -579,14 +590,14 @@ void RenderFrameProxyHost::RouteMessageEvent(
   }
 
   // Only deliver the message if the request came from a RenderFrameHost in the
-  // same BrowsingInstance or if this WebContents is dedicated to a browser
+  // same CoopRelatedGroup or if this WebContents is dedicated to a browser
   // plugin guest.
   //
   // TODO(alexmos, lazyboy):  The check for browser plugin guest currently
   // requires going through the delegate.  It should be refactored and
   // performed here once OOPIF support in <webview> is further along.
   SiteInstanceGroup* target_group = target_rfh->GetSiteInstance()->group();
-  if (!target_group->IsRelatedSiteInstanceGroup(site_instance_group()) &&
+  if (!target_group->IsCoopRelatedSiteInstanceGroup(site_instance_group()) &&
       !target_rfh->delegate()->ShouldRouteMessageEvent(target_rfh)) {
     return;
   }
@@ -616,11 +627,25 @@ void RenderFrameProxyHost::RouteMessageEvent(
             ->SynchronizeVisualPropertiesIgnoringPendingAck();
       }
 
-      // Ensure that we have a swapped-out RVH and proxy for the source frame
-      // in the target SiteInstance. If it doesn't exist, create it on demand
-      // and also create its opener chain, since that will also be accessible
-      // to the target page.
-      target_rfh->delegate()->EnsureOpenerProxiesExist(source_rfh);
+      if (!target_group->IsRelatedSiteInstanceGroup(site_instance_group()) &&
+          target_group->IsCoopRelatedSiteInstanceGroup(site_instance_group())) {
+        // If we're getting messaged by a frame in a different BrowsingInstance
+        // in the same CoopRelatedGroup, we should create only the proxies
+        // needed for event.source (and its ancestor chain).
+        source_rfh->frame_tree_node()
+            ->render_manager()
+            ->CreateRenderFrameProxyAndAncestorChainIfNeeded(
+                target_rfh->GetSiteInstance());
+      } else {
+        // Ensure that we have a swapped-out RVH and proxy for the source frame
+        // in the target SiteInstance. If it doesn't exist, create it on demand
+        // and also create its opener chain, since that will also be accessible
+        // to the target page.
+        // TODO(https://crbug.com/1427387): Using WebContents here disregards
+        // the possibility of postMessaging an iframe. This is broken, and
+        // sometimes leads to null event.source.
+        target_rfh->delegate()->EnsureOpenerProxiesExist(source_rfh);
+      }
 
       // If the message source is a cross-process subframe, its proxy will only
       // be created in --site-per-process mode, which is the case when we set an
@@ -696,7 +721,9 @@ void RenderFrameProxyHost::RouteCloseEvent() {
   // Tell the active RenderFrameHost to run unload handlers and close, as long
   // as the request came from a RenderFrameHost in the same BrowsingInstance.
   // We receive this from a WebViewImpl when it receives a request to close
-  // the window containing the active RenderFrameHost.
+  // the window containing the active RenderFrameHost. Note that different
+  // BrowsingInstances in the same CoopRelatedGroup should not be able to close
+  // each other's windows, therefore checking IsRelatedSiteInstance() is enough.
   if (site_instance_group()->IsRelatedSiteInstanceGroup(
           rfh->GetSiteInstance()->group())) {
     rfh->ClosePage(RenderFrameHostImpl::ClosePageSource::kRenderer);
@@ -729,7 +756,9 @@ void RenderFrameProxyHost::OpenURL(blink::mojom::OpenURLParamsPtr params) {
   }
 
   // Verify that we are in the same BrowsingInstance as the current
-  // RenderFrameHost.
+  // RenderFrameHost. Note that different BrowsingInstances in the same
+  // CoopRelatedGroup should not be able to navigate each other's frames,
+  // therefore checking IsRelatedSiteInstance() is enough.
   if (!site_instance_group()->IsRelatedSiteInstanceGroup(
           current_rfh->GetSiteInstance()->group())) {
     return;
@@ -763,11 +792,14 @@ void RenderFrameProxyHost::OpenURL(blink::mojom::OpenURLParamsPtr params) {
   // See also https://crbug.com/647772.
   // TODO(clamy): The transition should probably be changed for POST navigations
   // to PAGE_TRANSITION_FORM_SUBMIT. See https://crbug.com/829827.
+  // TODO(https://crbug.com/1261963): Determine which source_site_instance from
+  // site_instance_group_ to use for navigations to about:blank, once
+  // RenderFrameProxyHost no longer has a site_instance_deprecated_.
   frame_tree_node_->navigator().NavigateFromFrameProxy(
       current_rfh, validated_url,
       base::OptionalToPtr(params->initiator_frame_token), GetProcess()->GetID(),
       params->initiator_origin, params->initiator_base_url,
-      site_instance_.get(), params->referrer.To<content::Referrer>(),
+      GetSiteInstanceDeprecated(), params->referrer.To<content::Referrer>(),
       ui::PAGE_TRANSITION_LINK, params->should_replace_current_entry,
       download_policy, params->post_body ? "POST" : "GET", params->post_body,
       params->extra_headers, std::move(blob_url_loader_factory),

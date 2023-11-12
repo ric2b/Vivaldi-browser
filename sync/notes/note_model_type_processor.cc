@@ -51,7 +51,7 @@ constexpr size_t kDefaultMaxNotesTillSyncEnabled = 100000;
 
 class ScopedRemoteUpdateNotes {
  public:
-  // |notes_model|, and |observer| must not be null
+  // `notes_model`, and `observer` must not be null
   // and must outlive this object.
   ScopedRemoteUpdateNotes(vivaldi::NotesModel* notes_model,
                           vivaldi::NotesModelObserver* observer)
@@ -109,8 +109,11 @@ size_t CountSyncableNotesFromModel(vivaldi::NotesModel* model) {
 }  // namespace
 
 NoteModelTypeProcessor::NoteModelTypeProcessor(
-    file_sync::SyncedFileStore* synced_file_store)
+    file_sync::SyncedFileStore* synced_file_store,
+    bool wipe_model_on_stopping_sync_with_clear_data)
     : synced_file_store_(synced_file_store),
+      wipe_model_on_stopping_sync_with_clear_data_(
+          wipe_model_on_stopping_sync_with_clear_data),
       max_notes_till_sync_enabled_(kDefaultMaxNotesTillSyncEnabled) {}
 
 NoteModelTypeProcessor::~NoteModelTypeProcessor() {
@@ -127,7 +130,7 @@ void NoteModelTypeProcessor::ConnectSync(
 
   worker_ = std::move(worker);
 
-  // |note_tracker_| is instantiated only after initial sync is done.
+  // `note_tracker_` is instantiated only after initial sync is done.
   if (note_tracker_) {
     NudgeForCommitIfNeeded();
   }
@@ -149,7 +152,7 @@ void NoteModelTypeProcessor::GetLocalChanges(size_t max_entries,
                                              GetLocalChangesCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Processor should never connect if
-  // |last_initial_merge_remote_updates_exceeded_limit_| is set.
+  // `last_initial_merge_remote_updates_exceeded_limit_` is set.
   DCHECK(!last_initial_merge_remote_updates_exceeded_limit_);
   NoteLocalChangesBuilder builder(note_tracker_.get(), notes_model_);
   std::move(callback).Run(builder.BuildCommitRequests(max_entries));
@@ -161,7 +164,7 @@ void NoteModelTypeProcessor::OnCommitCompleted(
     const syncer::FailedCommitResponseDataList& error_response_list) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  // |error_response_list| is ignored, because all errors are treated as
+  // `error_response_list` is ignored, because all errors are treated as
   // transient and the processor with eventually retry.
 
   for (const syncer::CommitResponseData& response : committed_response_list) {
@@ -186,17 +189,17 @@ void NoteModelTypeProcessor::OnUpdateReceived(
     absl::optional<sync_pb::GarbageCollectionDirective> gc_directive) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!model_type_state.cache_guid().empty());
-  DCHECK_EQ(model_type_state.cache_guid(), cache_guid_);
+  DCHECK_EQ(model_type_state.cache_guid(), cache_uuid_);
   DCHECK(syncer::IsInitialSyncDone(model_type_state.initial_sync_state()));
   DCHECK(start_callback_.is_null());
   // Processor should never connect if
-  // |last_initial_merge_remote_updates_exceeded_limit_| is set.
+  // `last_initial_merge_remote_updates_exceeded_limit_` is set.
   DCHECK(!last_initial_merge_remote_updates_exceeded_limit_);
 
-  // TODO(crbug.com/1356900): validate incoming updates, e.g. |gc_directive|
+  // TODO(crbug.com/1356900): validate incoming updates, e.g. `gc_directive`
   // must be empty for Notes.
 
-  // Clients before M94 did not populate the parent GUID in specifics.
+  // Clients before M94 did not populate the parent UUID in specifics.
   PopulateParentGuidInSpecifics(note_tracker_.get(), &updates);
 
   if (!note_tracker_) {
@@ -249,6 +252,10 @@ void NoteModelTypeProcessor::StorePendingInvalidations(
   schedule_save_closure_.Run();
 }
 
+bool NoteModelTypeProcessor::IsTrackingMetadata() const {
+  return note_tracker_.get() != nullptr;
+}
+
 const SyncedNoteTracker* NoteModelTypeProcessor::GetTrackerForTest() const {
   return note_tracker_.get();
 }
@@ -260,7 +267,7 @@ bool NoteModelTypeProcessor::IsConnectedForTest() const {
 std::string NoteModelTypeProcessor::EncodeSyncMetadata() const {
   std::string metadata_str;
   if (note_tracker_) {
-    // |last_initial_merge_remote_updates_exceeded_limit_| is only set in error
+    // `last_initial_merge_remote_updates_exceeded_limit_` is only set in error
     // cases where the tracker would not be initialized.
     DCHECK(!last_initial_merge_remote_updates_exceeded_limit_);
 
@@ -316,7 +323,7 @@ void NoteModelTypeProcessor::ModelReadyToSync(
                  syncer::kSyncEnforceBookmarksCountLimit)) {
     // Report error if remote updates fetched last time during initial merge
     // exceeded limit. Note that here we are only setting
-    // |last_initial_merge_remote_updates_exceeded_limit_|, the actual error
+    // `last_initial_merge_remote_updates_exceeded_limit_`, the actual error
     // would be reported in ConnectIfReady().
     last_initial_merge_remote_updates_exceeded_limit_ = true;
   } else {
@@ -326,8 +333,8 @@ void NoteModelTypeProcessor::ModelReadyToSync(
     if (note_tracker_) {
       StartTrackingMetadata();
     } else if (!metadata_str.empty()) {
-      // Even if the field |last_initial_merge_remote_updates_exceeded_limit| is
-      // set and the feature toggle |kSyncEnforceBookmarksCountLimit| not
+      // Even if the field `last_initial_merge_remote_updates_exceeded_limit` is
+      // set and the feature toggle `kSyncEnforceBookmarksCountLimit` not
       // enabled, making the metadata_str non-empty, scheduling a save shouldn't
       // cause any problem.
       DLOG(WARNING) << "Persisted note sync metadata invalidated when loading.";
@@ -348,7 +355,7 @@ size_t NoteModelTypeProcessor::EstimateMemoryUsage() const {
   if (note_tracker_) {
     memory_usage += note_tracker_->EstimateMemoryUsage();
   }
-  memory_usage += EstimateMemoryUsage(cache_guid_);
+  memory_usage += EstimateMemoryUsage(cache_uuid_);
   return memory_usage;
 }
 
@@ -365,11 +372,11 @@ void NoteModelTypeProcessor::OnSyncStarting(
   DCHECK(start_callback);
   DVLOG(1) << "Sync is starting for Notes";
 
-  cache_guid_ = request.cache_guid;
+  cache_uuid_ = request.cache_guid;
   start_callback_ = std::move(start_callback);
   error_handler_ = request.error_handler;
 
-  DCHECK(!cache_guid_.empty());
+  DCHECK(!cache_uuid_.empty());
   DCHECK(error_handler_);
   ConnectIfReady();
 }
@@ -391,7 +398,7 @@ void NoteModelTypeProcessor::ConnectIfReady() {
   // Report error if remote updates fetched last time during initial merge
   // exceeded limit.
   if (last_initial_merge_remote_updates_exceeded_limit_) {
-    // |last_initial_merge_remote_updates_exceeded_limit_| is only set in error
+    // `last_initial_merge_remote_updates_exceeded_limit_` is only set in error
     // case and thus tracker should be empty.
     DCHECK(!note_tracker_);
     start_callback_.Reset();
@@ -420,12 +427,12 @@ void NoteModelTypeProcessor::ConnectIfReady() {
     return;
   }
 
-  DCHECK(!cache_guid_.empty());
+  DCHECK(!cache_uuid_.empty());
 
   if (note_tracker_ &&
-      note_tracker_->model_type_state().cache_guid() != cache_guid_) {
+      note_tracker_->model_type_state().cache_guid() != cache_uuid_) {
     // TODO(crbug.com/820049): Add basic unit testing.
-    // In case of a cache guid mismatch, treat it as a corrupted metadata and
+    // In case of a cache uuid mismatch, treat it as a corrupted metadata and
     // start clean.
     StopTrackingMetadataAndResetTracker();
   }
@@ -438,7 +445,7 @@ void NoteModelTypeProcessor::ConnectIfReady() {
     sync_pb::ModelTypeState model_type_state;
     model_type_state.mutable_progress_marker()->set_data_type_id(
         GetSpecificsFieldNumberFromModelType(syncer::NOTES));
-    model_type_state.set_cache_guid(cache_guid_);
+    model_type_state.set_cache_guid(cache_uuid_);
     activation_context->model_type_state = model_type_state;
   }
   activation_context->type_processor =
@@ -457,7 +464,7 @@ void NoteModelTypeProcessor::OnSyncStopping(
   DCHECK(notes_model_);
   DCHECK(!start_callback_);
 
-  cache_guid_.clear();
+  cache_uuid_.clear();
   worker_.reset();
 
   switch (metadata_fate) {
@@ -472,6 +479,14 @@ void NoteModelTypeProcessor::OnSyncStopping(
         StopTrackingMetadataAndResetTracker();
       }
       last_initial_merge_remote_updates_exceeded_limit_ = false;
+      if (wipe_model_on_stopping_sync_with_clear_data_) {
+        // `CLEAR_METADATA` indicates sync is permanently disabled. Since
+        // `wipe_model_on_stopping_sync_with_clear_data_` is `true`, the
+        // lifetime of local data (bookmarks) is coupled with sync metadata's,
+        // which means disabling sync requires that bookmarks in local storage
+        // are deleted.
+        notes_model_->RemoveAllUserNotes();
+      }
       schedule_save_closure_.Run();
       synced_file_store_->RemoveAllSyncRefsForType(syncer::NOTES);
       break;
@@ -487,7 +502,7 @@ void NoteModelTypeProcessor::NudgeForCommitIfNeeded() {
   DCHECK(note_tracker_);
 
   // Issue error and stop sync if the number of local notes exceed limit.
-  // If |error_handler_| is not set, the check is ignored because this gets
+  // If `error_handler_` is not set, the check is ignored because this gets
   // re-evaluated in ConnectIfReady().
   if (error_handler_ &&
       note_tracker_->TrackedNotesCount() > max_notes_till_sync_enabled_ &&
@@ -526,7 +541,7 @@ void NoteModelTypeProcessor::OnInitialUpdateReceived(
 
   TRACE_EVENT0("sync", "NoteModelTypeProcessor::OnInitialUpdateReceived");
 
-  // |updates| can contain an additional root folder. The server may or may not
+  // `updates` can contain an additional root folder. The server may or may not
   // deliver a root node - it is not guaranteed, but this works as an
   // approximated safeguard.
   const size_t max_initial_updates_count = max_notes_till_sync_enabled_ + 1;

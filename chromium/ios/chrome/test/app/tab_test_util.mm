@@ -7,23 +7,24 @@
 #import <Foundation/Foundation.h>
 
 #import "base/mac/foundation_util.h"
-#import "ios/chrome/app/main_controller_private.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/flags/system_flags.h"
-#import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/main/browser_provider.h"
+#import "ios/chrome/app/main_controller.h"
 #import "ios/chrome/browser/metrics/tab_usage_recorder_browser_agent.h"
 #import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_controller.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_controller_testing.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/tabs/tab_title_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_usage_enabler/web_usage_enabler_browser_agent.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/testing/open_url_context.h"
@@ -195,6 +196,16 @@ void CloseAllTabs() {
     SessionRestorationBrowserAgent::FromBrowser(browser)->SaveSession(
         /*immediately=*/true);
   }
+  if (GetInactiveTabCount() && GetForegroundActiveScene()) {
+    Browser* browser =
+        GetForegroundActiveScene()
+            .browserProviderInterface.mainBrowserProvider.inactiveBrowser;
+    DCHECK(browser);
+    browser->GetWebStateList()->CloseAllWebStates(
+        WebStateList::CLOSE_USER_ACTION);
+    SessionRestorationBrowserAgent::FromBrowser(browser)->SaveSession(
+        /*immediately=*/true);
+  }
 }
 
 void SelectTabAtIndexInCurrentMode(NSUInteger index) {
@@ -208,6 +219,13 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
 NSUInteger GetMainTabCount() {
   return GetMainController()
       .browserProviderInterface.mainBrowserProvider.browser->GetWebStateList()
+      ->count();
+}
+
+NSUInteger GetInactiveTabCount() {
+  return GetMainController()
+      .browserProviderInterface.mainBrowserProvider.inactiveBrowser
+      ->GetWebStateList()
       ->count();
 }
 

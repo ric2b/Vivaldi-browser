@@ -455,7 +455,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
 
   // Returns true when the NativeTheme uses a light-on-dark color scheme. If
   // you're considering using this function to choose between two hard-coded
-  // colors, you probably shouldn't. Instead, use GetSystemColor().
+  // colors, you probably shouldn't. Instead, use ColorProvider::GetColor().
   virtual bool ShouldUseDarkColors() const;
 
   // Returns the user's current page colors.
@@ -504,7 +504,8 @@ class NATIVE_THEME_EXPORT NativeTheme {
       absl::optional<ui::ColorProviderManager::SchemeVariant> scheme_variant) {
     scheme_variant_ = scheme_variant;
   }
-  absl::optional<ui::ColorProviderManager::SchemeVariant> scheme_variant() {
+  absl::optional<ui::ColorProviderManager::SchemeVariant> scheme_variant()
+      const {
     return scheme_variant_;
   }
 

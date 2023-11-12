@@ -167,8 +167,19 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
                         preferences:(WKWebpagePreferences*)preferences
                     decisionHandler:(void (^)(WKNavigationActionPolicy,
                                               WKWebpagePreferences*))handler {
-  GURL requestURL = net::GURLWithNSURL(action.request.URL);
+  // Check if OS lockdown mode is enabled and update the preference value.
+  if (!self.beingDestroyed) {
+    static dispatch_once_t onceToken;
+    web::BrowserState* browser_state = self.webStateImpl->GetBrowserState();
+    dispatch_once(&onceToken, ^{
+      if (@available(iOS 16.0, *)) {
+        web::GetWebClient()->SetOSLockdownModeEnabled(
+            browser_state, preferences.lockdownModeEnabled);
+      }
+    });
+  }
 
+  GURL requestURL = net::GURLWithNSURL(action.request.URL);
   const web::UserAgentType userAgentType =
       [self userAgentForNavigationAction:action webView:webView];
 
@@ -223,10 +234,19 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
                               preferences.lockdownModeEnabled);
       }
 
-      if (self.webStateImpl) {
+      if (!self.beingDestroyed) {
         web::BrowserState* browser_state = self.webStateImpl->GetBrowserState();
-        if (web::GetWebClient()->IsBrowserLockdownModeEnabled(browser_state))
+        bool browser_lockdown_mode_enabled =
+            web::GetWebClient()->IsBrowserLockdownModeEnabled(browser_state);
+        if ((policy == WKNavigationActionPolicyAllow) &&
+            isMainFrameNavigationAction) {
+          UMA_HISTOGRAM_BOOLEAN(
+              "IOS.MainFrameNavigationIsInBrowserLockdownMode",
+              browser_lockdown_mode_enabled);
+        }
+        if (browser_lockdown_mode_enabled) {
           preferences.lockdownModeEnabled = true;
+        }
       }
     }
 #endif  // defined (__IPHONE_16_0)
@@ -993,15 +1013,15 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
   [self didReceiveWKNavigationDelegateCallback];
 
   NSString* authMethod = challenge.protectionSpace.authenticationMethod;
-  if ([authMethod isEqual:NSURLAuthenticationMethodHTTPBasic] ||
-      [authMethod isEqual:NSURLAuthenticationMethodNTLM] ||
-      [authMethod isEqual:NSURLAuthenticationMethodHTTPDigest]) {
+  if ([authMethod isEqualToString:NSURLAuthenticationMethodHTTPBasic] ||
+      [authMethod isEqualToString:NSURLAuthenticationMethodNTLM] ||
+      [authMethod isEqualToString:NSURLAuthenticationMethodHTTPDigest]) {
     [self handleHTTPAuthForChallenge:challenge
                    completionHandler:completionHandler];
     return;
   }
 
-  if (![authMethod isEqual:NSURLAuthenticationMethodServerTrust]) {
+  if (![authMethod isEqualToString:NSURLAuthenticationMethodServerTrust]) {
     completionHandler(NSURLSessionAuthChallengeRejectProtectionSpace, nil);
     return;
   }
@@ -1422,11 +1442,11 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
   // not capable of displaying them natively.
   if (@available(iOS 15, *)) {
     NSString* MIMEType = WKResponse.response.MIMEType;
-    if ([MIMEType isEqual:@"model/vnd.pixar.usd"] ||
-        [MIMEType isEqual:@"model/usd"] ||
-        [MIMEType isEqual:@"model/vnd.usdz+zip"] ||
-        [MIMEType isEqual:@"model/vnd.pixar.usd"] ||
-        [MIMEType isEqual:@"model/vnd.reality"]) {
+    if ([MIMEType isEqualToString:@"model/vnd.pixar.usd"] ||
+        [MIMEType isEqualToString:@"model/usd"] ||
+        [MIMEType isEqualToString:@"model/vnd.usdz+zip"] ||
+        [MIMEType isEqualToString:@"model/vnd.pixar.usd"] ||
+        [MIMEType isEqualToString:@"model/vnd.reality"]) {
       return NO;
     }
   }
@@ -1680,10 +1700,12 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
                      (void (^)(NSURLSessionAuthChallengeDisposition,
                                NSURLCredential*))completionHandler {
   NSURLProtectionSpace* space = challenge.protectionSpace;
-  DCHECK(
-      [space.authenticationMethod isEqual:NSURLAuthenticationMethodHTTPBasic] ||
-      [space.authenticationMethod isEqual:NSURLAuthenticationMethodNTLM] ||
-      [space.authenticationMethod isEqual:NSURLAuthenticationMethodHTTPDigest]);
+  DCHECK([space.authenticationMethod
+             isEqualToString:NSURLAuthenticationMethodHTTPBasic] ||
+         [space.authenticationMethod
+             isEqualToString:NSURLAuthenticationMethodNTLM] ||
+         [space.authenticationMethod
+             isEqualToString:NSURLAuthenticationMethodHTTPDigest]);
 
   self.webStateImpl->OnAuthRequired(
       space, challenge.proposedCredential,
@@ -1754,7 +1776,8 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
   // TODO(crbug.com/803631) DCHECK that self.currentNavItem is the navigation
   // item associated with navigationContext.
 
-  if ([error.domain isEqual:base::SysUTF8ToNSString(web::kWebKitErrorDomain)]) {
+  if ([error.domain
+          isEqualToString:base::SysUTF8ToNSString(web::kWebKitErrorDomain)]) {
     if (error.code == web::kWebKitErrorPlugInLoadFailed) {
       // In cases where a Plug-in handles the load do not take any further
       // action.
@@ -2168,7 +2191,7 @@ web::HttpsUpgradeType GetFailedHttpsUpgradeType(
       self.pendingNavigationInfo
           ? self.pendingNavigationInfo.HTTPMethod
           : self.currentBackForwardListItemHolder->http_method();
-  if ([HTTPMethod isEqual:@"POST"]) {
+  if ([HTTPMethod isEqualToString:@"POST"]) {
     return YES;
   }
   if (!self.currentNavItem) {

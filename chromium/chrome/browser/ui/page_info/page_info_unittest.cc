@@ -33,6 +33,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_constraints.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/infobar.h"
@@ -62,6 +63,7 @@
 #include "services/device/public/mojom/usb_device.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/origin.h"
 
@@ -110,12 +112,13 @@ int SetSSLCipherSuite(int connection_status, int cipher_suite) {
 class MockPageInfoUI : public PageInfoUI {
  public:
   ~MockPageInfoUI() override = default;
-  MOCK_METHOD1(SetCookieInfo, void(const CookieInfoList& cookie_info_list));
-  MOCK_METHOD0(SetPermissionInfoStub, void());
-  MOCK_METHOD1(SetIdentityInfo, void(const IdentityInfo& identity_info));
-  MOCK_METHOD1(SetPageFeatureInfo, void(const PageFeatureInfo& info));
-  MOCK_METHOD1(SetAdPersonalizationInfo,
-               void(const AdPersonalizationInfo& info));
+  MOCK_METHOD(void, SetCookieInfo, (const CookieInfoList& cookie_info_list));
+  MOCK_METHOD(void, SetPermissionInfoStub, ());
+  MOCK_METHOD(void, SetIdentityInfo, (const IdentityInfo& identity_info));
+  MOCK_METHOD(void, SetPageFeatureInfo, (const PageFeatureInfo& info));
+  MOCK_METHOD(void,
+              SetAdPersonalizationInfo,
+              (const AdPersonalizationInfo& info));
 
   void SetPermissionInfo(
       const PermissionInfoList& permission_info_list,
@@ -154,11 +157,13 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
   ~PageInfoTest() override = default;
 
   void SetUp() override {
-#if !BUILDFLAG(IS_ANDROID)
     // TODO(crbug.com/1344787): Fix tests and enable the feature.
-    scoped_feature_list_.InitAndDisableFeature(
-        page_info::kPageInfoCookiesSubpage);
+    scoped_feature_list_.InitWithFeatures(
+        {permissions::features::kPermissionStorageAccessAPI}, {
+#if !BUILDFLAG(IS_ANDROID)
+          page_info::kPageInfoCookiesSubpage
 #endif
+        });
 
     ChromeRenderViewHostTestHarness::SetUp();
 
@@ -390,6 +395,9 @@ TEST_F(PageInfoTest, PermissionStringsHaveMidSentenceVersion) {
 }
 
 TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
+  GURL kEmbedded1("https://embedded1.com");
+  GURL kEmbedded2("https://embedded2.com");
+
   page_info()->PresentSitePermissions();
   std::set<ContentSettingsType> expected_visible_permissions;
 
@@ -405,16 +413,24 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
   // Change some default-ask settings away from the default.
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   expected_visible_permissions.insert(ContentSettingsType::GEOLOCATION);
   page_info()->OnSitePermissionChanged(ContentSettingsType::NOTIFICATIONS,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   expected_visible_permissions.insert(ContentSettingsType::NOTIFICATIONS);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   expected_visible_permissions.insert(ContentSettingsType::MEDIASTREAM_MIC);
+  page_info()->OnSitePermissionChanged(ContentSettingsType::STORAGE_ACCESS,
+                                       CONTENT_SETTING_ALLOW,
+                                       url::Origin::Create(kEmbedded1),
+                                       /*is_one_time=*/false);
+  expected_visible_permissions.insert(ContentSettingsType::STORAGE_ACCESS);
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
 
@@ -422,6 +438,7 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
   // Change a default-block setting to a user-preference block instead.
   page_info()->OnSitePermissionChanged(ContentSettingsType::POPUPS,
                                        CONTENT_SETTING_BLOCK,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
@@ -430,6 +447,7 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
   // Change a default-allow setting away from the default.
   page_info()->OnSitePermissionChanged(ContentSettingsType::JAVASCRIPT,
                                        CONTENT_SETTING_BLOCK,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
@@ -439,6 +457,7 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
   expected_visible_permissions.insert(ContentSettingsType::MEDIASTREAM_CAMERA);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_CAMERA,
                                        CONTENT_SETTING_DEFAULT,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
@@ -446,6 +465,7 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
   // Set the Javascript setting to default should keep it shown.
   page_info()->OnSitePermissionChanged(ContentSettingsType::JAVASCRIPT,
                                        CONTENT_SETTING_DEFAULT,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
@@ -461,7 +481,51 @@ TEST_F(PageInfoTest, NonFactoryDefaultAndRecentlyChangedPermissionsShown) {
   // from the user preference (i.e. it counts as non-factory default).
   page_info()->OnSitePermissionChanged(ContentSettingsType::JAVASCRIPT,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
+  ExpectPermissionInfoList(expected_visible_permissions,
+                           last_permission_info_list());
+
+  // Adding another storage access permission for a different embedded origin
+  // adds an additional entry.
+  page_info()->OnSitePermissionChanged(ContentSettingsType::STORAGE_ACCESS,
+                                       CONTENT_SETTING_ALLOW,
+                                       url::Origin::Create(kEmbedded2),
+                                       /*is_one_time=*/false);
+  EXPECT_EQ(expected_visible_permissions.size() + 1,
+            last_permission_info_list().size());
+}
+
+TEST_F(PageInfoTest, StorageAccessGrantsAreFiltered) {
+  GURL kEmbedded1("https://embedded1.com");
+  ContentSettingsType type = ContentSettingsType::STORAGE_ACCESS;
+
+  std::set<ContentSettingsType> expected_visible_permissions;
+
+  auto* map = HostContentSettingsMapFactory::GetForProfile(profile());
+  // First-party exceptions are hidden.
+  map->SetContentSettingDefaultScope(url(), url(), type, CONTENT_SETTING_ALLOW);
+  // First-party-set exceptions are hidden based on their SessionModel.
+  content_settings::ContentSettingConstraints constraint;
+  constraint.set_session_model(
+      content_settings::SessionModel::NonRestorableUserSession);
+  map->SetContentSettingDefaultScope(kEmbedded1, url(), type,
+                                     CONTENT_SETTING_ALLOW, constraint);
+  page_info()->PresentSitePermissions();
+
+#if BUILDFLAG(IS_ANDROID)
+  // Geolocation is always allowed to pass through to Android-specific logic to
+  // check for DSE settings (so expect 1 item), but isn't actually shown later
+  // on because this test isn't testing with a default search engine origin.
+  expected_visible_permissions.insert(ContentSettingsType::GEOLOCATION);
+#endif
+  ExpectPermissionInfoList(expected_visible_permissions,
+                           last_permission_info_list());
+
+  map->SetContentSettingDefaultScope(kEmbedded1, url(), type,
+                                     CONTENT_SETTING_ALLOW);
+  page_info()->PresentSitePermissions();
+  expected_visible_permissions.insert(type);
   ExpectPermissionInfoList(expected_visible_permissions,
                            last_permission_info_list());
 }
@@ -486,10 +550,12 @@ TEST_F(PageInfoTest, IncognitoPermissionsDontShowAsk) {
   // Add some permissions to regular page info.
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
 
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
                                        CONTENT_SETTING_BLOCK,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   expected_permissions.insert(ContentSettingsType::MEDIASTREAM_MIC);
   expected_incognito_permissions.insert(ContentSettingsType::MEDIASTREAM_MIC);
@@ -506,6 +572,7 @@ TEST_F(PageInfoTest, IncognitoPermissionsDontShowAsk) {
   // Changing the permission to BLOCK should show it.
   incognito_page_info()->OnSitePermissionChanged(
       ContentSettingsType::GEOLOCATION, CONTENT_SETTING_BLOCK,
+      /*requesting_origin=*/absl::nullopt,
       /*is_one_time=*/false);
   expected_incognito_permissions.insert(ContentSettingsType::GEOLOCATION);
   ExpectPermissionInfoList(expected_incognito_permissions,
@@ -514,12 +581,15 @@ TEST_F(PageInfoTest, IncognitoPermissionsDontShowAsk) {
   // Switching a permission back to default should not hide the permission.
   incognito_page_info()->OnSitePermissionChanged(
       ContentSettingsType::GEOLOCATION, CONTENT_SETTING_DEFAULT,
+      /*requesting_origin=*/absl::nullopt,
       /*is_one_time=*/false);
   ExpectPermissionInfoList(expected_incognito_permissions,
                            last_permission_info_list());
 }
 
 TEST_F(PageInfoTest, OnPermissionsChanged) {
+  GURL kEmbedded("https://embedded.com");
+
   // Setup site permissions.
   HostContentSettingsMap* content_settings =
       HostContentSettingsMapFactory::GetForProfile(profile());
@@ -538,29 +608,41 @@ TEST_F(PageInfoTest, OnPermissionsChanged) {
   setting = content_settings->GetContentSetting(
       url(), url(), ContentSettingsType::MEDIASTREAM_CAMERA);
   EXPECT_EQ(setting, CONTENT_SETTING_ASK);
+  setting = content_settings->GetContentSetting(
+      kEmbedded, url(), ContentSettingsType::STORAGE_ACCESS);
+  EXPECT_EQ(setting, CONTENT_SETTING_ASK);
 
   EXPECT_CALL(*mock_ui(), SetIdentityInfo(_));
   EXPECT_CALL(*mock_ui(), SetCookieInfo(_));
 
   // SetPermissionInfo() is called once initially, and then again every time
   // OnSitePermissionChanged() is called.
-  EXPECT_CALL(*mock_ui(), SetPermissionInfoStub()).Times(6);
+  EXPECT_CALL(*mock_ui(), SetPermissionInfoStub()).Times(7);
 
   // Execute code under tests.
   page_info()->OnSitePermissionChanged(ContentSettingsType::POPUPS,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::NOTIFICATIONS,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_CAMERA,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
+                                       /*is_one_time=*/false);
+  page_info()->OnSitePermissionChanged(ContentSettingsType::STORAGE_ACCESS,
+                                       CONTENT_SETTING_ALLOW,
+                                       url::Origin::Create(kEmbedded),
                                        /*is_one_time=*/false);
 
   // Verify that the site permissions were changed correctly.
@@ -578,6 +660,9 @@ TEST_F(PageInfoTest, OnPermissionsChanged) {
   EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
   setting = content_settings->GetContentSetting(
       url(), url(), ContentSettingsType::MEDIASTREAM_CAMERA);
+  EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
+  setting = content_settings->GetContentSetting(
+      kEmbedded, url(), ContentSettingsType::STORAGE_ACCESS);
   EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
 }
 
@@ -605,8 +690,8 @@ TEST_F(PageInfoTest, OnChosenObjectDeleted) {
 
   ASSERT_EQ(1u, last_chosen_object_info().size());
   const PageInfoUI::ChosenObjectInfo* info = last_chosen_object_info()[0].get();
-  page_info()->OnSiteChosenObjectDeleted(*info->ui_info,
-                                         info->chooser_object->value);
+  page_info()->OnSiteChosenObjectDeleted(
+      *info->ui_info, base::Value(info->chooser_object->value.Clone()));
 
   EXPECT_FALSE(store->HasDevicePermission(origin(), *device_info));
   EXPECT_EQ(0u, last_chosen_object_info().size());
@@ -1053,6 +1138,7 @@ TEST_F(PageInfoTest, ShowInfoBar) {
   EXPECT_EQ(0u, infobar_manager()->infobar_count());
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   bool unused;
   page_info()->OnUIClosing(&unused);
@@ -1064,7 +1150,8 @@ TEST_F(PageInfoTest, ShowInfoBar) {
 TEST_F(PageInfoTest, NoInfoBarWhenSoundSettingChanged) {
   EXPECT_EQ(0u, infobar_manager()->infobar_count());
   page_info()->OnSitePermissionChanged(
-      ContentSettingsType::SOUND, CONTENT_SETTING_BLOCK, /*is_one_time=*/false);
+      ContentSettingsType::SOUND, CONTENT_SETTING_BLOCK,
+      /*requesting_origin=*/absl::nullopt, /*is_one_time=*/false);
   bool unused;
   page_info()->OnUIClosing(&unused);
   EXPECT_EQ(0u, infobar_manager()->infobar_count());
@@ -1074,9 +1161,11 @@ TEST_F(PageInfoTest, ShowInfoBarWhenSoundSettingAndAnotherSettingChanged) {
   EXPECT_EQ(0u, infobar_manager()->infobar_count());
   page_info()->OnSitePermissionChanged(ContentSettingsType::JAVASCRIPT,
                                        CONTENT_SETTING_BLOCK,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(
-      ContentSettingsType::SOUND, CONTENT_SETTING_BLOCK, /*is_one_time=*/false);
+      ContentSettingsType::SOUND, CONTENT_SETTING_BLOCK,
+      /*requesting_origin=*/absl::nullopt, /*is_one_time=*/false);
   bool unused;
   page_info()->OnUIClosing(&unused);
   EXPECT_EQ(1u, infobar_manager()->infobar_count());
@@ -1100,9 +1189,11 @@ TEST_F(PageInfoTest, ShowInfobarWhenMediaChanged) {
 
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_CAMERA,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   page_info()->OnUIClosing(nullptr);
   EXPECT_EQ(1u, infobar_manager()->infobar_count());
@@ -1135,9 +1226,11 @@ TEST_F(PageInfoTest, SuppressInfobarWhenMediaChangedToBlock) {
 
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_CAMERA,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
 
   page_info()->OnUIClosing(nullptr);
@@ -1171,9 +1264,11 @@ TEST_F(PageInfoTest, SuppressInfobarWhenMediaChangedToAllow) {
 
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_CAMERA,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
 
   page_info()->OnUIClosing(nullptr);
@@ -1210,9 +1305,11 @@ TEST_F(PageInfoTest, SuppressInfobarWhenMediaChangedToDefault) {
 
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_CAMERA,
                                        CONTENT_SETTING_DEFAULT,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
                                        CONTENT_SETTING_DEFAULT,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
 
   page_info()->OnUIClosing(nullptr);
@@ -1243,6 +1340,7 @@ TEST_F(PageInfoTest, ShowInfobarWhenGeolocationChangedToAllow) {
 
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
 
   page_info()->OnUIClosing(nullptr);
@@ -1265,6 +1363,7 @@ TEST_F(PageInfoTest, NotSuppressedInfobarWhenGeolocationChangedToBlock) {
 
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
                                        CONTENT_SETTING_BLOCK,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
 
   page_info()->OnUIClosing(nullptr);
@@ -1285,6 +1384,7 @@ TEST_F(PageInfoTest, ShowInfobarWhenGeolocationChangedToDefault) {
 
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
                                        CONTENT_SETTING_DEFAULT,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
 
   page_info()->OnUIClosing(nullptr);
@@ -1315,12 +1415,15 @@ TEST_F(PageInfoTest, ShowInfobarWhenGeolocationAndMediaChangedToBlock) {
 
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
                                        CONTENT_SETTING_BLOCK,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_CAMERA,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
   page_info()->OnSitePermissionChanged(ContentSettingsType::MEDIASTREAM_MIC,
                                        CONTENT_SETTING_ALLOW,
+                                       /*requesting_origin=*/absl::nullopt,
                                        /*is_one_time=*/false);
 
   page_info()->OnUIClosing(nullptr);
@@ -1490,12 +1593,13 @@ TEST_F(PageInfoTest, TimeOpenMetrics) {
 }
 
 TEST_F(PageInfoTest, AdPersonalization) {
+  constexpr int kTaxonomyVersion = 1;
   privacy_sandbox::CanonicalTopic kFirstTopic(
       browsing_topics::Topic(24),  // "Blues"
-      privacy_sandbox::CanonicalTopic::AVAILABLE_TAXONOMY);
+      kTaxonomyVersion);
   privacy_sandbox::CanonicalTopic kSecondTopic(
       browsing_topics::Topic(23),  // "Music & audio"
-      privacy_sandbox::CanonicalTopic::AVAILABLE_TAXONOMY);
+      kTaxonomyVersion);
 
   std::vector<privacy_sandbox::CanonicalTopic> accessed_topics = {kFirstTopic,
                                                                   kSecondTopic};
@@ -1651,26 +1755,6 @@ TEST_F(PageInfoTest, SubresourceFilterSetting_MatchesActivation) {
 
   page_info();
   EXPECT_TRUE(showing_setting(last_permission_info_list()));
-}
-
-TEST_F(PageInfoTest, IsolatedWebAppStatus) {
-  EXPECT_CALL(*mock_ui(), SetPermissionInfoStub());
-  EXPECT_CALL(*mock_ui(), SetCookieInfo(_));
-  /*
-    SetIdentityInfo() is expected to be called 3 times:
-    1. PageInfo::InitializeUiState() inside page_info()
-    2. page_info()->SetIsolatedWebAppNameForTesting()
-    3. page_info()->UpdateSecurityState()
-  */
-  EXPECT_CALL(*mock_ui(), SetIdentityInfo(_)).Times(3);
-
-  page_info()->SetIsolatedWebAppNameForTesting(std::u16string());
-  page_info()->UpdateSecurityState();
-
-  EXPECT_EQ(PageInfo::SITE_CONNECTION_STATUS_ISOLATED_WEB_APP,
-            page_info()->site_connection_status());
-  EXPECT_EQ(PageInfo::SITE_IDENTITY_STATUS_ISOLATED_WEB_APP,
-            page_info()->site_identity_status());
 }
 
 #if !BUILDFLAG(IS_ANDROID)

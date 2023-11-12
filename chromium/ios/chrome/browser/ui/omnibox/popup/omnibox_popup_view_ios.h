@@ -7,6 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
+#include <string>
+
 #include "components/omnibox/browser/omnibox_popup_view.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_mediator.h"
 #include "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_provider.h"
@@ -14,6 +16,7 @@
 class OmniboxEditModel;
 @class OmniboxPopupMediator;
 class OmniboxPopupViewSuggestionsDelegate;
+class WebLocationBar;
 struct AutocompleteMatch;
 
 // iOS implementation of OmniboxPopupView.
@@ -22,6 +25,7 @@ class OmniboxPopupViewIOS : public OmniboxPopupView,
                             public OmniboxPopupProvider {
  public:
   OmniboxPopupViewIOS(OmniboxEditModel* edit_model,
+                      WebLocationBar* location_bar,
                       OmniboxPopupViewSuggestionsDelegate* delegate);
   ~OmniboxPopupViewIOS() override;
 
@@ -35,6 +39,9 @@ class OmniboxPopupViewIOS : public OmniboxPopupView,
   void ProvideButtonFocusHint(size_t line) override {}
   void OnMatchIconUpdated(size_t match_index) override {}
   void OnDragCanceled() override {}
+  void GetPopupAccessibleNodeData(ui::AXNodeData* node_data) override {}
+  void AddPopupAccessibleNodeData(ui::AXNodeData* node_data) override {}
+  std::u16string GetAccessibleButtonTextForResult(size_t line) override;
 
   // OmniboxPopupProvider implemetation.
   void SetTextAlignment(NSTextAlignment alignment) override;
@@ -57,6 +64,7 @@ class OmniboxPopupViewIOS : public OmniboxPopupView,
 
  private:
   OmniboxEditModel* edit_model_;
+  WebLocationBar* location_bar_;
   OmniboxPopupViewSuggestionsDelegate* delegate_;  // weak
   OmniboxPopupMediator* mediator_;
 };

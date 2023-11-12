@@ -26,6 +26,11 @@ group("resources") {
     ":vivaldi_open_offline_version",
     ":vivaldi_eye_off",
     ":vivaldi_eye_on",
+    ":vivaldi_search",
+    ":vivaldi_print",
+    ":vivaldi_clear_history_cookies",
+    ":vivaldi_clear_history_cache",
+    ":vivaldi_clear_history_autofill",
   ]
 }
 
@@ -202,5 +207,41 @@ imageset("vivaldi_eye_on") {
     "vivaldi_eye_on.imageset/Contents.json",
     "vivaldi_eye_on.imageset/vivaldi_eye_on.pdf",
     "vivaldi_eye_on.imageset/vivaldi_eye_on_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_print") {
+  sources = [
+    "vivaldi_print.imageset/Contents.json",
+    "vivaldi_print.imageset/vivaldi_print.pdf",
+    "vivaldi_print.imageset/vivaldi_print_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_search") {
+  sources = [
+    "vivaldi_search.imageset/Contents.json",
+    "vivaldi_search.imageset/vivaldi_search.pdf",
+  ]
+}
+
+imageset("vivaldi_clear_history_autofill") {
+  sources = [
+    "vivaldi_clear_history_autofill.imageset/Contents.json",
+    "vivaldi_clear_history_autofill.imageset/vivaldi_clear_history_autofill.pdf",
+  ]
+}
+
+imageset("vivaldi_clear_history_cookies") {
+  sources = [
+    "vivaldi_clear_history_cookies.imageset/Contents.json",
+    "vivaldi_clear_history_cookies.imageset/vivaldi_clear_history_cookies.pdf",
+  ]
+}
+
+imageset("vivaldi_clear_history_cache") {
+  sources = [
+    "vivaldi_clear_history_cache.imageset/Contents.json",
+    "vivaldi_clear_history_cache.imageset/vivaldi_clear_history_cache.pdf",
   ]
 }

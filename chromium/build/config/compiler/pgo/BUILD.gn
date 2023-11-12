@@ -6,6 +6,7 @@ import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/clang/clang.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/compiler/pgo/pgo.gni")
+import("//build/config/features.gni")
 import("//build/toolchain/toolchain.gni")
 
 # Configuration that enables PGO instrumentation.
@@ -71,6 +72,12 @@ config("pgo_optimization_flags") {
       } else {
         _pgo_target = "mac"
       }
+    } else if (is_ios && use_blink) {
+      if (target_cpu == "arm64") {
+        _pgo_target = "mac-arm"
+      } else {
+        _pgo_target = "mac"
+      }
     }
 
     if (_pgo_target == "win64") {
@@ -118,6 +125,21 @@ config("pgo_optimization_flags") {
       # See https://crbug.com/978401
       "-Wno-backend-plugin",
     ]
+
+    # Enable basic block layout based on the extended TSP problem. This aims to
+    # improve icache utilization and reduce the binary size.
+    if (use_thin_lto) {
+      if (is_win) {
+        ldflags = [ "-mllvm:-enable-ext-tsp-block-placement=1" ]
+      } else {
+        ldflags = [ "-Wl,-mllvm,-enable-ext-tsp-block-placement=1" ]
+      }
+    } else {
+      cflags += [
+        "-mllvm",
+        "-enable-ext-tsp-block-placement=1",
+      ]
+    }
   }
 }
 

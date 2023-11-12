@@ -8,7 +8,6 @@
 #include <map>
 
 #include "base/containers/flat_map.h"
-#include "gn/inherited_libraries.h"
 #include "gn/label.h"
 #include "gn/source_file.h"
 

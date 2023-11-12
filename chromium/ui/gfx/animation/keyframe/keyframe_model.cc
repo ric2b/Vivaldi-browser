@@ -74,8 +74,9 @@ void KeyframeModel::SetRunState(RunState run_state,
 void KeyframeModel::Pause(base::TimeDelta pause_offset) {
   // Convert pause offset which is in local time to monotonic time.
   // TODO(crbug.com/912407): This should be scaled by playbackrate.
-  base::TimeTicks monotonic_time =
-      pause_offset + start_time_ + total_paused_duration_;
+  base::TimeTicks monotonic_time = pause_offset +
+                                   start_time_.value_or(base::TimeTicks()) +
+                                   total_paused_duration_;
   SetRunState(PAUSED, monotonic_time);
 }
 
@@ -92,7 +93,8 @@ KeyframeModel::Phase KeyframeModel::CalculatePhase(
   base::TimeDelta before_active_boundary_time =
       std::max(opposite_time_offset, base::TimeDelta());
   if (local_time < before_active_boundary_time ||
-      (local_time == before_active_boundary_time && playback_rate_ < 0)) {
+      (local_time == before_active_boundary_time && playback_rate_ < 0 &&
+       !active_at_boundary_)) {
     return KeyframeModel::Phase::BEFORE;
   }
   // TODO(crbug.com/909794): By spec end time = max(start delay + duration +
@@ -112,7 +114,8 @@ KeyframeModel::Phase KeyframeModel::CalculatePhase(
         std::max(opposite_time_offset + active_duration, base::TimeDelta());
   }
   if (local_time > active_after_boundary_time ||
-      (local_time == active_after_boundary_time && playback_rate_ > 0)) {
+      (local_time == active_after_boundary_time && playback_rate_ > 0 &&
+       !active_at_boundary_)) {
     return KeyframeModel::Phase::AFTER;
   }
   return KeyframeModel::Phase::ACTIVE;
@@ -251,7 +254,8 @@ base::TimeDelta KeyframeModel::ConvertMonotonicTimeToLocalTime(
 
   // If we're paused, time is 'stuck' at the pause time.
   base::TimeTicks time = (run_state_ == PAUSED) ? pause_time_ : monotonic_time;
-  return time - start_time_ - total_paused_duration_;
+  return time - start_time_.value_or(base::TimeTicks()) -
+         total_paused_duration_;
 }
 
 }  // namespace gfx

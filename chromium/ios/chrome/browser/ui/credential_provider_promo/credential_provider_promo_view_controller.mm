@@ -17,12 +17,13 @@
 #endif
 
 namespace {
-constexpr CGFloat kCustomSpacingBeforeImageIfNoNavigationBar = 2;
-constexpr CGFloat kCustomSpacingAfterImageWithAnimation = 24;
+constexpr CGFloat kCustomSpacingAtTopIfNoNavigationBar = 24;
 constexpr CGFloat kCustomSpacingAfterImageWithoutAnimation = 0;
 constexpr CGFloat kPreferredCornerRadius = 20;
 NSString* const kDarkModeAnimationSuffix = @"_darkmode";
 NSString* const kPasswordOptionsKeypath = @"text_password_options";
+NSString* const kCredentialProviderPromoAccessibilityId =
+    @"kCredentialProviderPromoAccessibilityId";
 }  // namespace
 
 @interface CredentialProviderPromoViewController ()
@@ -51,6 +52,7 @@ NSString* const kPasswordOptionsKeypath = @"text_password_options";
 
 - (void)viewDidLoad {
   [super viewDidLoad];
+  self.view.accessibilityIdentifier = kCredentialProviderPromoAccessibilityId;
   self.view.backgroundColor = [UIColor colorNamed:kGrey100Color];
   if (self.animationViewWrapper) {
     [self configureAndLayoutAnimationView];
@@ -72,6 +74,7 @@ NSString* const kPasswordOptionsKeypath = @"text_password_options";
       hidden || !darkModeEnabled;
 
   [self updateAnimationsPlaying];
+  [self updateAlertScreenTopAnchorConstraint];
 }
 
 #pragma mark - CredentialProviderPromoConsumer
@@ -135,12 +138,15 @@ NSString* const kPasswordOptionsKeypath = @"text_password_options";
   self.alertScreen.imageHasFixedSize = YES;
   self.alertScreen.showDismissBarButton = NO;
   self.alertScreen.titleTextStyle = UIFontTextStyleTitle2;
-  self.alertScreen.customSpacingBeforeImageIfNoNavigationBar =
-      kCustomSpacingBeforeImageIfNoNavigationBar;
   self.alertScreen.topAlignedLayout = YES;
-  self.alertScreen.customSpacingAfterImage =
-      self.shouldShowAnimation ? kCustomSpacingAfterImageWithAnimation
-                               : kCustomSpacingAfterImageWithoutAnimation;
+
+  if (self.shouldShowAnimation) {
+    self.alertScreen.customSpacingBeforeImageIfNoNavigationBar =
+        kCustomSpacingAtTopIfNoNavigationBar;
+  } else {
+    self.alertScreen.customSpacingAfterImage =
+        kCustomSpacingAfterImageWithoutAnimation;
+  }
 
   [self addChildViewController:self.alertScreen];
   [self.view addSubview:self.alertScreen.view];

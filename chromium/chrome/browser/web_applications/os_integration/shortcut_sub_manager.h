@@ -51,6 +51,7 @@ class ShortcutSubManager : public OsIntegrationSubManager {
                       base::OnceClosure on_complete,
                       std::unique_ptr<ShortcutInfo> shortcut_info);
   void UpdateShortcut(const AppId& app_id,
+                      absl::optional<SynchronizeOsOptions> synchronize_options,
                       const std::u16string& old_app_title,
                       base::OnceClosure on_complete,
                       std::unique_ptr<ShortcutInfo> shortcut_info);
@@ -61,8 +62,8 @@ class ShortcutSubManager : public OsIntegrationSubManager {
                              base::flat_map<SquareSizePx, base::Time> time_map);
 
   const raw_ref<Profile> profile_;
-  const raw_ref<WebAppIconManager> icon_manager_;
-  const raw_ref<WebAppRegistrar> registrar_;
+  const raw_ref<WebAppIconManager, DanglingUntriaged> icon_manager_;
+  const raw_ref<WebAppRegistrar, DanglingUntriaged> registrar_;
 
   base::WeakPtrFactory<ShortcutSubManager> weak_ptr_factory_{this};
 };

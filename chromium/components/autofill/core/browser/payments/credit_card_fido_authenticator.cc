@@ -507,6 +507,8 @@ blink::mojom::PublicKeyCredentialRequestOptionsPtr
 CreditCardFidoAuthenticator::ParseRequestOptions(
     const base::Value::Dict& request_options) {
   auto options = blink::mojom::PublicKeyCredentialRequestOptions::New();
+  options->extensions =
+      blink::mojom::AuthenticationExtensionsClientInputs::New();
 
   const auto* rpid = request_options.FindString("relying_party_id");
   options->relying_party_id = rpid ? *rpid : std::string(kGooglePaymentsRpid);
@@ -686,8 +688,10 @@ bool CreditCardFidoAuthenticator::IsValidRequestOptions(
   }
 
   for (const base::Value& key_info : *key_info_list) {
-    if (!key_info.is_dict() || !key_info.FindStringKey("credential_id"))
+    auto* dict = key_info.GetIfDict();
+    if (!dict || !dict->FindString("credential_id")) {
       return false;
+    }
   }
 
   return true;

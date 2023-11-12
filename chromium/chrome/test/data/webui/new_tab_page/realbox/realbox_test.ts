@@ -31,6 +31,7 @@ function createClipboardEvent(name: string): ClipboardEvent {
 function createAutocompleteMatch(): AutocompleteMatch {
   return {
     a11yLabel: mojoString16(''),
+    actions: [],
     allowedToBeDefaultMatch: false,
     isSearchType: false,
     swapContentsAndDescription: false,
@@ -183,6 +184,7 @@ suite('NewTabPageRealboxTest', () => {
   }
 
   test('when created is not focused and matches are not showing', async () => {
+    assertEquals(0, testProxy.handler.getCallCount('onFocusChanged'));
     assertFalse(realbox.hidden);
     assertNotEquals(realbox, getDeepActiveElement());
     assertFalse(areMatchesShowing());
@@ -281,6 +283,7 @@ suite('NewTabPageRealboxTest', () => {
     // Left click does not query autocomplete when matches are showing.
     realbox.$.input.dispatchEvent(new MouseEvent('mousedown', {button: 0}));
     assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
+    assertEquals(1, testProxy.handler.getCallCount('onFocusChanged'));
 
     // Hide the matches by focusing out.
     matchEls[0]!.dispatchEvent(new FocusEvent('focusout', {
@@ -293,6 +296,7 @@ suite('NewTabPageRealboxTest', () => {
     // Right click does not query autocomplete.
     realbox.$.input.dispatchEvent(new MouseEvent('mousedown', {button: 1}));
     assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
+    assertEquals(2, testProxy.handler.getCallCount('onFocusChanged'));
 
     // Left click does not query autocomplete when input is non-empty.
     realbox.$.input.value = '   ';
@@ -301,10 +305,12 @@ suite('NewTabPageRealboxTest', () => {
   });
 
   test('focusing the input does not query autocomplete', async () => {
+    assertEquals(0, testProxy.handler.getCallCount('onFocusChanged'));
     realbox.$.input.value = '';
     realbox.$.input.focus();
     assertEquals(realbox.$.input, getDeepActiveElement());
     assertEquals(0, testProxy.handler.getCallCount('queryAutocomplete'));
+    assertEquals(1, testProxy.handler.getCallCount('onFocusChanged'));
   });
 
   test('tabbing into empty input queries autocomplete', async () => {
@@ -948,7 +954,6 @@ suite('NewTabPageRealboxTest', () => {
       assertEquals(matches[0]!.destinationUrl.url, args.url.url);
       assertTrue(args.areMatchesShowing);
       assertTrue(args.shiftKey);
-      assertTrue(args.timeElapsedSinceLastFocus.microseconds > 0);
     });
     assertEquals(1, testProxy.handler.getCallCount('openAutocompleteMatch'));
   });
@@ -1028,7 +1033,6 @@ suite('NewTabPageRealboxTest', () => {
               assertEquals(matches[0]!.destinationUrl.url, args.url.url);
               assertFalse(args.areMatchesShowing);
               assertTrue(args.shiftKey);
-              assertTrue(args.timeElapsedSinceLastFocus.microseconds > 0);
             });
         assertEquals(
             1, testProxy.handler.getCallCount('openAutocompleteMatch'));
@@ -1204,7 +1208,6 @@ suite('NewTabPageRealboxTest', () => {
       assertEquals(matches[0]!.destinationUrl.url, args.url.url);
       assertTrue(args.areMatchesShowing);
       assertTrue(args.shiftKey);
-      assertTrue(args.timeElapsedSinceLastFocus.microseconds > 0);
     });
     assertEquals(1, testProxy.handler.getCallCount('openAutocompleteMatch'));
   });
@@ -1253,7 +1256,6 @@ suite('NewTabPageRealboxTest', () => {
       assertEquals(matches[0]!.destinationUrl.url, args.url.url);
       assertTrue(args.areMatchesShowing);
       assertTrue(args.shiftKey);
-      assertTrue(args.timeElapsedSinceLastFocus.microseconds > 0);
     });
     assertEquals(1, testProxy.handler.getCallCount('openAutocompleteMatch'));
   });
@@ -1304,7 +1306,6 @@ suite('NewTabPageRealboxTest', () => {
       assertEquals(matches[0]!.destinationUrl.url, args.url.url);
       assertTrue(args.areMatchesShowing);
       assertEquals(1, args.mouseButton);
-      assertTrue(args.timeElapsedSinceLastFocus.microseconds > 0);
     });
     assertEquals(1, testProxy.handler.getCallCount('openAutocompleteMatch'));
 
@@ -1325,7 +1326,6 @@ suite('NewTabPageRealboxTest', () => {
       assertEquals(matches[0]!.destinationUrl.url, args.url.url);
       assertTrue(args.areMatchesShowing);
       assertEquals(0, args.mouseButton);
-      assertTrue(args.timeElapsedSinceLastFocus.microseconds > 0);
     });
     assertEquals(1, testProxy.handler.getCallCount('openAutocompleteMatch'));
   });
@@ -1728,6 +1728,7 @@ suite('NewTabPageRealboxTest', () => {
     realbox.$.input.focus();
     realbox.$.input.value = 'hello';
     realbox.$.input.dispatchEvent(new InputEvent('input'));
+    assertEquals(1, testProxy.handler.getCallCount('onFocusChanged'));
 
     const matches = [createSearchMatch(), createUrlMatch()];
     testProxy.callbackRouterRemote.autocompleteResultChanged({
@@ -1815,6 +1816,10 @@ suite('NewTabPageRealboxTest', () => {
     assertTrue(matchEls[0]!.hasAttribute(Attributes.SELECTED));
     assertEquals('hello world', realbox.$.input.value);
     assertEquals(matchEls[0], realbox.$.matches.shadowRoot!.activeElement);
+
+    // Changing match selection doesn't result in another onFocusChanged call
+    // because focus is for the whole realbox (including input container).
+    assertEquals(1, testProxy.handler.getCallCount('onFocusChanged'));
   });
 
   test('focus indicator', async () => {
@@ -1823,12 +1828,12 @@ suite('NewTabPageRealboxTest', () => {
     realbox.$.input.dispatchEvent(new InputEvent('input'));
 
     const matches = [createSearchMatch({
-      action: {
+      actions: [{
         a11yLabel: mojoString16(''),
         hint: mojoString16('Clear Browsing History'),
         suggestionContents: mojoString16(''),
         iconUrl: 'chrome://theme/current-channel-logo',
-      },
+      }],
       fillIntoEdit: mojoString16('clear browsing history'),
       supportsDeletion: true,
     })];
@@ -2459,12 +2464,12 @@ suite('NewTabPageRealboxTest', () => {
     realbox.$.input.value = 'Clear Browsing History';
     realbox.$.input.dispatchEvent(new InputEvent('input'));
     const matches = [createSearchMatch({
-      action: {
+      actions: [{
         a11yLabel: mojoString16(''),
         hint: mojoString16('Clear Browsing History'),
         suggestionContents: mojoString16(''),
         iconUrl: 'chrome://theme/current-channel-logo',
-      },
+      }],
     })];
     testProxy.callbackRouterRemote.autocompleteResultChanged({
       input: mojoString16(realbox.$.input.value.trimStart()),
@@ -2509,12 +2514,20 @@ suite('NewTabPageRealboxTest', () => {
     const matches = [
       createSearchMatch({contents: mojoString16('Clear Bro')}),
       createSearchMatch({
-        action: {
-          a11yLabel: mojoString16(''),
-          hint: mojoString16('Clear Browsing History'),
-          suggestionContents: mojoString16(''),
-          iconUrl: 'chrome://theme/current-channel-logo',
-        },
+        actions: [
+          {
+            a11yLabel: mojoString16(''),
+            hint: mojoString16('Clear Browsing History'),
+            suggestionContents: mojoString16(''),
+            iconUrl: 'chrome://theme/current-channel-logo',
+          },
+          {
+            a11yLabel: mojoString16(''),
+            hint: mojoString16('Tab Switch'),
+            suggestionContents: mojoString16(''),
+            iconUrl: 'chrome://theme/current-channel-logo',
+          },
+        ],
       }),
     ];
     testProxy.callbackRouterRemote.autocompleteResultChanged({
@@ -2530,10 +2543,11 @@ suite('NewTabPageRealboxTest', () => {
     verifyMatch(matches[0]!, matchEls[0]!);
     verifyMatch(matches[1]!, matchEls[1]!);
 
-    const pedalEl = $$($$(matchEls[1]!, 'cr-realbox-action')!, '.contents')!;
+    const pedalElClear =
+        $$($$(matchEls[1]!, 'cr-realbox-action')!, '.contents')!;
 
     assertEquals(
-        pedalEl.querySelector<HTMLImageElement>('#action-icon')!.src,
+        pedalElClear.querySelector<HTMLImageElement>('#action-icon')!.src,
         'chrome://theme/current-channel-logo');  // Default Pedal Icon
 
     const leftClick = new MouseEvent('click', {
@@ -2543,7 +2557,7 @@ suite('NewTabPageRealboxTest', () => {
       composed: true,  // So it propagates across shadow DOM boundary.
     });
 
-    pedalEl.dispatchEvent(leftClick);
+    pedalElClear.dispatchEvent(leftClick);
     assertTrue(leftClick.defaultPrevented);
 
     await testProxy.handler.whenCalled('executeAction').then((args) => {
@@ -2552,6 +2566,20 @@ suite('NewTabPageRealboxTest', () => {
       assertTrue(args.matchSelectionTimestamp['internalValue'] > 0);
     });
     assertEquals(1, testProxy.handler.getCallCount('executeAction'));
+
+    const pedalElTab =
+        $$(matchEls[1]!.shadowRoot!.querySelectorAll('cr-realbox-action')![1]!,
+           '.contents')!;
+
+    pedalElTab.dispatchEvent(leftClick);
+    assertTrue(leftClick.defaultPrevented);
+
+    await testProxy.handler.whenCalled('executeAction').then((args) => {
+      assertEquals(1, args.line);
+      assertEquals(args.mouseButton, 0);
+      assertTrue(args.matchSelectionTimestamp['internalValue'] > 0);
+    });
+    assertEquals(2, testProxy.handler.getCallCount('executeAction'));
   });
 
   //============================================================================

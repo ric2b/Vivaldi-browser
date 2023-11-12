@@ -13,7 +13,6 @@
 #include "base/component_export.h"
 #include "base/containers/flat_set.h"
 #include "base/time/time.h"
-#include "components/aggregation_service/aggregation_service.mojom-shared.h"
 #include "components/attribution_reporting/aggregatable_dedup_key.h"
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
@@ -21,8 +20,10 @@
 #include "components/attribution_reporting/destination_set.h"
 #include "components/attribution_reporting/event_trigger_data.h"
 #include "components/attribution_reporting/filters.h"
+#include "components/attribution_reporting/os_registration.h"
 #include "components/attribution_reporting/registration.mojom-shared.h"
 #include "components/attribution_reporting/source_registration.h"
+#include "components/attribution_reporting/source_registration_error.mojom-shared.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/trigger_registration.h"
 #include "mojo/public/cpp/base/int128_mojom_traits.h"
@@ -31,7 +32,9 @@
 #include "services/network/public/cpp/schemeful_site_mojom_traits.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "url/gurl.h"
 #include "url/mojom/origin_mojom_traits.h"
+#include "url/mojom/url_gurl_mojom_traits.h"
 #include "url/origin.h"
 
 namespace mojo {
@@ -282,10 +285,16 @@ struct COMPONENT_EXPORT(ATTRIBUTION_REPORTING_REGISTRATION_MOJOM_TRAITS)
     return trigger.debug_reporting;
   }
 
-  static aggregation_service::mojom::AggregationCoordinator
-  aggregation_coordinator(
+  static const absl::optional<attribution_reporting::SuitableOrigin>&
+  aggregation_coordinator_origin(
       const attribution_reporting::TriggerRegistration& trigger) {
-    return trigger.aggregation_coordinator;
+    return trigger.aggregation_coordinator_origin;
+  }
+
+  static attribution_reporting::mojom::SourceRegistrationTimeConfig
+  source_registration_time_config(
+      const attribution_reporting::TriggerRegistration& trigger) {
+    return trigger.source_registration_time_config;
   }
 
   static bool Read(
@@ -310,6 +319,41 @@ struct COMPONENT_EXPORT(ATTRIBUTION_REPORTING_REGISTRATION_MOJOM_TRAITS)
   static bool Read(
       attribution_reporting::mojom::AggregatableDedupKeyDataView data,
       attribution_reporting::AggregatableDedupKey* out);
+};
+
+template <>
+struct COMPONENT_EXPORT(ATTRIBUTION_REPORTING_REGISTRATION_MOJOM_TRAITS)
+    StructTraits<attribution_reporting::mojom::OsRegistrationDataView,
+                 std::vector<attribution_reporting::OsRegistrationItem>> {
+  static const std::vector<attribution_reporting::OsRegistrationItem>& items(
+      const std::vector<attribution_reporting::OsRegistrationItem>& items) {
+    return items;
+  }
+
+  static bool Read(
+      attribution_reporting::mojom::OsRegistrationDataView data,
+      std::vector<attribution_reporting::OsRegistrationItem>* out) {
+    return data.ReadItems(out);
+  }
+};
+
+template <>
+struct COMPONENT_EXPORT(ATTRIBUTION_REPORTING_REGISTRATION_MOJOM_TRAITS)
+    StructTraits<attribution_reporting::mojom::OsRegistrationItemDataView,
+                 attribution_reporting::OsRegistrationItem> {
+  static const GURL& url(
+      const attribution_reporting::OsRegistrationItem& item) {
+    return item.url;
+  }
+
+  static bool debug_reporting(
+      const attribution_reporting::OsRegistrationItem& item) {
+    return item.debug_reporting;
+  }
+
+  static bool Read(
+      attribution_reporting::mojom::OsRegistrationItemDataView data,
+      attribution_reporting::OsRegistrationItem* out);
 };
 
 }  // namespace mojo

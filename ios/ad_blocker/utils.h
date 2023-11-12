@@ -50,7 +50,8 @@ constexpr char kHeader[] = "header";
 constexpr char kCsp[] = "Content-Security-Policy";
 constexpr char kValue[] = "value";
 
-constexpr char kListsInfo [] ="lists-info";
+constexpr char kMetadata [] ="metadata";
+constexpr char kListChecksums [] ="list-checksums";
 constexpr char kExceptionRule [] ="exception-rule";
 constexpr char kOrganizedRules[] = "organized-rules";
 }

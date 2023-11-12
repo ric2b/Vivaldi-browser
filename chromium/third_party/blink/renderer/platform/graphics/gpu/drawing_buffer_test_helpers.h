@@ -78,6 +78,10 @@ class WebGraphicsContext3DProviderForTests
   viz::RasterContextProvider* RasterContextProvider() const override {
     return nullptr;
   }
+  unsigned int GetGrGLTextureFormat(
+      viz::SharedImageFormat format) const override {
+    return 0;
+  }
 
  private:
   cc::StubDecodeCache image_decode_cache_;
@@ -434,6 +438,7 @@ class DrawingBufferForTests : public DrawingBuffer {
             std::move(extensions_util),
             client,
             false /* discardFramebufferSupported */,
+            false /* textureStorageEnabled */,
             true /* wantAlphaChannel */,
             true /* premultipliedAlpha */,
             preserve,

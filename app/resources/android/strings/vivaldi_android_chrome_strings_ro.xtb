@@ -32,7 +32,9 @@
 <translation id="4121750346708795461">Prin folosirea acestei aplicații, vă declarați de acord cu <ph name="BEGIN_LINK1" />Acordul de licență pentru utilizatorul final<ph name="END_LINK1" /> și <ph name="BEGIN_LINK2" />Politica privind confidențialitatea<ph name="END_LINK2" /> de la Vivaldi.</translation>
 <translation id="4137746084635924146">Limba actuală a dispozitivului</translation>
 <translation id="4167670741834902166">Filă privată nouă</translation>
+<translation id="4195643157523330669">Deschide în filă nouă</translation>
 <translation id="4243710787042215766">Deschide într-o filă privată</translation>
+<translation id="451872707440238414">Caută în semnele de carte</translation>
 <translation id="4526803704855831732">File private</translation>
 <translation id="4719086422742491124">Aflați despre subiectele de pe site-urile web fără a părăsi pagina. Selectați unul sau mai multe cuvinte de pe pagină pentru a le căuta.
 
@@ -62,6 +64,7 @@ Pentru a ajusta termenul de căutare, apăsați lung pentru a-l selecta. Pentru 
 <translation id="732145680195464316">Semnul de carte a fost salvat în <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Despre Vivaldi</translation>
 <translation id="7465104139234185284">Închide toate filele private</translation>
+<translation id="7481312909269577407">Înainte</translation>
 <translation id="7583262514280211622">Veți găsi aici lista de lectură</translation>
 <translation id="7968014550143838305">Adăugat în lista de lectură</translation>
 <translation id="804786196054284061">Acordul de licență pentru utilizator</translation>

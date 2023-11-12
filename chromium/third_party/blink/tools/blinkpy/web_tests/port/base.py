@@ -70,8 +70,6 @@ from blinkpy.web_tests.port.factory import PortFactory
 from blinkpy.web_tests.servers import apache_http
 from blinkpy.web_tests.servers import pywebsocket
 from blinkpy.web_tests.servers import wptserve
-from blinkpy.web_tests.skia_gold import blink_skia_gold_properties as sgp
-from blinkpy.web_tests.skia_gold import blink_skia_gold_session_manager as sgsm
 
 _log = logging.getLogger(__name__)
 
@@ -127,8 +125,9 @@ VALID_FILE_NAME_REGEX = re.compile(r'^[\w\-=]+$')
 # contain all the disc artifacts created by web tests
 ARTIFACTS_SUB_DIR = 'layout-test-results'
 
-ENABLE_THREADED_COMPOSITING_FLAG = '--enable-threaded-compositing'
+ARCHIVED_RESULTS_LIMIT = 25
 
+ENABLE_THREADED_COMPOSITING_FLAG = '--enable-threaded-compositing'
 
 class Port(object):
     """Abstract class for Port-specific hooks for the web_test package."""
@@ -160,6 +159,7 @@ class Port(object):
         ('mac13', 'x86_64'),
         ('mac13-arm64', 'arm64'),
         ('win10.20h2', 'x86'),
+        ('win11-arm64', 'arm64'),
         ('win11', 'x86_64'),
         ('trusty', 'x86_64'),
         ('fuchsia', 'x86_64'),
@@ -170,7 +170,7 @@ class Port(object):
             'mac10.13', 'mac10.14', 'mac10.15', 'mac11', 'mac11-arm64',
             'mac12', 'mac12-arm64', 'mac13', 'mac13-arm64'
         ],
-        'win': ['win10.20h2', 'win11'],
+        'win': ['win10.20h2', 'win11-arm64', 'win11'],
         'linux': ['trusty'],
         'fuchsia': ['fuchsia'],
     }
@@ -284,17 +284,7 @@ class Port(object):
             self.set_option_default('wpt_only', False)
         self._test_configuration = None
         self._results_directory = None
-        self._virtual_test_suites = None
         self._used_expectation_files = None
-
-        self._skia_gold_temp_dir = None
-        self._skia_gold_session_manager = None
-        self._skia_gold_properties = None
-
-    def __del__(self):
-        if self._skia_gold_temp_dir:
-            self._filesystem.rmtree(self._skia_gold_temp_dir,
-                                    ignore_errors=True)
 
     def __str__(self):
         return 'Port{name=%s, version=%s, architecture=%s, test_configuration=%s}' % (
@@ -422,34 +412,9 @@ class Port(object):
             return 2 * timeout_ms
         return timeout_ms
 
-    def skia_gold_temp_dir(self):
-        return self._skia_gold_temp_dir
-
-    def skia_gold_properties(self):
-        if not self._skia_gold_properties:
-            self._skia_gold_properties = sgp.BlinkSkiaGoldProperties(
-                self._options)
-        return self._skia_gold_properties
-
-    def skia_gold_session_manager(self):
-        if not self._skia_gold_session_manager:
-            self._skia_gold_temp_dir = self._filesystem.mkdtemp()
-            self._skia_gold_session_manager = sgsm.BlinkSkiaGoldSessionManager(
-                str(self._skia_gold_temp_dir), self.skia_gold_properties())
-        return self._skia_gold_session_manager
-
-    def skia_gold_json_keys(self):
-        return {
-            'configuration': self._options.configuration.lower(),
-            'version': self._version,
-            'port': self.port_name,
-            'architecture': self._architecture,
-            'ignore': '1',
-        }
-
     @memoized
     def _build_args_gn_content(self):
-        args_gn_file = self._build_path('args.gn')
+        args_gn_file = self.build_path('args.gn')
         if not self._filesystem.exists(args_gn_file):
             _log.error('Unable to find %s', args_gn_file)
             return ''
@@ -976,8 +941,15 @@ class Port(object):
         path_in_wpt = match.group(2)
         for expectation, ref_path_in_wpt in self.wpt_manifest(
                 wpt_path).extract_reference_list(path_in_wpt):
-            ref_absolute_path = self._filesystem.join(
-                self.web_tests_dir(), wpt_path + ref_path_in_wpt)
+            if 'external/wpt' in wpt_path:
+                ref_path_in_web_tests = wpt_path + ref_path_in_wpt
+            else:
+                # References in this manifest are already generated with
+                # `/wpt_internal` in the URL. Remove the leading '/' for
+                # joining.
+                ref_path_in_web_tests = ref_path_in_wpt[1:]
+            ref_absolute_path = self._filesystem.join(self.web_tests_dir(),
+                                                      ref_path_in_web_tests)
             reftest_list.append((expectation, ref_absolute_path))
         return reftest_list
 
@@ -1613,6 +1585,11 @@ class Port(object):
     @memoized
     def args_for_test(self, test_name):
         args = self._lookup_virtual_test_args(test_name)
+
+        if self._is_in_allowlist_for_threaded_compositing(test_name):
+            if (ENABLE_THREADED_COMPOSITING_FLAG not in args):
+                args.append(ENABLE_THREADED_COMPOSITING_FLAG)
+
         pac_url = self.extract_wpt_pac(test_name)
         if pac_url is not None:
             args.append("--proxy-pac-url=" + pac_url)
@@ -1630,10 +1607,6 @@ class Port(object):
                 self._filesystem.sanitize_filename(test_name), current_time)
             args.append('--trace-startup-file=' + file_name)
 
-        if self._is_in_allowlist_for_threaded_compositing(test_name):
-            if (ENABLE_THREADED_COMPOSITING_FLAG not in args):
-                args.append(ENABLE_THREADED_COMPOSITING_FLAG)
-
         return args
 
     @memoized
@@ -1649,7 +1622,7 @@ class Port(object):
         # an exception is raised when merging the bot times json files. This happens  whenever they
         # are outputted into the results directory. Temporarily we will return the bot times json
         # file relative to the target directory.
-        return self._build_path('webkit_test_times', 'bot_times_ms.json')
+        return self.build_path('webkit_test_times', 'bot_times_ms.json')
 
     def results_directory(self):
         """Returns the absolute path directory which will store all web tests outputted
@@ -1675,21 +1648,21 @@ class Port(object):
 
     def inspector_build_directory(self):
         if self._build_is_chrome_branded():
-            return self._build_path('gen', 'third_party',
-                                    'devtools-frontend-internal',
-                                    'devtools-frontend', 'front_end')
-        return self._build_path('gen', 'third_party', 'devtools-frontend',
-                                'src', 'front_end')
+            return self.build_path('gen', 'third_party',
+                                   'devtools-frontend-internal',
+                                   'devtools-frontend', 'front_end')
+        return self.build_path('gen', 'third_party', 'devtools-frontend',
+                               'src', 'front_end')
 
     def generated_sources_directory(self):
-        return self._build_path('gen')
+        return self.build_path('gen')
 
     def apache_config_directory(self):
         return self._path_finder.path_from_blink_tools('apache_config')
 
     def default_results_directory(self):
         """Returns the absolute path to the build directory."""
-        return self._build_path()
+        return self.build_path()
 
     @memoized
     def typ_host(self):
@@ -1821,10 +1794,7 @@ class Port(object):
         """
         assert not self._websocket_server, 'Already running a websocket server.'
         output_dir = output_dir or self.artifacts_directory()
-        server = pywebsocket.PyWebSocket(
-            self,
-            output_dir,
-            python_executable=self._options.python_executable)
+        server = pywebsocket.PyWebSocket(self, output_dir)
         server.start()
         self._websocket_server = server
 
@@ -2121,6 +2091,68 @@ class Port(object):
     def default_configuration(self):
         return 'Release'
 
+    def _delete_dirs(self, dir_list):
+        for dir_path in dir_list:
+            self._filesystem.rmtree(dir_path)
+
+    def rename_results_folder(self):
+        try:
+            timestamp = time.strftime(
+                "%Y-%m-%d-%H-%M-%S",
+                time.localtime(
+                    self._filesystem.mtime(
+                        self._filesystem.join(self.artifacts_directory(),
+                                              'results.html'))))
+        except OSError as error:
+            # It might be possible that results.html was not generated in previous run, because the test
+            # run was interrupted even before testing started. In those cases, don't archive the folder.
+            # Simply override the current folder contents with new results.
+            import errno
+            if error.errno in (errno.EEXIST, errno.ENOENT):
+                _log.info(
+                    'No results.html file found in previous run, skipping it.')
+            return None
+        archived_name = ''.join(
+            (self._filesystem.basename(self.artifacts_directory()), '_',
+             timestamp))
+        archived_path = self._filesystem.join(
+            self._filesystem.dirname(self.artifacts_directory()),
+            archived_name)
+        self._filesystem.move(self.artifacts_directory(), archived_path)
+
+    def _get_artifact_directories(self, artifacts_directory_path):
+        results_directory_path = self._filesystem.dirname(
+            artifacts_directory_path)
+        file_list = self._filesystem.listdir(results_directory_path)
+        results_directories = []
+        for name in file_list:
+            file_path = self._filesystem.join(results_directory_path, name)
+            if (artifacts_directory_path in file_path
+                    and self._filesystem.isdir(file_path)):
+                results_directories.append(file_path)
+        results_directories.sort(key=self._filesystem.mtime)
+        return results_directories
+
+    def limit_archived_results_count(self):
+        _log.info('Clobbering excess archived results in %s' %
+                  self._filesystem.dirname(self.artifacts_directory()))
+        results_directories = self._get_artifact_directories(
+            self.artifacts_directory())
+        self._delete_dirs(results_directories[:-ARCHIVED_RESULTS_LIMIT])
+
+    def clobber_old_results(self):
+        dir_above_results_path = self._filesystem.dirname(
+            self.artifacts_directory())
+        _log.info('Clobbering old results in %s.' % dir_above_results_path)
+        if not self._filesystem.exists(dir_above_results_path):
+            return
+        results_directories = self._get_artifact_directories(
+            self.artifacts_directory())
+        self._delete_dirs(results_directories)
+
+        # Port specific clean-up.
+        self.clobber_old_port_specific_results()
+
     def clobber_old_port_specific_results(self):
         pass
 
@@ -2185,14 +2217,14 @@ class Port(object):
 
     def _path_to_driver(self, target=None):
         """Returns the full path to the test driver."""
-        return self._build_path(target, self.driver_name())
+        return self.build_path(target, self.driver_name())
 
     def _path_to_image_diff(self):
         """Returns the full path to the image_diff binary, or None if it is not available.
 
         This is likely used only by diff_image()
         """
-        return self._build_path('image_diff')
+        return self.build_path('image_diff')
 
     def _absolute_baseline_path(self, platform_dir):
         """Return the absolute path to the top of the baseline tree for a
@@ -2282,38 +2314,34 @@ class Port(object):
     def sample_process(self, name, pid):
         pass
 
+    @memoized
     def virtual_test_suites(self):
-        if self._virtual_test_suites is None:
-            path_to_virtual_test_suites = self._filesystem.join(
-                self.web_tests_dir(), 'VirtualTestSuites')
-            assert self._filesystem.exists(path_to_virtual_test_suites), \
-                path_to_virtual_test_suites + ' not found'
-            try:
-                test_suite_json = json.loads(
-                    self._filesystem.read_text_file(
-                        path_to_virtual_test_suites))
-                self._virtual_test_suites = []
-                current_time = datetime.now()
-                for json_config in test_suite_json:
-                    # Strings are treated as comments.
-                    if isinstance(json_config, str):
-                        continue
-                    expires = json_config.get('expires', 'never')
-                    if (expires.lower() != 'never' and datetime.strptime(
-                            expires, '%b %d, %Y') <= current_time):
-                        # do not load expired virtual suites
-                        continue
-                    vts = VirtualTestSuite(**json_config)
-                    if any(vts.full_prefix == s.full_prefix
-                           for s in self._virtual_test_suites):
-                        raise ValueError(
-                            '{} contains entries with the same prefix: {!r}. Please combine them'
-                            .format(path_to_virtual_test_suites, json_config))
-                    self._virtual_test_suites.append(vts)
-            except ValueError as error:
-                raise ValueError('{} is not a valid JSON file: {}'.format(
-                    path_to_virtual_test_suites, error))
-        return self._virtual_test_suites
+        path_to_virtual_test_suites = self._filesystem.join(
+            self.web_tests_dir(), 'VirtualTestSuites')
+        assert self._filesystem.exists(path_to_virtual_test_suites), \
+            path_to_virtual_test_suites + ' not found'
+        virtual_test_suites = []
+        try:
+            test_suite_json = json.loads(
+                self._filesystem.read_text_file(path_to_virtual_test_suites))
+            current_time = datetime.now()
+            for json_config in test_suite_json:
+                # Strings are treated as comments.
+                if isinstance(json_config, str):
+                    continue
+                # expired VTSs are loaded and continue to run. We will have a separate
+                # process to delete expired VTSs.
+                vts = VirtualTestSuite(**json_config)
+                if any(vts.full_prefix == s.full_prefix
+                       for s in virtual_test_suites):
+                    raise ValueError(
+                        '{} contains entries with the same prefix: {!r}. Please combine them'
+                        .format(path_to_virtual_test_suites, json_config))
+                virtual_test_suites.append(vts)
+        except ValueError as error:
+            raise ValueError('{} is not a valid JSON file: {}'.format(
+                path_to_virtual_test_suites, error))
+        return virtual_test_suites
 
     def _all_virtual_tests(self, tests_by_dir):
         tests = []
@@ -2525,16 +2553,37 @@ class Port(object):
         normalized_test_name = self.normalize_test_name(test_name)
         for suite in self.virtual_test_suites():
             if normalized_test_name.startswith(suite.full_prefix):
-                return suite.args
+                return suite.args.copy()
         return []
 
-    def _is_in_allowlist_for_threaded_compositing(self, test_name):
-        # We start with a very simple and small subset of the tests to create
-        # the infrastructure for an allowlist and plan to move to an external
-        # file soon.
-        return test_name.startswith("vibration")
+    @memoized
+    def _get_blocked_tests_for_threaded_compositing_testing(self):
+        path = self._filesystem.join(self.web_tests_dir(),
+                                     'SmokeTests/SingleThreadedTests')
+        return set(self._filesystem.read_text_file(path).split('\n'))
 
-    def _build_path(self, *comps):
+    def _is_in_allowlist_for_threaded_compositing(self, test_name):
+        # We currently only turn on threaded compositing tests for Linux
+        if not self.host.platform.is_linux():
+            return False
+        # We currently only turn on threaded compositing for web_tests
+        if self.is_wpt_test(test_name):
+            return False
+
+        block_list = self._get_blocked_tests_for_threaded_compositing_testing()
+
+        if test_name in block_list:
+            return False
+
+        # We apply the setting of a base test to all of its virtual versions
+        base_name = self.lookup_virtual_test_base(test_name)
+        if base_name:
+            if base_name in block_list:
+                return False
+
+        return True
+
+    def build_path(self, *comps):
         """Returns a path from the build directory."""
         return self._build_path_with_target(self._options.target, *comps)
 
@@ -2584,7 +2633,7 @@ class Port(object):
             for font_dir in font_dirs:
                 font_path = self._filesystem.join(font_dir, font_file)
                 if not self._filesystem.isabs(font_path):
-                    font_path = self._build_path(font_path)
+                    font_path = self.build_path(font_path)
                 if self._check_file_exists(font_path, '', more_logging=False):
                     result.append(font_path)
                     exists = True
@@ -2659,6 +2708,7 @@ class VirtualTestSuite(object):
                  bases=None,
                  exclusive_tests=None,
                  args=None,
+                 owners=None,
                  expires=None):
         assert VALID_FILE_NAME_REGEX.match(prefix), \
             "Virtual test suite prefix '{}' contains invalid characters".format(prefix)
@@ -2677,7 +2727,13 @@ class VirtualTestSuite(object):
         self.platforms = [x.lower() for x in platforms]
         self.bases = bases
         self.exclusive_tests = exclusive_tests
-        self.args = args
+        self.args = sorted(args)
+        # always put --enable-threaded-compositing at the end of list, so that after appending
+        # this parameter due to crrev.com/c/4599846, we do not need to restart content shell
+        # if the parameter set is same.
+        if ENABLE_THREADED_COMPOSITING_FLAG in self.args:
+            self.args.remove(ENABLE_THREADED_COMPOSITING_FLAG)
+            self.args.append(ENABLE_THREADED_COMPOSITING_FLAG)
 
     def __repr__(self):
         return "VirtualTestSuite('%s', %s, %s, %s)" % (self.full_prefix,

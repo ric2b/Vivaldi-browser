@@ -2,16 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <d3d11_1.h>
-
 #include "ui/gl/dc_layer_tree.h"
+
+#include <d3d11_1.h>
 
 #include <utility>
 
 #include "base/feature_list.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/trace_event/trace_event.h"
+#include "ui/gfx/color_space_win.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gl/direct_composition_child_surface_win.h"
 #include "ui/gl/direct_composition_support.h"
 #include "ui/gl/gl_angle_util_win.h"
@@ -24,19 +27,12 @@ bool SizeContains(const gfx::Size& a, const gfx::Size& b) {
 }
 
 bool NeedSwapChainPresenter(const DCLayerOverlayParams* overlay) {
-  // TODO(tangm): when we have more overlays originating from
-  // SkiaOutputDeviceDComp, we should replace this with an explicit "needs swap
-  // chain presenter" flag on DCLayerOverlayParams.
-  switch (overlay->overlay_image->type()) {
-    case DCLayerOverlayType::kNV12Texture:
-    case DCLayerOverlayType::kNV12Pixmap:
-    case DCLayerOverlayType::kDCompSurfaceProxy:
-      return true;
-    case DCLayerOverlayType::kDCompVisualContent:
-      // Z-order of 0 indicates the backbuffer, which already has been presented
-      // and ready for the DComp tree.
-      return overlay->z_order != 0;
+  if (overlay->background_color.has_value()) {
+    return false;
   }
+  CHECK(overlay->overlay_image);
+  return overlay->overlay_image->type() !=
+         DCLayerOverlayType::kDCompVisualContent;
 }
 
 // TODO(http://crbug.com/1380822): Implement dcomp visual tree optimization.
@@ -55,10 +51,13 @@ VideoProcessorWrapper& VideoProcessorWrapper::operator=(
 DCLayerTree::DCLayerTree(bool disable_nv12_dynamic_textures,
                          bool disable_vp_scaling,
                          bool disable_vp_super_resolution,
+                         bool force_dcomp_triple_buffer_video_swap_chain,
                          bool no_downscaled_overlay_promotion)
     : disable_nv12_dynamic_textures_(disable_nv12_dynamic_textures),
       disable_vp_scaling_(disable_vp_scaling),
       disable_vp_super_resolution_(disable_vp_super_resolution),
+      force_dcomp_triple_buffer_video_swap_chain_(
+          force_dcomp_triple_buffer_video_swap_chain),
       no_downscaled_overlay_promotion_(no_downscaled_overlay_promotion),
       ink_renderer_(std::make_unique<DelegatedInkRenderer>()) {}
 
@@ -85,8 +84,9 @@ bool DCLayerTree::Initialize(HWND window) {
     return false;
   }
 
-  dcomp_device_->CreateVisual(&dcomp_root_visual_);
-  DCHECK(dcomp_root_visual_);
+  hr = dcomp_device_->CreateVisual(&dcomp_root_visual_);
+  CHECK_EQ(hr, S_OK);
+
   dcomp_target_->SetRoot(dcomp_root_visual_.Get());
   // A visual inherits the interpolation mode of the parent visual by default.
   // If no visuals set the interpolation mode, the default for the entire visual
@@ -206,11 +206,17 @@ DCLayerTree::VisualTree::VisualSubtree::VisualSubtree() = default;
 DCLayerTree::VisualTree::VisualSubtree::~VisualSubtree() = default;
 
 bool DCLayerTree::VisualTree::VisualSubtree::Update(
-    IDCompositionDevice2* dcomp_device,
+    IDCompositionDevice3* dcomp_device,
     Microsoft::WRL::ComPtr<IUnknown> dcomp_visual_content,
     uint64_t dcomp_surface_serial,
-    const gfx::Vector2d& quad_rect_offset,
+    const gfx::Size& image_size,
+    absl::optional<SkColor4f> content_tint_color,
+    const gfx::Rect& content_rect,
+    const gfx::Rect& quad_rect,
+    bool nearest_neighbor_filter,
     const gfx::Transform& quad_to_root_transform,
+    const gfx::RRectF& rounded_corner_bounds,
+    float opacity,
     const absl::optional<gfx::Rect>& clip_rect_in_root) {
   bool needs_commit = false;
 
@@ -227,13 +233,24 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
 
     hr = dcomp_device->CreateVisual(&clip_visual_);
     CHECK_EQ(hr, S_OK);
+    hr = dcomp_device->CreateVisual(&rounded_corners_visual_);
+    CHECK_EQ(hr, S_OK);
     hr = dcomp_device->CreateVisual(&transform_visual_);
     CHECK_EQ(hr, S_OK);
     hr = dcomp_device->CreateVisual(&content_visual_);
     CHECK_EQ(hr, S_OK);
-    hr = clip_visual_->AddVisual(transform_visual_.Get(), FALSE, nullptr);
+
+    hr = clip_visual_->AddVisual(rounded_corners_visual_.Get(), FALSE, nullptr);
+    CHECK_EQ(hr, S_OK);
+    hr = rounded_corners_visual_->AddVisual(transform_visual_.Get(), FALSE,
+                                            nullptr);
     CHECK_EQ(hr, S_OK);
     hr = transform_visual_->AddVisual(content_visual_.Get(), FALSE, nullptr);
+    CHECK_EQ(hr, S_OK);
+
+    // The default state for the border mode is INHERIT, so we need to force it
+    // to HARD.
+    hr = content_visual_->SetBorderMode(DCOMPOSITION_BORDER_MODE_HARD);
     CHECK_EQ(hr, S_OK);
   }
 
@@ -255,6 +272,102 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
     }
   }
 
+  if (opacity_ != opacity) {
+    opacity_ = opacity;
+    needs_commit = true;
+
+    // |IDCompositionVisual3| should be available since Windows 8.1, but we
+    // noticed crashes due to unconditionally casting to the interface on very
+    // early versions of Windows 10. Here, we only attempt the cast when the
+    // opacity changes, which should only happen for features that we don't
+    // intend to run unconditionally. If this cast fails, we may need to exclude
+    // some Windows versions from these features.
+    // See: https://crbug.com/1455666
+    Microsoft::WRL::ComPtr<IDCompositionVisual3> clip_visual_opacity;
+    hr = clip_visual_.As(&clip_visual_opacity);
+    CHECK_EQ(hr, S_OK);
+    CHECK(clip_visual_opacity);
+
+    if (opacity_ != 1) {
+      hr = clip_visual_opacity->SetOpacity(opacity_);
+      CHECK_EQ(hr, S_OK);
+
+      // Let all of this subtree's visuals blend as one, instead of
+      // individually
+      hr = clip_visual_->SetOpacityMode(DCOMPOSITION_OPACITY_MODE_LAYER);
+      CHECK_EQ(hr, S_OK);
+    } else {
+      hr = clip_visual_opacity->SetOpacity(1.0);
+      CHECK_EQ(hr, S_OK);
+      hr = clip_visual_->SetOpacityMode(DCOMPOSITION_OPACITY_MODE_MULTIPLY);
+      CHECK_EQ(hr, S_OK);
+    }
+  }
+
+  if (rounded_corner_bounds_ != rounded_corner_bounds) {
+    rounded_corner_bounds_ = rounded_corner_bounds;
+    needs_commit = true;
+
+    if (!rounded_corner_bounds_.IsEmpty()) {
+      Microsoft::WRL::ComPtr<IDCompositionRectangleClip> clip;
+      hr = dcomp_device->CreateRectangleClip(&clip);
+      CHECK_EQ(hr, S_OK);
+      CHECK(clip);
+
+      const gfx::RectF rect = rounded_corner_bounds_.rect();
+      hr = clip->SetLeft(rect.x());
+      CHECK_EQ(hr, S_OK);
+      hr = clip->SetRight(rect.right());
+      CHECK_EQ(hr, S_OK);
+      hr = clip->SetBottom(rect.bottom());
+      CHECK_EQ(hr, S_OK);
+      hr = clip->SetTop(rect.y());
+      CHECK_EQ(hr, S_OK);
+
+      const gfx::Vector2dF top_left = rounded_corner_bounds_.GetCornerRadii(
+          gfx::RRectF::Corner::kUpperLeft);
+      hr = clip->SetTopLeftRadiusX(top_left.x());
+      CHECK_EQ(hr, S_OK);
+      hr = clip->SetTopLeftRadiusY(top_left.y());
+      CHECK_EQ(hr, S_OK);
+
+      const gfx::Vector2dF top_right = rounded_corner_bounds_.GetCornerRadii(
+          gfx::RRectF::Corner::kUpperRight);
+      hr = clip->SetTopRightRadiusX(top_right.x());
+      CHECK_EQ(hr, S_OK);
+      hr = clip->SetTopRightRadiusY(top_right.y());
+      CHECK_EQ(hr, S_OK);
+
+      const gfx::Vector2dF bottom_left = rounded_corner_bounds_.GetCornerRadii(
+          gfx::RRectF::Corner::kLowerLeft);
+      hr = clip->SetBottomLeftRadiusX(bottom_left.x());
+      CHECK_EQ(hr, S_OK);
+      hr = clip->SetBottomLeftRadiusY(bottom_left.y());
+      CHECK_EQ(hr, S_OK);
+
+      const gfx::Vector2dF bottom_right = rounded_corner_bounds_.GetCornerRadii(
+          gfx::RRectF::Corner::kLowerRight);
+      hr = clip->SetBottomRightRadiusX(bottom_right.x());
+      CHECK_EQ(hr, S_OK);
+      hr = clip->SetBottomRightRadiusY(bottom_right.y());
+      CHECK_EQ(hr, S_OK);
+
+      hr = rounded_corners_visual_->SetClip(clip.Get());
+      CHECK_EQ(hr, S_OK);
+
+      // Enable anti-aliasing of the rounded corners.
+      hr =
+          rounded_corners_visual_->SetBorderMode(DCOMPOSITION_BORDER_MODE_SOFT);
+      CHECK_EQ(hr, S_OK);
+    } else {
+      hr = rounded_corners_visual_->SetClip(nullptr);
+      CHECK_EQ(hr, S_OK);
+      hr = rounded_corners_visual_->SetBorderMode(
+          DCOMPOSITION_BORDER_MODE_INHERIT);
+      CHECK_EQ(hr, S_OK);
+    }
+  }
+
   if (transform_ != quad_to_root_transform) {
     transform_ = quad_to_root_transform;
     needs_commit = true;
@@ -265,41 +378,138 @@ bool DCLayerTree::VisualTree::VisualSubtree::Update(
         D2D1::Matrix3x2F(transform_.rc(0, 0), transform_.rc(1, 0),  //
                          transform_.rc(0, 1), transform_.rc(1, 1),  //
                          transform_.rc(0, 3), transform_.rc(1, 3));
-    hr = transform_visual_->SetTransform(matrix);
+    hr = Microsoft::WRL::ComPtr<IDCompositionVisual>(transform_visual_)
+             ->SetTransform(matrix);
     CHECK_EQ(hr, S_OK);
   }
 
-  if (offset_ != quad_rect_offset) {
-    offset_ = quad_rect_offset;
+  if (nearest_neighbor_filter_ != nearest_neighbor_filter) {
+    nearest_neighbor_filter_ = nearest_neighbor_filter;
     needs_commit = true;
+
+    hr = transform_visual_->SetBitmapInterpolationMode(
+        nearest_neighbor_filter_
+            ? DCOMPOSITION_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
+            : DCOMPOSITION_BITMAP_INTERPOLATION_MODE_LINEAR);
+    CHECK_EQ(hr, S_OK);
+  }
+
+  if (image_size_ != image_size || content_rect_ != content_rect ||
+      quad_rect_ != quad_rect) {
+    image_size_ = image_size;
+    content_rect_ = content_rect;
+    quad_rect_ = quad_rect;
+    needs_commit = true;
+
+    if (content_rect_.Contains(gfx::Rect(image_size_))) {
+      // No need to set clip to content if the whole image is inside the content
+      // rect region.
+      hr = content_visual_->SetClip(nullptr);
+      CHECK_EQ(hr, S_OK);
+    } else {
+      // Exclude content outside the content rect region.
+      const auto content_clip =
+          D2D1::RectF(content_rect_.x(), content_rect_.y(),
+                      content_rect_.right(), content_rect_.bottom());
+      hr = content_visual_->SetClip(content_clip);
+      CHECK_EQ(hr, S_OK);
+    }
+
+    // Transform the (clipped) content so that it fills |quad_rect_|'s bounds.
+    // |quad_rect_|'s offset is handled below, so we exclude it from the matrix.
+    const bool needs_offset = !content_rect_.OffsetFromOrigin().IsZero();
+    const bool needs_scale = quad_rect_.width() != content_rect_.width() ||
+                             quad_rect_.height() != content_rect_.height();
+    if (needs_offset || needs_scale) {
+      const float scale_x = static_cast<float>(quad_rect_.width()) /
+                            static_cast<float>(content_rect_.width());
+      const float scale_y = static_cast<float>(quad_rect_.height()) /
+                            static_cast<float>(content_rect_.height());
+      const D2D_MATRIX_3X2_F matrix =
+          D2D1::Matrix3x2F::Translation(-content_rect_.x(),
+                                        -content_rect_.y()) *
+          D2D1::Matrix3x2F::Scale(scale_x, scale_y);
+      hr = Microsoft::WRL::ComPtr<IDCompositionVisual>(content_visual_)
+               ->SetTransform(matrix);
+      CHECK_EQ(hr, S_OK);
+    } else {
+      hr = content_visual_->SetTransform(nullptr);
+      CHECK_EQ(hr, S_OK);
+    }
 
     // Visual offset is applied after transform so it is affected by the
     // transform, which is consistent with how the compositor maps quad rects to
     // their target space.
-    hr = content_visual_->SetOffsetX(offset_.x());
+    hr = content_visual_->SetOffsetX(quad_rect_.x());
     CHECK_EQ(hr, S_OK);
-    hr = content_visual_->SetOffsetY(offset_.y());
+    hr = content_visual_->SetOffsetY(quad_rect_.y());
     CHECK_EQ(hr, S_OK);
+  }
+
+  if (content_tint_color_ != content_tint_color) {
+    content_tint_color_ = content_tint_color;
+    needs_commit = true;
+
+    SkColor4f color = content_tint_color_.value_or(SkColors::kWhite);
+
+    if (color == SkColors::kWhite) {
+      // White-colored tint is the same as no effect.
+      hr = content_visual_->SetEffect(nullptr);
+      CHECK_EQ(hr, S_OK);
+    } else {
+      // Transforms an opaque white color to the background color.
+      D2D_MATRIX_5X4_F white_to_color = D2D1::Matrix5x4F();
+      white_to_color._11 = color.fR;
+      white_to_color._22 = color.fG;
+      white_to_color._33 = color.fB;
+      white_to_color._44 = color.fA;
+
+      Microsoft::WRL::ComPtr<IDCompositionColorMatrixEffect> effect;
+      hr = dcomp_device->CreateColorMatrixEffect(&effect);
+      CHECK_EQ(hr, S_OK);
+      hr = effect->SetMatrix(white_to_color);
+      CHECK_EQ(hr, S_OK);
+      hr = content_visual_->SetEffect(effect.Get());
+      CHECK_EQ(hr, S_OK);
+    }
   }
 
   if (dcomp_visual_content_ != dcomp_visual_content) {
     dcomp_visual_content_ = std::move(dcomp_visual_content);
     needs_commit = true;
+
     hr = content_visual_->SetContent(dcomp_visual_content_.Get());
     CHECK_EQ(hr, S_OK);
   }
 
   if (dcomp_surface_serial_ != dcomp_surface_serial) {
-    // If dcomp_surface data is updated needs a commit.
-    needs_commit = true;
     dcomp_surface_serial_ = dcomp_surface_serial;
+    needs_commit = true;
+
+    // The DComp surface has been drawn to and needs a commit to show its
+    // update. No visual changes are needed in this case.
   }
-#if DCHECK_IS_ON()
-  // dcomp_surface_serial_ is used for root surface only. For other surfaces
-  // it's always zero.
-  if (dcomp_surface_serial_ > 0)
-    DCHECK_EQ(z_order_, 0);
-#endif
+
+  // Properties that derive from multiple other properties can only change if
+  // something else in the subtree has changed, so we can guard recalculating
+  // these behind |needs_commit|.
+  if (needs_commit) {
+    const float kNeedsSoftBorderTolerance = 0.001;
+    const bool content_soft_borders =
+        !transform_.Preserves2dAxisAlignment() ||
+        !gfx::IsNearestRectWithinDistance(
+            transform_.MapRect(gfx::RectF(quad_rect_)),
+            kNeedsSoftBorderTolerance);
+    if (content_soft_borders_ != content_soft_borders) {
+      content_soft_borders_ = content_soft_borders;
+
+      hr = content_visual_->SetBorderMode(content_soft_borders_
+                                              ? DCOMPOSITION_BORDER_MODE_SOFT
+                                              : DCOMPOSITION_BORDER_MODE_HARD);
+      CHECK_EQ(hr, S_OK);
+    }
+  }
+
   return needs_commit;
 }
 
@@ -308,7 +518,7 @@ void DCLayerTree::VisualTree::VisualSubtree::GetSwapChainVisualInfoForTesting(
     gfx::Point* offset,
     gfx::Rect* clip_rect) const {
   *transform = transform_;
-  *offset = gfx::Point() + offset_;
+  *offset = quad_rect_.origin();
   *clip_rect = clip_rect_.value_or(gfx::Rect());
 }
 
@@ -333,6 +543,14 @@ bool DCLayerTree::VisualTree::UpdateTree(
   visual_subtrees.resize(overlays.size());
   // Build or update visual subtree for each overlay.
   for (size_t i = 0; i < overlays.size(); ++i) {
+    const bool is_root_plane = overlays[i]->z_order == 0;
+    if (!is_root_plane && overlays[i]->overlay_image) {
+      TRACE_EVENT2(
+          "gpu", "DCLayerTree::VisualTree::UpdateOverlay", "image_type",
+          DCLayerOverlayTypeToString(overlays[i]->overlay_image->type()),
+          "size", overlays[i]->content_rect.size().ToString());
+    }
+
     IUnknown* dcomp_visual_content =
         overlays[i]->overlay_image->dcomp_visual_content();
     // Find matching subtree for each overlay. If subtree is found, move it
@@ -368,7 +586,10 @@ bool DCLayerTree::VisualTree::UpdateTree(
         dc_layer_tree_->dcomp_device_.Get(),
         overlays[i]->overlay_image->dcomp_visual_content(),
         overlays[i]->overlay_image->dcomp_surface_serial(),
-        overlays[i]->quad_rect.OffsetFromOrigin(), overlays[i]->transform,
+        overlays[i]->overlay_image->size(), overlays[i]->background_color,
+        overlays[i]->content_rect, overlays[i]->quad_rect,
+        overlays[i]->nearest_neighbor_filter, overlays[i]->transform,
+        overlays[i]->rounded_corner_bounds, overlays[i]->opacity,
         overlays[i]->clip_rect);
 
     // Zero z_order represents root layer.
@@ -400,8 +621,10 @@ bool DCLayerTree::VisualTree::UpdateTree(
           visual_subtrees_[i]->container_visual(), FALSE, nullptr);
     }
 
-    dc_layer_tree_->AddDelegatedInkVisualToTreeIfNeeded(
-        root_surface_visual.Get());
+    if (root_surface_visual) {
+      dc_layer_tree_->AddDelegatedInkVisualToTreeIfNeeded(
+          root_surface_visual.Get());
+    }
 
     needs_commit = true;
   }
@@ -463,6 +686,8 @@ bool DCLayerTree::CommitAndClearPendingOverlays(
       root_params->overlay_image = DCLayerOverlayImage(
           root_surface->GetSize(), std::move(root_visual_content),
           root_surface->dcomp_surface_serial());
+      root_params->content_rect = gfx::Rect(root_params->overlay_image->size());
+      root_params->quad_rect = gfx::Rect(root_params->overlay_image->size());
       ScheduleDCLayer(std::move(root_params));
     } else {
       auto it = std::find_if(
@@ -470,7 +695,7 @@ bool DCLayerTree::CommitAndClearPendingOverlays(
           [](const std::unique_ptr<DCLayerOverlayParams>& overlay) {
             return overlay->z_order == 0;
           });
-      if (it != pending_overlays_.end()) {
+      if (it != pending_overlays_.end() && (*it)->overlay_image) {
         Microsoft::WRL::ComPtr<IUnknown> root_visual_content =
             (*it)->overlay_image->dcomp_visual_content();
         HRESULT hr = root_visual_content.As(&root_swap_chain);
@@ -522,33 +747,55 @@ bool DCLayerTree::CommitAndClearPendingOverlays(
   auto video_swap_iter = video_swap_chains_.begin();
 
   // Populate |overlays| with information required to build dcomp visual tree.
-  for (size_t i = 0; i < overlays.size(); ++i) {
-    if (!NeedSwapChainPresenter(overlays[i].get())) {
-      continue;
+  for (auto& overlay : overlays) {
+    if (NeedSwapChainPresenter(overlay.get())) {
+      // Present to swap chain and update the overlay with transform, clip
+      // and content.
+      auto& video_swap_chain = *(video_swap_iter++);
+      if (!video_swap_chain) {
+        // TODO(sunnyps): Try to find a matching swap chain based on size, type
+        // of swap chain, gl image, etc.
+        video_swap_chain = std::make_unique<SwapChainPresenter>(
+            this, window_, d3d11_device_, dcomp_device_);
+        if (frame_rate_ > 0) {
+          video_swap_chain->SetFrameRate(frame_rate_);
+        }
+      }
+      gfx::Transform transform;
+      gfx::Rect clip_rect;
+      if (!video_swap_chain->PresentToSwapChain(*overlay, &transform,
+                                                &clip_rect)) {
+        DLOG(ERROR) << "PresentToSwapChain failed";
+        return false;
+      }
+      // |SwapChainPresenter| may have changed the size of the overlay's quad
+      // rect, e.g. to present to a swap chain exactly the size of the display
+      // rect when the source video is larger.
+      overlay->transform = transform;
+      overlay->content_rect = gfx::Rect(video_swap_chain->content_size());
+      overlay->quad_rect.set_size(video_swap_chain->content_size());
+      if (overlay->clip_rect.has_value()) {
+        overlay->clip_rect = clip_rect;
+      }
+      overlay->overlay_image = DCLayerOverlayImage(
+          video_swap_chain->content_size(), video_swap_chain->content());
+    } else if (overlay->background_color.has_value()) {
+      CHECK(!overlay->overlay_image.has_value());
+
+      gfx::Size content_size;
+      Microsoft::WRL::ComPtr<IDCompositionSurface> solid_color_surface =
+          GetOrCreateSolidWhiteTexture(content_size).get();
+      if (!solid_color_surface) {
+        DLOG(ERROR) << "Could not get solid color surface.";
+        return false;
+      }
+
+      // Solid color overlay case is special-cased in DCLayerTree as a shared
+      // opaque white surface that's tinted to the desired color.
+      overlay->overlay_image =
+          DCLayerOverlayImage(content_size, std::move(solid_color_surface));
+      overlay->content_rect = gfx::Rect(content_size);
     }
-    // Present to swap chain and update the overlay with transform, clip
-    // and content.
-    auto& video_swap_chain = *(video_swap_iter++);
-    if (!video_swap_chain) {
-      // TODO(sunnyps): Try to find a matching swap chain based on size, type of
-      // swap chain, gl image, etc.
-      video_swap_chain = std::make_unique<SwapChainPresenter>(
-          this, window_, d3d11_device_, dcomp_device_);
-      if (frame_rate_ > 0)
-        video_swap_chain->SetFrameRate(frame_rate_);
-    }
-    gfx::Transform transform;
-    gfx::Rect clip_rect;
-    if (!video_swap_chain->PresentToSwapChain(*overlays[i], &transform,
-                                              &clip_rect)) {
-      DLOG(ERROR) << "PresentToSwapChain failed";
-      return false;
-    }
-    overlays[i]->transform = transform;
-    if (overlays[i]->clip_rect.has_value())
-      overlays[i]->clip_rect = clip_rect;
-    overlays[i]->overlay_image = DCLayerOverlayImage(
-        video_swap_chain->content_size(), video_swap_chain->content());
   }
 
   bool status = BuildVisualTreeHelper(overlays, needs_rebuild_visual_tree_);
@@ -658,4 +905,59 @@ void DCLayerTree::InitDelegatedInkPointRendererReceiver(
   ink_renderer_->InitMessagePipeline(std::move(pending_receiver));
 }
 
+raw_ptr<IDCompositionSurface> DCLayerTree::GetOrCreateSolidWhiteTexture(
+    gfx::Size& resource_size_in_pixels) {
+  resource_size_in_pixels = gfx::Size(1, 1);
+
+  if (!solid_color_texture_) {
+    Microsoft::WRL::ComPtr<IDCompositionSurface> solid_color_texture;
+
+    HRESULT hr = S_OK;
+    hr = dcomp_device_->CreateSurface(
+        resource_size_in_pixels.width(), resource_size_in_pixels.height(),
+        gfx::ColorSpaceWin::GetDXGIFormat(gfx::ColorSpace::CreateSRGB()),
+        DXGI_ALPHA_MODE_IGNORE, &solid_color_texture);
+    if (FAILED(hr)) {
+      LOG(ERROR) << "CreateSurface failed: "
+                 << logging::SystemErrorCodeToString(hr);
+      return nullptr;
+    }
+
+    RECT update_rect = D2D1::Rect(0, 0, resource_size_in_pixels.width(),
+                                  resource_size_in_pixels.height());
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> draw_texture;
+    POINT update_offset;
+    hr = solid_color_texture->BeginDraw(
+        &update_rect, IID_PPV_ARGS(&draw_texture), &update_offset);
+    if (FAILED(hr)) {
+      LOG(ERROR) << "BeginDraw failed: "
+                 << logging::SystemErrorCodeToString(hr);
+      return nullptr;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> rtv;
+    hr = d3d11_device_->CreateRenderTargetView(draw_texture.Get(), nullptr,
+                                               &rtv);
+    if (FAILED(hr)) {
+      LOG(ERROR) << "CreateRenderTargetView failed: "
+                 << logging::SystemErrorCodeToString(hr);
+      return nullptr;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D11DeviceContext> immediate_context;
+    d3d11_device_->GetImmediateContext(&immediate_context);
+    FLOAT white[4] = {1.0, 1.0, 1.0, 1.0};
+    immediate_context->ClearRenderTargetView(rtv.Get(), white);
+
+    hr = solid_color_texture->EndDraw();
+    if (FAILED(hr)) {
+      LOG(ERROR) << "EndDraw failed: " << logging::SystemErrorCodeToString(hr);
+      return nullptr;
+    }
+
+    solid_color_texture_ = std::move(solid_color_texture);
+  }
+
+  return solid_color_texture_.Get();
+}
 }  // namespace gl

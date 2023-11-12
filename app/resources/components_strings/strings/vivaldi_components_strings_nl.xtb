@@ -57,6 +57,7 @@
 <translation id="3226128629678568754">Klik op de knop 'Pagina herladen' om de gegevens opnieuw te verzenden die nodig zijn om de pagina te laden.</translation>
 <translation id="3234666976984236645">Altijd belangrijke inhoud op deze website detecteren</translation>
 <translation id="3308738399950580893">advertenties</translation>
+<translation id="3384522979010096022">Jouw organisatie staat niet toe dat je deze site bekijkt</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is momenteel niet bereikbaar.</translation>
 <translation id="3427092606871434483">Toestaan (standaard)</translation>
 <translation id="3447661539832366887">De eigenaar van dit apparaat heeft de dinosaurusgame uitgeschakeld.</translation>
@@ -188,7 +189,6 @@
 <translation id="8150722005171944719">Het bestand op <ph name="URL" /> is onleesbaar. Het bestand is mogelijk verwijderd of verplaatst of de bestandsrechten zorgen ervoor dat het bestand niet kan worden geopend.</translation>
 <translation id="8184538546369750125">Algemene standaardinstelling gebruiken (Toestaan)</translation>
 <translation id="8211406090763984747">Verbinding is beveiligd</translation>
-<translation id="8225771182978767009">De persoon die deze computer heeft geconfigureerd, heeft deze website geblokkeerd.</translation>
 <translation id="8241707690549784388">De pagina die je wilt bezoeken, heeft informatie verwerkt die je hebt ingevoerd. Als je terugkeert naar deze pagina, worden al uitgevoerde acties mogelijk herhaald. Wil je doorgaan?</translation>
 <translation id="8241712895048303527">Blokkeren op deze website</translation>
 <translation id="8286036467436129157">Inloggen</translation>
@@ -209,7 +209,6 @@
 <translation id="9062620674789239642">Het is mogelijk verplaatst, bewerkt of verwijderd.</translation>
 <translation id="9069693763241529744">Geblokkeerd door een extensie</translation>
 <translation id="9073799351042754113">Je hebt ervoor gekozen beveiligingswaarschuwingen voor deze website uit te zetten.</translation>
-<translation id="910924428752220542">Vivaldi-wachtwoorden</translation>
 <translation id="9169664750068251925">Altijd blokkeren op deze website</translation>
 <translation id="9180553614777056266">Reclamefilter</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> gebruikt een niet-ondersteund protocol.</translation>

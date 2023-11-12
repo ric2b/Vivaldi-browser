@@ -120,6 +120,8 @@ void PrintingSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"cupsPrintersLearnMoreLabel",
        IDS_SETTINGS_PRINTING_CUPS_PRINTERS_LEARN_MORE_LABEL},
       {"addCupsPrinter", IDS_SETTINGS_PRINTING_CUPS_PRINTERS_ADD_PRINTER},
+      {"addCupsPrinterManually",
+       IDS_SETTINGS_PRINTING_CUPS_PRINTERS_ADD_PRINTER_MANUALLY},
       {"editPrinter", IDS_SETTINGS_PRINTING_CUPS_PRINTERS_EDIT},
       {"viewPrinter", IDS_SETTINGS_PRINTING_CUPS_PRINTERS_VIEW},
       {"removePrinter", IDS_SETTINGS_PRINTING_CUPS_PRINTERS_REMOVE},
@@ -150,6 +152,10 @@ void PrintingSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_PRINTING_CUPS_PRINTERS_SAVED_PRINTERS_COUNT_ONE},
       {"savedPrintersCountNone",
        IDS_SETTINGS_PRINTING_CUPS_PRINTERS_SAVED_PRINTERS_COUNT_NONE},
+      {"noSavedPrinters", IDS_SETTINGS_PRINTING_CUPS_NO_SAVED_PRINTERS},
+      {"helpSectionTitle", IDS_SETTINGS_PRINTING_CUPS_HELP_SECTION_TITLE},
+      {"helpSectionDescription",
+       IDS_SETTINGS_PRINTING_CUPS_HELP_SECTION_DESCRIPTION},
       {"showMorePrinters", IDS_SETTINGS_PRINTING_CUPS_SHOW_MORE},
       {"addPrintersNearbyTitle",
        IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTERS_NEARBY_TITLE},
@@ -279,6 +285,30 @@ void PrintingSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_PRINTING_CUPS_PRINT_SERVER_CONNECTION_ERROR},
       {"printServerConfigurationErrorMessage",
        IDS_SETTINGS_PRINTING_CUPS_PRINT_SERVER_REACHABLE_BUT_CANNOT_ADD},
+      {"printerStatusDeviceError",
+       IDS_SETTINGS_PRINTING_PRINTER_STATUS_DEVICE_ERROR},
+      {"printerStatusDoorOpen", IDS_SETTINGS_PRINTING_PRINTER_STATUS_DOOR_OPEN},
+      {"printerStatusLowOnInk",
+       IDS_SETTINGS_PRINTING_PRINTER_STATUS_LOW_ON_INK},
+      {"printerStatusLowOnPaper",
+       IDS_SETTINGS_PRINTING_PRINTER_STATUS_LOW_ON_PAPER},
+      {"printerStatusOutOfInk",
+       IDS_SETTINGS_PRINTING_PRINTER_STATUS_OUT_OF_INK},
+      {"printerStatusOutOfPaper",
+       IDS_SETTINGS_PRINTING_PRINTER_STATUS_OUT_OF_PAPER},
+      {"printerStatusOutputAlmostFull",
+       IDS_SETTINGS_PRINTING_PRINTER_STATUS_OUPUT_ALMOST_FULL},
+      {"printerStatusOutputFull",
+       IDS_SETTINGS_PRINTING_PRINTER_STATUS_OUPUT_FULL},
+      {"printerStatusPaperJam", IDS_SETTINGS_PRINTING_PRINTER_STATUS_PAPER_JAM},
+      {"printerStatusPaused", IDS_SETTINGS_PRINTING_PRINTER_STATUS_PAUSED},
+      {"printerStatusPrinterQueueFull",
+       IDS_SETTINGS_PRINTING_PRINTER_STATUS_PRINTER_QUEUE_FULL},
+      {"printerStatusPrinterUnreachable",
+       IDS_SETTINGS_PRINTING_PRINTER_STATUS_PRINTER_UNREACHABLE},
+      {"printerStatusStopped", IDS_SETTINGS_PRINTING_PRINTER_STATUS_STOPPED},
+      {"printerStatusTrayMissing",
+       IDS_SETTINGS_PRINTING_PRINTER_STATUS_TRAY_MISSING},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
@@ -287,9 +317,10 @@ void PrintingSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddString(
       "printingCUPSPrintPpdLearnMoreUrl",
       GetHelpUrlWithBoard(chrome::kCupsPrintPPDLearnMoreURL));
-  html_source->AddBoolean("isViewPpdEnabled", features::IsViewPpdEnabled());
   html_source->AddBoolean("isPrinterSettingsRevampEnabled",
                           features::IsPrinterSettingsRevampEnabled());
+  html_source->AddBoolean("isPrinterSettingsPrinterStatusEnabled",
+                          features::IsPrinterSettingsPrinterStatusEnabled());
 }
 
 void PrintingSection::AddHandlers(content::WebUI* web_ui) {

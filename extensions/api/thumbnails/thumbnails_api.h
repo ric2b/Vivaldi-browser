@@ -7,6 +7,8 @@
 
 #include <memory>
 
+#include "chrome/browser/profiles/profile_observer.h"
+#include "components/capture/thumbnail_capture_contents.h"
 #include "extensions/browser/extension_function.h"
 #include "url/gurl.h"
 
@@ -50,7 +52,7 @@ class ThumbnailsCaptureTabFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
-class ThumbnailsCaptureBookmarkFunction : public ExtensionFunction {
+class ThumbnailsCaptureBookmarkFunction : public ExtensionFunction, public ProfileObserver {
  public:
   DECLARE_EXTENSION_FUNCTION("thumbnails.captureBookmark",
                              THUMBNAILS_CAPTUREBOOKMARK)
@@ -64,7 +66,11 @@ class ThumbnailsCaptureBookmarkFunction : public ExtensionFunction {
 
   void SendResult(std::string data_url);
 
+  // ProfileObserver:
+  void OnProfileWillBeDestroyed(Profile* profile) override;
+
   GURL url_;
+  ::vivaldi::ThumbnailCaptureContents* tcc_ = nullptr;
 };
 
 }  // namespace extensions

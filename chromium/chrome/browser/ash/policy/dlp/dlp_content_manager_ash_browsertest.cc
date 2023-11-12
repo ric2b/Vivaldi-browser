@@ -865,13 +865,11 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerAshBrowserTest,
 
   DlpConfidentialContents expected_contents;
   expected_contents.Add(web_contents);
-  EXPECT_CALL(
-      *mock_dlp_warn_notifier,
-      ShowDlpWarningDialog(
-          testing::_,
-          DlpWarnDialog::DlpWarnDialogOptions(
-              DlpWarnDialog::Restriction::kVideoCapture, expected_contents),
-          testing::_))
+  EXPECT_CALL(*mock_dlp_warn_notifier,
+              ShowDlpWarningDialog(
+                  testing::_, DlpWarnDialog::DlpWarnDialogOptions(
+                                  DlpWarnDialog::Restriction::kVideoCapture,
+                                  expected_contents)))
       .Times(1);
 
   ASSERT_TRUE(helper_->GetRunningVideoCaptureInfo().has_value());
@@ -901,7 +899,6 @@ class DlpContentManagerAshScreenShareBrowserTest
             web_contents->GetPrimaryMainFrame()->GetProcess()->GetID(),
             web_contents->GetPrimaryMainFrame()->GetRoutingID(),
             url::Origin::Create(GURL(kExampleUrl)), media_id,
-            /*extension_name=*/"",
             content::DesktopStreamRegistryType::kRegistryStreamTypeDesktop);
 
     MaybeStartScreenShare(
@@ -923,16 +920,16 @@ class DlpContentManagerAshScreenShareBrowserTest
       content::WebContents* web_contents,
       bool expect_allowed = true,
       bool expect_warning = false) {
+    int process_id = web_contents->GetPrimaryMainFrame()->GetProcess()->GetID();
+    int frame_id = web_contents->GetPrimaryMainFrame()->GetRoutingID();
     const content::DesktopMediaID media_id(
         content::DesktopMediaID::TYPE_WEB_CONTENTS,
         content::DesktopMediaID::kNullId,
-        content::WebContentsMediaCaptureId(
-            web_contents->GetPrimaryMainFrame()->GetProcess()->GetID(),
-            web_contents->GetPrimaryMainFrame()->GetRoutingID()));
+        content::WebContentsMediaCaptureId(process_id, frame_id));
+
     extensions::TabCaptureRegistry::Get(browser()->profile())
         ->AddRequest(web_contents, /*extension_id=*/"", /*is_anonymous=*/false,
-                     GURL(kExampleUrl), media_id, /*extension_name=*/"",
-                     web_contents);
+                     GURL(kExampleUrl), media_id, process_id, frame_id);
 
     MaybeStartScreenShare(
         std::make_unique<TabCaptureAccessHandler>(), web_contents,
@@ -1564,16 +1561,14 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerAshScreenShareBrowserTest,
               ShowDlpWarningDialog(testing::_,
                                    DlpWarnDialog::DlpWarnDialogOptions(
                                        DlpWarnDialog::Restriction::kScreenShare,
-                                       expected_contents, kApplicationTitle),
-                                   testing::_))
+                                       expected_contents, kApplicationTitle)))
       .Times(1);
   expected_contents.GetContents().begin()->title = u"New Title";
   EXPECT_CALL(*mock_dlp_warn_notifier,
               ShowDlpWarningDialog(testing::_,
                                    DlpWarnDialog::DlpWarnDialogOptions(
                                        DlpWarnDialog::Restriction::kScreenShare,
-                                       expected_contents, kApplicationTitle),
-                                   testing::_))
+                                       expected_contents, kApplicationTitle)))
       .Times(1);
 
   helper_->ChangeConfidentiality(web_contents, kScreenShareWarned);

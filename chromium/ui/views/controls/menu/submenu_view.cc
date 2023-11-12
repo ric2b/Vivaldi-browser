@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <numeric>
 #include <set>
+#include <tuple>
 
 #include "base/compiler_specific.h"
 #include "base/containers/contains.h"
@@ -24,13 +25,17 @@
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/controls/menu/menu_config.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_host.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_scroll_view_container.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -64,22 +69,13 @@ SubmenuView::~SubmenuView() {
   delete scroll_view_container_;
 }
 
-bool SubmenuView::HasEmptyMenuItemView() const {
-  return base::Contains(children(), MenuItemView::kEmptyMenuItemViewID,
-                        &View::GetID);
-}
-
-bool SubmenuView::HasVisibleChildren() const {
-  return base::ranges::any_of(GetMenuItems(), [](const MenuItemView* item) {
-    return item->GetVisible();
-  });
-}
-
 SubmenuView::MenuItems SubmenuView::GetMenuItems() const {
   MenuItems menu_items;
   for (View* child : children()) {
-    if (child->GetID() == MenuItemView::kMenuItemViewID)
-      menu_items.push_back(static_cast<MenuItemView*>(child));
+    if (auto* menu_item = AsViewClass<MenuItemView>(child);
+        menu_item && !IsViewClass<EmptyMenuMenuItem>(child)) {
+      menu_items.push_back(menu_item);
+    }
   }
   return menu_items;
 }
@@ -90,8 +86,96 @@ MenuItemView* SubmenuView::GetMenuItemAt(size_t index) {
   return menu_items[index];
 }
 
+int SubmenuView::GetPreferredItemHeight() const {
+  EmptyMenuMenuItem menu_item(parent_menu_item_);
+  menu_item.set_controller(parent_menu_item_->GetMenuController());
+  return menu_item.GetPreferredSize().height();
+}
+
 PrefixSelector* SubmenuView::GetPrefixSelector() {
   return &prefix_selector_;
+}
+
+void SubmenuView::UpdateMenuPartSizes() {
+  const MenuConfig& config = MenuConfig::instance();
+
+  const auto get_metrics = [&] {
+    return std::tie(icon_area_width_, label_start_, trailing_padding_);
+  };
+  const auto old_metrics = get_metrics();
+
+  trailing_padding_ =
+      config.item_horizontal_padding + config.item_horizontal_border_padding;
+  const auto& menu_items = GetMenuItems();
+  if (config.reserve_dedicated_arrow_column &&
+      base::ranges::any_of(menu_items, &MenuItemView::HasSubmenu)) {
+    trailing_padding_ +=
+        kSubmenuArrowSize +
+        (base::Contains(menu_items, MenuItemView::Type::kActionableSubMenu,
+                        &MenuItemView::GetType)
+             ? config.actionable_submenu_arrow_to_edge_padding
+             : config.arrow_to_edge_padding);
+  }
+
+  const bool has_checks_or_radios = base::ranges::any_of(
+      menu_items,
+      [](MenuItemView::Type type) {
+        return type == MenuItemView::Type::kCheckbox ||
+               type == MenuItemView::Type::kRadio;
+      },
+      &MenuItemView::GetType);
+  icon_area_width_ = has_checks_or_radios ? config.check_width : 0;
+  int max_icon_width = 0;
+  if (parent_menu_item_->GetRootMenuItem()->has_icons() &&
+      !menu_items.empty()) {
+    std::vector<int> widths(menu_items.size());
+    base::ranges::transform(
+        menu_items, widths.begin(), [&](const MenuItemView* item) {
+          // If this item has a radio or checkbox, the icon will not
+          // affect alignment of other items.
+          return (config.icons_in_label ||
+                  (item->GetType() != MenuItemView::Type::kCheckbox &&
+                   item->GetType() != MenuItemView::Type::kRadio))
+                     ? item->GetIconPreferredWidth()
+                     : 0;
+        });
+    max_icon_width = base::ranges::max(widths);
+  }
+  if (!config.icons_in_label) {
+    icon_area_width_ = std::max(icon_area_width_, max_icon_width);
+  }
+
+  // From chrome 116 the menus will be narrover if there are no icons present.
+  // The flags used to determine this width are stored in icon_area_width_ and
+  // label_start_. While it is acceptable that a single context menu is narrower
+  // than another it is not so for menus in a menu bar as the flags are set up
+  // for the first shown menu and will, depending on the content of the the
+  // first menu shown cause clipping and overlapping layout for other menus in
+  // the bar. (VB-98077).
+  if (icon_area_width_ == 0 && vivaldi::IsVivaldiRunning()) {
+    icon_area_width_ = 16;
+  }
+
+  label_start_ = parent_menu_item_->GetContentStart() + icon_area_width_;
+  if (icon_area_width_) {
+    const auto* const controller = parent_menu_item_->GetMenuController();
+    if (controller && controller->use_ash_system_ui_layout()) {
+      label_start_ += config.touchable_item_horizontal_padding;
+    } else if (config.icons_in_label) {
+      label_start_ += config.item_horizontal_padding;
+    } else {
+      label_start_ += LayoutProvider::Get()->GetDistanceMetric(
+          DISTANCE_RELATED_LABEL_HORIZONTAL);
+    }
+  }
+
+  if (config.icons_in_label) {
+    icon_area_width_ = max_icon_width;
+  }
+
+  if (get_metrics() != old_metrics) {
+    InvalidateLayout();
+  }
 }
 
 void SubmenuView::ChildPreferredSizeChanged(View* child) {
@@ -156,8 +240,7 @@ gfx::Size SubmenuView::CalculatePreferredSize() const {
   for (const View* child : children()) {
     if (!child->GetVisible())
       continue;
-    if (child->GetID() == MenuItemView::kMenuItemViewID) {
-      const MenuItemView* menu = static_cast<const MenuItemView*>(child);
+    if (auto* menu = AsViewClass<const MenuItemView>(child)) {
       const MenuItemView::MenuItemDimensions& dimensions =
           menu->GetDimensions();
       max_simple_width = std::max(max_simple_width, dimensions.standard_width);
@@ -461,7 +544,7 @@ bool SubmenuView::SkipDefaultKeyEventProcessing(const ui::KeyEvent& e) {
   return views::FocusManager::IsTabTraversalKeyEvent(e);
 }
 
-MenuItemView* SubmenuView::GetMenuItem() {
+const MenuItemView* SubmenuView::GetMenuItem() const {
   return parent_menu_item_;
 }
 
@@ -479,12 +562,9 @@ void SubmenuView::SetDropMenuItem(MenuItemView* item,
     // drop item. Find the selected item and have it updates its paint as
     // selected state.
     for (View* child : children()) {
-      if (!child->GetVisible() ||
-          child->GetID() != MenuItemView::kMenuItemViewID) {
-        continue;
-      }
-      MenuItemView* child_menu_item = static_cast<MenuItemView*>(child);
-      if (child_menu_item->IsSelected()) {
+      if (auto* child_menu_item = AsViewClass<MenuItemView>(child);
+          child_menu_item && child_menu_item->GetVisible() &&
+          child_menu_item->IsSelected()) {
         child_menu_item->OnDropOrSelectionStatusMayHaveChanged();
         // Only one menu item is selected, so no need to continue iterating once
         // the selected item is found.

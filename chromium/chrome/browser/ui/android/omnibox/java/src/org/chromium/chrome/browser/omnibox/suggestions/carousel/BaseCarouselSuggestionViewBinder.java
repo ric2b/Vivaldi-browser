@@ -10,8 +10,8 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 
-import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.R;
+import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionCommonProperties;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionCommonProperties.FormFactor;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
@@ -40,19 +40,9 @@ public final class BaseCarouselSuggestionViewBinder {
         } else if (key == BaseCarouselSuggestionViewProperties.SHOW_TITLE) {
             final boolean showTitle = model.get(BaseCarouselSuggestionViewProperties.SHOW_TITLE);
             final View headerView = view.getHeaderView();
-            boolean shouldShowSmallBottomMargin =
-                    OmniboxFeatures.shouldShowModernizeVisualUpdate(view.getContext())
-                    && OmniboxFeatures.shouldShowSmallBottomMargin();
-            int topPadding = view.getResources().getDimensionPixelSize(
-                    R.dimen.omnibox_carousel_suggestion_padding);
-            if (OmniboxFeatures.shouldShowModernizeVisualUpdate(view.getContext())) {
-                topPadding -= view.getResources().getDimensionPixelSize(
-                        R.dimen.tile_view_icon_background_margin_top_modern);
-            }
+            int topPadding = OmniboxResourceProvider.getCarouselTopPadding(view.getContext());
             final int bottomPadding =
-                    view.getResources().getDimensionPixelSize(shouldShowSmallBottomMargin
-                                    ? R.dimen.omnibox_carousel_suggestion_small_bottom_padding
-                                    : R.dimen.omnibox_carousel_suggestion_padding);
+                    OmniboxResourceProvider.getCarouselBottomPadding(view.getContext());
             if (showTitle) {
                 headerView.setVisibility(View.VISIBLE);
                 view.setPaddingRelative(0, 0, 0, bottomPadding);

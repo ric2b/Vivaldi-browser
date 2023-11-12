@@ -81,7 +81,8 @@ void SafeBrowsingServiceImpl::Initialize(
   safe_browsing_db_manager_ = safe_browsing::V4LocalDatabaseManager::Create(
       safe_browsing_data_path, web::GetUIThreadTaskRunner({}),
       web::GetIOThreadTaskRunner({}),
-      safe_browsing::ExtendedReportingLevelCallback());
+      safe_browsing::ExtendedReportingLevelCallback(),
+      safe_browsing::V4LocalDatabaseManager::RecordMigrationMetricsCallback());
 
   io_thread_enabler_ =
       base::MakeRefCounted<IOThreadEnabler>(safe_browsing_db_manager_);
@@ -147,14 +148,14 @@ SafeBrowsingServiceImpl::CreateUrlChecker(
       client->GetRealTimeUrlLookupService();
   bool can_perform_full_url_lookup =
       url_lookup_service && url_lookup_service->CanPerformFullURLLookup();
-  bool can_realtime_check_subresource_url =
+  bool can_url_realtime_check_subresource_url =
       url_lookup_service && url_lookup_service->CanCheckSubresourceURL();
   scoped_refptr<safe_browsing::UrlCheckerDelegate> url_checker_delegate =
       base::MakeRefCounted<UrlCheckerDelegateImpl>(safe_browsing_db_manager_,
                                                    client->AsWeakPtr());
   return std::make_unique<safe_browsing::SafeBrowsingUrlCheckerImpl>(
       request_destination, url_checker_delegate, web_state->GetWeakPtr(),
-      can_perform_full_url_lookup, can_realtime_check_subresource_url,
+      can_perform_full_url_lookup, can_url_realtime_check_subresource_url,
       web::GetUIThreadTaskRunner({}),
       url_lookup_service ? url_lookup_service->GetWeakPtr() : nullptr);
 }

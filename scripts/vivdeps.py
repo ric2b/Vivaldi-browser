@@ -132,7 +132,7 @@ def get_chromium_variables():
     global_vars.setdefault('skia_git', BASE_URL +'/skia')
     global_vars.setdefault('swiftshader_git', BASE_URL +'/swiftshader')
     global_vars.setdefault('webrtc_git', BASE_URL +'/webrtc')
-    global_vars.setdefault('betocore_git', BASE_URL +'/betocore')
+    global_vars.setdefault('betocore_git', BASE_URL +'/beto-core')
 
   global_vars["checkout_src_internal"]=False
   global_vars["checkout_nacl"]=False
@@ -188,6 +188,15 @@ class VivaldiBaseDeps(gclient.GitDependency):
   @property
   def target_cpu(self):
     return self._target_cpu
+
+  def get_builtin_vars(self):
+    our_vars = super(VivaldiBaseDeps, self).get_builtin_vars()
+
+    for n,v in list(our_vars.items()):
+      if n.startswith("checkout_"):
+        our_vars[n+"_str"] = str(v)
+
+    return our_vars
 
   def GetCipdRoot(self):
     if not self._cipd_root:

@@ -11,21 +11,17 @@ import android.text.TextUtils;
 
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.BaseSwitches;
-import org.chromium.base.CommandLine;
-import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.R;
-import org.chromium.chrome.browser.omnibox.suggestions.ActionChipsDelegate;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionUiType;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionDrawableState;
-import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.components.image_fetcher.ImageFetcher;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.OmniboxSuggestionType;
+import org.chromium.components.omnibox.suggestions.OmniboxSuggestionUiType;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
 
@@ -36,27 +32,16 @@ import java.util.Map;
 
 /** A class that handles model and view creation for the Entity suggestions. */
 public class EntitySuggestionProcessor extends BaseSuggestionViewProcessor {
-    private static final String TAG = "EntitySP";
-    private final SuggestionHost mSuggestionHost;
     private final Map<GURL, List<PropertyModel>> mPendingImageRequests;
     private final Supplier<ImageFetcher> mImageFetcherSupplier;
-    // Threshold for low RAM devices. We won't be showing entity suggestion images
-    // on devices that have less RAM than this to avoid bloat and reduce user-visible
-    // slowdown while spinning up an image decompression process.
-    // We set the threshold to 1.5GB to reduce number of users affected by this restriction.
-    // TODO(crbug.com/979426): This threshold is set arbitrarily and should be revisited once
-    // we have more data about relation between system memory and performance.
-    private static final int LOW_MEMORY_THRESHOLD_KB =
-            (int) (1.5 * ConversionUtils.KILOBYTES_PER_GIGABYTE);
 
     /**
      * @param context An Android context.
      * @param suggestionHost A handle to the object using the suggestions.
      */
     public EntitySuggestionProcessor(Context context, SuggestionHost suggestionHost,
-            ActionChipsDelegate actionChipsDelegate, Supplier<ImageFetcher> imageFetcherSupplier) {
-        super(context, suggestionHost, actionChipsDelegate, null);
-        mSuggestionHost = suggestionHost;
+            Supplier<ImageFetcher> imageFetcherSupplier) {
+        super(context, suggestionHost, null);
         mPendingImageRequests = new HashMap<>();
         mImageFetcherSupplier = imageFetcherSupplier;
     }
@@ -110,7 +95,7 @@ public class EntitySuggestionProcessor extends BaseSuggestionViewProcessor {
                     for (int i = 0; i < pendingModels.size(); i++) {
                         PropertyModel pendingModel = pendingModels.get(i);
                         setSuggestionDrawableState(pendingModel,
-                                SuggestionDrawableState.Builder.forBitmap(getContext(), bitmap)
+                                SuggestionDrawableState.Builder.forBitmap(mContext, bitmap)
                                         .setUseRoundedCorners(true)
                                         .setLarge(true)
                                         .build());
@@ -144,12 +129,11 @@ public class EntitySuggestionProcessor extends BaseSuggestionViewProcessor {
         super.populateModel(suggestion, model, position);
         setSuggestionDrawableState(model,
                 SuggestionDrawableState.Builder
-                        .forDrawableRes(getContext(), R.drawable.ic_suggestion_magnifier)
+                        .forDrawableRes(mContext, R.drawable.ic_suggestion_magnifier)
                         .setAllowTint(true)
                         .build());
 
-        if (SysUtils.amountOfPhysicalMemoryKB() >= LOW_MEMORY_THRESHOLD_KB
-                || CommandLine.getInstance().hasSwitch(BaseSwitches.DISABLE_LOW_END_DEVICE_MODE)) {
+        if (!OmniboxFeatures.isLowMemoryDevice()) {
             applyImageDominantColor(suggestion.getImageDominantColor(), model);
             fetchEntityImage(suggestion, model);
         }

@@ -127,7 +127,7 @@ void DeviceSettingsService::SetDeviceMode(policy::DeviceMode device_mode) {
   DCHECK(policy::DEVICE_MODE_PENDING == device_mode_ ||
          policy::DEVICE_MODE_NOT_SET == device_mode_);
   device_mode_ = device_mode;
-  if (GetOwnershipStatus() != OWNERSHIP_UNKNOWN) {
+  if (GetOwnershipStatus() != OwnershipStatus::kOwnershipUnknown) {
     RunPendingOwnershipStatusCallbacks();
   }
 }
@@ -159,14 +159,8 @@ void DeviceSettingsService::LoadIfNotPresent() {
 }
 
 void DeviceSettingsService::LoadImmediately() {
-  bool request_key_load = true;
-  bool cloud_validations = true;
-  if (device_mode_ == policy::DEVICE_MODE_ENTERPRISE_AD) {
-    request_key_load = false;
-    cloud_validations = false;
-  }
   std::unique_ptr<SessionManagerOperation> operation(new LoadSettingsOperation(
-      request_key_load, cloud_validations, true /*force_immediate_load*/,
+      /*request_key_load=*/true, /*force_immediate_load=*/true,
       base::BindOnce(&DeviceSettingsService::HandleCompletedOperation,
                      weak_factory_.GetWeakPtr(), base::OnceClosure())));
   operation->Start(session_manager_client_, owner_key_util_, public_key_);
@@ -175,8 +169,6 @@ void DeviceSettingsService::LoadImmediately() {
 void DeviceSettingsService::Store(
     std::unique_ptr<em::PolicyFetchResponse> policy,
     base::OnceClosure callback) {
-  // On Active Directory managed devices policy is written only by authpolicyd.
-  CHECK(device_mode_ != policy::DEVICE_MODE_ENTERPRISE_AD);
   Enqueue(std::make_unique<StoreSettingsOperation>(
       base::BindOnce(&DeviceSettingsService::HandleCompletedAsyncOperation,
                      weak_factory_.GetWeakPtr(), std::move(callback)),
@@ -186,15 +178,14 @@ void DeviceSettingsService::Store(
 DeviceSettingsService::OwnershipStatus
 DeviceSettingsService::GetOwnershipStatus() {
   if (public_key_.get())
-    return public_key_->is_empty() ? OWNERSHIP_NONE : OWNERSHIP_TAKEN;
-  if (device_mode_ == policy::DEVICE_MODE_ENTERPRISE_AD)
-    return OWNERSHIP_TAKEN;
-  return OWNERSHIP_UNKNOWN;
+    return public_key_->is_empty() ? OwnershipStatus::kOwnershipNone
+                                   : OwnershipStatus::kOwnershipTaken;
+  return OwnershipStatus::kOwnershipUnknown;
 }
 
 void DeviceSettingsService::GetOwnershipStatusAsync(
     OwnershipStatusCallback callback) {
-  if (GetOwnershipStatus() != OWNERSHIP_UNKNOWN) {
+  if (GetOwnershipStatus() != OwnershipStatus::kOwnershipUnknown) {
     // Report status immediately.
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
@@ -212,9 +203,9 @@ void DeviceSettingsService::GetOwnershipStatusAsync(
 
 void DeviceSettingsService::ValidateOwnershipStatusAndNotify(
     OwnershipStatusCallback callback) {
-  if (GetOwnershipStatus() == OWNERSHIP_UNKNOWN) {
+  if (GetOwnershipStatus() == OwnershipStatus::kOwnershipUnknown) {
     // OwnerKeySet() could be called upon user sign-in while event was in queue,
-    // which resets status to OWNERSHIP_UNKNOWN.
+    // which resets status to OwnershipStatus::kOwnershipUnknown.
     // We need to retry the logic in this case.
     GetOwnershipStatusAsync(std::move(callback));
     return;
@@ -272,7 +263,7 @@ void DeviceSettingsService::OwnerKeySet(bool success) {
 
   public_key_.reset();
 
-  if (GetOwnershipStatus() == OWNERSHIP_TAKEN ||
+  if (GetOwnershipStatus() == OwnershipStatus::kOwnershipTaken ||
       !will_establish_consumer_ownership_) {
     EnsureReload(true);
   }
@@ -284,7 +275,7 @@ void DeviceSettingsService::PropertyChangeComplete(bool success) {
     return;
   }
 
-  if (GetOwnershipStatus() == OWNERSHIP_TAKEN ||
+  if (GetOwnershipStatus() == OwnershipStatus::kOwnershipTaken ||
       !will_establish_consumer_ownership_) {
     EnsureReload(false);
   }
@@ -299,13 +290,8 @@ void DeviceSettingsService::Enqueue(
 }
 
 void DeviceSettingsService::EnqueueLoad(bool request_key_load) {
-  bool cloud_validations = true;
-  if (device_mode_ == policy::DEVICE_MODE_ENTERPRISE_AD) {
-    request_key_load = false;
-    cloud_validations = false;
-  }
   Enqueue(std::make_unique<LoadSettingsOperation>(
-      request_key_load, cloud_validations, false /*force_immediate_load*/,
+      request_key_load, /*force_immediate_load=*/false,
       base::BindOnce(&DeviceSettingsService::HandleCompletedAsyncOperation,
                      weak_factory_.GetWeakPtr(), base::OnceClosure())));
 }

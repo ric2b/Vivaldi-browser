@@ -37,7 +37,6 @@
 #include "chrome/browser/ash/login/saml/lockscreen_reauth_dialog_test_helper.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
-#include "chrome/browser/ash/login/test/embedded_policy_test_server_mixin.h"
 #include "chrome/browser/ash/login/test/enrollment_ui_mixin.h"
 #include "chrome/browser/ash/login/test/feature_parameter_interface.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
@@ -52,6 +51,7 @@
 #include "chrome/browser/ash/policy/affiliation/affiliation_test_helper.h"
 #include "chrome/browser/ash/policy/core/device_policy_builder.h"
 #include "chrome/browser/ash/policy/core/device_policy_cros_browser_test.h"
+#include "chrome/browser/ash/policy/test_support/embedded_policy_test_server_mixin.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
@@ -631,7 +631,7 @@ IN_PROC_BROWSER_TEST_P(SamlTestWithFeatures, ScrapedSingle) {
 
   content::DOMMessageQueue message_queue(GetLoginUI()->GetWebContents());
   // Make sure that the password is scraped correctly.
-  ASSERT_TRUE(content::ExecuteScript(
+  ASSERT_TRUE(content::ExecJs(
       GetLoginUI()->GetWebContents(),
       "$('gaia-signin').authenticator_.addEventListener('authCompleted',"
       "    function(e) {"
@@ -945,33 +945,34 @@ IN_PROC_BROWSER_TEST_P(SamlTestWithFeatures, NoticeUpdatedOnRedirect) {
   // Wait until the notice shown to the user is updated to contain
   // `kAdditionalIdPHost`.
   std::string js =
-      "var sendIfHostFound = function() {"
-      "  var found = $SamlNoticeMessagePath.textContent.indexOf('$Host') > -1;"
-      "  if (found)"
-      "    window.domAutomationController.send(true);"
-      "  return found;"
-      "};"
-      "var processEventsAndSendIfHostFound = function() {"
-      "  window.setTimeout(function() {"
-      "    if (sendIfHostFound()) {"
-      "      $('gaia-signin').authenticator_.removeEventListener("
-      "          'authDomainChange',"
-      "          processEventsAndSendIfHostFound);"
-      "    }"
-      "  }, 0);"
-      "};"
-      "if (!sendIfHostFound()) {"
-      "  $('gaia-signin').authenticator_.addEventListener("
-      "      'authDomainChange',"
-      "      processEventsAndSendIfHostFound);"
-      "}";
+      "new Promise(resolve => {"
+      "  var sendIfHostFound = function() {"
+      "    var found = $SamlNoticeMessagePath.textContent.indexOf('$Host') > "
+      "-1;"
+      "    if (found)"
+      "      resolve(true);"
+      "    return found;"
+      "  };"
+      "  var processEventsAndSendIfHostFound = function() {"
+      "    window.setTimeout(function() {"
+      "      if (sendIfHostFound()) {"
+      "        $('gaia-signin').authenticator_.removeEventListener("
+      "            'authDomainChange',"
+      "            processEventsAndSendIfHostFound);"
+      "      }"
+      "    }, 0);"
+      "  };"
+      "  if (!sendIfHostFound()) {"
+      "    $('gaia-signin').authenticator_.addEventListener("
+      "        'authDomainChange',"
+      "        processEventsAndSendIfHostFound);"
+      "  }"
+      "});";
   base::ReplaceSubstringsAfterOffset(
       &js, 0, "$SamlNoticeMessagePath",
       test::GetOobeElementPath(kSamlNoticeMessage));
   base::ReplaceSubstringsAfterOffset(&js, 0, "$Host", kAdditionalIdPHost);
-  bool dummy;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      GetLoginUI()->GetWebContents(), js, &dummy));
+  EXPECT_EQ(true, content::ExecJs(GetLoginUI()->GetWebContents(), js));
 
   // Verify that the notice is visible.
   test::OobeJS().ExpectVisiblePath(kSamlNoticeContainer);
@@ -1113,6 +1114,9 @@ class SAMLPolicyTest : public SamlTestBase {
   void EnableTransferSAMLCookiesPolicy();
   void SetLoginBehaviorPolicyToSAMLInterstitial();
   void SetLoginVideoCaptureAllowedUrls(const std::vector<GURL>& allowed);
+  // SSO_profile in device policy blob is responsible for per-OU IdP
+  // configuration.
+  void SetSSOProfile(const std::string& sso_profile);
 
   void ShowGAIALoginForm();
   void ShowSAMLLoginForm();
@@ -1127,12 +1131,6 @@ class SAMLPolicyTest : public SamlTestBase {
   void GetCookies();
 
  protected:
-  policy::DevicePolicyCrosTestHelper test_helper_;
-  // TODO(b/270930387): refactor to do device policy updates through
-  // `device_state_` from `SamlTestBase` instead. Right now we have two ways to
-  // do device policy updates in this fixture and they are not interchangeable
-  // as they update different policy blobs.
-  raw_ptr<policy::DevicePolicyBuilder, ExperimentalAsh> device_policy_;
   NiceMock<policy::MockConfigurationPolicyProvider> provider_;
   net::CookieList cookie_list_;
 
@@ -1145,8 +1143,7 @@ class SAMLPolicyTest : public SamlTestBase {
           AccountId::FromUserEmailGaiaId("user@gmail.com", "1111"))}};
 };
 
-SAMLPolicyTest::SAMLPolicyTest()
-    : device_policy_(test_helper_.device_policy()) {
+SAMLPolicyTest::SAMLPolicyTest() {
   device_state_.SetState(
       DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED);
   device_state_.set_skip_initial_policy_setup(true);
@@ -1159,11 +1156,11 @@ void SAMLPolicyTest::SetUpInProcessBrowserTestFixture() {
 
   SamlTestBase::SetUpInProcessBrowserTestFixture();
 
-  // Initialize device policy.
-  auto affiliation_helper = policy::AffiliationTestHelper::CreateForCloud(
-      FakeSessionManagerClient::Get());
-  ASSERT_NO_FATAL_FAILURE(affiliation_helper.SetDeviceAffiliationIDs(
-      &test_helper_, std::array{base::StringPiece(kAffiliationID)}));
+  // Add device affiliation id.
+  std::unique_ptr<ScopedDevicePolicyUpdate> device_policy_update =
+      device_state_.RequestDevicePolicyUpdate();
+  device_policy_update->policy_data()->add_device_affiliation_ids(
+      kAffiliationID);
 
   // Initialize user policy.
   provider_.SetDefaultReturns(/*is_initialization_complete_return=*/true,
@@ -1227,59 +1224,41 @@ void SAMLPolicyTest::SetSAMLOfflineSigninTimeLimitPolicy(int limit) {
 }
 
 void SAMLPolicyTest::EnableTransferSAMLCookiesPolicy() {
-  em::ChromeDeviceSettingsProto& proto(device_policy_->payload());
+  std::unique_ptr<ScopedDevicePolicyUpdate> device_policy_update =
+      device_state_.RequestDevicePolicyUpdate();
+  em::ChromeDeviceSettingsProto& proto(*device_policy_update->policy_payload());
   proto.mutable_saml_settings()->set_transfer_saml_cookies(true);
-
-  base::RunLoop run_loop;
-  base::CallbackListSubscription subscription =
-      CrosSettings::Get()->AddSettingsObserver(kAccountsPrefTransferSAMLCookies,
-                                               run_loop.QuitClosure());
-  device_policy_->SetDefaultSigningKey();
-  device_policy_->Build();
-  FakeSessionManagerClient::Get()->set_device_policy(device_policy_->GetBlob());
-  FakeSessionManagerClient::Get()->OnPropertyChangeComplete(true);
-  run_loop.Run();
 }
 
 void SAMLPolicyTest::SetLoginBehaviorPolicyToSAMLInterstitial() {
-  em::ChromeDeviceSettingsProto& proto(device_policy_->payload());
+  std::unique_ptr<ScopedDevicePolicyUpdate> device_policy_update =
+      device_state_.RequestDevicePolicyUpdate();
+  em::ChromeDeviceSettingsProto& proto(*device_policy_update->policy_payload());
   proto.mutable_login_authentication_behavior()
       ->set_login_authentication_behavior(
           em::LoginAuthenticationBehaviorProto_LoginBehavior_SAML_INTERSTITIAL);
-
-  base::RunLoop run_loop;
-  base::CallbackListSubscription subscription =
-      CrosSettings::Get()->AddSettingsObserver(kLoginAuthenticationBehavior,
-                                               run_loop.QuitClosure());
-  device_policy_->SetDefaultSigningKey();
-  device_policy_->Build();
-  FakeSessionManagerClient::Get()->set_device_policy(device_policy_->GetBlob());
-  FakeSessionManagerClient::Get()->OnPropertyChangeComplete(true);
-  run_loop.Run();
 }
 
 void SAMLPolicyTest::SetLoginVideoCaptureAllowedUrls(
     const std::vector<GURL>& allowed) {
-  em::ChromeDeviceSettingsProto& proto(device_policy_->payload());
+  std::unique_ptr<ScopedDevicePolicyUpdate> device_policy_update =
+      device_state_.RequestDevicePolicyUpdate();
+  em::ChromeDeviceSettingsProto& proto(*device_policy_update->policy_payload());
   for (const GURL& url : allowed)
     proto.mutable_login_video_capture_allowed_urls()->add_urls(url.spec());
+}
 
-  base::RunLoop run_loop;
-  base::CallbackListSubscription subscription =
-      CrosSettings::Get()->AddSettingsObserver(kLoginVideoCaptureAllowedUrls,
-                                               run_loop.QuitClosure());
-  device_policy_->SetDefaultSigningKey();
-  device_policy_->Build();
-  FakeSessionManagerClient::Get()->set_device_policy(device_policy_->GetBlob());
-  FakeSessionManagerClient::Get()->OnPropertyChangeComplete(true);
-  run_loop.Run();
+void SAMLPolicyTest::SetSSOProfile(const std::string& sso_profile) {
+  std::unique_ptr<ScopedDevicePolicyUpdate> device_policy_update =
+      device_state_.RequestDevicePolicyUpdate();
+  device_policy_update->policy_data()->set_sso_profile(sso_profile);
 }
 
 void SAMLPolicyTest::ShowGAIALoginForm() {
   LoginDisplayHost::default_host()->StartWizard(GaiaView::kScreenId);
   OobeScreenWaiter(GaiaView::kScreenId).Wait();
   content::DOMMessageQueue message_queue(GetLoginUI()->GetWebContents());
-  ASSERT_TRUE(content::ExecuteScript(
+  ASSERT_TRUE(content::ExecJs(
       GetLoginUI()->GetWebContents(),
       "$('gaia-signin').authenticator_.addEventListener('ready', function() {"
       "  window.domAutomationController.send('ready');"
@@ -1618,28 +1597,20 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TestLoginMediaPermission) {
   SetLoginVideoCaptureAllowedUrls({url0, url1, url2});
 
   // Trigger the permission check from the js side.
-  {
-    bool get_user_media_success = false;
-    ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-        SigninFrameJS().web_contents(),
-        "navigator.getUserMedia("
-        "    {video: true},"
-        "    function() { window.domAutomationController.send(true); },"
-        "    function() { window.domAutomationController.send(false); });",
-        &get_user_media_success));
-    ASSERT_TRUE(get_user_media_success);
-  }
-  {
-    bool get_user_media_success = true;
-    ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-        SigninFrameJS().web_contents(),
-        "navigator.getUserMedia("
-        "    {audio: true},"
-        "    function() { window.domAutomationController.send(true); },"
-        "    function() { window.domAutomationController.send(false); });",
-        &get_user_media_success));
-    ASSERT_FALSE(get_user_media_success);
-  }
+  ASSERT_EQ(true, content::EvalJs(SigninFrameJS().web_contents(),
+                                  "new Promise(resolve => {"
+                                  "  navigator.getUserMedia("
+                                  "    {video: true},"
+                                  "    function() { resolve(true); },"
+                                  "    function() { resolve(false); });"
+                                  "});"));
+  ASSERT_EQ(false, content::EvalJs(SigninFrameJS().web_contents(),
+                                   "new Promise(resolve => {"
+                                   "  navigator.getUserMedia("
+                                   "    {audio: true},"
+                                   "    function() { resolve(true); },"
+                                   "    function() { resolve(false); });"
+                                   "});"));
 
   // Check permissions directly by calling the `CheckMediaAccessPermission`.
   content::WebContents* web_contents = GetLoginUI()->GetWebContents();
@@ -1695,28 +1666,22 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TestLockMediaPermission) {
       LockScreenReauthDialogTestHelper::StartSamlAndWaitForIdpPageLoad();
   ASSERT_TRUE(reauth_dialog_helper);
 
-  {
-    bool get_user_media_success = false;
-    ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-        reauth_dialog_helper->SigninFrameJS().web_contents(),
-        "navigator.getUserMedia("
-        "    {video: true},"
-        "    function() { window.domAutomationController.send(true); },"
-        "    function() { window.domAutomationController.send(false); });",
-        &get_user_media_success));
-    ASSERT_TRUE(get_user_media_success);
-  }
-  {
-    bool get_user_media_success = true;
-    ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-        reauth_dialog_helper->SigninFrameJS().web_contents(),
-        "navigator.getUserMedia("
-        "    {audio: true},"
-        "    function() { window.domAutomationController.send(true); },"
-        "    function() { window.domAutomationController.send(false); });",
-        &get_user_media_success));
-    ASSERT_FALSE(get_user_media_success);
-  }
+  ASSERT_EQ(true, content::EvalJs(
+                      reauth_dialog_helper->SigninFrameJS().web_contents(),
+                      "new Promise(resolve => {"
+                      "  navigator.getUserMedia("
+                      "    {video: true},"
+                      "    function() { resolve(true); },"
+                      "    function() { resolve(false); });"
+                      "});"));
+  ASSERT_EQ(false, content::EvalJs(
+                       reauth_dialog_helper->SigninFrameJS().web_contents(),
+                       "new Promise(resolve => {"
+                       "  navigator.getUserMedia("
+                       "    {audio: true},"
+                       "    function() { resolve(true); },"
+                       "    function() { resolve(false); });"
+                       "});"));
 
   // Check permissions directly by calling the `CheckMediaAccessPermission`.
   // Video devices should be allowed from the lock screen for specified urls.
@@ -1744,6 +1709,31 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TestLockMediaPermission) {
       blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE));
 }
 
+// Tests that we land on 3P IdP page corresponding to sso_profile from the
+// device policy blob during "add user" flow.
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SsoProfileInAddNewUserFlow) {
+  fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
+
+  // Set wrong redirect url for domain-based saml redirection. This ensures that
+  // for test to finish successfully it should perform redirection based on sso
+  // profile.
+  const GURL wrong_redirect_url("https://wrong.com");
+  fake_gaia_.fake_gaia()->RegisterSamlDomainRedirectUrl(
+      fake_saml_idp()->GetIdpDomain(), wrong_redirect_url);
+
+  SetLoginBehaviorPolicyToSAMLInterstitial();
+  SetSSOProfile(fake_saml_idp()->GetIdpSsoProfile());
+
+  // Launch "add user" flow.
+  ShowSAMLLoginForm();
+
+  SigninFrameJS().TypeIntoPath("fake_user", {"Email"});
+  SigninFrameJS().TypeIntoPath("fake_password", {"Password"});
+
+  SigninFrameJS().TapOn("Submit");
+  test::WaitForPrimaryUserSessionStart();
+}
+
 // Pushes DeviceLoginScreenLocales into the device policy.
 class SAMLLocalesTest : public SamlTestBase {
  public:
@@ -1758,65 +1748,16 @@ class SAMLLocalesTest : public SamlTestBase {
   }
 };
 
-// Tests that DeviceLoginLocales policy propagates to the 3rd-party IdP.
+// Tests that DeviceLoginLocales policy propagates to the 3rd-party IdP. We use
+// a separate `SAMLLocalesTest` test fixture for this instead of expanding
+// `SAMLPolicyTest` because dynamically reloading the language on policy change
+// is hard.
 IN_PROC_BROWSER_TEST_F(SAMLLocalesTest, PropagatesToIdp) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   StartSamlAndWaitForIdpPageLoad(
       saml_test_users::kFirstUserCorpExampleComEmail);
 
   SigninFrameJS().ExpectEQ("navigator.language", std::string(kLoginLocale));
-}
-
-// For tests relying on sso_profile in device policy blob which is responcible
-// for per-OU IdP configuration.
-class SsoProfileTest : public SamlTestBase {
- public:
-  SsoProfileTest();
-
-  SsoProfileTest(const SsoProfileTest&) = delete;
-  SsoProfileTest& operator=(const SsoProfileTest&) = delete;
-
-  ~SsoProfileTest() override = default;
-};
-
-SsoProfileTest::SsoProfileTest() {
-  device_state_.SetState(
-      DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED);
-  std::unique_ptr<ScopedDevicePolicyUpdate> policy_update =
-      device_state_.RequestDevicePolicyUpdate();
-  // Set LoginAuthenticationBehavior policy to go directly to 3P IdP login page
-  em::ChromeDeviceSettingsProto& proto(*policy_update->policy_payload());
-  proto.mutable_login_authentication_behavior()
-      ->set_login_authentication_behavior(
-          em::LoginAuthenticationBehaviorProto_LoginBehavior_SAML_INTERSTITIAL);
-  // Set SSO Profile corresponding to `fake_saml_idp()`
-  policy_update->policy_data()->set_sso_profile(
-      fake_saml_idp()->GetIdpSsoProfile());
-}
-
-// Tests that we land on 3P IdP page corresponding to sso_profile from the
-// device policy blob during "add user" flow.
-IN_PROC_BROWSER_TEST_F(SsoProfileTest, AddNewUser) {
-  fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
-
-  // Set wrong redirect url for domain-based saml redirection. This ensures that
-  // for test to finish successfully it should perform redirection based on sso
-  // profile.
-  const GURL wrong_redirect_url("https://wrong.com");
-  fake_gaia_.fake_gaia()->RegisterSamlDomainRedirectUrl(
-      fake_saml_idp()->GetIdpDomain(), wrong_redirect_url);
-
-  // Launch "add user" flow.
-  ASSERT_TRUE(LoginScreenTestApi::ClickAddUserButton());
-  OobeScreenWaiter(GaiaView::kScreenId).Wait();
-  test::OobeJS().CreateVisibilityWaiter(true, kSigninFrameDialog)->Wait();
-  test::OobeJS().CreateVisibilityWaiter(false, kGaiaLoading)->Wait();
-
-  SigninFrameJS().TypeIntoPath("fake_user", {"Email"});
-  SigninFrameJS().TypeIntoPath("fake_password", {"Password"});
-
-  SigninFrameJS().TapOn("Submit");
-  test::WaitForPrimaryUserSessionStart();
 }
 
 class SAMLPasswordAttributesTest : public SAMLPolicyTest,
@@ -2072,26 +2013,9 @@ IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationTest,
   ASSERT_FALSE(fake_saml_idp()->IsLastChallengeResponseExists());
 }
 
-// Verify that device attestation is not available when device attestation is
-// not enabled.
-IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationEnrolledTest,
-                       DeviceAttestationNotEnabledError) {
-  SetAllowedUrlsPolicy({fake_saml_idp()->GetIdpHost()});
-
-  StartSamlAndWaitForIdpPageLoad(
-      saml_test_users::kFourthUserCorpExampleTestEmail);
-
-  if (Test::HasFailure()) {
-    return;
-  }
-
-  ASSERT_FALSE(fake_saml_idp()->IsLastChallengeResponseExists());
-}
-
 // Verify that device attestation works when all policies configured correctly.
 IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationEnrolledTest, Success) {
   SetAllowedUrlsPolicy({fake_saml_idp()->GetIdpHost()});
-  settings_provider_->SetBoolean(kDeviceAttestationEnabled, true);
 
   StartSamlAndWaitForIdpPageLoad(
       saml_test_users::kFourthUserCorpExampleTestEmail);
@@ -2111,7 +2035,6 @@ IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationEnrolledTest, Success) {
 // allowed URLs list.
 IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationEnrolledTest, PolicyNoMatchError) {
   SetAllowedUrlsPolicy({fake_saml_idp()->GetIdpDomain()});
-  settings_provider_->SetBoolean(kDeviceAttestationEnabled, true);
 
   StartSamlAndWaitForIdpPageLoad(
       saml_test_users::kFourthUserCorpExampleTestEmail);
@@ -2129,7 +2052,6 @@ IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationEnrolledTest, PolicyNoMatchError) {
 // from allowed URLs list.
 IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationEnrolledTest, PolicyRegexSuccess) {
   SetAllowedUrlsPolicy({"[*.]" + fake_saml_idp()->GetIdpDomain()});
-  settings_provider_->SetBoolean(kDeviceAttestationEnabled, true);
 
   StartSamlAndWaitForIdpPageLoad(
       saml_test_users::kFourthUserCorpExampleTestEmail);
@@ -2150,7 +2072,6 @@ IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationEnrolledTest, PolicyRegexSuccess) {
 IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationEnrolledTest,
                        PolicyTwoEntriesSuccess) {
   SetAllowedUrlsPolicy({"example2.com", fake_saml_idp()->GetIdpHost()});
-  settings_provider_->SetBoolean(kDeviceAttestationEnabled, true);
 
   StartSamlAndWaitForIdpPageLoad(
       saml_test_users::kFourthUserCorpExampleTestEmail);
@@ -2174,7 +2095,6 @@ IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationEnrolledTest,
   SetAllowedUrlsPolicy({fake_saml_idp()->GetIdpHost()});
   SetDeviceContextAwareAccessSignalsAllowlistPolicy(
       {fake_saml_idp()->GetIdpHost()});
-  settings_provider_->SetBoolean(kDeviceAttestationEnabled, true);
 
   StartSamlAndWaitForIdpPageLoad(
       saml_test_users::kFourthUserCorpExampleTestEmail);
@@ -2198,7 +2118,6 @@ IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationEnrolledTest,
 
 IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationEnrolledTest, TimeoutError) {
   SetAllowedUrlsPolicy({"example2.com", fake_saml_idp()->GetIdpHost()});
-  settings_provider_->SetBoolean(kDeviceAttestationEnabled, true);
 
   AttestationClient::Get()
       ->GetTestInterface()
@@ -2233,12 +2152,6 @@ class SAMLDeviceTrustTest : public SAMLDeviceAttestationTest,
   SAMLDeviceTrustTest() {
     device_state_.SetState(
         DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED);
-  }
-
-  void SetUpInProcessBrowserTestFixture() override {
-    SAMLDeviceAttestationTest::SetUpInProcessBrowserTestFixture();
-    // Enable device trust feature.
-    settings_provider_->SetBoolean(kDeviceAttestationEnabled, true);
   }
 
   void ExpectDeviceTrustSuccessful(bool expected) {
@@ -2306,24 +2219,6 @@ IN_PROC_BROWSER_TEST_P(SAMLDeviceTrustEnrolledTest, EmptyPolicy) {
       saml_test_users::kSixthUserCorpExampleTestEmail);
 
   ASSERT_FALSE(fake_saml_idp()->DeviceTrustHeaderRecieved());
-}
-
-// Verify that device trust is not available when device trust is
-// not enabled.
-IN_PROC_BROWSER_TEST_P(SAMLDeviceTrustEnrolledTest,
-                       DeviceTrustNotEnabledError) {
-  SetDeviceContextAwareAccessSignalsAllowlistPolicy(
-      {fake_saml_idp()->GetIdpHost()});
-  settings_provider_->SetBoolean(kDeviceAttestationEnabled, false);
-
-  StartSamlAndWaitForIdpPageLoad(
-      saml_test_users::kSixthUserCorpExampleTestEmail);
-
-  if (Test::HasFailure()) {
-    return;
-  }
-
-  ASSERT_FALSE(fake_saml_idp()->IsLastChallengeResponseExists());
 }
 
 // Verify that device trust is available for URLs that match a pattern

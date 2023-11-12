@@ -41,6 +41,8 @@ class TouchSelectionControllerClientManagerAndroid
 
   // TouchSelectionControllerClientManager implementation.
   void DidStopFlinging() override;
+  void OnSwipeToMoveCursorBegin() override;
+  void OnSwipeToMoveCursorEnd() override;
   void UpdateClientSelectionBounds(
       const gfx::SelectionBound& start,
       const gfx::SelectionBound& end,
@@ -73,9 +75,8 @@ class TouchSelectionControllerClientManagerAndroid
       const std::vector<viz::AggregatedHitTestRegion>& hit_test_data) override;
 
   bool has_active_selection() const {
-    return manager_selection_start_.type() !=
-               gfx::SelectionBound::Type::EMPTY ||
-           manager_selection_end_.type() != gfx::SelectionBound::Type::EMPTY;
+    return manager_selection_start_.HasHandle() ||
+           manager_selection_end_.HasHandle();
   }
 
  private:

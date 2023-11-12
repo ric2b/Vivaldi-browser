@@ -7,10 +7,10 @@
 #import "components/safe_browsing/core/browser/sync/sync_utils.h"
 #import "components/safe_browsing/core/browser/user_population.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
-#import "components/sync/driver/sync_service.h"
-#import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "components/sync/service/sync_service.h"
 #import "ios/chrome/browser/policy/browser_policy_connector_ios.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
 

@@ -15,9 +15,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/time/time.h"
-#include "build/build_config.h"
-#include "build/buildflag.h"
-#include "components/aggregation_service/aggregation_service.mojom.h"
 #include "components/attribution_reporting/aggregatable_dedup_key.h"
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
@@ -25,15 +22,20 @@
 #include "components/attribution_reporting/event_trigger_data.h"
 #include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/source_registration_error.mojom.h"
+#include "components/attribution_reporting/source_registration_time_config.mojom.h"
 #include "components/attribution_reporting/source_type.mojom.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/trigger_registration.h"
 #include "content/browser/attribution_reporting/attribution_debug_report.h"
+#include "content/browser/attribution_reporting/attribution_input_event.h"
 #include "content/browser/attribution_reporting/attribution_manager.h"
+#include "content/browser/attribution_reporting/attribution_os_level_manager.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
+#include "content/browser/attribution_reporting/attribution_reporting.mojom.h"
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "content/browser/attribution_reporting/attribution_trigger.h"
 #include "content/browser/attribution_reporting/create_report_result.h"
+#include "content/browser/attribution_reporting/os_registration.h"
 #include "content/browser/attribution_reporting/send_result.h"
 #include "content/browser/attribution_reporting/storable_source.h"
 #include "content/browser/attribution_reporting/store_source_result.h"
@@ -54,17 +56,10 @@
 #include "content/shell/browser/shell.h"
 #include "net/base/net_errors.h"
 #include "net/base/schemeful_site.h"
-#include "services/network/public/cpp/trigger_attestation.h"
+#include "services/network/public/cpp/trigger_verification.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/origin.h"
-
-#if BUILDFLAG(IS_ANDROID)
-#include "content/browser/attribution_reporting/attribution_input_event.h"
-#include "content/browser/attribution_reporting/attribution_os_level_manager_android.h"
-#include "content/browser/attribution_reporting/attribution_reporting.mojom.h"
-#include "content/browser/attribution_reporting/os_registration.h"
-#endif
 
 namespace content {
 
@@ -420,7 +415,6 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
   EXPECT_EQ(kCompleteTitle, title_watcher.WaitAndGetTitle());
 }
 
-#if BUILDFLAG(IS_ANDROID)
 IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
                        OsRegistrationsShown) {
   ASSERT_TRUE(NavigateToURL(shell(), GURL(kAttributionInternalsUrl)));
@@ -435,7 +429,8 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
           table.children[0].children[2]?.innerText === 'https://a.test/' &&
           table.children[0].children[3]?.innerText === 'https://b.test' &&
           table.children[0].children[4]?.innerText === 'false' &&
-          table.children[0].children[5]?.innerText === 'Passed to OS') {
+          table.children[0].children[5]?.innerText === 'false' &&
+          table.children[0].children[6]?.innerText === 'Passed to OS') {
         obs.disconnect();
         document.title = $1;
       }
@@ -447,14 +442,13 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
   TitleWatcher title_watcher(shell()->web_contents(), kCompleteTitle);
 
   manager()->NotifyOsRegistration(
-      OsRegistration(GURL("https://a.test"),
+      OsRegistration(GURL("https://a.test"), /*debug_reporting=*/false,
                      url::Origin::Create(GURL("https://b.test")),
-                     AttributionInputEvent()),
+                     AttributionInputEvent(), /*is_within_fenced_frame=*/false),
       /*is_debug_key_allowed=*/false,
       attribution_reporting::mojom::OsRegistrationResult::kPassedToOs);
   EXPECT_EQ(kCompleteTitle, title_watcher.WaitAndGetTitle());
 }
-#endif  // BUILDFLAG(IS_ANDROID)
 
 IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
                        WebUIShownWithNoReports_NoReportsDisplayed) {
@@ -545,7 +539,6 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
   EXPECT_EQ(kCompleteTitle, title_watcher.WaitAndGetTitle());
 }
 
-#if BUILDFLAG(IS_ANDROID)
 IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
                        WebUIShownWithManager_OsSupportEnabled) {
   ASSERT_TRUE(NavigateToURL(shell(), GURL(kAttributionInternalsUrl)));
@@ -569,15 +562,13 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
   )";
   ASSERT_TRUE(ExecJsInWebUI(JsReplace(kScript, kCompleteTitle)));
 
-  AttributionOsLevelManagerAndroid::ScopedApiStateForTesting
-      scoped_api_state_setting(
-          AttributionOsLevelManagerAndroid::ApiState::kEnabled);
+  AttributionOsLevelManager::ScopedApiStateForTesting scoped_api_state_setting(
+      AttributionOsLevelManager::ApiState::kEnabled);
 
   TitleWatcher title_watcher(shell()->web_contents(), kCompleteTitle);
   ClickRefreshButton();
   EXPECT_EQ(kCompleteTitle, title_watcher.WaitAndGetTitle());
 }
-#endif  // BUILDFLAG(IS_ANDROID)
 
 IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
                        WebUIShownWithPendingReports_ReportsDisplayed) {
@@ -649,24 +640,24 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
           .shadowRoot.querySelector('tbody');
       const obs = new MutationObserver((_, obs) => {
         if (table.children.length === 6 &&
-            table.children[0].children[3]?.innerText ===
+            table.children[0].children[2]?.innerText ===
               'https://report.test/.well-known/attribution-reporting/report-event-attribution' &&
-            table.children[0].children[6]?.innerText === '13' &&
-            table.children[0].children[7]?.innerText === 'yes' &&
-            table.children[0].children[2]?.innerText === 'Pending' &&
-            table.children[1].children[6]?.innerText === '11' &&
-            table.children[1].children[2]?.innerText ===
+            table.children[0].children[5]?.innerText === '13' &&
+            table.children[0].children[6]?.innerText === 'true' &&
+            table.children[0].children[1]?.innerText === 'Pending' &&
+            table.children[1].children[5]?.innerText === '11' &&
+            table.children[1].children[1]?.innerText ===
               'Replaced by higher-priority report: 21abd97f-73e8-4b88-9389-a9fee6abda5e' &&
-            table.children[2].children[6]?.innerText === '0' &&
-            table.children[2].children[7]?.innerText === 'no' &&
-            table.children[2].children[2]?.innerText === 'Sent: HTTP 200' &&
+            table.children[2].children[5]?.innerText === '0' &&
+            table.children[2].children[6]?.innerText === 'false' &&
+            table.children[2].children[1]?.innerText === 'Sent: HTTP 200' &&
             !table.children[2].classList.contains('send-error') &&
-            table.children[3].children[2]?.innerText === 'Prohibited by browser policy' &&
+            table.children[3].children[1]?.innerText === 'Prohibited by browser policy' &&
             !table.children[3].classList.contains('send-error') &&
-            table.children[4].children[2]?.innerText === 'Network error: ERR_METHOD_NOT_SUPPORTED' &&
+            table.children[4].children[1]?.innerText === 'Network error: ERR_METHOD_NOT_SUPPORTED' &&
             table.children[4].classList.contains('send-error') &&
-            table.children[5].children[2]?.innerText === 'Network error: ERR_TIMED_OUT' &&
-            table.children[5].children[3]?.innerText ===
+            table.children[5].children[1]?.innerText === 'Network error: ERR_TIMED_OUT' &&
+            table.children[5].children[2]?.innerText ===
               'https://report.test/.well-known/attribution-reporting/debug/report-event-attribution') {
           obs.disconnect();
           document.title = $1;
@@ -692,21 +683,21 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
           .shadowRoot.querySelector('tbody');
       const obs = new MutationObserver((_, obs) => {
         if (table.children.length === 6 &&
-            table.children[5].children[3]?.innerText ===
+            table.children[5].children[2]?.innerText ===
               'https://report.test/.well-known/attribution-reporting/report-event-attribution' &&
-            table.children[5].children[6]?.innerText === '13' &&
-            table.children[5].children[7]?.innerText === 'yes' &&
-            table.children[5].children[2]?.innerText === 'Pending' &&
-            table.children[4].children[6]?.innerText === '11' &&
-            table.children[4].children[2]?.innerText ===
+            table.children[5].children[5]?.innerText === '13' &&
+            table.children[5].children[6]?.innerText === 'true' &&
+            table.children[5].children[1]?.innerText === 'Pending' &&
+            table.children[4].children[5]?.innerText === '11' &&
+            table.children[4].children[1]?.innerText ===
               'Replaced by higher-priority report: 21abd97f-73e8-4b88-9389-a9fee6abda5e' &&
-            table.children[3].children[6]?.innerText === '0' &&
-            table.children[3].children[7]?.innerText === 'no' &&
-            table.children[3].children[2]?.innerText === 'Sent: HTTP 200' &&
-            table.children[2].children[2]?.innerText === 'Prohibited by browser policy' &&
-            table.children[1].children[2]?.innerText === 'Network error: ERR_METHOD_NOT_SUPPORTED' &&
-            table.children[0].children[2]?.innerText === 'Network error: ERR_TIMED_OUT' &&
-            table.children[0].children[3]?.innerText ===
+            table.children[3].children[5]?.innerText === '0' &&
+            table.children[3].children[6]?.innerText === 'false' &&
+            table.children[3].children[1]?.innerText === 'Sent: HTTP 200' &&
+            table.children[2].children[1]?.innerText === 'Prohibited by browser policy' &&
+            table.children[1].children[1]?.innerText === 'Network error: ERR_METHOD_NOT_SUPPORTED' &&
+            table.children[0].children[1]?.innerText === 'Network error: ERR_TIMED_OUT' &&
+            table.children[0].children[2]?.innerText ===
               'https://report.test/.well-known/attribution-reporting/debug/report-event-attribution') {
           obs.disconnect();
           document.title = $1;
@@ -720,7 +711,7 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
     // Sort by priority ascending.
     ASSERT_TRUE(ExecJsInWebUI(R"(
       document.querySelector('#reportTable')
-        .shadowRoot.querySelectorAll('th')[6].click();
+        .shadowRoot.querySelectorAll('th')[5].click();
     )"));
     ASSERT_EQ(kCompleteTitle2, title_watcher.WaitAndGetTitle());
   }
@@ -731,21 +722,21 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
           .shadowRoot.querySelector('tbody');
       const obs = new MutationObserver((_, obs) => {
         if (table.children.length === 6 &&
-            table.children[0].children[3]?.innerText ===
+            table.children[0].children[2]?.innerText ===
               'https://report.test/.well-known/attribution-reporting/report-event-attribution' &&
-            table.children[0].children[6]?.innerText === '13' &&
-            table.children[0].children[7]?.innerText === 'yes' &&
-            table.children[0].children[2]?.innerText === 'Pending' &&
-            table.children[1].children[6]?.innerText === '11' &&
-            table.children[1].children[2]?.innerText ===
+            table.children[0].children[5]?.innerText === '13' &&
+            table.children[0].children[6]?.innerText === 'true' &&
+            table.children[0].children[1]?.innerText === 'Pending' &&
+            table.children[1].children[5]?.innerText === '11' &&
+            table.children[1].children[1]?.innerText ===
               'Replaced by higher-priority report: 21abd97f-73e8-4b88-9389-a9fee6abda5e' &&
-            table.children[2].children[6]?.innerText === '0' &&
-            table.children[2].children[7]?.innerText === 'no' &&
-            table.children[2].children[2]?.innerText === 'Sent: HTTP 200' &&
-            table.children[3].children[2]?.innerText === 'Prohibited by browser policy' &&
-            table.children[4].children[2]?.innerText === 'Network error: ERR_METHOD_NOT_SUPPORTED' &&
-            table.children[5].children[2]?.innerText === 'Network error: ERR_TIMED_OUT' &&
-            table.children[5].children[3]?.innerText ===
+            table.children[2].children[5]?.innerText === '0' &&
+            table.children[2].children[6]?.innerText === 'false' &&
+            table.children[2].children[1]?.innerText === 'Sent: HTTP 200' &&
+            table.children[3].children[1]?.innerText === 'Prohibited by browser policy' &&
+            table.children[4].children[1]?.innerText === 'Network error: ERR_METHOD_NOT_SUPPORTED' &&
+            table.children[5].children[1]?.innerText === 'Network error: ERR_TIMED_OUT' &&
+            table.children[5].children[2]?.innerText ===
               'https://report.test/.well-known/attribution-reporting/debug/report-event-attribution') {
           obs.disconnect();
           document.title = $1;
@@ -759,7 +750,7 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
     // Sort by priority descending.
     ASSERT_TRUE(ExecJsInWebUI(R"(
       document.querySelector('#reportTable')
-        .shadowRoot.querySelectorAll('th')[6].click();
+        .shadowRoot.querySelectorAll('th')[5].click();
     )"));
     ASSERT_EQ(kCompleteTitle3, title_watcher.WaitAndGetTitle());
   }
@@ -808,8 +799,8 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
 
     const setTitleIfDone = (_, obs) => {
       if (table.children.length === 2 &&
-          table.children[0].children[6]?.innerText === '7' &&
-          table.children[1].children[2]?.innerText === 'Sent: HTTP 200') {
+          table.children[0].children[5]?.innerText === '7' &&
+          table.children[1].children[1]?.innerText === 'Sent: HTTP 200') {
         if (obs) {
           obs.disconnect();
         }
@@ -939,7 +930,7 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
         .shadowRoot.querySelector('tbody');
     const setTitleIfDone = (_, obs) => {
       if (table.children.length === 1 &&
-          table.children[0].children[6]?.innerText === '7') {
+          table.children[0].children[5]?.innerText === '7') {
           if (obs) {
             obs.disconnect();
           }
@@ -1016,7 +1007,7 @@ IN_PROC_BROWSER_TEST_F(
                     SourceBuilder(now).BuildStored())
           .SetReportTime(now + base::Hours(3))
           .SetAggregatableHistogramContributions(contributions)
-          .SetAttestationToken("abc")
+          .SetVerificationToken("abc")
           .BuildAggregatableAttribution(),
       /*is_debug_report=*/false,
       SendResult(SendResult::Status::kSent, net::OK,
@@ -1035,7 +1026,7 @@ IN_PROC_BROWSER_TEST_F(
           .SetAggregatableHistogramContributions(contributions)
           .BuildAggregatableAttribution(),
       /*is_debug_report=*/false,
-      SendResult(SendResult::Status::kFailedToAssemble));
+      SendResult(SendResult::Status::kAssemblyFailure));
   manager()->NotifyReportSent(
       ReportBuilder(AttributionInfoBuilder().Build(),
                     SourceBuilder(now).BuildStored())
@@ -1053,6 +1044,13 @@ IN_PROC_BROWSER_TEST_F(
       /*is_debug_report=*/true,
       SendResult(SendResult::Status::kTransientFailure,
                  net::ERR_INTERNET_DISCONNECTED));
+  manager()->NotifyReportSent(ReportBuilder(AttributionInfoBuilder().Build(),
+                                            SourceBuilder(now).BuildStored())
+                                  .SetReportTime(now + base::Hours(11))
+                                  .BuildNullAggregatable(),
+                              /*is_debug_report=*/false,
+                              SendResult(SendResult::Status::kSent, net::OK,
+                                         /*http_response_code=*/200));
   ON_CALL(*manager(), GetPendingReportsForInternalUse)
       .WillByDefault(RunOnceCallback<1>(std::vector<AttributionReport>{
           ReportBuilder(AttributionInfoBuilder().Build(),
@@ -1061,6 +1059,8 @@ IN_PROC_BROWSER_TEST_F(
                             .BuildStored())
               .SetReportTime(now)
               .SetAggregatableHistogramContributions(contributions)
+              .SetAggregationCoordinatorOrigin(
+                  *SuitableOrigin::Deserialize("https://aws.example.test"))
               .BuildAggregatableAttribution()}));
 
   {
@@ -1068,21 +1068,24 @@ IN_PROC_BROWSER_TEST_F(
       const table = document.querySelector('#aggregatableReportTable')
           .shadowRoot.querySelector('tbody');
       const obs = new MutationObserver((_, obs) => {
-        if (table.children.length === 6 &&
-            table.children[0].children[3]?.innerText ===
+        if (table.children.length === 7 &&
+            table.children[0].children[2]?.innerText ===
               'https://report.test/.well-known/attribution-reporting/report-aggregate-attribution' &&
-            table.children[0].children[2]?.innerText === 'Pending' &&
-            table.children[0].children[6]?.innerText === '[ {  "key": "0x1",  "value": 2 }]' &&
-            table.children[0].children[7]?.innerText === '' &&
-            table.children[0].children[8]?.innerText === 'aws-cloud' &&
-            table.children[1].children[2]?.innerText === 'Sent: HTTP 200' &&
-            table.children[1].children[7]?.innerText === 'abc' &&
-            table.children[2].children[2]?.innerText === 'Prohibited by browser policy' &&
-            table.children[3].children[2]?.innerText === 'Dropped due to assembly failure' &&
-            table.children[4].children[2]?.innerText === 'Network error: ERR_INVALID_REDIRECT' &&
-            table.children[5].children[2]?.innerText === 'Network error: ERR_INTERNET_DISCONNECTED' &&
-            table.children[5].children[3]?.innerText ===
-              'https://report.test/.well-known/attribution-reporting/debug/report-aggregate-attribution') {
+            table.children[0].children[1]?.innerText === 'Pending' &&
+            table.children[0].children[5]?.innerText === '[ {  "key": "0x1",  "value": 2 }]' &&
+            table.children[0].children[6]?.innerText === '' &&
+            table.children[0].children[7]?.innerText === 'https://aws.example.test' &&
+            table.children[0].children[8]?.innerText === 'false' &&
+            table.children[1].children[1]?.innerText === 'Sent: HTTP 200' &&
+            table.children[1].children[6]?.innerText === 'abc' &&
+            table.children[2].children[1]?.innerText === 'Prohibited by browser policy' &&
+            table.children[3].children[1]?.innerText === 'Dropped due to assembly failure' &&
+            table.children[4].children[1]?.innerText === 'Network error: ERR_INVALID_REDIRECT' &&
+            table.children[5].children[1]?.innerText === 'Network error: ERR_INTERNET_DISCONNECTED' &&
+            table.children[5].children[2]?.innerText ===
+              'https://report.test/.well-known/attribution-reporting/debug/report-aggregate-attribution' &&
+            table.children[6].children[5]?.innerText === '[ {  "key": "0x0",  "value": 0 }]' &&
+            table.children[6].children[8]?.innerText === 'true') {
           obs.disconnect();
           document.title = $1;
         }
@@ -1101,52 +1104,59 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
                        TriggersDisplayed) {
   ASSERT_TRUE(NavigateToURL(shell(), GURL(kAttributionInternalsUrl)));
 
-  const auto create_trigger = [](absl::optional<network::TriggerAttestation>
-                                     attestation) {
-    return AttributionTrigger(
-        /*reporting_origin=*/*SuitableOrigin::Deserialize("https://r.test"),
-        attribution_reporting::TriggerRegistration(
-            FilterPair(/*positive=*/{{{"a", {"b"}}}},
-                       /*negative=*/{{{"g", {"h"}}}}),
-            /*debug_key=*/1,
-            {attribution_reporting::AggregatableDedupKey(
-                /*dedup_key=*/18, FilterPair())},
-            {
-                attribution_reporting::EventTriggerData(
-                    /*data=*/2,
-                    /*priority=*/3,
-                    /*dedup_key=*/absl::nullopt,
-                    FilterPair(
-                        /*positive=*/{{{"c", {"d"}}}},
-                        /*negative=*/{})),
-                attribution_reporting::EventTriggerData(
-                    /*data=*/4,
-                    /*priority=*/5,
-                    /*dedup_key=*/6,
-                    FilterPair(/*positive=*/{}, /*negative=*/{{{"e", {"f"}}}})),
-            },
-            {*attribution_reporting::AggregatableTriggerData::Create(
-                 /*key_piece=*/345,
-                 /*source_keys=*/{"a"},
-                 FilterPair(/*positive=*/{},
-                            /*negative=*/{{{"c", {"d"}}}})),
-             *attribution_reporting::AggregatableTriggerData::Create(
-                 /*key_piece=*/678,
-                 /*source_keys=*/{"b"},
-                 FilterPair(/*positive=*/{}, /*negative=*/{{{"e", {"f"}}}}))},
-            /*aggregatable_values=*/
-            *attribution_reporting::AggregatableValues::Create(
-                {{"a", 123}, {"b", 456}}),
-            /*debug_reporting=*/false,
-            ::aggregation_service::mojom::AggregationCoordinator::kDefault),
-        *SuitableOrigin::Deserialize("https://d.test"), std::move(attestation),
-        /*is_within_fenced_frame=*/false);
-  };
+  const auto create_trigger =
+      [](std::vector<network::TriggerVerification> verifications) {
+        return AttributionTrigger(
+            /*reporting_origin=*/*SuitableOrigin::Deserialize("https://r.test"),
+            attribution_reporting::TriggerRegistration(
+                FilterPair(/*positive=*/{{{"a", {"b"}}}},
+                           /*negative=*/{{{"g", {"h"}}}}),
+                /*debug_key=*/1,
+                {attribution_reporting::AggregatableDedupKey(
+                    /*dedup_key=*/18, FilterPair())},
+                {
+                    attribution_reporting::EventTriggerData(
+                        /*data=*/2,
+                        /*priority=*/3,
+                        /*dedup_key=*/absl::nullopt,
+                        FilterPair(
+                            /*positive=*/{{{"c", {"d"}}}},
+                            /*negative=*/{})),
+                    attribution_reporting::EventTriggerData(
+                        /*data=*/4,
+                        /*priority=*/5,
+                        /*dedup_key=*/6,
+                        FilterPair(/*positive=*/{},
+                                   /*negative=*/{{{"e", {"f"}}}})),
+                },
+                {*attribution_reporting::AggregatableTriggerData::Create(
+                     /*key_piece=*/345,
+                     /*source_keys=*/{"a"},
+                     FilterPair(/*positive=*/{},
+                                /*negative=*/{{{"c", {"d"}}}})),
+                 *attribution_reporting::AggregatableTriggerData::Create(
+                     /*key_piece=*/678,
+                     /*source_keys=*/{"b"},
+                     FilterPair(/*positive=*/{},
+                                /*negative=*/{{{"e", {"f"}}}}))},
+                /*aggregatable_values=*/
+                *attribution_reporting::AggregatableValues::Create(
+                    {{"a", 123}, {"b", 456}}),
+                /*debug_reporting=*/false,
+                /*aggregation_coordinator_origin=*/absl::nullopt,
+                attribution_reporting::mojom::SourceRegistrationTimeConfig::
+                    kInclude),
+            *SuitableOrigin::Deserialize("https://d.test"),
+            std::move(verifications),
+            /*is_within_fenced_frame=*/false);
+      };
 
   static constexpr char kScript[] = R"(
-    const expectedAttestation =
+    const expectedVerification =
       '<dl><dt>Token</dt><dd>abc</dd>' +
-      '<dt>Report ID</dt><dd>a2ab30b9-d664-4dfc-a9db-85f9729b9a30</dd></dl>';
+      '<dt>Report ID</dt><dd>aaab30b9-d664-4dfc-a9db-85f9729b9a30</dd></dl>' +
+      '<dl><dt>Token</dt><dd>def</dd>' +
+      '<dt>Report ID</dt><dd>bbab30b9-d664-4dfc-a9db-85f9729b9a30</dd></dl>';
 
     const table = document.querySelector('#triggerTable')
         .shadowRoot.querySelector('tbody');
@@ -1159,7 +1169,7 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
           table.children[0].children[3]?.innerText.includes('{') &&
           table.children[0].children[4]?.innerText === '' &&
           table.children[1].children[4]?.innerText === '123' &&
-          table.children[1].children[7]?.innerHTML === expectedAttestation) {
+          table.children[1].children[7]?.innerHTML === expectedVerification) {
         obs.disconnect();
         document.title = $1;
       }
@@ -1188,12 +1198,16 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
             cleared_debug_key);
       };
 
-  notify_trigger_handled(create_trigger(/*attestation=*/absl::nullopt),
+  notify_trigger_handled(create_trigger(/*verifications=*/{}),
                          AttributionTrigger::EventLevelResult::kSuccess,
                          AttributionTrigger::AggregatableResult::kSuccess);
 
-  notify_trigger_handled(create_trigger(network::TriggerAttestation::Create(
-                             "abc", "a2ab30b9-d664-4dfc-a9db-85f9729b9a30")),
+  std::vector<network::TriggerVerification> verifications;
+  verifications.push_back(*network::TriggerVerification::Create(
+      "abc", "aaab30b9-d664-4dfc-a9db-85f9729b9a30"));
+  verifications.push_back(*network::TriggerVerification::Create(
+      "def", "bbab30b9-d664-4dfc-a9db-85f9729b9a30"));
+  notify_trigger_handled(create_trigger(std::move(verifications)),
                          AttributionTrigger::EventLevelResult::kSuccess,
                          AttributionTrigger::AggregatableResult::kSuccess,
                          /*cleared_debug_key=*/123);
@@ -1306,8 +1320,8 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
       const label = document.querySelector('#show-debug-event-reports span');
       const obs = new MutationObserver((_, obs) => {
         if (table.children.length === 2 &&
-            table.children[0].children[6]?.innerText === '1' &&
-            table.children[1].children[6]?.innerText === '2' &&
+            table.children[0].children[5]?.innerText === '1' &&
+            table.children[1].children[5]?.innerText === '2' &&
             label.innerText === '') {
           obs.disconnect();
           document.title = $1;
@@ -1345,7 +1359,7 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
       const label = document.querySelector('#show-debug-event-reports span');
       const obs = new MutationObserver((_, obs) => {
         if (table.children.length === 1 &&
-            table.children[0].children[6]?.innerText === '2' &&
+            table.children[0].children[5]?.innerText === '2' &&
             label.innerText === ' (2 hidden)') {
           obs.disconnect();
           document.title = $1;
@@ -1374,9 +1388,9 @@ IN_PROC_BROWSER_TEST_F(AttributionInternalsWebUiBrowserTest,
       const label = document.querySelector('#show-debug-event-reports span');
       const obs = new MutationObserver((_, obs) => {
         if (table.children.length === 3 &&
-            table.children[0].children[6]?.innerText === '1' &&
-            table.children[1].children[6]?.innerText === '2' &&
-            table.children[2].children[6]?.innerText === '3' &&
+            table.children[0].children[5]?.innerText === '1' &&
+            table.children[1].children[5]?.innerText === '2' &&
+            table.children[2].children[5]?.innerText === '3' &&
             label.innerText === '') {
           obs.disconnect();
           document.title = $1;

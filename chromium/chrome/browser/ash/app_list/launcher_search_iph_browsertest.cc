@@ -166,7 +166,7 @@ class AppListIphBrowserTest : public MixinBasedInProcessBrowserTest,
           /*wait_for_opening_animation=*/true);
     } else {
       ash::AcceleratorController::Get()->PerformActionIfEnabled(
-          ash::TOGGLE_APP_LIST, {});
+          ash::AcceleratorAction::kToggleAppList, {});
 
       // We dispatch mouse events to interact with UI. Wait animation completion
       // to reliably dispatch those events.
@@ -474,11 +474,6 @@ IN_PROC_BROWSER_TEST_P(AppListIphBrowserTest,
 
 IN_PROC_BROWSER_TEST_P(AppListIphBrowserTestWithLearnMoreToast,
                        ShowAssistantLearnMoreToast) {
-  // TODO(b/276970723): Disables tablet mode variant for a crash.
-  if (IsTabletModeTest()) {
-    GTEST_SKIP() << "b/276970723";
-  }
-
   OpenAppList();
 
   views::ImageButton* assistant_button = search_box_view()->assistant_button();

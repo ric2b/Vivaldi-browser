@@ -15,12 +15,13 @@ import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-media-query/iron-media-query.js';
-import '../../icons.html.js';
+import '../icons.html.js';
+import '../main_page_container/main_page_container_styles.css.js';
+import '../main_page_container/page_displayer.js';
 import '../os_settings_page/os_settings_animated_pages.js';
 import '../os_settings_page/os_settings_section.js';
 import '../os_settings_page/os_settings_subpage.js';
-import '../os_settings_page_styles.css.js';
-import '../../settings_shared.css.js';
+import '../settings_shared.css.js';
 import '../os_settings_icons.html.js';
 import '../os_reset_page/os_powerwash_dialog.js';
 import './eol_offer_section.js';
@@ -34,12 +35,13 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {sanitizeInnerHtml} from 'chrome://resources/js/parse_html_subset.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {isCrostiniSupported} from '../common/load_time_booleans.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {MainPageMixin} from '../main_page_mixin.js';
 import {recordSettingChange} from '../metrics_recorder.js';
+import {Section} from '../mojom-webui/routes.mojom-webui.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
-import {Route, Router} from '../router.js';
+import {isAboutRoute, Route, Router, routes} from '../router.js';
 
 import {AboutPageBrowserProxy, AboutPageBrowserProxyImpl, AboutPageUpdateInfo, BrowserChannel, browserChannelToI18nId, RegulatoryInfo, TpmFirmwareUpdateStatusChangedEvent, UpdateStatus, UpdateStatusChangedEvent} from './about_page_browser_proxy.js';
 import {getTemplate} from './os_about_page.html.js';
@@ -71,6 +73,12 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
 
   static get properties() {
     return {
+      section_: {
+        type: Number,
+        value: Section.kAboutChromeOs,
+        readOnly: true,
+      },
+
       /**
        * Whether the about page is being rendered in dark mode.
        */
@@ -161,8 +169,6 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
         type: Number,
         value: 0,
       },
-
-      showCrostini: Boolean,
 
       showCrostiniLicense_: {
         type: Boolean,
@@ -267,13 +273,13 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
   private eolMessageWithMonthAndYear_: string;
   private hasInternetConnection_: boolean;
   private firmwareUpdateCount_: number;
-  private showCrostini: boolean;
+  private focusConfig_: Map<string, string>;
   private showCrostiniLicense_: boolean;
   private showUpdateStatus_: boolean;
   private showButtonContainer_: boolean;
   private showRelaunch_: boolean;
   private showCheckUpdates_: boolean;
-  private focusConfig_: Map<string, string>;
+  private section_: Section;
   private showUpdateWarningDialog_: boolean;
   private showTPMFirmwareUpdateLineItem_: boolean;
   private showTPMFirmwareUpdateDialog_: boolean;
@@ -350,8 +356,8 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
     });
   }
 
-  override containsRoute(route: Route) {
-    return !route || routes.ABOUT.contains(route);
+  override containsRoute(route: Route|undefined) {
+    return !route || isAboutRoute(route);
   }
 
   private startListening_() {
@@ -521,6 +527,8 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
         return this.i18nAdvanced('aboutUpgradeDownloadError');
       case UpdateStatus.DISABLED_BY_ADMIN:
         return this.i18nAdvanced('aboutUpgradeAdministrator');
+      case UpdateStatus.UPDATE_TO_ROLLBACK_VERSION_DISALLOWED:
+        return this.i18nAdvanced('aboutUpdateToRollbackVersionDisallowed');
       case UpdateStatus.DEFERRED:
         return this.i18nAdvanced('aboutUpgradeNotUpToDate');
       default:
@@ -556,6 +564,7 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
         // TODO(crbug.com/986596): Don't use browser icons here. Fork them.
         return 'settings:check-circle';
       case UpdateStatus.DEFERRED:
+      case UpdateStatus.UPDATE_TO_ROLLBACK_VERSION_DISALLOWED:
         return 'cr:warning';
       default:
         return null;
@@ -643,7 +652,8 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
     return staleUpdatedStatus || this.checkStatus_(UpdateStatus.FAILED) ||
         this.checkStatus_(UpdateStatus.FAILED_HTTP) ||
         this.checkStatus_(UpdateStatus.FAILED_DOWNLOAD) ||
-        this.checkStatus_(UpdateStatus.DISABLED_BY_ADMIN);
+        this.checkStatus_(UpdateStatus.DISABLED_BY_ADMIN) ||
+        this.checkStatus_(UpdateStatus.UPDATE_TO_ROLLBACK_VERSION_DISALLOWED);
   }
 
   /**
@@ -660,7 +670,7 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
    * @param enabled True if Crostini is enabled.
    */
   private handleCrostiniEnabledChanged_(enabled: boolean) {
-    this.showCrostiniLicense_ = enabled && this.showCrostini;
+    this.showCrostiniLicense_ = enabled && isCrostiniSupported();
   }
 
   private shouldShowSafetyInfo_(): boolean {

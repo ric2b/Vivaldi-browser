@@ -18,8 +18,14 @@ struct InterestGroupAd {
   url.mojom.Url render_url;
   // Optional size groups assigned to this Ad.
   string? size_group;
+  // Optional identifiers that may be passed to reporting functions, if
+  // sufficiently k-anonymous.
+  string? buyer_reporting_id;
+  string? buyer_and_seller_reporting_id;
   // Opaque JSON data, persisted, then passed as object to auction worklet.
   string? metadata;
+  // Optional alias to use with B&A auctions
+  string? ad_render_id;
 };
 
 // The maximum size of a valid interest group in bytes.

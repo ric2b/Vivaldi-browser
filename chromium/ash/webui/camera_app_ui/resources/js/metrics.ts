@@ -25,9 +25,15 @@ import {getGAHelper} from './untrusted_scripts.js';
 import {WaitableEvent} from './waitable_event.js';
 
 /**
- * The tracker ID of the GA metrics.
+ * The tracker ID of the GA metrics and the measurement ID of GA4 events. Make
+ * sure to set `PRODUCTION` to `false` when developing/debugging metrics. See
+ * Debugging section in go/cros-camera:dd:cca-ga-migration.
  */
-const GA_ID = 'UA-134822711-1';
+const PRODUCTION = true;
+const GA_ID = PRODUCTION ? 'UA-134822711-1' : 'UA-134822711-2';
+const GA4_ID = PRODUCTION ? 'G-TRQS261G6E' : 'G-J03LBPJBGD';
+const GA4_API_SECRET =
+    PRODUCTION ? '0Ir88y9HQtiwnchvaIzZ3Q' : 'WE_zBPUQTGefdXpHl25-ig';
 
 let baseDimen: Map<number, number|string>|null = null;
 
@@ -47,6 +53,7 @@ async function sendEvent(
       // The TypeScript definition for UniversalAnalytics.FieldsObject
       // manually listed out dimension1 ~ dimension200, and TypeScript don't
       // recognize accessing it using []. Force the type here.
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
       (e as Record<string, unknown>)[`dimension${key}`] = value;
     }
   }
@@ -67,11 +74,38 @@ async function sendEvent(
   await ready.wait();
 
   // This value reflects the logging consent option in OS settings.
-  const canSendMetrics =
+  const canSendMetrics = !PRODUCTION ||
       await ChromeHelper.getInstance().isMetricsAndCrashReportingEnabled();
   if (canSendMetrics) {
-    (await getGAHelper()).sendGAEvent(event);
+    const gaHelper = await getGAHelper();
+    const ga4CustomDimensions =
+        toGA4Dimensions(new Map([...baseDimen, ...(dimen ?? [])]));
+    await Promise.all([
+      gaHelper.sendGAEvent(event),
+      gaHelper.sendGA4Event(event, ga4CustomDimensions),
+    ]);
   }
+}
+
+/**
+ * Convert GA custom dimensions to GA4 custom dimensions. Dimension numbers are
+ * mapped to lowercase enum key names; the values are cast to strings (undefined
+ * values are dropped).
+ *
+ * @param dimensions GA custom dimensions map.
+ * @return A string key-value pairs.
+ */
+function toGA4Dimensions(dimensions: Map<number, unknown>) {
+  const ga4Dimensions: Record<string, string> = {};
+  for (const [enumKey, value] of dimensions) {
+    if (value === undefined) {
+      continue;
+    }
+    const key = MetricDimension[enumKey].toLowerCase();
+    ga4Dimensions[key] = String(value);
+  }
+  ga4Dimensions['browser_version'] = loadTimeData.getBrowserVersion();
+  return ga4Dimensions;
 }
 
 /**
@@ -136,6 +170,7 @@ enum MetricDimension {
   ASPECT_RATIO_SET = 35,
   DOC_PAGE_COUNT = 36,
   TIME_LAPSE_SPEED = 37,
+  IS_TEST_IMAGE = 38,
 }
 
 /**
@@ -155,10 +190,12 @@ export async function initMetrics(): Promise<void> {
     }
     return match[1];
   })();
+  const isTestImage = loadTimeData.getIsTestImage();
   baseDimen = new Map<MetricDimension, number|string>([
     [MetricDimension.BOARD, boardName],
     [MetricDimension.OS_VERSION, osVer],
     [MetricDimension.SCHEMA_VERSION, SCHEMA_VERSION],
+    [MetricDimension.IS_TEST_IMAGE, isTestImage ? '1' : '0'],
   ]);
 
   const clientId = localStorage.getString(LocalStorageKey.GA_USER_ID);
@@ -168,7 +205,16 @@ export async function initMetrics(): Promise<void> {
   }
 
   await (await getGAHelper())
-      .initGA(GA_ID, clientId, Comlink.proxy(setClientId));
+      .initGA(
+          {
+            gaId: GA_ID,
+            ga4Id: GA4_ID,
+            clientId,
+            ga4ApiSecret: GA4_API_SECRET,
+            ga4SessionId: String(Date.now()),
+          },
+          Comlink.proxy(setClientId),
+      );
   ready.signal();
 }
 
@@ -305,15 +351,15 @@ export function sendCaptureEvent({
   function condState(
       states: state.StateUnion[],
       cond?: state.StateUnion,
-      strict?: boolean,
+      strict = false,
       ): string {
     // Return the first existing state among the given states only if
     // there is no gate condition or the condition is met.
-    const prerequisite = !cond || state.get(cond);
-    if (strict && !prerequisite) {
-      return '';
+    const prerequisite = cond === undefined || state.get(cond);
+    if (!prerequisite) {
+      return strict ? '' : 'n/a';
     }
-    return prerequisite && states.find((s) => state.get(s)) || 'n/a';
+    return states.find((s) => state.get(s)) ?? 'n/a';
   }
 
   sendEvent(

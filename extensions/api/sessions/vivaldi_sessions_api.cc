@@ -499,10 +499,13 @@ ExtensionFunction::ResponseAction SessionsPrivateAddFunction::Run() {
   const SessionAddOptions& options = params->options;
 
   // Special test for backup operation.
-  if (options.backup.has_value()) {
-    // optional backup flag set to false is defined to be a noop.
-    int error_code = options.backup.value() ? MakeBackup(browser_context())
-      : sessions::kNoError;
+  if (options.backup != vivaldi::sessions_private::BACKUP_TYPE_NONE) {
+    int error_code = MakeBackup(browser_context());
+    if (error_code == sessions::kNoError &&
+        options.backup == vivaldi::sessions_private::BACKUP_TYPE_AUTOSAVE) {
+      error_code = sessions::AutoSaveFromBackup(browser_context());
+    }
+
     return RespondNow(ArgumentList(Results::Create(error_code)));
   }
 
@@ -529,7 +532,7 @@ ExtensionFunction::ResponseAction SessionsPrivateAddFunction::Run() {
   if (error_code == sessions::kNoError) {
     int id = Index_Node::GetNewId();
     std::unique_ptr<Index_Node> node = std::make_unique<Index_Node>(
-        base::GenerateGUID(), id);
+      base::Uuid::GenerateRandomV4().AsLowercaseString(), id);
     SetNodeState(browser_context(), ctl.path, true, node.get());
     if (!with_workspaces) {
       // TODO: Remove ws info from node
@@ -609,6 +612,23 @@ void SessionsPrivateGetAllFunction::SendResponse(Index_Model* model) {
   session_model.loading_failed = model->loadingFailed();
 
   Respond(ArgumentList(Results::Create(session_model)));
+}
+
+ExtensionFunction::ResponseAction SessionsPrivateGetAutosaveIdsFunction::Run() {
+  namespace Results = vivaldi::sessions_private::GetAutosaveIds::Results;
+  using vivaldi::sessions_private::GetAutosaveIds::Params;
+  absl::optional<Params> params = Params::Create(args());
+
+  std::vector<Index_Node*> nodes;
+  sessions::GetExpiredAutoSaveNodes(browser_context(),
+                                    params->days,
+                                    false,
+                                    nodes);
+  std::vector<double> list;
+  for (const Index_Node* node : nodes) {
+    list.push_back(node->id());
+  }
+  return RespondNow(ArgumentList(Results::Create(list)));
 }
 
 ExtensionFunction::ResponseAction SessionsPrivateGetContentFunction::Run() {
@@ -850,7 +870,8 @@ ExtensionFunction::ResponseAction SessionsPrivateUpdateFunction::Run() {
   if (error_code == sessions::kNoError) {
     // New child of the node we are about to update. Holds backup of node.
     std::unique_ptr<Index_Node> child = std::make_unique<Index_Node>(
-        base::GenerateGUID(), Index_Node::GetNewId());
+        base::Uuid::GenerateRandomV4().AsLowercaseString(),
+        Index_Node::GetNewId());
     child->Copy(pair.first);
     child->SetContainerGuid(pair.first->guid());
 

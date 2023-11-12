@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">По садржају</translation>
 <translation id="2129408066358825297">Старост</translation>
 <translation id="2148384276939959392">Синхронизуј изабрано</translation>
+<translation id="21693288559538605">Резиме блокатора реклама и праћења</translation>
 <translation id="2195713384412091023">Ово ће уклонити све синхронизоване податке ускладиштене на нашем серверу, поништити вашу лозинку за шифровање и одјавити вас.</translation>
 <translation id="2243210264130642074">Белешка је сачувана</translation>
 <translation id="2272338747456392228">Налог је закључан</translation>
 <translation id="2273327106802955778">Више опција</translation>
 <translation id="2324160330092901720">Верификациони код је послат на <ph name="EMAIL_ID" /></translation>
+<translation id="2336309953058658733">Испразни отпад</translation>
 <translation id="2359808026110333948">Настави</translation>
 <translation id="2386793615875593361">1 изабрана</translation>
 <translation id="2388224692799337242">Када почнете да прегледате, ваша историја ће се појавити овде</translation>
@@ -117,6 +119,7 @@
 <translation id="3699026013955941879">Код је истекао. Затражите нови активациони код.</translation>
 <translation id="3700829948786686853">Добро дошли у Vivaldi</translation>
 <translation id="3766350025418769949">Лозинке које сте сачували у управљачу лозинкама Vivaldi прегледача можете користити у другим апликацијама на вашем iPad-у.</translation>
+<translation id="3845564230651302310">Примена нових подешавања блокатора...</translation>
 <translation id="3858860766373142691">Име</translation>
 <translation id="3866249974567520381">Опис</translation>
 <translation id="3872195896030547485">Унесите важећу адресу е-поште.</translation>
@@ -225,6 +228,7 @@
 <translation id="6406506848690869874">Синхронизација</translation>
 <translation id="6438416544409849235">Изабрано: <ph name="NUMBER_OF_SELECTED_NOTES" /></translation>
 <translation id="6468130661190228905">Извините, изгледа да морате још мало сачекати пре него што се придружите нашој заједници. Захтевамо да наши чланови имају најмање 16 година да би се придружили.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Увези<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Резервни кључ за шифровање</translation>
 <translation id="6527303717912515753">Дели</translation>
 <translation id="6535988230515403205">Пољски (<ph name="ORIGIN" />)</translation>
@@ -244,7 +248,7 @@
 <translation id="681368974849482173">Ставка је креирана</translation>
 <translation id="6830986331692390764">Брисање синхронизованих података. Сачекајте.</translation>
 <translation id="6875510405870945573">Изаберите жељени ниво блокирања.</translation>
-<translation id="6885837502028760851">Прикажи само фасцикле брзих бирања</translation>
+<translation id="6885837502028760851">Прикажи само фасцикле брзог бирања</translation>
 <translation id="6887143077297974801">Није успело покретање синхронизације.</translation>
 <translation id="6937750621455385628">Морате користити Vivaldi налог да бисте се пријавили.</translation>
 <translation id="6945221475159498467">Изабери</translation>
@@ -270,7 +274,6 @@
 <translation id="7461899062138731833">ИЗВОРИ</translation>
 <translation id="750493650310597496">0 изабраних</translation>
 <translation id="7525067979554623046">Креирај</translation>
-<translation id="7541020606126512786">Резиме блокатора праћења и реклама</translation>
 <translation id="7573518470897278603">Прикажи мобилну верзију сајта</translation>
 <translation id="7574321014880720413">Додај нови домен</translation>
 <translation id="7587132259180664054">Е-порука је успешно послата</translation>

@@ -51,6 +51,11 @@ class ShoppingBookmarkModelObserver
   void BookmarkNodeChanged(bookmarks::BookmarkModel* model,
                            const bookmarks::BookmarkNode* node) override;
 
+  void BookmarkNodeAdded(bookmarks::BookmarkModel* model,
+                         const bookmarks::BookmarkNode* parent,
+                         size_t index,
+                         bool added_by_user) override;
+
   void BookmarkNodeRemoved(bookmarks::BookmarkModel* model,
                            const bookmarks::BookmarkNode* parent,
                            size_t old_index,
@@ -61,9 +66,9 @@ class ShoppingBookmarkModelObserver
                                const bookmarks::BookmarkNode* node) override;
 
  private:
-  base::raw_ptr<ShoppingService> shopping_service_;
+  raw_ptr<ShoppingService> shopping_service_;
 
-  base::raw_ptr<SubscriptionsManager> subscriptions_manager_;
+  raw_ptr<SubscriptionsManager> subscriptions_manager_;
 
   // A map of bookmark ID to its current URL. This is used to detect incoming
   // changes to the URL since there isn't an explicit event for it.

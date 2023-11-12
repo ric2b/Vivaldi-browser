@@ -39,6 +39,7 @@
 #include <functional>
 #include <type_traits>
 
+#include "absl/base/attributes.h"
 #include "absl/base/config.h"
 
 // Defines the default alignment. `__STDCPP_DEFAULT_NEW_ALIGNMENT__` is a C++17
@@ -278,6 +279,7 @@ using remove_extent_t = typename std::remove_extent<T>::type;
 template <typename T>
 using remove_all_extents_t = typename std::remove_all_extents<T>::type;
 
+ABSL_INTERNAL_DISABLE_DEPRECATED_DECLARATION_WARNING
 namespace type_traits_internal {
 // This trick to retrieve a default alignment is necessary for our
 // implementation of aligned_storage_t to be consistent with any
@@ -296,6 +298,7 @@ struct default_alignment_of_aligned_storage<
 template <size_t Len, size_t Align = type_traits_internal::
                           default_alignment_of_aligned_storage<Len>::value>
 using aligned_storage_t = typename std::aligned_storage<Len, Align>::type;
+ABSL_INTERNAL_RESTORE_DEPRECATED_DECLARATION_WARNING
 
 template <typename T>
 using decay_t = typename std::decay<T>::type;
@@ -505,7 +508,7 @@ struct is_trivially_relocatable
 #else
 // Otherwise we use a fallback that detects only those types we can feasibly
 // detect. Any time that has trivial move-construction and destruction
-// operations is by definition trivally relocatable.
+// operations is by definition trivially relocatable.
 template <class T>
 struct is_trivially_relocatable
     : absl::conjunction<absl::is_trivially_move_constructible<T>,

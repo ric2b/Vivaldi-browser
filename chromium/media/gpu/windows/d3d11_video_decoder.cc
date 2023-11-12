@@ -104,10 +104,9 @@ std::unique_ptr<VideoDecoder> D3D11VideoDecoder::Create(
   // Note that we WrapUnique<VideoDecoder> rather than D3D11VideoDecoder to make
   // this castable; the deleters have to match.
   std::unique_ptr<MediaLog> cloned_media_log = media_log->Clone();
-  auto get_helper_cb =
-      base::BindRepeating(CreateCommandBufferHelper, std::move(get_stub_cb),
-                          scoped_refptr<CommandBufferHelperHolder>(
-                              new CommandBufferHelperHolder(gpu_task_runner)));
+  auto get_helper_cb = base::BindRepeating(
+      CreateCommandBufferHelper, std::move(get_stub_cb),
+      base::MakeRefCounted<CommandBufferHelperHolder>(gpu_task_runner));
   return base::WrapUnique<VideoDecoder>(new D3D11VideoDecoder(
       gpu_task_runner, std::move(media_log), gpu_preferences, gpu_workarounds,
       base::SequenceBound<D3D11VideoDecoderImpl>(
@@ -154,9 +153,6 @@ D3D11VideoDecoder::~D3D11VideoDecoder() {
 
   // Explicitly destroy the decoder, since it can reference picture buffers.
   accelerated_video_decoder_.reset();
-
-  if (already_initialized_)
-    AddLifetimeProgressionStage(D3D11LifetimeProgression::kPlaybackSucceeded);
 }
 
 VideoDecoderType D3D11VideoDecoder::GetDecoderType() const {
@@ -345,9 +341,6 @@ void D3D11VideoDecoder::Initialize(const VideoDecoderConfig& config,
                                    const OutputCB& output_cb,
                                    const WaitingCB& /* waiting_cb */) {
   TRACE_EVENT0("gpu", "D3D11VideoDecoder::Initialize");
-  if (already_initialized_)
-    AddLifetimeProgressionStage(D3D11LifetimeProgression::kPlaybackSucceeded);
-  AddLifetimeProgressionStage(D3D11LifetimeProgression::kInitializeStarted);
 
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(output_cb);
@@ -442,8 +435,6 @@ void D3D11VideoDecoder::Initialize(const VideoDecoderConfig& config,
       base::BindRepeating(&D3D11VideoDecoder::ReceivePictureBufferFromClient,
                           weak_factory_.GetWeakPtr());
 
-  AddLifetimeProgressionStage(D3D11LifetimeProgression::kInitializeSucceeded);
-
   // Initialize the gpu side.  It would be nice if we could ask SB<> to elide
   // the post if we're already on that thread, but it can't.
   // Bind our own init / output cb that hop to this thread, so we don't call
@@ -452,14 +443,6 @@ void D3D11VideoDecoder::Initialize(const VideoDecoderConfig& config,
   // const ref.
   impl_.AsyncCall(&D3D11VideoDecoderImpl::Initialize)
       .WithArgs(base::BindPostTaskToCurrentDefault(std::move(impl_init_cb)));
-}
-
-void D3D11VideoDecoder::AddLifetimeProgressionStage(
-    D3D11LifetimeProgression stage) {
-  already_initialized_ =
-      (stage == D3D11LifetimeProgression::kInitializeSucceeded);
-  const std::string uma_name("Media.D3D11.DecoderLifetimeProgression");
-  base::UmaHistogramEnumeration(uma_name, stage);
 }
 
 void D3D11VideoDecoder::ReceivePictureBufferFromClient(
@@ -681,6 +664,14 @@ void D3D11VideoDecoder::DoDecode() {
       set_accelerator_decoder_cb_.Run(
           std::move(video_decoder_or_error).value());
       picture_buffers_.clear();
+    } else if (result == media::AcceleratedVideoDecoder::kColorSpaceChange) {
+      MEDIA_LOG(INFO, media_log_)
+          << "D3D11VideoDecoder color space change: color_space: "
+          << accelerated_video_decoder_->GetVideoColorSpace().ToString();
+
+      // Clear the picture buffers and recreate the pictures leading to new
+      // shared images with new color space.
+      picture_buffers_.clear();
     } else if (result == media::AcceleratedVideoDecoder::kTryAgain) {
       LOG(ERROR) << "Try again is not supported";
       NotifyError(D3D11Status::Codes::kTryAgainNotSupported);
@@ -755,6 +746,11 @@ void D3D11VideoDecoder::CreatePictureBuffers() {
   DCHECK(decoder_configurator_);
   DCHECK(texture_selector_);
   gfx::Size size = accelerated_video_decoder_->GetPicSize();
+  gfx::ColorSpace color_space =
+      accelerated_video_decoder_->GetVideoColorSpace().ToGfxColorSpace();
+  if (!color_space.IsValid()) {
+    color_space = config_.color_space_info().ToGfxColorSpace();
+  }
 
   // Some streams may have varying metadata, so bitstream metadata should be
   // preferred over metadata provide by the configuration.
@@ -810,16 +806,17 @@ void D3D11VideoDecoder::CreatePictureBuffers() {
 
     DCHECK(!!in_texture);
 
-    auto tex_wrapper = texture_selector_->CreateTextureWrapper(device_, size);
+    auto tex_wrapper =
+        texture_selector_->CreateTextureWrapper(device_, color_space, size);
     if (!tex_wrapper) {
       return NotifyError(
           D3D11Status::Codes::kAllocateTextureForCopyingWrapperFailed);
     }
 
     const size_t array_slice = use_single_video_decoder_texture_ ? 0 : i;
-    picture_buffers_.push_back(
-        new D3D11PictureBuffer(decoder_task_runner_, in_texture, array_slice,
-                               std::move(tex_wrapper), size, i /* level */));
+    picture_buffers_.push_back(base::MakeRefCounted<D3D11PictureBuffer>(
+        decoder_task_runner_, in_texture, array_slice, std::move(tex_wrapper),
+        size, /*level=*/i));
 
     base::OnceCallback<void(scoped_refptr<media::D3D11PictureBuffer>)>
         picture_buffer_gpu_resource_init_done_cb = base::DoNothing();
@@ -908,10 +905,10 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
   base::TimeDelta timestamp = picture_buffer->timestamp_;
 
   // Prefer the frame color space over what's in the config.
-  gfx::ColorSpace picture_color_space =
-      (picture->get_colorspace().IsSpecified() ? picture->get_colorspace()
-                                               : config_.color_space_info())
-          .ToGfxColorSpace();
+  auto picture_color_space = picture->get_colorspace().ToGfxColorSpace();
+  if (!picture_color_space.IsValid()) {
+    picture_color_space = config_.color_space_info().ToGfxColorSpace();
+  }
 
   MailboxHolderArray mailbox_holders;
   gfx::ColorSpace output_color_space;
@@ -952,10 +949,6 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
   // However, we may choose to set ALLOW_OVERLAY to false even if
   // the finch flag is enabled.  We may not choose to set ALLOW_OVERLAY if the
   // flag is off, however.
-  //
-  // Also note that, since we end up binding textures with GLImageEGLStream,
-  // it's probably okay just to allow overlay always, and let the swap chain
-  // presenter decide if it wants to.
   frame->metadata().allow_overlay = true;
 
   frame->metadata().power_efficient = true;
@@ -965,6 +958,11 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
     // preferred over metadata provide by the configuration.
     frame->set_hdr_metadata(picture->hdr_metadata() ? picture->hdr_metadata()
                                                     : config_.hdr_metadata());
+  }
+
+  if (IsMultiPlaneFormatForHardwareVideoEnabled()) {
+    frame->set_shared_image_format_type(
+        SharedImageFormatType::kSharedImageFormat);
   }
 
   // TODO(crbug.com/1236801): WebGPU cannot import and create texture view on
@@ -984,9 +982,6 @@ void D3D11VideoDecoder::SetDecoderCB(const SetAcceleratorDecoderCB& cb) {
 void D3D11VideoDecoder::NotifyError(D3D11Status reason,
                                     DecoderStatus::Codes opt_decoder_code) {
   TRACE_EVENT0("gpu", "D3D11VideoDecoder::NotifyError");
-
-  base::UmaHistogramSparse("Media.D3D11.NotifyErrorStatus",
-                           static_cast<int>(reason.code()));
 
   PostDecoderStatus(
       DecoderStatus(opt_decoder_code).AddCause(std::move(reason)));

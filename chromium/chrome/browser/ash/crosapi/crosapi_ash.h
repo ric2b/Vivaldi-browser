@@ -60,6 +60,7 @@ class DeviceSettingsAsh;
 class DlpAsh;
 class DocumentScanAsh;
 class DownloadControllerAsh;
+class DownloadStatusUpdaterAsh;
 class DriveIntegrationServiceAsh;
 class EchoPrivateAsh;
 class EmojiPickerAsh;
@@ -75,6 +76,7 @@ class IdentityManagerAsh;
 class IdleServiceAsh;
 class ImageWriterAsh;
 class InSessionAuthAsh;
+class KerberosInBrowserAsh;
 class KeystoreServiceAsh;
 class KioskSessionServiceAsh;
 class LocalPrinterAsh;
@@ -100,6 +102,7 @@ class PrintingMetricsAsh;
 #endif  // BUILDFLAG(USE_CUPS)
 class RemotingAsh;
 class ResourceManagerAsh;
+class ScreenAIDownloaderAsh;
 class ScreenManagerAsh;
 class SearchProviderAsh;
 class SelectFileAsh;
@@ -199,6 +202,8 @@ class CrosapiAsh : public mojom::Crosapi {
       mojo::PendingReceiver<mojom::DocumentScan> receiver) override;
   void BindDownloadController(
       mojo::PendingReceiver<mojom::DownloadController> receiver) override;
+  void BindDownloadStatusUpdater(
+      mojo::PendingReceiver<mojom::DownloadStatusUpdater> receiver) override;
   void BindDriveIntegrationService(
       mojo::PendingReceiver<mojom::DriveIntegrationService> receiver) override;
   void BindEchoPrivate(
@@ -235,6 +240,8 @@ class CrosapiAsh : public mojom::Crosapi {
       mojo::PendingReceiver<mojom::ImageWriter> receiver) override;
   void BindInSessionAuth(
       mojo::PendingReceiver<mojom::InSessionAuth> receiver) override;
+  void BindKerberosInBrowser(
+      mojo::PendingReceiver<mojom::KerberosInBrowser> receiver) override;
   void BindKeystoreService(
       mojo::PendingReceiver<mojom::KeystoreService> receiver) override;
   void BindKioskSessionService(
@@ -293,6 +300,8 @@ class CrosapiAsh : public mojom::Crosapi {
   void BindRemoting(mojo::PendingReceiver<mojom::Remoting> receiver) override;
   void BindResourceManager(
       mojo::PendingReceiver<mojom::ResourceManager> receiver) override;
+  void BindScreenAIDownloader(
+      mojo::PendingReceiver<mojom::ScreenAIDownloader> receiver) override;
   void BindScreenManager(
       mojo::PendingReceiver<mojom::ScreenManager> receiver) override;
   void BindSearchControllerRegistry(
@@ -391,6 +400,10 @@ class CrosapiAsh : public mojom::Crosapi {
     return download_controller_ash_.get();
   }
 
+  DownloadStatusUpdaterAsh* download_status_updater_ash() {
+    return download_status_updater_ash_.get();
+  }
+
   EchoPrivateAsh* echo_private_ash() { return echo_private_ash_.get(); }
 
   EmojiPickerAsh* emoji_picker_ash() { return emoji_picker_ash_.get(); }
@@ -456,6 +469,10 @@ class CrosapiAsh : public mojom::Crosapi {
     return printing_metrics_ash_.get();
   }
 #endif  // BUILDFLAG(USE_CUPS)
+
+  ScreenAIDownloaderAsh* screen_ai_downloader_ash() {
+    return screen_ai_downloader_ash_.get();
+  }
 
   ScreenManagerAsh* screen_manager_ash() { return screen_manager_ash_.get(); }
 
@@ -531,6 +548,7 @@ class CrosapiAsh : public mojom::Crosapi {
   std::unique_ptr<DlpAsh> dlp_ash_;
   std::unique_ptr<DocumentScanAsh> document_scan_ash_;
   std::unique_ptr<DownloadControllerAsh> download_controller_ash_;
+  std::unique_ptr<DownloadStatusUpdaterAsh> download_status_updater_ash_;
   std::unique_ptr<DriveIntegrationServiceAsh> drive_integration_service_ash_;
   std::unique_ptr<EchoPrivateAsh> echo_private_ash_;
   std::unique_ptr<EmojiPickerAsh> emoji_picker_ash_;
@@ -547,6 +565,7 @@ class CrosapiAsh : public mojom::Crosapi {
   std::unique_ptr<IdleServiceAsh> idle_service_ash_;
   std::unique_ptr<ImageWriterAsh> image_writer_ash_;
   std::unique_ptr<InSessionAuthAsh> in_session_auth_ash_;
+  std::unique_ptr<KerberosInBrowserAsh> kerberos_in_browser_ash_;
   std::unique_ptr<KeystoreServiceAsh> keystore_service_ash_;
   std::unique_ptr<KioskSessionServiceAsh> kiosk_session_service_ash_;
   std::unique_ptr<LocalPrinterAsh> local_printer_ash_;
@@ -574,6 +593,7 @@ class CrosapiAsh : public mojom::Crosapi {
   std::unique_ptr<ash::ProbeServiceAsh> probe_service_ash_;
   std::unique_ptr<RemotingAsh> remoting_ash_;
   std::unique_ptr<ResourceManagerAsh> resource_manager_ash_;
+  std::unique_ptr<ScreenAIDownloaderAsh> screen_ai_downloader_ash_;
   std::unique_ptr<ScreenManagerAsh> screen_manager_ash_;
   std::unique_ptr<SearchProviderAsh> search_provider_ash_;
   std::unique_ptr<SelectFileAsh> select_file_ash_;

@@ -23,10 +23,6 @@
 #include "components/history/core/browser/history_database_params.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/test/test_history_database.h"
-#include "components/optimization_guide/content/browser/page_content_annotations_service.h"
-#include "components/optimization_guide/content/browser/test_page_content_annotations_service.h"
-#include "components/optimization_guide/content/browser/test_page_content_annotator.h"
-#include "components/optimization_guide/core/test_model_info_builder.h"
 #include "components/privacy_sandbox/privacy_sandbox_prefs.h"
 #include "components/privacy_sandbox/privacy_sandbox_settings_impl.h"
 #include "components/privacy_sandbox/privacy_sandbox_test_util.h"
@@ -63,14 +59,14 @@ constexpr base::Time kTime1 =
 constexpr base::Time kTime2 =
     base::Time::FromDeltaSinceWindowsEpoch(base::Days(2));
 
-constexpr size_t kTaxonomySize = 349;
 constexpr int kTaxonomyVersion = 1;
 constexpr int64_t kModelVersion = 5000000000LL;
 
 EpochTopics CreateTestEpochTopics(
     const std::vector<std::pair<Topic, std::set<HashedDomain>>>& topics,
     base::Time calculation_time,
-    size_t padded_top_topics_start_index = 5) {
+    size_t padded_top_topics_start_index = 5,
+    int64_t model_version = kModelVersion) {
   DCHECK_EQ(topics.size(), 5u);
 
   std::vector<TopicAndDomains> top_topics_and_observing_domains;
@@ -80,8 +76,9 @@ EpochTopics CreateTestEpochTopics(
   }
 
   return EpochTopics(std::move(top_topics_and_observing_domains),
-                     padded_top_topics_start_index, kTaxonomySize,
-                     kTaxonomyVersion, kModelVersion, calculation_time);
+                     padded_top_topics_start_index, kTaxonomyVersion,
+                     model_version, calculation_time,
+                     /*from_manually_triggered_calculation=*/false);
 }
 
 }  // namespace
@@ -95,7 +92,7 @@ class TesterBrowsingTopicsService : public BrowsingTopicsServiceImpl {
       privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings,
       history::HistoryService* history_service,
       content::BrowsingTopicsSiteDataManager* site_data_manager,
-      optimization_guide::PageContentAnnotationsService* annotations_service,
+      std::unique_ptr<Annotator> annotator,
       base::queue<EpochTopics> mock_calculator_results,
       base::TimeDelta calculator_finish_delay)
       : BrowsingTopicsServiceImpl(
@@ -103,7 +100,7 @@ class TesterBrowsingTopicsService : public BrowsingTopicsServiceImpl {
             privacy_sandbox_settings,
             history_service,
             site_data_manager,
-            annotations_service,
+            std::move(annotator),
             base::BindRepeating(
                 content_settings::PageSpecificContentSettings::TopicAccessed)),
         mock_calculator_results_(std::move(mock_calculator_results)),
@@ -122,8 +119,9 @@ class TesterBrowsingTopicsService : public BrowsingTopicsServiceImpl {
       privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings,
       history::HistoryService* history_service,
       content::BrowsingTopicsSiteDataManager* site_data_manager,
-      optimization_guide::PageContentAnnotationsService* annotations_service,
+      Annotator* annotator,
       const base::circular_deque<EpochTopics>& epochs,
+      bool is_manually_triggered,
       BrowsingTopicsCalculator::CalculateCompletedCallback callback) override {
     DCHECK(!mock_calculator_results_.empty());
 
@@ -133,9 +131,8 @@ class TesterBrowsingTopicsService : public BrowsingTopicsServiceImpl {
     mock_calculator_results_.pop();
 
     return std::make_unique<TesterBrowsingTopicsCalculator>(
-        privacy_sandbox_settings, history_service, site_data_manager,
-        annotations_service, std::move(callback), std::move(next_epoch),
-        calculator_finish_delay_);
+        privacy_sandbox_settings, history_service, site_data_manager, annotator,
+        std::move(callback), std::move(next_epoch), calculator_finish_delay_);
   }
 
   const BrowsingTopicsState& browsing_topics_state() override {
@@ -172,7 +169,8 @@ class BrowsingTopicsServiceImplTest
             base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
     scoped_feature_list_.InitWithFeaturesAndParameters(
         /*enabled_features=*/
-        {{blink::features::kBrowsingTopics,
+        {{blink::features::kBrowsingTopics, {}},
+         {blink::features::kBrowsingTopicsParameters,
           {{"time_period_per_epoch",
             base::StrCat({base::NumberToString(kEpoch.InSeconds()), "s"})},
            {"browsing_topics_max_epoch_introduction_delay",
@@ -211,14 +209,6 @@ class BrowsingTopicsServiceImplTest
     history_service_->Init(
         history::TestHistoryDatabaseParamsForPath(temp_dir_.GetPath()));
 
-    page_content_annotations_service_ =
-        optimization_guide::TestPageContentAnnotationsService::Create(
-            /*optimization_guide_model_provider=*/nullptr,
-            history_service_.get());
-
-    page_content_annotations_service_->OverridePageContentAnnotatorForTesting(
-        &test_page_content_annotator_);
-
     task_environment()->RunUntilIdle();
   }
 
@@ -243,9 +233,6 @@ class BrowsingTopicsServiceImplTest
     history_service_->SetOnBackendDestroyTask(run_loop.QuitClosure());
     history_service_->Shutdown();
     run_loop.Run();
-
-    page_content_annotations_service_.reset();
-    task_environment()->RunUntilIdle();
 
     host_content_settings_map_->ShutdownOnUIThread();
 
@@ -294,8 +281,8 @@ class BrowsingTopicsServiceImplTest
     browsing_topics_service_ = std::make_unique<TesterBrowsingTopicsService>(
         temp_dir_.GetPath(), privacy_sandbox_settings_.get(),
         history_service_.get(), topics_site_data_manager(),
-        page_content_annotations_service_.get(),
-        std::move(mock_calculator_results), kCalculatorDelay);
+        std::make_unique<TestAnnotator>(), std::move(mock_calculator_results),
+        kCalculatorDelay);
   }
 
   const BrowsingTopicsState& browsing_topics_state() {
@@ -319,11 +306,6 @@ class BrowsingTopicsServiceImplTest
       privacy_sandbox_settings_;
 
   std::unique_ptr<history::HistoryService> history_service_;
-
-  std::unique_ptr<optimization_guide::PageContentAnnotationsService>
-      page_content_annotations_service_;
-
-  optimization_guide::TestPageContentAnnotator test_page_content_annotator_;
 
   std::unique_ptr<TesterBrowsingTopicsService> browsing_topics_service_;
 
@@ -1268,6 +1250,182 @@ TEST_F(BrowsingTopicsServiceImplTest,
   EXPECT_EQ(result[1]->topic, 7);
 }
 
+TEST_F(BrowsingTopicsServiceImplTest,
+       HandleTopicsWebApi_TopicsReturnedInSortedOrder_DifferentVersions) {
+  base::queue<EpochTopics> mock_calculator_results;
+  mock_calculator_results.push(
+      CreateTestEpochTopics({{Topic(6), {GetHashedDomain("bar.com")}},
+                             {Topic(7), {GetHashedDomain("bar.com")}},
+                             {Topic(8), {GetHashedDomain("bar.com")}},
+                             {Topic(9), {GetHashedDomain("bar.com")}},
+                             {Topic(10), {GetHashedDomain("bar.com")}}},
+                            kTime1,
+                            /*padded_top_topics_start_index=*/5,
+                            /*model_version=*/4));
+  mock_calculator_results.push(
+      CreateTestEpochTopics({{Topic(1), {GetHashedDomain("bar.com")}},
+                             {Topic(2), {GetHashedDomain("bar.com")}},
+                             {Topic(3), {GetHashedDomain("bar.com")}},
+                             {Topic(4), {GetHashedDomain("bar.com")}},
+                             {Topic(5), {GetHashedDomain("bar.com")}}},
+                            kTime1,
+                            /*padded_top_topics_start_index=*/5,
+                            /*model_version=*/3));
+  mock_calculator_results.push(
+      CreateTestEpochTopics({{Topic(6), {GetHashedDomain("bar.com")}},
+                             {Topic(7), {GetHashedDomain("bar.com")}},
+                             {Topic(8), {GetHashedDomain("bar.com")}},
+                             {Topic(9), {GetHashedDomain("bar.com")}},
+                             {Topic(10), {GetHashedDomain("bar.com")}}},
+                            kTime1,
+                            /*padded_top_topics_start_index=*/5,
+                            /*model_version=*/2));
+  mock_calculator_results.push(
+      CreateTestEpochTopics({{Topic(1), {GetHashedDomain("bar.com")}},
+                             {Topic(2), {GetHashedDomain("bar.com")}},
+                             {Topic(3), {GetHashedDomain("bar.com")}},
+                             {Topic(4), {GetHashedDomain("bar.com")}},
+                             {Topic(5), {GetHashedDomain("bar.com")}}},
+                            kTime1,
+                            /*padded_top_topics_start_index=*/5,
+                            /*model_version=*/1));
+
+  InitializeBrowsingTopicsService(std::move(mock_calculator_results));
+
+  // Finish all calculations.
+  task_environment()->FastForwardBy(4 * kCalculatorDelay + 3 * kEpoch);
+
+  EXPECT_EQ(browsing_topics_state().epochs().size(), 4u);
+
+  NavigateToPage(GURL("https://www.foo.com"));
+
+  // Current time is before the epoch switch time.
+
+  std::vector<blink::mojom::EpochTopicPtr> result;
+  EXPECT_TRUE(browsing_topics_service_->HandleTopicsWebApi(
+      /*context_origin=*/url::Origin::Create(GURL("https://www.bar.com")),
+      web_contents()->GetPrimaryMainFrame(), ApiCallerSource::kJavaScript,
+      /*get_topics=*/true,
+      /*observe=*/true, result));
+
+  EXPECT_EQ(result.size(), 3u);
+  EXPECT_EQ(result[0]->topic, 7);
+  EXPECT_EQ(result[0]->version, "chrome.1:1:2");
+  EXPECT_EQ(result[1]->topic, 2);
+  EXPECT_EQ(result[1]->version, "chrome.1:1:3");
+  EXPECT_EQ(result[2]->topic, 7);
+  EXPECT_EQ(result[2]->version, "chrome.1:1:4");
+}
+
+TEST_F(BrowsingTopicsServiceImplTest, NumVersionsInEpochs_OneVerison) {
+  base::queue<EpochTopics> mock_calculator_results;
+
+  mock_calculator_results.push(CreateTestEpochTopics({{Topic(6), {}},
+                                                      {Topic(7), {}},
+                                                      {Topic(8), {}},
+                                                      {Topic(9), {}},
+                                                      {Topic(10), {}}},
+                                                     kTime1));
+  mock_calculator_results.push(CreateTestEpochTopics({{Topic(6), {}},
+                                                      {Topic(7), {}},
+                                                      {Topic(8), {}},
+                                                      {Topic(9), {}},
+                                                      {Topic(10), {}}},
+                                                     kTime1));
+  mock_calculator_results.push(CreateTestEpochTopics({{Topic(6), {}},
+                                                      {Topic(7), {}},
+                                                      {Topic(8), {}},
+                                                      {Topic(9), {}},
+                                                      {Topic(10), {}}},
+                                                     kTime1));
+  mock_calculator_results.push(CreateTestEpochTopics({{Topic(6), {}},
+                                                      {Topic(7), {}},
+                                                      {Topic(8), {}},
+                                                      {Topic(9), {}},
+                                                      {Topic(10), {}}},
+                                                     kTime1));
+
+  InitializeBrowsingTopicsService(std::move(mock_calculator_results));
+
+  // Finish all calculations.
+  task_environment()->FastForwardBy(4 * kCalculatorDelay + 3 * kEpoch);
+
+  EXPECT_EQ(browsing_topics_state().epochs().size(), 4u);
+
+  NavigateToPage(GURL("https://www.foo.com"));
+
+  EXPECT_EQ(
+      browsing_topics_service_->NumVersionsInEpochs(
+          web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin()),
+      1);
+}
+
+TEST_F(BrowsingTopicsServiceImplTest,
+       NumVersionsInEpochs_ThreeVerisons_ClearedTopics) {
+  base::queue<EpochTopics> mock_calculator_results;
+
+  EpochTopics epoch_version1 =
+      CreateTestEpochTopics({{Topic(6), {}},
+                             {Topic(7), {}},
+                             {Topic(8), {}},
+                             {Topic(9), {}},
+                             {Topic(10), {}}},
+                            kTime1,
+                            /*padded_top_topics_start_index=*/5,
+                            /*model_version=*/1);
+  EpochTopics epoch_version2 =
+      CreateTestEpochTopics({{Topic(6), {}},
+                             {Topic(7), {}},
+                             {Topic(8), {}},
+                             {Topic(9), {}},
+                             {Topic(10), {}}},
+                            kTime1,
+                            /*padded_top_topics_start_index=*/5,
+                            /*model_version=*/2);
+  EpochTopics epoch_version3 =
+      CreateTestEpochTopics({{Topic(6), {}},
+                             {Topic(7), {}},
+                             {Topic(8), {}},
+                             {Topic(9), {}},
+                             {Topic(10), {}}},
+                            kTime1,
+                            /*padded_top_topics_start_index=*/5,
+                            /*model_version=*/3);
+  EpochTopics epoch_version4 =
+      CreateTestEpochTopics({{Topic(6), {}},
+                             {Topic(7), {}},
+                             {Topic(8), {}},
+                             {Topic(9), {}},
+                             {Topic(10), {}}},
+                            kTime1,
+                            /*padded_top_topics_start_index=*/5,
+                            /*model_version=*/4);
+
+  epoch_version1.ClearTopics();
+  epoch_version2.ClearTopics();
+  epoch_version3.ClearTopics();
+  epoch_version4.ClearTopics();
+
+  mock_calculator_results.push(std::move(epoch_version1));
+  mock_calculator_results.push(std::move(epoch_version2));
+  mock_calculator_results.push(std::move(epoch_version3));
+  mock_calculator_results.push(std::move(epoch_version4));
+
+  InitializeBrowsingTopicsService(std::move(mock_calculator_results));
+
+  // Finish all calculations.
+  task_environment()->FastForwardBy(4 * kCalculatorDelay + 3 * kEpoch);
+
+  EXPECT_EQ(browsing_topics_state().epochs().size(), 4u);
+
+  NavigateToPage(GURL("https://www.foo.com"));
+
+  EXPECT_EQ(
+      browsing_topics_service_->NumVersionsInEpochs(
+          web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin()),
+      3);
+}
+
 TEST_F(BrowsingTopicsServiceImplTest, HandleTopicsWebApi_TrackedUsageContext) {
   base::queue<EpochTopics> mock_calculator_results;
   mock_calculator_results.push(
@@ -1907,7 +2065,8 @@ TEST_F(BrowsingTopicsServiceImplTest, BlockTopicWithFinch) {
   scoped_feature_list_.Reset();
   scoped_feature_list_.InitWithFeaturesAndParameters(
       /*enabled_features=*/
-      {{blink::features::kBrowsingTopics,
+      {{blink::features::kBrowsingTopics, {}},
+       {blink::features::kBrowsingTopicsParameters,
         {{"time_period_per_epoch",
           base::StrCat({base::NumberToString(kEpoch.InSeconds()), "s"})},
          {"browsing_topics_max_epoch_introduction_delay",

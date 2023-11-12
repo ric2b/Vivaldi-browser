@@ -22,6 +22,8 @@
                          bool* proceed_to_fire_unload) override;
   // From WebContentsObserver, avoid compile error on the above override.
   void BeforeUnloadFired(bool proceed) override {}
+  void SetContentsBounds(content::WebContents* source,
+                         const gfx::Rect& bounds) override;
 
   // Vivaldi customs below
   bool IsVivaldiMail();
@@ -170,6 +172,8 @@
 
  private:
   int inspecting_tab_id_ = 0;
+  // Used for SetContentsBounds while being unattached.
+  std::unique_ptr<gfx::Rect> last_set_bounds_;
 
 #endif  // Extensions
 

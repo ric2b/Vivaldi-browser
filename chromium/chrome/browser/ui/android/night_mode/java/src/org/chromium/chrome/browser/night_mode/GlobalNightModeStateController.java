@@ -16,6 +16,10 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ObserverList;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
+// Vivaldi
+import android.os.Build;
+import org.chromium.build.BuildConfig;
+
 /**
  * Maintains and provides the night mode state for the entire application.
  */
@@ -128,9 +132,13 @@ class GlobalNightModeStateController implements NightModeStateProvider,
     private void updateNightMode() {
         boolean powerSaveModeOn = mPowerSaveModeMonitor.powerSavingIsOn();
         final int theme = NightModeUtils.getThemeSetting();
-        final boolean newNightModeOn = theme == ThemeType.SYSTEM_DEFAULT
+        boolean newNightModeOn = theme == ThemeType.SYSTEM_DEFAULT
                         && (powerSaveModeOn || mSystemNightModeMonitor.isSystemNightModeOn())
                 || theme == ThemeType.DARK;
+        // Vivaldi
+        if (BuildConfig.IS_OEM_LYNKCO_BUILD && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            newNightModeOn = mSystemNightModeMonitor.isSystemNightModeOn();
+        }
         if (mNightModeOn != null && newNightModeOn == mNightModeOn) return;
 
         mNightModeOn = newNightModeOn;

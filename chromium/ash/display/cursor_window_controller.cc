@@ -8,7 +8,6 @@
 #include "ash/capture_mode/capture_mode_camera_controller.h"
 #include "ash/capture_mode/capture_mode_controller.h"
 #include "ash/capture_mode/capture_mode_session.h"
-#include "ash/color_enhancement/color_enhancement_controller.h"
 #include "ash/constants/ash_constants.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -27,6 +26,7 @@
 #include "ui/aura/window_delegate.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/resource/resource_scale_factor.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
@@ -135,7 +135,7 @@ class CursorWindowDelegate : public aura::WindowDelegate {
   void OnBoundsChanged(const gfx::Rect& old_bounds,
                        const gfx::Rect& new_bounds) override {}
   gfx::NativeCursor GetCursor(const gfx::Point& point) override {
-    return gfx::kNullCursor;
+    return gfx::NativeCursor{};
   }
   int GetNonClientComponent(const gfx::Point& point) const override {
     return HTNOWHERE;
@@ -295,11 +295,6 @@ bool CursorWindowController::ShouldEnableCursorCompositing() {
                               displays_ctm_support);
     if (displays_ctm_support != DisplayColorManager::DisplayCtmSupport::kAll)
       return true;
-  }
-
-  if (shell->color_enhancement_controller()
-          ->ShouldEnableCursorCompositingForSepia()) {
-    return true;
   }
 
   return prefs->GetBoolean(prefs::kAccessibilityLargeCursorEnabled) ||
@@ -476,8 +471,9 @@ void CursorWindowController::UpdateCursorImage() {
     // by compositor. HW cursor will not be scaled by display zoom, so the
     // physical size will be inconsistent.
     int resource_id;
-    cursor_scale =
-        gfx::ImageSkia::MapToResourceScale(display_.device_scale_factor());
+    cursor_scale = ui::GetScaleForResourceScaleFactor(
+        ui::GetSupportedResourceScaleFactorForRescale(
+            display_.device_scale_factor()));
     if (!wm::GetCursorDataFor(cursor_size_, cursor_.type(), cursor_scale,
                               &resource_id, &hot_point_in_physical_pixels)) {
       return;

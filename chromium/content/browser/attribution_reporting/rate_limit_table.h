@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_ATTRIBUTION_REPORTING_RATE_LIMIT_TABLE_H_
 #define CONTENT_BROWSER_ATTRIBUTION_REPORTING_RATE_LIMIT_TABLE_H_
 
+#include <set>
 #include <vector>
 
 #include "base/containers/flat_set.h"
@@ -79,11 +80,18 @@ class CONTENT_EXPORT RateLimitTable {
 
   [[nodiscard]] RateLimitResult SourceAllowedForReportingOriginLimit(
       sql::Database* db,
-      const StorableSource& source);
+      const StorableSource& source,
+      base::Time source_time);
+
+  [[nodiscard]] RateLimitResult SourceAllowedForReportingOriginPerSiteLimit(
+      sql::Database* db,
+      const StorableSource& source,
+      base::Time source_time);
 
   [[nodiscard]] RateLimitResult SourceAllowedForDestinationLimit(
       sql::Database* db,
-      const StorableSource& source);
+      const StorableSource& source,
+      base::Time source_time);
 
   [[nodiscard]] RateLimitResult AttributionAllowedForReportingOriginLimit(
       sql::Database* db,
@@ -109,9 +117,8 @@ class CONTENT_EXPORT RateLimitTable {
       sql::Database* db,
       const std::vector<StoredSource::Id>& source_ids);
 
-  void AppendRateLimitDataKeys(
-      sql::Database* db,
-      std::vector<AttributionDataModel::DataKey>& keys);
+  void AppendRateLimitDataKeys(sql::Database* db,
+                               std::set<AttributionDataModel::DataKey>& keys);
 
  private:
   [[nodiscard]] bool AddRateLimit(

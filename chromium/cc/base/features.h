@@ -6,6 +6,7 @@
 #define CC_BASE_FEATURES_H_
 
 #include "base/feature_list.h"
+#include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
 #include "cc/base/base_export.h"
 
@@ -14,12 +15,6 @@ namespace features {
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kAnimatedImageResume);
 CC_BASE_EXPORT extern bool IsImpulseScrollAnimationEnabled();
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSynchronizedScrolling);
-
-// Elastic overscroll on Android can change scale causing a lot of raster.
-// This is wasteful and visually unnecessary since it's a short animation
-// that resets the scale at the end. When enabled, this aovids recomputing
-// raster scale during elastic overscroll.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kAvoidRasterDuringElasticOverscroll);
 
 // When enabled, the double tap to zoom will be disabled when the viewport
 // meta tag is properly set for mobile using content=width=device-width
@@ -38,9 +33,6 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kScrollUnification);
 // unified scroll with main-thread repaint reasons.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMainRepaintScrollPrefersNewContent);
 
-// Flush pending GPU raster work before running the LTHI::DrawLayers stage.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kFlushGpuAtDraw);
-
 // When enabled, wheel scrolls trigger smoothness mode. When disabled,
 // smoothness mode is limited to non-animated (precision) scrolls, such as
 // touch scrolling.
@@ -49,9 +41,6 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSchedulerSmoothnessForAnimatedScrolls);
 // When enabled, cc will show blink's Web-Vital metrics inside its heads up
 // display.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kHudDisplayForPerformanceMetrics);
-
-// When enabled, some jank is injected to the animation/scrolling pipeline.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kJankInjectionAblationFeature);
 
 // When enabled, scheduler tree priority will change to
 // NEW_CONTENT_TAKES_PRIORITY if during a scrollbar scroll, CC has to
@@ -70,6 +59,12 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(
 // that main thread cc data structures are not modified on the main thread while
 // commit is running concurrently on the impl thread.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kNonBlockingCommit);
+
+// When enabled, LayerTreeImpl will not preserve the last mutation. This map
+// of the last mutated value should not be necessary as animations are always
+// ticked after the commit which should restore their animated values. Removing
+// this should improve performance and reduce technical complexity.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kNoPreserveLastMutation);
 
 // When enabled, DroppedFrameCounter will use an adjusted sliding window
 // interval specified by field trial params.
@@ -102,6 +97,10 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUIEnableSharedImageCacheForGpu);
 // flush to actually reclaim resources.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReclaimResourcesFlushInBackground);
 
+// When LayerTreeHostImpl::ReclaimResources() is called in background, trigger a
+// additional delayed flush to reclaim resources.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReclaimResourcesDelayedFlushInBackground);
+
 // Try to play a longer list of ops before giving up in solid color analysis for
 // tiles.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMoreAggressiveSolidColorDetection);
@@ -109,6 +108,15 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMoreAggressiveSolidColorDetection);
 // Allow CC FrameRateEstimater to reduce the frame rate to half of the default
 // if the condition meets the requirement.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReducedFrameRateEstimation);
+
+// Use 4x MSAA (vs 8) on High DPI screens.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kDetectHiDpiForMsaa);
+
+// Feature to reduce the area in which invisible tiles are kept around.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSmallerInterestArea);
+
+constexpr static int kDefaultInterestAreaSizeInPixels = 3000;
+CC_BASE_EXPORT extern const base::FeatureParam<int> kInterestAreaSizeInPixels;
 
 }  // namespace features
 

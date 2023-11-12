@@ -6683,9 +6683,9 @@ class CompositedSelectionBoundsTest
     ASSERT_NE(selection.start, cc::LayerSelectionBound());
     ASSERT_NE(selection.end, cc::LayerSelectionBound());
 
-    blink::Node* layer_owner_node_for_start = V8Node::ToImplWithTypeCheck(
-        web_view_helper_.GetAgentGroupScheduler().Isolate(),
-        expected_result.Get(context, 0).ToLocalChecked());
+    blink::Node* layer_owner_node_for_start =
+        V8Node::ToWrappable(web_view_helper_.GetAgentGroupScheduler().Isolate(),
+                            expected_result.Get(context, 0).ToLocalChecked());
     // Hidden selection does not always have a layer (might be hidden due to not
     // having been painted.
     ASSERT_TRUE(layer_owner_node_for_start || selection.start.hidden);
@@ -6712,9 +6712,9 @@ class CompositedSelectionBoundsTest
     EXPECT_NEAR(start_edge_start_in_layer_y, selection.start.edge_start.y(), 1);
     EXPECT_NEAR(start_edge_end_in_layer_x, selection.start.edge_end.x(), 1);
 
-    blink::Node* layer_owner_node_for_end = V8Node::ToImplWithTypeCheck(
-        web_view_helper_.GetAgentGroupScheduler().Isolate(),
-        expected_result.Get(context, 5).ToLocalChecked());
+    blink::Node* layer_owner_node_for_end =
+        V8Node::ToWrappable(web_view_helper_.GetAgentGroupScheduler().Isolate(),
+                            expected_result.Get(context, 5).ToLocalChecked());
     // Hidden selection does not always have a layer (might be hidden due to not
     // having been painted.
     ASSERT_TRUE(layer_owner_node_for_end || selection.end.hidden);
@@ -13394,7 +13394,7 @@ TEST_F(WebFrameTest, ContextMenuDataSelectAll) {
   EXPECT_TRUE(TestSelectAll("<input value='nonempty'>"));
   EXPECT_FALSE(TestSelectAll("<div contenteditable></div>"));
   EXPECT_TRUE(TestSelectAll("<div contenteditable>nonempty</div>"));
-  EXPECT_TRUE(TestSelectAll("<div contenteditable>\n</div>"));
+  EXPECT_FALSE(TestSelectAll("<div contenteditable>\n</div>"));
 }
 
 TEST_F(WebFrameTest, ContextMenuDataSelectedText) {
@@ -13532,61 +13532,6 @@ TEST_F(WebFrameTest, AltTextOnAboutBlankPage) {
     }
   }
   EXPECT_EQ("foo alt", text.Utf8());
-}
-
-TEST_F(WebFrameTest, RecordSameDocumentNavigationToHistogram) {
-  const char* histogramName =
-      "RendererScheduler.UpdateForSameDocumentNavigationCount";
-  frame_test_helpers::WebViewHelper web_view_helper;
-  HistogramTester tester;
-  web_view_helper.InitializeAndLoad("about:blank");
-  auto* frame =
-      To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
-
-  DocumentLoader& document_loader = *web_view_helper.GetWebView()
-                                         ->MainFrameImpl()
-                                         ->GetFrame()
-                                         ->GetDocument()
-                                         ->Loader();
-  scoped_refptr<SerializedScriptValue> message =
-      SerializeString("message", ToScriptStateForMainWorld(frame));
-  tester.ExpectTotalCount(histogramName, 0);
-  document_loader.UpdateForSameDocumentNavigation(
-      ToKURL("about:blank"), nullptr,
-      mojom::blink::SameDocumentNavigationType::kHistoryApi, message,
-      WebFrameLoadType::kReplaceCurrentItem,
-      frame->DomWindow()->GetSecurityOrigin(),
-      /*is_browser_initiated=*/false,
-      /*is_synchronously_committed=*/true,
-      /*soft_navigation_heuristics_task_id=*/absl::nullopt);
-  // The bucket index corresponds to the definition of
-  // |SinglePageAppNavigationType|.
-  tester.ExpectBucketCount(histogramName,
-                           kSPANavTypeHistoryPushStateOrReplaceState, 1);
-  document_loader.UpdateForSameDocumentNavigation(
-      ToKURL("about:blank"), MakeGarbageCollected<HistoryItem>(),
-      mojom::blink::SameDocumentNavigationType::kFragment, message,
-      WebFrameLoadType::kBackForward, frame->DomWindow()->GetSecurityOrigin(),
-      /*is_browser_initiated=*/false,
-      /*is_synchronously_committed=*/true,
-      /*soft_navigation_heuristics_task_id=*/absl::nullopt);
-  tester.ExpectBucketCount(histogramName,
-                           kSPANavTypeSameDocumentBackwardOrForward, 1);
-  document_loader.UpdateForSameDocumentNavigation(
-      ToKURL("about:blank"), nullptr,
-      mojom::blink::SameDocumentNavigationType::kFragment, message,
-      WebFrameLoadType::kReplaceCurrentItem,
-      frame->DomWindow()->GetSecurityOrigin(),
-      /*is_browser_initiated=*/false,
-      /*is_synchronously_committed=*/true,
-      /*soft_navigation_heuristics_task_id=*/absl::nullopt);
-  tester.ExpectBucketCount(histogramName, kSPANavTypeOtherFragmentNavigation,
-                           1);
-  // mojom::blink::SameDocumentNavigationType::kHistoryApi and
-  // WebFrameLoadType::kBackForward is an illegal combination, which has been
-  // caught by DCHECK in UpdateForSameDocumentNavigation().
-
-  tester.ExpectTotalCount(histogramName, 3);
 }
 
 static void TestFramePrinting(WebLocalFrameImpl* frame) {

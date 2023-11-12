@@ -22,13 +22,13 @@ const std::u16string TitledUrlNode::GetTitledUrlNodeDescription() const {
 
 // BookmarkNode ---------------------------------------------------------------
 
-// Below predefined GUIDs for permanent bookmark folders, determined via named
-// GUIDs/UUIDs. Do NOT modify them as they may be exposed via Sync. For
+// Below predefined UUIDs for permanent bookmark folders, determined via named
+// UUIDs. Do NOT modify them as they may be exposed via Sync. For
 // reference, here's the python script to produce them:
 // > import uuid
 // > vivaldi_namespace = uuid.uuid5(uuid.NAMESPACE_DNS, "vivaldi.com")
 // > bookmarks_namespace = uuid.uuid5(vivaldi_namespace, "bookmarks")
-// > trash_guid = uuid.uuid5(bookmarks_namespace, "trash")
+// > trash_uuid = uuid.uuid5(bookmarks_namespace, "trash")
 const char BookmarkNode::kVivaldiTrashNodeUuid[] =
     "9f32a0fb-bfd9-5032-be46-07afe4a25400";
 
@@ -46,7 +46,7 @@ std::unique_ptr<BookmarkPermanentNode> BookmarkPermanentNode::CreateTrashFolder(
     bool visible_when_empty) {
   // base::WrapUnique() used because the constructor is private.
   return base::WrapUnique(new BookmarkPermanentNode(
-      id, TRASH, base::GUID::ParseLowercase(kVivaldiTrashNodeUuid),
+      id, TRASH, base::Uuid::ParseLowercase(kVivaldiTrashNodeUuid),
       l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_TRASH_FOLDER_NAME),
       visible_when_empty));
 }

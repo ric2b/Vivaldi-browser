@@ -478,7 +478,8 @@ void TypedURLSyncBridge::OnURLsDeleted(HistoryBackend* history_backend,
   }
 }
 
-void TypedURLSyncBridge::OnVisitUpdated(const VisitRow& visit) {}
+void TypedURLSyncBridge::OnVisitUpdated(const VisitRow& visit,
+                                        VisitUpdateReason reason) {}
 
 void TypedURLSyncBridge::OnVisitDeleted(const VisitRow& visit) {}
 
@@ -1055,7 +1056,8 @@ absl::optional<syncer::ModelError> TypedURLSyncBridge::WriteToHistoryBackend(
   }
 
   if (deleted_visits) {
-    if (!history_backend_->RemoveVisits(*deleted_visits)) {
+    if (!history_backend_->RemoveVisits(*deleted_visits,
+                                        DeletionInfo::Reason::kOther)) {
       return syncer::ModelError(FROM_HERE,
                                 "Could not remove visits from HistoryBackend.");
       // This is bad news, since it means we may end up resurrecting history

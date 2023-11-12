@@ -60,6 +60,8 @@ class CORE_EXPORT InputMethodController final
     kKeepSelection,
   };
 
+  enum class MoveCaretBehavior { kDoNotMove, kMoveCaretAfterText };
+
   explicit InputMethodController(LocalDOMWindow&, LocalFrame&);
   InputMethodController(const InputMethodController&) = delete;
   InputMethodController& operator=(const InputMethodController&) = delete;
@@ -89,8 +91,11 @@ class CORE_EXPORT InputMethodController final
                   const Vector<ImeTextSpan>& ime_text_spans,
                   int relative_caret_position);
 
-  // Replaces the text in the specified range without changing the selection.
-  bool ReplaceText(const String&, PlainTextRange);
+  // Replaces the text in the specified range and possibly changes the selection
+  // or the caret position.
+  bool ReplaceTextAndMoveCaret(const String&,
+                               PlainTextRange,
+                               MoveCaretBehavior);
 
   // Inserts ongoing composing text; changes the selection to the end of
   // the inserting text if DoNotKeepSelection, or holds the selection if
@@ -108,6 +113,9 @@ class CORE_EXPORT InputMethodController final
   // Returns true if setting selection to specified offsets, otherwise false.
   bool SetEditableSelectionOffsets(const PlainTextRange&);
   void ExtendSelectionAndDelete(int before, int after);
+  void ExtendSelectionAndReplace(int before,
+                                 int after,
+                                 const String& replacement_text);
   PlainTextRange CreateRangeForSelection(int start,
                                          int end,
                                          size_t text_length) const;

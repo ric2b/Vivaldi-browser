@@ -329,6 +329,9 @@ class CORE_EXPORT WebFrameWidgetImpl
   // AnimationFrameTimingMonitor::Client overrides
   void ReportLongAnimationFrameTiming(AnimationFrameTimingInfo* info) override;
   bool ShouldReportLongAnimationFrameTiming() const override;
+  void ReportLongTaskTiming(base::TimeTicks start_time,
+                            base::TimeTicks end,
+                            ExecutionContext* task_context) override;
   bool RequestedMainFramePending() override;
   ukm::UkmRecorder* MainFrameUkmRecorder() override;
   ukm::SourceId MainFrameUkmSourceId() override;
@@ -803,6 +806,9 @@ class CORE_EXPORT WebFrameWidgetImpl
       int32_t end,
       const Vector<ui::ImeTextSpan>& ime_text_spans) override;
   void ExtendSelectionAndDelete(int32_t before, int32_t after) override;
+  void ExtendSelectionAndReplace(uint32_t before,
+                                 uint32_t after,
+                                 const String& replacement_text) override;
   void DeleteSurroundingText(int32_t before, int32_t after) override;
   void DeleteSurroundingTextInCodePoints(int32_t before,
                                          int32_t after) override;
@@ -943,6 +949,9 @@ class CORE_EXPORT WebFrameWidgetImpl
       const VisualProperties& visual_properties) const;
 
   void NotifyZoomLevelChanged(LocalFrame* root);
+
+  // Satisfy the render blocking condition for cross-document view transitions.
+  void NotifyViewTransitionRenderingHasBegun();
 
   // A copy of the web drop data object we received from the browser.
   Member<DataObject> current_drag_data_;

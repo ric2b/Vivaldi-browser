@@ -195,10 +195,6 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
     // Wayland only: determine whether toplevel surfaces can be activated and
     // deactivated.
     bool supports_activation = false;
-
-    // Wayland only: determines whether tooltip can be delegated via wayland
-    // protocol.
-    bool supports_tooltip = false;
   };
 
   // Corresponds to chrome_browser_main_extra_parts.h.
@@ -342,6 +338,8 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
   // ensure that calls happen on the right thread.
   virtual std::unique_ptr<PlatformUserInputMonitor> GetPlatformUserInputMonitor(
       const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner);
+
+  virtual void DumpState(std::ostream& out) const {}
 
  protected:
   bool has_initialized_ui() const { return initialized_ui_; }

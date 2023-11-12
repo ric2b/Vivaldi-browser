@@ -5,7 +5,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_item.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_item.h"
 
 @interface NSFileManager(Vivaldi)
 

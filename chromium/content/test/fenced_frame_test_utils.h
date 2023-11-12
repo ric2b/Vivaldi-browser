@@ -18,10 +18,8 @@ class RenderFrameHost;
 class MappingResultObserver;
 
 // `node` is expected to be the child FrameTreeNode created in response to a
-// <fencedframe> element being created. This method:
-//    - Returns `node` if we're in the ShadowDOM version
-//    - Returns the FrameTreeNode of the fenced frame's inner FrameTree, if
-//    we're in the MPArch version of fenced frames
+// <fencedframe> element being created. This method returns the FrameTreeNode of
+// the fenced frame's inner FrameTree.
 FrameTreeNode* GetFencedFrameRootNode(FrameTreeNode* node);
 
 void SimulateSharedStorageURNMappingComplete(
@@ -115,15 +113,26 @@ class FencedFrameURLMappingTestPeer {
   // Insert urn mappings until it reaches the limit.
   void FillMap(const GURL& url);
 
+  // TODO(crbug.com/1422301): This method allows setting of an arbitrary id of
+  // the fenced frame mapping. It is used to test that the auction fails if
+  // there is a mismatch between the fenced frame mapping used at the beginning
+  // of the auction and at the end of the auction. Once the root cause is known
+  // and the issue fixed, remove `SetId()` and `GetNextId()`.
+  void SetId(FencedFrameURLMapping::Id id);
+
+  FencedFrameURLMapping::Id GetNextId() const;
+
  private:
   raw_ptr<FencedFrameURLMapping> fenced_frame_url_mapping_;
 };
 
 // TODO(xiaochenzh): Once fenced frame size freezing has no time gap, remove
 // this.
-// This function is needed because the freezing only takes effect after layout
-// has happened.
-bool WaitForFencedFrameSizeFreeze(RenderFrameHost* rfh);
+// This function keeps polling the evaluation result of the given script until
+// it returns true or times out.
+// Currently this is only used to check the fenced frame size freezing behavior.
+// The size freezing only takes effect after layout has happened.
+bool PollUntilEvalToTrue(const std::string& script, RenderFrameHost* rfh);
 
 }  // namespace content
 

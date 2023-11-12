@@ -176,6 +176,8 @@ bool NetworkState::PropertyChanged(const std::string& key,
     return GetIntegerValue(key, value, &priority_);
   } else if (key == shill::kWifiHiddenSsid) {
     return GetBooleanValue(key, value, &hidden_ssid_);
+  } else if (key == shill::kPasspointIDProperty) {
+    return GetStringValue(key, value, &passpoint_id_);
   } else if (key == shill::kOutOfCreditsProperty) {
     return GetBooleanValue(key, value, &cellular_out_of_credits_);
   } else if (key == shill::kIccidProperty) {
@@ -511,7 +513,8 @@ bool NetworkState::IsPrivate() const {
 }
 
 bool NetworkState::IsNonShillCellularNetwork() const {
-  return type() == shill::kTypeCellular && IsStubCellularServicePath(path());
+  return type() == shill::kTypeCellular &&
+         cellular_utils::IsStubCellularServicePath(path());
 }
 
 NetworkState::PortalState NetworkState::GetPortalState() const {
@@ -672,7 +675,7 @@ std::unique_ptr<NetworkState> NetworkState::CreateNonShillCellularNetwork(
     const std::string& guid,
     bool is_managed,
     const std::string& cellular_device_path) {
-  std::string path = GenerateStubCellularServicePath(iccid);
+  std::string path = cellular_utils::GenerateStubCellularServicePath(iccid);
   auto new_state = std::make_unique<NetworkState>(path);
   new_state->set_type(shill::kTypeCellular);
   new_state->set_update_received();

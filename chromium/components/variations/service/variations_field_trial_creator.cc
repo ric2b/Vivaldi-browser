@@ -23,6 +23,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/process/process.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -318,15 +319,15 @@ bool VariationsFieldTrialCreator::SetUpFieldTrials(
   platform_field_trials->SetUpClientSideFieldTrials(
       used_seed, *entropy_providers, feature_list.get());
 
+  platform_field_trials->RegisterFeatureOverrides(feature_list.get());
+
   base::FeatureList::SetInstance(std::move(feature_list));
 
   // For testing Variations Safe Mode, maybe crash here.
   if (base::FeatureList::IsEnabled(kForceFieldTrialSetupCrashForTesting)) {
-    // We log a recognizable token for the crash condition, to allow tests to
-    // recognize the crash location in the test output. See:
-    // VariationsSafeModeEndToEndBrowserTest.ExtendedSafeSeedEndToEnd
-    LOG(ERROR) << "crash_for_testing";
-    abort();
+    // Terminate with a custom exit test code. See
+    // VariationsSafeModeEndToEndBrowserTest.ExtendedSafeSeedEndToEnd.
+    base::Process::TerminateCurrentProcessImmediately(0x7E57C0D3);
   }
 
   // This must be called after |local_state_| is initialized.

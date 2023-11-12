@@ -137,13 +137,6 @@ crosapi::mojom::OpenUrlFrom BrowserParamsProxy::StartupUrlsFrom() const {
   return BrowserInitParams::Get()->startup_urls_from;
 }
 
-const absl::optional<std::vector<GURL>>& BrowserParamsProxy::StartupUrls()
-    const {
-  if (IsLaunchedWithPostLoginParams())
-    return BrowserPostLoginParams::Get()->startup_urls;
-  return BrowserInitParams::Get()->startup_urls;
-}
-
 const crosapi::mojom::DeviceSettingsPtr& BrowserParamsProxy::DeviceSettings()
     const {
   return BrowserInitParams::Get()->device_settings;
@@ -244,6 +237,13 @@ bool BrowserParamsProxy::IsCurrentUserDeviceOwner() const {
   return BrowserInitParams::Get()->is_current_user_device_owner;
 }
 
+bool BrowserParamsProxy::IsCurrentUserEphemeral() const {
+  if (IsLaunchedWithPostLoginParams()) {
+    return BrowserPostLoginParams::Get()->is_current_user_ephemeral;
+  }
+  return BrowserInitParams::Get()->is_current_user_ephemeral;
+}
+
 bool BrowserParamsProxy::DoNotMuxExtensionAppIds() const {
   return BrowserInitParams::Get()->do_not_mux_extension_app_ids;
 }
@@ -296,6 +296,14 @@ bool BrowserParamsProxy::OopVideoDecodingEnabled() const {
 
 bool BrowserParamsProxy::IsUploadOfficeToCloudEnabled() const {
   return BrowserInitParams::Get()->is_upload_office_to_cloud_enabled;
+}
+
+bool BrowserParamsProxy::EnableClipboardHistoryRefresh() const {
+  return BrowserInitParams::Get()->enable_clipboard_history_refresh;
+}
+
+bool BrowserParamsProxy::IsVariableRefreshRateEnabled() const {
+  return BrowserInitParams::Get()->is_variable_refresh_rate_enabled;
 }
 
 }  // namespace chromeos

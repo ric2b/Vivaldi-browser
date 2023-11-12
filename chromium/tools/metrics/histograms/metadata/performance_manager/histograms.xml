@@ -34,8 +34,18 @@ each histogram.
   </summary>
 </histogram>
 
+<histogram name="PerformanceManager.UserTuning.BatterySaverModeEnabledPercent"
+    units="%" expires_after="2023-10-28">
+  <owner>anthonyvd@chromium.org</owner>
+  <owner>chrome-catan@google.com</owner>
+  <summary>
+    Recorded every UMA upload, this histogram represents the percentage of the
+    interval since the last upload that was spent with Battery Saver enabled.
+  </summary>
+</histogram>
+
 <histogram name="PerformanceManager.UserTuning.EfficiencyMode"
-    enum="EfficiencyMode" expires_after="2023-09-10">
+    enum="EfficiencyMode" expires_after="2023-11-12">
   <owner>anthonyvd@chromium.org</owner>
   <owner>chrome-catan@google.com</owner>
   <summary>
@@ -48,9 +58,19 @@ each histogram.
   </summary>
 </histogram>
 
+<histogram name="PerformanceManager.UserTuning.MemorySaverModeEnabledPercent"
+    units="%" expires_after="2023-10-28">
+  <owner>anthonyvd@chromium.org</owner>
+  <owner>chrome-catan@google.com</owner>
+  <summary>
+    Recorded every UMA upload, this histogram represents the percentage of the
+    interval since the last upload that was spent with Memory Saver enabled.
+  </summary>
+</histogram>
+
 <histogram
     name="PerformanceManager.V8DetailedMemory.{Destination}.MeasurementMode"
-    enum="V8DetailedMemoryMeasurementMode" expires_after="2023-05-23">
+    enum="V8DetailedMemoryMeasurementMode" expires_after="2023-08-23">
   <owner>joenotcharles@google.com</owner>
   <owner>chrome-catan@google.com</owner>
   <summary>

@@ -6,12 +6,15 @@
 <translation id="1352919863522755794">Google Password Manager couldn't check your passwords. Try checking your Internet connection.</translation>
 <translation id="1462727070346936664">Sign in to get the most out of Chrome.</translation>
 <translation id="1479202195792305274">Chrome can check your passwords when you sign in with your Google Account.</translation>
+<translation id="1491435845014430217">Turn on 'Lock Incognito tabs when you close Chrome'.</translation>
 <translation id="1493827051843127077">Set Chrome as default to sync your tabs, passwords and payment info on all your devices</translation>
 <translation id="1504372625950710826">Chrome couldn't check for updates. Try checking your Internet connection.</translation>
 <translation id="1511320244449497906">You are signed in and syncing your data with an account managed by <ph name="DOMAIN" /> where its administrator can now set user policies specific to that account that can change the behaviour of Chrome.</translation>
 <translation id="1554731936187952550">You have Chrome's strongest security against harmful websites</translation>
 <translation id="1682483655351012182">Sync your Chrome data</translation>
+<translation id="1733654336159102143">Lock your Incognito when you leave Chrome or switch to a different app.</translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1843217788865538014">Automatically use Chrome when you tap links in messages, documents and other apps.</translation>
 <translation id="1917964099031477364">This account and any unsaved data will be removed from Chrome and other Google apps on this device.</translation>
 <translation id="2009224836393115614">Chrome couldn't check your passwords. Try checking your Internet connection.</translation>
 <translation id="2056123005618757196">Get more done with a simple, secure and faster-than-ever Google Chrome.</translation>
@@ -34,6 +37,7 @@
 <translation id="2732745070297234559">Chrome couldn't check all passwords. Try again tomorrow.</translation>
 <translation id="2736805085127235148">Chrome notifications are currently turned off in your device settings.</translation>
 <translation id="2767464022270041271">No saved passwords. Google Password Manager can check your passwords when you save them.</translation>
+<translation id="2840432500933227975">Open Chrome Settings in iOS, then tap on 'Browser Default APP' and select Chrome.</translation>
 <translation id="2869959624320573933">Sign In to Chrome</translation>
 <translation id="2957447865124070833">Select <ph name="BEGIN_BOLD" />Chrome<ph name="END_BOLD" /></translation>
 <translation id="3030414234702425231">Because you're signing out of an account managed by <ph name="SIGNOUT_MANAGED_DOMAIN" />, your Chrome data will be deleted from this device. Your data will remain in your Google Account.</translation>
@@ -46,9 +50,10 @@
 <translation id="3503014945441706099">Get Enhanced Safe Browsing for this Chrome profile, too</translation>
 <translation id="3522659714780527202">To see your tabs from wherever you use Chrome, turn on sync</translation>
 <translation id="3533694711092285624">No saved passwords. Chrome can check your passwords when you save them.</translation>
+<translation id="3594076341410558780">Hide 'Get the most out of Chrome'</translation>
 <translation id="3655656110921623717">This means that Chrome will request the mobile site every time.</translation>
-<translation id="3706101708757577809">You can now use Chrome any time that you tap links in messages, documents and other apps.</translation>
 <translation id="3720541637541300822">Lock incognito tabs when you close Chrome</translation>
+<translation id="3827545470516145620">You're getting standard security protection on this device</translation>
 <translation id="384394811301901750">Google Chrome can't use your camera at the moment.</translation>
 <translation id="3980220367029651214">You are switching sync accounts from <ph name="USER_EMAIL1" /> to <ph name="USER_EMAIL2" />. Your existing Chrome data is managed by <ph name="DOMAIN" />. This will delete your data from this device, but your data will remain in <ph name="USER_EMAIL1" />.</translation>
 <translation id="3984746313391923992">Your organisation requires you to stay signed out of Chrome.</translation>
@@ -58,13 +63,16 @@
 <translation id="4233521129555661685"><ph name="USER_EMAIL1" /> was using Chrome and left bookmarks, passwords and other settings on this device.</translation>
 <translation id="424864128008805179">Sign out of Chrome?</translation>
 <translation id="4249068189593983585">Chrome tip. For more tab options, touch and hold the Show Tabs button in the toolbar, which is at the bottom or top of your screen.</translation>
+<translation id="4508370294876102450">Open Chrome from any app</translation>
 <translation id="4523886039239821078">Some add-ons cause Chrome to crash. Please uninstall:</translation>
 <translation id="4633328489441962921">Chrome can't check for updates</translation>
 <translation id="4636900170638246267">Sign in to this site and Chrome.</translation>
 <translation id="4698415050768537821">Chrome couldn't check all passwords. Try again tomorrow or <ph name="BEGIN_LINK" />check passwords in your Google Account.<ph name="END_LINK" /></translation>
 <translation id="4819268619367838612">To help improve the app, Chrome sends usage and crash data to Google. <ph name="BEGIN_LINK" />Manage<ph name="END_LINK" /></translation>
+<translation id="4830799082179398588">Make Chrome your default browser?</translation>
 <translation id="484033449593719797">Not supported on Chrome beta</translation>
 <translation id="4840404732697892756">Google Password Manager can check your passwords when you sign in with your Google Account.</translation>
+<translation id="4903674399067644695">This card shows you suggestions on how to get the most out of Chrome.</translation>
 <translation id="5030102366287574140">Chrome can help keep you safe from data breaches, unsafe websites and more.</translation>
 <translation id="5108659628347594808">Make Chrome Better</translation>
 <translation id="5119391094379141756">Select Chrome</translation>
@@ -73,6 +81,7 @@
 <translation id="5395376160638294582">Make sure that you can always use the Chrome data in your Google Account</translation>
 <translation id="5460571915754665838">4. Select Chrome</translation>
 <translation id="5492504007368565877">Google Password Manager can’t check your passwords.</translation>
+<translation id="5527026824954593399">Tap 'View with Google Maps on Chrome'</translation>
 <translation id="5552137475244467770">Chrome periodically checks your passwords against lists that have been published online. When doing this, your passwords and usernames are encrypted, so they can’t be read by anyone, including Google.</translation>
 <translation id="5639704535586432836">Open Settings &gt; Privacy &gt; Camera &gt; Google Chrome and turn on the camera.</translation>
 <translation id="5642200033778930880">Google Chrome can't use your camera in Split View mode</translation>
@@ -87,6 +96,7 @@
 <translation id="6110625574506755980">Some Chrome features won’t be available anymore.</translation>
 <translation id="6181930887571472871">Switch to Chrome</translation>
 <translation id="6238746320622508509">Let Chrome lock your incognito tabs.</translation>
+<translation id="6247557882553405851">Google Password Manager</translation>
 <translation id="6412673304250309937">Checks URLs with a list of unsafe sites stored in Chrome. If a site tries to steal your password, or when you download a harmful file, Chrome may also send URLs, including bits of page content, to Safe Browsing.</translation>
 <translation id="6427126399757991875">Your organisation is setting up Chrome…</translation>
 <translation id="6600954340915313787">Copied to Chrome</translation>
@@ -97,7 +107,6 @@
 <translation id="6822673484890854830">Chrome couldn't check all passwords. Try again later.</translation>
 <translation id="6964931465519938134">You can now use Chrome whenever you tap on links in messages, documents and other apps.</translation>
 <translation id="6975725306479268850">Choose Chrome for auto-fill</translation>
-<translation id="701356708427365932">Get to know the new Chrome menu</translation>
 <translation id="7059914902409643750">Make Chrome your own</translation>
 <translation id="7124339256045485976">Keep Chrome up to date</translation>
 <translation id="7161390184744336561">Google Chrome is out of date</translation>
@@ -108,10 +117,12 @@
 <translation id="7261678641327190792">Chrome can't check your passwords</translation>
 <translation id="7272930098487145294">To save images, tap on settings to let Chrome add to your photos</translation>
 <translation id="7275945473750112644">Your account is managed by <ph name="HOSTED_DOMAIN" />, so your Chrome data will be cleared from this device</translation>
+<translation id="7394108421562933108">Maps in Chrome</translation>
 <translation id="7400722733683201933">About Google Chrome</translation>
 <translation id="7501046334262221972">To make Chrome your default browser, open Settings. Tap 'Default browser app', and then select Chrome.</translation>
 <translation id="756809126120519699">Cleared Chrome data</translation>
 <translation id="7662994914830945754">To see your tabs from wherever you use Chrome, sign in and turn on sync</translation>
+<translation id="7669869107155339016">Go to Chrome settings</translation>
 <translation id="7693590760643069321">You can now use Chrome any time that you tap links in messages, documents and other apps.</translation>
 <translation id="7698568245838009292">Chrome would like to access the camera</translation>
 <translation id="7754633291442704733">Your organisation <ph name="DOMAIN" /> will have access to your Chrome data, bookmarks, history, passwords and other settings that you store in this account. When you sign out, your data will be cleared from this device.  However, your data will remain stored in your managed Google Account and be available to your organisation. Your organisation can also set user policies specific to that account that can change the behaviour of Chrome.</translation>
@@ -148,7 +159,6 @@ Things to consider:
   • If Chrome crashes, details about the crash may include some personal info.
 
   • If you turn on sync, metrics may also include info about URLs that you visit.<ph name="END_INDENT" /></translation>
-<translation id="9103442491611662960">You're getting standard security protection for this Chrome profile</translation>
 <translation id="9112744793181547300">Set Chrome as default?</translation>
 <translation id="9122931302567044771">This means that Chrome will request the desktop site every time.</translation>
 </translationbundle>

@@ -134,8 +134,7 @@ CSSValue* ConsumeFontFaceSrcURI(CSSParserTokenRange& range,
       range.Peek().GetType() != CSSParserTokenType::kCommaToken &&
       (range.Peek().GetType() != CSSParserTokenType::kFunctionToken ||
        (range.Peek().FunctionId() != CSSValueID::kFormat &&
-        (range.Peek().FunctionId() != CSSValueID::kTech ||
-         !RuntimeEnabledFeatures::CSSFontFaceSrcTechParsingEnabled())))) {
+        range.Peek().FunctionId() != CSSValueID::kTech))) {
     return nullptr;
   }
 
@@ -176,8 +175,7 @@ CSSValue* ConsumeFontFaceSrcURI(CSSParserTokenRange& range,
     }
   }
 
-  if (RuntimeEnabledFeatures::CSSFontFaceSrcTechParsingEnabled() &&
-      range.Peek().FunctionId() == CSSValueID::kTech) {
+  if (range.Peek().FunctionId() == CSSValueID::kTech) {
     CSSParserTokenRange tech_args = css_parsing_utils::ConsumeFunction(range);
 
     // One or more tech args expected.
@@ -295,7 +293,7 @@ CSSValue* ConsumeDescriptor(StyleRule::RuleType rule_type,
     case StyleRule::kSupports:
     case StyleRule::kPositionFallback:
     case StyleRule::kTry:
-    case StyleRule::kInitial:
+    case StyleRule::kStartingStyle:
       // TODO(andruud): Handle other descriptor types here.
       NOTREACHED();
       return nullptr;

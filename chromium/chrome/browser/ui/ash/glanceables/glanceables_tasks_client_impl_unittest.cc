@@ -9,14 +9,12 @@
 #include <string>
 #include <vector>
 
-#include "ash/constants/ash_features.h"
 #include "ash/glanceables/tasks/glanceables_tasks_types.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/test/bind.h"
 #include "base/test/repeating_test_future.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "content/public/test/browser_task_environment.h"
@@ -81,7 +79,8 @@ constexpr char kDefaultTasksResponseContent[] = R"(
         {
           "id": "asd",
           "title": "Parent task, level 1",
-          "status": "needsAction"
+          "status": "needsAction",
+          "due": "2023-04-19T00:00:00.000Z"
         },
         {
           "id": "qwe",
@@ -91,9 +90,9 @@ constexpr char kDefaultTasksResponseContent[] = R"(
         },
         {
           "id": "zxc",
-          "title": "Child task, level 3",
-          "parent": "qwe",
-          "status": "completed"
+          "title": "Parent task 2, level 1",
+          "status": "needsAction",
+          "links": [{"type": "email"}]
         }
       ]
     }
@@ -170,7 +169,6 @@ class GlanceablesTasksClientImplTest : public testing::Test {
   content::BrowserTaskEnvironment task_environment_{
       base::test::TaskEnvironment::MainThreadType::IO};
   net::EmbeddedTestServer test_server_;
-  base::test::ScopedFeatureList feature_list_{features::kGlanceablesV2};
   scoped_refptr<network::TestSharedURLLoaderFactory> url_loader_factory_ =
       base::MakeRefCounted<network::TestSharedURLLoaderFactory>(
           /*network_service=*/nullptr,
@@ -179,6 +177,9 @@ class GlanceablesTasksClientImplTest : public testing::Test {
   testing::StrictMock<TestRequestHandler> request_handler_;
   std::unique_ptr<GlanceablesTasksClientImpl> client_;
 };
+
+// ----------------------------------------------------------------------------
+// Get task lists:
 
 TEST_F(GlanceablesTasksClientImplTest, GetTaskLists) {
   EXPECT_CALL(request_handler(), HandleRequest(_))
@@ -276,6 +277,9 @@ TEST_F(GlanceablesTasksClientImplTest, GetTaskListsFetchesAllPages) {
   EXPECT_EQ(task_lists->GetItemAt(2)->id, "task-list-from-page-3");
 }
 
+// ----------------------------------------------------------------------------
+// Get tasks:
+
 TEST_F(GlanceablesTasksClientImplTest, GetTasks) {
   EXPECT_CALL(request_handler(), HandleRequest(_))
       .WillOnce(Return(ByMove(TestRequestHandler::CreateSuccessfulResponse(
@@ -286,22 +290,22 @@ TEST_F(GlanceablesTasksClientImplTest, GetTasks) {
   ASSERT_TRUE(future.Wait());
 
   const auto* const root_tasks = future.Get();
-  EXPECT_EQ(root_tasks->item_count(), 1u);
+  ASSERT_EQ(root_tasks->item_count(), 2u);
+
   EXPECT_EQ(root_tasks->GetItemAt(0)->id, "asd");
   EXPECT_EQ(root_tasks->GetItemAt(0)->title, "Parent task, level 1");
   EXPECT_EQ(root_tasks->GetItemAt(0)->completed, false);
+  EXPECT_EQ(FormatTimeAsString(root_tasks->GetItemAt(0)->due.value()),
+            "2023-04-19T00:00:00.000Z");
+  EXPECT_TRUE(root_tasks->GetItemAt(0)->has_subtasks);
+  EXPECT_FALSE(root_tasks->GetItemAt(0)->has_email_link);
 
-  const auto& subtasks_level_2 = root_tasks->GetItemAt(0)->subtasks;
-  EXPECT_EQ(subtasks_level_2.size(), 1u);
-  EXPECT_EQ(subtasks_level_2.at(0)->id, "qwe");
-  EXPECT_EQ(subtasks_level_2.at(0)->title, "Child task, level 2");
-  EXPECT_EQ(subtasks_level_2.at(0)->completed, false);
-
-  const auto& subtasks_level_3 = subtasks_level_2.at(0)->subtasks;
-  EXPECT_EQ(subtasks_level_3.size(), 1u);
-  EXPECT_EQ(subtasks_level_3.at(0)->id, "zxc");
-  EXPECT_EQ(subtasks_level_3.at(0)->title, "Child task, level 3");
-  EXPECT_EQ(subtasks_level_3.at(0)->completed, true);
+  EXPECT_EQ(root_tasks->GetItemAt(1)->id, "zxc");
+  EXPECT_EQ(root_tasks->GetItemAt(1)->title, "Parent task 2, level 1");
+  EXPECT_EQ(root_tasks->GetItemAt(1)->completed, false);
+  EXPECT_FALSE(root_tasks->GetItemAt(1)->due);
+  EXPECT_FALSE(root_tasks->GetItemAt(1)->has_subtasks);
+  EXPECT_TRUE(root_tasks->GetItemAt(1)->has_email_link);
 }
 
 TEST_F(GlanceablesTasksClientImplTest, GetTasksOnSubsequentCalls) {
@@ -325,36 +329,6 @@ TEST_F(GlanceablesTasksClientImplTest, GetTasksOnSubsequentCalls) {
 TEST_F(GlanceablesTasksClientImplTest, GetTasksReturnsEmptyVectorOnHttpError) {
   EXPECT_CALL(request_handler(), HandleRequest(_))
       .WillOnce(Return(ByMove(TestRequestHandler::CreateFailedResponse())));
-
-  TestFuture<ui::ListModel<GlanceablesTask>*> future;
-  client()->GetTasks("test-task-list-id", future.GetCallback());
-  ASSERT_TRUE(future.Wait());
-
-  const auto* const root_tasks = future.Get();
-  EXPECT_EQ(root_tasks->item_count(), 0u);
-}
-
-TEST_F(GlanceablesTasksClientImplTest,
-       GetTasksReturnsEmptyVectorOnConversionError) {
-  EXPECT_CALL(request_handler(), HandleRequest(_))
-      .WillOnce(Return(ByMove(TestRequestHandler::CreateSuccessfulResponse(R"(
-          {
-            "kind": "tasks#tasks",
-            "items": [
-              {
-                "id": "asd",
-                "title": "Parent task",
-                "status": "needsAction"
-              },
-              {
-                "id": "qwe",
-                "title": "Child task",
-                "parent": "asd1",
-                "status": "needsAction"
-              }
-            ]
-          }
-        )"))));
 
   TestFuture<ui::ListModel<GlanceablesTask>*> future;
   client()->GetTasks("test-task-list-id", future.GetCallback());
@@ -405,12 +379,42 @@ TEST_F(GlanceablesTasksClientImplTest, GetTasksFetchesAllPages) {
   ASSERT_TRUE(future.Wait());
 
   const auto* const root_tasks = future.Get();
-  EXPECT_EQ(root_tasks->item_count(), 2u);
+  ASSERT_EQ(root_tasks->item_count(), 2u);
+
   EXPECT_EQ(root_tasks->GetItemAt(0)->id, "parent-task-from-page-2");
-  EXPECT_EQ(root_tasks->GetItemAt(0)->subtasks.at(0)->id,
-            "child-task-from-page-1");
+  EXPECT_TRUE(root_tasks->GetItemAt(0)->has_subtasks);
+
   EXPECT_EQ(root_tasks->GetItemAt(1)->id, "parent-task-from-page-3");
+  EXPECT_FALSE(root_tasks->GetItemAt(1)->has_subtasks);
 }
+
+TEST_F(GlanceablesTasksClientImplTest, GetTasksSortsByPosition) {
+  EXPECT_CALL(request_handler(), HandleRequest(_))
+      .WillOnce(Return(ByMove(TestRequestHandler::CreateSuccessfulResponse(R"(
+          {
+            "kind": "tasks#tasks",
+            "items": [
+              {"title": "2nd", "position": "00000000000000000001"},
+              {"title": "3rd", "position": "00000000000000000002"},
+              {"title": "1st", "position": "00000000000000000000"}
+            ]
+          }
+        )"))));
+
+  TestFuture<ui::ListModel<GlanceablesTask>*> future;
+  client()->GetTasks("test-task-list-id", future.GetCallback());
+  ASSERT_TRUE(future.Wait());
+
+  const auto* const root_tasks = future.Get();
+  ASSERT_EQ(root_tasks->item_count(), 3u);
+
+  EXPECT_EQ(root_tasks->GetItemAt(0)->title, "1st");
+  EXPECT_EQ(root_tasks->GetItemAt(1)->title, "2nd");
+  EXPECT_EQ(root_tasks->GetItemAt(2)->title, "3rd");
+}
+
+// ----------------------------------------------------------------------------
+// Mark as completed:
 
 TEST_F(GlanceablesTasksClientImplTest, MarkAsCompleted) {
   EXPECT_CALL(

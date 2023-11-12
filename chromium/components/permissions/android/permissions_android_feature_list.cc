@@ -5,7 +5,8 @@
 #include "components/permissions/android/permissions_android_feature_list.h"
 #include "base/android/jni_string.h"
 #include "base/notreached.h"
-#include "components/permissions/android/jni_headers/PermissionsAndroidFeatureList_jni.h"
+#include "components/permissions/android/core_jni/PermissionsAndroidFeatureList_jni.h"
+#include "components/permissions/features.h"
 
 using base::android::ConvertJavaStringToUTF8;
 using base::android::JavaParamRef;
@@ -19,6 +20,7 @@ namespace {
 // in other locations in the code base (e.g. content_features.h).
 const base::Feature* kFeaturesExposedToJava[] = {
     &kAndroidApproximateLocationPermissionSupport,
+    &permissions::features::kBlockMidiByDefault,
 };
 
 const base::Feature* FindFeatureExposedToJava(const std::string& feature_name) {

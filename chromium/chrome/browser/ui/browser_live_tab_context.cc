@@ -345,14 +345,18 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
 sessions::LiveTabContext* BrowserLiveTabContext::FindContextForWebContents(
     const WebContents* contents) {
   Browser* browser = chrome::FindBrowserWithWebContents(contents);
-  return browser ? browser->live_tab_context() : nullptr;
+  return browser && !browser->is_delete_scheduled()
+             ? browser->live_tab_context()
+             : nullptr;
 }
 
 // static
 sessions::LiveTabContext* BrowserLiveTabContext::FindContextWithID(
     SessionID desired_id) {
   Browser* browser = chrome::FindBrowserWithID(desired_id);
-  return browser ? browser->live_tab_context() : nullptr;
+  return browser && !browser->is_delete_scheduled()
+             ? browser->live_tab_context()
+             : nullptr;
 }
 
 // static
@@ -360,7 +364,9 @@ sessions::LiveTabContext* BrowserLiveTabContext::FindContextWithGroup(
     tab_groups::TabGroupId group,
     Profile* profile) {
   Browser* browser = chrome::FindBrowserWithGroup(group, profile);
-  return browser ? browser->live_tab_context() : nullptr;
+  return browser && !browser->is_delete_scheduled()
+             ? browser->live_tab_context()
+             : nullptr;
 }
 
 std::string BrowserLiveTabContext::GetVivExtData() const {

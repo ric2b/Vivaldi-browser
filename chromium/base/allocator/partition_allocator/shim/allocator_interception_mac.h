@@ -7,8 +7,8 @@
 
 #include <stddef.h>
 
+#include "base/allocator/partition_allocator/third_party/apple_apsl/malloc.h"
 #include "base/base_export.h"
-#include "third_party/apple_apsl/malloc.h"
 
 namespace allocator_shim {
 
@@ -29,11 +29,13 @@ void StoreFunctionsForAllZones();
 // |functions|.
 void ReplaceFunctionsForStoredZones(const MallocZoneFunctions* functions);
 
-extern bool g_replaced_default_zone;
+BASE_EXPORT extern bool g_replaced_default_zone;
 
 // Calls the original implementation of malloc/calloc prior to interception.
-bool UncheckedMallocMac(size_t size, void** result);
-bool UncheckedCallocMac(size_t num_items, size_t size, void** result);
+BASE_EXPORT bool UncheckedMallocMac(size_t size, void** result);
+BASE_EXPORT bool UncheckedCallocMac(size_t num_items,
+                                    size_t size,
+                                    void** result);
 
 // Intercepts calls to default and purgeable malloc zones. Intercepts Core
 // Foundation and Objective-C allocations.
@@ -49,12 +51,12 @@ BASE_EXPORT void UninterceptMallocZonesForTesting();
 // zones.
 bool AreMallocZonesIntercepted();
 
-// Periodically checks for, and shims new malloc zones. Stops checking after 1
-// minute.
-BASE_EXPORT void PeriodicallyShimNewMallocZones();
+// heap_profiling::ProfilingClient needs to shim all malloc zones even ones
+// that are registered after the start-up time. ProfilingClient periodically
+// calls this API to make it sure that all malloc zones are shimmed.
+BASE_EXPORT void ShimNewMallocZones();
 
 // Exposed for testing.
-BASE_EXPORT void ShimNewMallocZones();
 BASE_EXPORT void ReplaceZoneFunctions(ChromeMallocZone* zone,
                                       const MallocZoneFunctions* functions);
 

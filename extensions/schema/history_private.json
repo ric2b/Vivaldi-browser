@@ -52,6 +52,52 @@
         }
       },
       {
+        "id": "DetailedHistoryItem",
+        "type": "object",
+        "description": "An object encapsulating one result of a top url history query.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minimum": 0,
+            "description": "The unique identifier for the item."
+          },
+          "url": {
+            "type": "string",
+            "description": "The URL navigated to by a user."
+          },
+          "title": {
+            "type": "string",
+            "description": "The title of the page when it was last loaded."
+          },
+          "lastVisitTime": {
+            "type": "number",
+            "optional": true,
+            "description": "When this page was last loaded, represented in milliseconds since the epoch."
+          },
+          "visitCount": {
+            "type": "integer",
+            "description": "The number of times the user has navigated to this page."
+          },
+          "typedCount": {
+            "type": "integer",
+            "optional": true,
+            "description": "The number of times the user has navigated to this page by typing in the address."
+          },
+          "isBookmarked": {
+            "type": "boolean",
+            "description": "States if the URL is bookmarked."
+          },
+          "transitionType": {
+            "$ref": "TransitionType",
+            "description": "The transition type for this visit from its referrer."
+          },
+          "isRedirect": {
+            "type": "boolean",
+            "description": "The link is in a redirection chain. First and last redirection links are not considered as redirect."
+          }
+        }
+      },
+      {
         "id": "HistoryPrivateItem",
         "type": "object",
         "description": "An object encapsulating one result of a history query.",
@@ -135,49 +181,6 @@
       }
     ],
     "functions": [
-      {
-        "name": "dbSearch",
-        "type": "function",
-        "description": "",
-        "parameters": [
-          {
-            "name": "query",
-            "type": "object",
-            "properties": {
-              "text": {
-                "type": "string",
-                "description": "A free-text query to the history service.  Leave empty to retrieve all pages."
-              },
-              "startTime": {
-                "type": "number",
-                "optional": true,
-                "description": "Limit results to those visited after this date, represented in milliseconds since the epoch."
-              },
-              "endTime": {
-                "type": "number",
-                "optional": true,
-                "description": "Limit results to those visited before this date, represented in milliseconds since the epoch."
-              },
-              "maxResults": {
-                "type": "integer",
-                "optional": true,
-                "minimum": 0,
-                "description": "The maximum number of results to retrieve.  Defaults to 100."
-              }
-            }
-          }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "name": "results",
-              "type": "array",
-              "items": { "$ref": "HistoryPrivateItem" }
-            }
-          ]
-        }
-      },
       {
         "name": "search",
         "type": "function",
@@ -328,6 +331,49 @@
             "description": "Expected to be typed, keyword or generated. In the last two cases, remember to call setKeywordSearchTermsForURL."
           }
         ]
+      },
+      {
+        "name": "getDetailedHistory",
+        "type": "function",
+        "description": "",
+        "parameters": [
+          {
+            "name": "query",
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "description": "A free-text query to the history service.  Leave empty to retrieve all pages."
+              },
+              "startTime": {
+                "type": "number",
+                "optional": true,
+                "description": "Limit results to those visited after this date, represented in milliseconds since the epoch."
+              },
+              "endTime": {
+                "type": "number",
+                "optional": true,
+                "description": "Limit results to those visited before this date, represented in milliseconds since the epoch."
+              },
+              "maxResults": {
+                "type": "integer",
+                "optional": true,
+                "minimum": 0,
+                "description": "The maximum number of results to retrieve.  Defaults to 100."
+              }
+            }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "DetailedHistoryItem" }
+            }
+          ]
+        }
       }
     ],
     "events": [

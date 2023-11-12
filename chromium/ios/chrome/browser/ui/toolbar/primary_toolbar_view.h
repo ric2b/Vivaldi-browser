@@ -28,18 +28,9 @@
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 - (instancetype)init NS_UNAVAILABLE;
 
-// The location bar view, containing the omnibox.
-@property(nonatomic, strong) UIView* locationBarView;
-
-// Container for the location bar.
-@property(nonatomic, strong, readonly) UIView* locationBarContainer;
-
 // A tappable view overlapping `locationBarContainer` used when the omnibox is
 // hidden by the NTP.
 @property(nonatomic, strong) UIView* fakeOmniboxTarget;
-
-// The height of the container for the location bar.
-@property(nonatomic, strong, readonly) NSLayoutConstraint* locationBarHeight;
 
 // StackView containing the leading buttons (relative to the location bar).
 // It should only contain ToolbarButtons.
@@ -50,9 +41,6 @@
 
 // Button to cancel the edit of the location bar.
 @property(nonatomic, strong, readonly) UIButton* cancelButton;
-
-// Button taking the full size of the toolbar. Expands the toolbar when  tapped.
-@property(nonatomic, strong, readonly) UIButton* collapsedToolbarButton;
 
 // Constraints to be activated when the location bar is expanded and positioned
 // relatively to the cancel button.
@@ -87,6 +75,12 @@
 - (void)removeFakeOmniboxTarget;
 
 // Vivaldi
+/// Redraws the primary toolbar buttons based on device
+/// orientation.
+- (void)redrawToolbarButtons;
+/// Used to hide and show the toolbar buttons based on orientation and omnibox
+/// state.
+- (void)handleToolbarButtonVisibility:(BOOL)show;
 /// Update the vivaldi more actions based on web context. This is only available
 /// for iPhone landscape mode.
 - (void)setVivaldiMoreActionItemsWithShareState:(BOOL)enabled;

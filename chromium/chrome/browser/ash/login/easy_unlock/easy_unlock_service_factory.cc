@@ -5,11 +5,10 @@
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_service_factory.h"
 
 #include "base/command_line.h"
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/device_sync/device_sync_client_factory.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_service.h"
-#include "chrome/browser/ash/login/easy_unlock/easy_unlock_service_regular.h"
 #include "chrome/browser/ash/multidevice_setup/multidevice_setup_client_factory.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/secure_channel/secure_channel_client_provider.h"
@@ -36,7 +35,8 @@ bool IsFeatureAllowed(content::BrowserContext* context) {
 
 // static
 EasyUnlockServiceFactory* EasyUnlockServiceFactory::GetInstance() {
-  return base::Singleton<EasyUnlockServiceFactory>::get();
+  static base::NoDestructor<EasyUnlockServiceFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -62,7 +62,7 @@ EasyUnlockServiceFactory::EasyUnlockServiceFactory()
   DependsOn(multidevice_setup::MultiDeviceSetupClientFactory::GetInstance());
 }
 
-EasyUnlockServiceFactory::~EasyUnlockServiceFactory() {}
+EasyUnlockServiceFactory::~EasyUnlockServiceFactory() = default;
 
 KeyedService* EasyUnlockServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
@@ -79,9 +79,7 @@ KeyedService* EasyUnlockServiceFactory::BuildServiceInstanceFor(
     return nullptr;
   }
 
-  // This is a user and primary profile, so this service serves the lock screen
-  // and manages the Smart Lock user flow for only one user.
-  EasyUnlockService* service = new EasyUnlockServiceRegular(
+  EasyUnlockService* service = new EasyUnlockService(
       Profile::FromBrowserContext(context),
       secure_channel::SecureChannelClientProvider::GetInstance()->GetClient(),
       device_sync::DeviceSyncClientFactory::GetForProfile(profile),

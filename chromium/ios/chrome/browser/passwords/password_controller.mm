@@ -51,18 +51,19 @@
 #import "components/password_manager/ios/shared_password_controller.h"
 #import "components/safe_browsing/core/browser/password_protection/password_reuse_detection_manager_client.h"
 #import "components/strings/grit/components_strings.h"
-#import "components/sync/driver/sync_service.h"
+#import "components/sync/base/features.h"
+#import "components/sync/service/sync_service.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
-#import "ios/chrome/browser/autofill/bottom_sheet/bottom_sheet_tab_helper.h"
+#import "ios/chrome/browser/autofill/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
 #import "ios/chrome/browser/autofill/form_input_accessory_view_handler.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/infobars/infobar_ios.h"
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/infobars/infobar_type.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/passwords/ios_chrome_save_password_infobar_delegate.h"
 #import "ios/chrome/browser/passwords/notify_auto_signin_view_controller.h"
 #import "ios/chrome/browser/passwords/password_controller_delegate.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/credential_provider_promo_commands.h"
 #import "ios/chrome/browser/shared/public/commands/password_breach_commands.h"
@@ -471,7 +472,8 @@ constexpr int kNotifyAutoSigninDuration = 3;  // seconds
 
       auto delegate = std::make_unique<IOSChromeSavePasswordInfoBarDelegate>(
           accountToStorePassword,
-          /*password_update=*/false, accountStorageUserState, std::move(form));
+          /*password_update=*/false, accountStorageUserState, std::move(form),
+          self.dispatcher);
       std::unique_ptr<InfoBarIOS> infobar = std::make_unique<InfoBarIOS>(
           InfobarType::kInfobarTypePasswordSave, std::move(delegate),
           /*skip_banner=*/manual);
@@ -489,7 +491,8 @@ constexpr int kNotifyAutoSigninDuration = 3;  // seconds
 
         auto delegate = std::make_unique<IOSChromeSavePasswordInfoBarDelegate>(
             accountToStorePassword,
-            /*password_update=*/true, accountStorageUserState, std::move(form));
+            /*password_update=*/true, accountStorageUserState, std::move(form),
+            self.dispatcher);
         std::unique_ptr<InfoBarIOS> infobar = std::make_unique<InfoBarIOS>(
             InfobarType::kInfobarTypePasswordUpdate, std::move(delegate),
             /*skip_banner=*/manual);
@@ -561,8 +564,8 @@ constexpr int kNotifyAutoSigninDuration = 3;  // seconds
 
 - (void)sharedPasswordController:(SharedPasswordController*)controller
              didAcceptSuggestion:(FormSuggestion*)suggestion {
-  if (suggestion.identifier ==
-      autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY) {
+  if (suggestion.popupItemId ==
+      autofill::PopupItemId::kAllSavedPasswordsEntry) {
     // Navigate to the settings list.
     [self.delegate displaySavedPasswordList];
   }
@@ -570,16 +573,30 @@ constexpr int kNotifyAutoSigninDuration = 3;  // seconds
 
 - (void)attachListenersForBottomSheet:
             (const std::vector<autofill::FieldRendererId>&)rendererIds
-                              inFrame:(web::WebFrame*)frame {
-  BottomSheetTabHelper::FromWebState(_webState)->AttachListeners(rendererIds,
-                                                                 frame);
+                           forFrameId:(const std::string&)frameId {
+  AutofillBottomSheetTabHelper* bottomSheetTabHelper =
+      AutofillBottomSheetTabHelper::FromWebState(_webState);
+  if (bottomSheetTabHelper) {
+    bottomSheetTabHelper->AttachPasswordListeners(rendererIds, frameId);
+  }
+}
+
+- (void)detachListenersForBottomSheet:(const std::string&)frameId {
+  AutofillBottomSheetTabHelper* bottomSheetTabHelper =
+      AutofillBottomSheetTabHelper::FromWebState(_webState);
+  if (bottomSheetTabHelper) {
+    bottomSheetTabHelper->DetachPasswordListeners(frameId,
+                                                  /*refocus = */ false);
+  }
 }
 
 - (BOOL)shouldShowAccountStorageNotice {
   return _passwordManagerClient->GetPasswordFeatureManager()
              ->IsOptedInForAccountStorage() &&
          !self.browserState->GetPrefs()->GetBoolean(
-             password_manager::prefs::kAccountStorageNoticeShown);
+             password_manager::prefs::kAccountStorageNoticeShown) &&
+         !base::FeatureList::IsEnabled(
+             syncer::kReplaceSyncPromosWithSignInPromos);
 }
 
 - (void)showAccountStorageNotice:(void (^)())completion {

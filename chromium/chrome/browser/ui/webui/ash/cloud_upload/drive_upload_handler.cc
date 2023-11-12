@@ -6,10 +6,14 @@
 
 #include "base/check_op.h"
 #include "base/files/file_path.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ash/file_manager/copy_or_move_io_task.h"
+#include "chrome/browser/ash/file_manager/file_tasks.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
+#include "chrome/browser/ash/file_manager/io_task.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_util.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -30,22 +34,32 @@ const int kAlternateUrlTimeout = 15;
 // alternate URL.
 const int kAlternateUrlPollInterval = 200;
 
+constexpr char kUploadResultMetricName[] =
+    "FileBrowser.OfficeFiles.Open.UploadResult.GoogleDrive";
+
+constexpr char kSpaceExceededErrorMessage[] =
+    "Free up space in Drive to move this file";
+
 // Runs the callback provided to `DriveUploadHandler::Upload`.
 void OnUploadDone(scoped_refptr<DriveUploadHandler> drive_upload_handler,
                   DriveUploadHandler::UploadCallback callback,
-                  const GURL& hosted_url) {
-  std::move(callback).Run(hosted_url);
+                  const GURL& hosted_url,
+                  int64_t upload_size) {
+  std::move(callback).Run(hosted_url, upload_size);
 }
 
 std::string GetTargetAppName(base::FilePath file_path) {
-  const std::string extension = file_path.FinalExtension();
-  if (extension == ".doc" || extension == ".docx") {
+  const std::string extension = base::ToLowerASCII(file_path.FinalExtension());
+  if (base::Contains(file_manager::file_tasks::WordGroupExtensions(),
+                     extension)) {
     return "Google Docs";
   }
-  if (extension == ".xls" || extension == ".xlsx") {
+  if (base::Contains(file_manager::file_tasks::ExcelGroupExtensions(),
+                     extension)) {
     return "Google Sheets";
   }
-  if (extension == ".ppt" || extension == ".pptx") {
+  if (base::Contains(file_manager::file_tasks::PowerPointGroupExtensions(),
+                     extension)) {
     return "Google Slides";
   }
   return "Google Docs";
@@ -78,7 +92,8 @@ DriveUploadHandler::DriveUploadHandler(Profile* profile,
               "Google Drive",
               GetTargetAppName(source_url.path()),
               // TODO(b/242685536) Update when support for multi-files is added.
-              /*num_files=*/1)),
+              /*num_files=*/1,
+              GetOperationTypeForUpload(profile, source_url))),
       source_url_(source_url) {
   observed_task_id_ = -1;
 }
@@ -101,24 +116,32 @@ void DriveUploadHandler::Run(UploadCallback callback) {
   callback_ = std::move(callback);
 
   if (!profile_) {
-    OnEndUpload(GURL(), "No profile");
+    LOG(ERROR) << "No profile";
+    OnEndUpload(GURL(), OfficeFilesUploadResult::kOtherError,
+                kGenericErrorMessage);
     return;
   }
 
   file_manager::VolumeManager* volume_manager =
       file_manager::VolumeManager::Get(profile_);
   if (!volume_manager) {
-    OnEndUpload(GURL(), "No volume manager");
+    LOG(ERROR) << "No volume manager";
+    OnEndUpload(GURL(), OfficeFilesUploadResult::kOtherError,
+                kGenericErrorMessage);
     return;
   }
   io_task_controller_ = volume_manager->io_task_controller();
   if (!io_task_controller_) {
-    OnEndUpload(GURL(), "No task_controller");
+    LOG(ERROR) << "No task_controller";
+    OnEndUpload(GURL(), OfficeFilesUploadResult::kOtherError,
+                kGenericErrorMessage);
     return;
   }
 
   if (!drive_integration_service_) {
-    OnEndUpload(GURL(), "No drive integration service");
+    LOG(ERROR) << "No Drive integration service";
+    OnEndUpload(GURL(), OfficeFilesUploadResult::kOtherError,
+                kGenericErrorMessage);
     return;
   }
 
@@ -128,6 +151,13 @@ void DriveUploadHandler::Run(UploadCallback callback) {
   // Observe Drive updates.
   drive_integration_service_->GetDriveFsHost()->AddObserver(this);
 
+  if (!drive_integration_service_->IsMounted()) {
+    LOG(ERROR) << "Google Drive is not mounted";
+    OnEndUpload(GURL(), OfficeFilesUploadResult::kFileSystemNotFound,
+                kGenericErrorMessage);
+    return;
+  }
+
   // Destination url.
   base::FilePath destination_folder_path =
       drive_integration_service_->GetMountPointPath().Append("root");
@@ -135,14 +165,18 @@ void DriveUploadHandler::Run(UploadCallback callback) {
       profile_, file_system_context_, destination_folder_path);
   // TODO (b/243095484) Define error behavior.
   if (!destination_folder_url.is_valid()) {
-    OnEndUpload(GURL(), "Unable to generate destination folder URL");
+    LOG(ERROR) << "Unable to generate destination folder Drive URL";
+    OnEndUpload(GURL(), OfficeFilesUploadResult::kFileSystemNotFound,
+                kGenericErrorMessage);
     return;
   }
 
+  const file_manager::io_task::OperationType operation_type =
+      GetOperationTypeForUpload(profile_, source_url_);
   std::vector<FileSystemURL> source_urls{source_url_};
   std::unique_ptr<file_manager::io_task::IOTask> task =
       std::make_unique<file_manager::io_task::CopyOrMoveIOTask>(
-          file_manager::io_task::OperationType::kMove, std::move(source_urls),
+          operation_type, std::move(source_urls),
           std::move(destination_folder_url), profile_, file_system_context_,
           /*show_notification=*/false);
 
@@ -157,7 +191,9 @@ void DriveUploadHandler::UpdateProgressNotification() {
 }
 
 void DriveUploadHandler::OnEndUpload(GURL hosted_url,
+                                     OfficeFilesUploadResult result,
                                      std::string error_message) {
+  UMA_HISTOGRAM_ENUMERATION(kUploadResultMetricName, result);
   // TODO (b/243095484) Define error behavior on invalid hosted URL.
   observed_relative_drive_path_.clear();
   // Stop suppressing Drive events for the observed file.
@@ -172,7 +208,7 @@ void DriveUploadHandler::OnEndUpload(GURL hosted_url,
     }
   }
   if (callback_) {
-    std::move(callback_).Run(hosted_url);
+    std::move(callback_).Run(hosted_url, upload_size_);
   }
 }
 
@@ -188,6 +224,7 @@ void DriveUploadHandler::OnIOTaskStatus(
       return;
     case file_manager::io_task::State::kInProgress:
       if (status.total_bytes > 0) {
+        upload_size_ = status.total_bytes;
         move_progress_ = 100 * status.bytes_transferred / status.total_bytes;
       }
       UpdateProgressNotification();
@@ -197,7 +234,9 @@ void DriveUploadHandler::OnIOTaskStatus(
         DCHECK_EQ(status.outputs.size(), 1u);
 
         if (!drive_integration_service_) {
-          OnEndUpload(GURL(), "No drive integration service");
+          LOG(ERROR) << "No Drive integration service";
+          OnEndUpload(GURL(), OfficeFilesUploadResult::kOtherError,
+                      kGenericErrorMessage);
           return;
         }
 
@@ -221,18 +260,76 @@ void DriveUploadHandler::OnIOTaskStatus(
       DCHECK_EQ(status.outputs.size(), 1u);
       return;
     case file_manager::io_task::State::kCancelled:
-      OnEndUpload(GURL(), "Move error: kCancelled");
+      if (status.type == file_manager::io_task::OperationType::kCopy) {
+        OnEndUpload(GURL(), OfficeFilesUploadResult::kCopyOperationCancelled,
+                    kGenericErrorMessage);
+      } else {
+        OnEndUpload(GURL(), OfficeFilesUploadResult::kMoveOperationCancelled,
+                    kGenericErrorMessage);
+      }
       return;
     case file_manager::io_task::State::kError:
-      OnEndUpload(GURL(), "Move error: kError");
+      ConvertFileErrorToUploadError(status);
       return;
     case file_manager::io_task::State::kNeedPassword:
-      OnEndUpload(GURL(), "Move error: kNeedPassword");
+      NOTREACHED() << "Encrypted file should not need password to be copied or "
+                      "moved. Case should not be reached.";
       return;
   }
 }
 
+void DriveUploadHandler::ConvertFileErrorToUploadError(
+    const file_manager::io_task::ProgressStatus& status) {
+  OfficeFilesUploadResult upload_result;
+  std::string error_message;
+  bool copy = status.type == file_manager::io_task::OperationType::kCopy;
+  std::string operation = copy ? "copied" : "moved";
+
+  base::File::Error file_error = base::File::FILE_ERROR_FAILED;
+  // TODO(b/242685536) Find most relevant error in a multi-file upload when
+  // support for multi-files is added.
+  // Find the first not base::File::Error::FILE_OK.
+  if (status.sources.size() > 0 && status.sources[0].error.has_value() &&
+      status.sources[0].error.value() != base::File::Error::FILE_OK) {
+    file_error = status.sources[0].error.value();
+  } else if (status.outputs.size() > 0 && status.outputs[0].error.has_value()) {
+    file_error = status.outputs[0].error.value();
+  }
+
+  switch (file_error) {
+    case base::File::FILE_ERROR_NO_SPACE:
+      upload_result = OfficeFilesUploadResult::kCloudQuotaFull;
+      // TODO(b/242685536) Use "these files" for multi-files when support for
+      // multi-files is added.
+      error_message = kSpaceExceededErrorMessage;
+      break;
+    case base::File::FILE_ERROR_NOT_FOUND:
+      if (copy) {
+        upload_result = OfficeFilesUploadResult::kCopyOperationError;
+      } else {
+        upload_result = OfficeFilesUploadResult::kMoveOperationError;
+      }
+      error_message =
+          "The file could not be " + operation + " because it no longer exists";
+      break;
+    default:
+      if (copy) {
+        upload_result = OfficeFilesUploadResult::kCopyOperationError;
+      } else {
+        upload_result = OfficeFilesUploadResult::kMoveOperationError;
+      }
+      error_message = kGenericErrorMessage;
+  }
+
+  OnEndUpload(GURL(), upload_result, error_message);
+}
+
 void DriveUploadHandler::OnUnmounted() {}
+
+void DriveUploadHandler::ImmediatelyUploadDone(drive::FileError error) {
+  LOG_IF(ERROR, error != drive::FileError::FILE_ERROR_OK)
+      << "ImmediatelyUpload failed with status: " << error;
+}
 
 void DriveUploadHandler::OnSyncingStatusUpdate(
     const drivefs::mojom::SyncingStatus& syncing_status) {
@@ -241,8 +338,16 @@ void DriveUploadHandler::OnSyncingStatusUpdate(
       continue;
     }
     switch (item->state) {
-      case drivefs::mojom::ItemEvent::State::kQueued:
+      case drivefs::mojom::ItemEvent::State::kQueued: {
+        // Tell Drive to upload the file now. If successful, we will receive a
+        // kInProgress or kCompleted event sooner. If this fails, we ignore it.
+        // The file will get uploaded eventually.
+        drive_integration_service_->ImmediatelyUpload(
+            observed_relative_drive_path_,
+            base::BindOnce(&DriveUploadHandler::ImmediatelyUploadDone,
+                           weak_ptr_factory_.GetWeakPtr()));
         return;
+      }
       case drivefs::mojom::ItemEvent::State::kInProgress:
         if (item->bytes_transferred > 0) {
           sync_progress_ =
@@ -262,10 +367,14 @@ void DriveUploadHandler::OnSyncingStatusUpdate(
         CheckAlternateUrl(/*timed_out=*/false);
         return;
       case drivefs::mojom::ItemEvent::State::kFailed:
-        OnEndUpload(GURL(), "Drive sync error: kFailed");
+        LOG(ERROR) << "Drive sync error";
+        OnEndUpload(GURL(), OfficeFilesUploadResult::kCloudError,
+                    kGenericErrorMessage);
         return;
       default:
-        OnEndUpload(GURL(), "Drive sync error + invalid sync state");
+        LOG(ERROR) << "Drive sync error + invalid sync state";
+        OnEndUpload(GURL(), OfficeFilesUploadResult::kCloudError,
+                    kGenericErrorMessage);
         return;
     }
   }
@@ -277,13 +386,18 @@ void DriveUploadHandler::OnError(const drivefs::mojom::DriveError& error) {
   }
   switch (error.type) {
     case drivefs::mojom::DriveError::Type::kCantUploadStorageFull:
-      OnEndUpload(GURL(), "Drive error: kCantUploadStorageFull");
+    case drivefs::mojom::DriveError::Type::kCantUploadStorageFullOrganization:
+    case drivefs::mojom::DriveError::Type::kCantUploadSharedDriveStorageFull:
+      OnEndUpload(GURL(), OfficeFilesUploadResult::kCloudQuotaFull,
+                  kSpaceExceededErrorMessage);
       break;
     case drivefs::mojom::DriveError::Type::kPinningFailedDiskFull:
-      OnEndUpload(GURL(), "Drive error: kPinningFailedDiskFull");
+      OnEndUpload(GURL(), OfficeFilesUploadResult::kPinningFailedDiskFull,
+                  kGenericErrorMessage);
       break;
     default:
-      OnEndUpload(GURL(), "Drive error + invalid error type...");
+      OnEndUpload(GURL(), OfficeFilesUploadResult::kCloudError,
+                  kGenericErrorMessage);
   }
 }
 
@@ -293,7 +407,9 @@ void DriveUploadHandler::OnGetDriveMetadata(
     drivefs::mojom::FileMetadataPtr metadata) {
   if (error != drive::FILE_ERROR_OK) {
     if (timed_out) {
-      OnEndUpload(GURL(), "Drive Metadata error");
+      LOG(ERROR) << "Drive Metadata error";
+      OnEndUpload(GURL(), OfficeFilesUploadResult::kCloudMetadataError,
+                  kGenericErrorMessage);
     } else {
       alternate_url_poll_timer_.Start(
           FROM_HERE, base::Milliseconds(kAlternateUrlPollInterval),
@@ -305,7 +421,9 @@ void DriveUploadHandler::OnGetDriveMetadata(
   GURL hosted_url(metadata->alternate_url);
   if (!hosted_url.is_valid()) {
     if (timed_out) {
-      OnEndUpload(GURL(), "Invalid alternate URL - Drive editing unavailable");
+      LOG(ERROR) << "Invalid alternate URL - Drive editing unavailable";
+      OnEndUpload(GURL(), OfficeFilesUploadResult::kCloudMetadataError,
+                  kGenericErrorMessage);
     } else {
       alternate_url_poll_timer_.Start(
           FROM_HERE, base::Milliseconds(kAlternateUrlPollInterval),
@@ -319,8 +437,9 @@ void DriveUploadHandler::OnGetDriveMetadata(
   // host.
   if (hosted_url.host() != "docs.google.com") {
     if (timed_out) {
-      OnEndUpload(GURL(),
-                  "Unexpected alternate URL - Drive editing unavailable");
+      LOG(ERROR) << "Unexpected alternate URL - Drive editing unavailable";
+      OnEndUpload(GURL(), OfficeFilesUploadResult::kCloudMetadataError,
+                  kGenericErrorMessage);
     } else {
       alternate_url_poll_timer_.Start(
           FROM_HERE, base::Milliseconds(kAlternateUrlPollInterval),
@@ -333,12 +452,14 @@ void DriveUploadHandler::OnGetDriveMetadata(
   // Success.
   alternate_url_timeout_.Stop();
   alternate_url_poll_timer_.Stop();
-  OnEndUpload(hosted_url);
+  OnEndUpload(hosted_url, OfficeFilesUploadResult::kSuccess);
 }
 
 void DriveUploadHandler::CheckAlternateUrl(bool timed_out) {
   if (!drive_integration_service_) {
-    OnEndUpload(GURL(), "No drive integration service");
+    LOG(ERROR) << "No Drive integration service";
+    OnEndUpload(GURL(), OfficeFilesUploadResult::kOtherError,
+                kGenericErrorMessage);
     return;
   }
 

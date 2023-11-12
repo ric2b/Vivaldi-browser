@@ -30,8 +30,8 @@
 #include "sql/statement.h"
 #include "sql/transaction.h"
 
-#if BUILDFLAG(IS_MAC)
-#include "base/mac/backup_util.h"
+#if BUILDFLAG(IS_APPLE)
+#include "base/apple/backup_util.h"
 #endif
 
 namespace contact {
@@ -92,9 +92,9 @@ sql::InitStatus ContactDatabase::Init(const base::FilePath& contact_db_name) {
   if (!committer.Begin())
     return sql::INIT_FAILURE;
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   // Exclude the contact file from backups.
-  base::mac::SetBackupExclusion(contact_db_name);
+  base::apple::SetBackupExclusion(contact_db_name);
 #endif
 
   // Prime the cache.

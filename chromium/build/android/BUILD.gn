@@ -71,7 +71,6 @@ if (enable_java_templates) {
     }
     robolectric_binary("build_junit_tests") {
       # Test has no JNI, so skip JNI Generator step.
-      generate_final_jni = false
       resources_package = "org.chromium.build"
       sources = [
         "junit/src/org/chromium/build/AndroidAssetsTest.java",
@@ -118,10 +117,12 @@ python_library("devil_chromium_py") {
 group("apk_installer_data") {
   # Other //build users let devil library fetch these from Google Storage.
   if (build_with_chromium) {
-    data_deps = [
-      "//build/android/pylib/device/commands",
-      "//tools/android/md5sum",
-    ]
+    if (is_component_build) {
+      data_deps = [
+        "//build/android/pylib/device/commands",
+        "//tools/android/md5sum",
+      ]
+    }
     data = [ "//third_party/android_build_tools/bundletool/bundletool.jar" ]
   }
 }
@@ -171,11 +172,13 @@ group("test_runner_device_support") {
 
   # Other //build users let devil library fetch these from Google Storage.
   if (build_with_chromium) {
-    data_deps += [ "//tools/android/forwarder2" ]
+    if (!is_component_build) {
+      data_deps += [ "//tools/android/forwarder2" ]
+    }
     data += [ "//tools/android/avd/proto/" ]
     if (enable_chrome_android_internal) {
-       data += [ "//clank/tools/android/avd/proto/" ]
-     }
+      data += [ "//clank/tools/android/avd/proto/" ]
+    }
     if (is_asan) {
       data_deps += [ "//tools/android/asan/third_party:asan_device_setup" ]
     }
@@ -200,8 +203,7 @@ python_library("resource_sizes_py") {
 
   data = [
     build_vars_file,
-    android_readelf,
-    rebase_path("$android_ndk_library_path/libc++.so.1", root_build_dir),
+    "//third_party/llvm-build/Release+Asserts/bin/llvm-readobj",
   ]
 }
 

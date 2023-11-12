@@ -63,8 +63,8 @@ std::string VivaldiTranslateServerRequest::GenerateJSON(
   base::Value request(base::Value::Type::DICT);
   base::Value string_collection(base::Value::Type::LIST);
 
-  request.SetStringKey(kSourceLanguageKey, source_language);
-  request.SetStringKey(kTargetLanguageKey, destination_language);
+  request.GetDict().Set(kSourceLanguageKey, source_language);
+  request.GetDict().Set(kTargetLanguageKey, destination_language);
 
   for (auto& item : data) {
     string_collection.GetList().Append(item);
@@ -151,8 +151,8 @@ void VivaldiTranslateServerRequest::OnRequestResponse(
     absl::optional<base::Value> json =
         base::JSONReader::Read(*response_body, options);
     if (json) {
-      const base::Value* translated_values;
-      const base::Value* source_values;
+      const base::Value::List* translated_values;
+      const base::Value::List* source_values;
       if (json->is_dict()) {
         std::vector<std::string> translated_strings;
         std::vector<std::string> source_strings;
@@ -169,7 +169,7 @@ void VivaldiTranslateServerRequest::OnRequestResponse(
         */
         const std::string* detected_source_language = nullptr;
         ::vivaldi::TranslateError error = TranslateError::kNoError;
-        const std::string* error_code = json->FindStringKey("code");
+        const std::string* error_code = json->GetDict().FindString("code");
         if (error_code) {
           if (error_code->compare("LANGUAGE_NOT_RECOGNIZED") == 0) {
             error = TranslateError::kUnknownLanguage;
@@ -182,17 +182,17 @@ void VivaldiTranslateServerRequest::OnRequestResponse(
           }
         } else {
           detected_source_language =
-              json->FindStringKey("detectedSourceLanguage");
+              json->GetDict().FindString("detectedSourceLanguage");
 
-          translated_values = json->FindListPath("translatedText");
+          translated_values = json->GetDict().FindList("translatedText");
           if (translated_values) {
-            for (const auto& value : translated_values->GetList()) {
+            for (const auto& value : *translated_values) {
               translated_strings.push_back(value.GetString());
             }
           }
-          source_values = json->FindListPath("sourceText");
+          source_values = json->GetDict().FindList("sourceText");
           if (source_values) {
-            for (const auto& value : source_values->GetList()) {
+            for (const auto& value : *source_values) {
               source_strings.push_back(value.GetString());
             }
           }

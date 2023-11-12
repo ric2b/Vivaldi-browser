@@ -7,7 +7,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "base/scoped_observation.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/ash/net/client_cert_store_ash.h"
@@ -136,7 +136,8 @@ PlatformKeysService* PlatformKeysServiceFactory::GetForBrowserContext(
 
 // static
 PlatformKeysServiceFactory* PlatformKeysServiceFactory::GetInstance() {
-  return base::Singleton<PlatformKeysServiceFactory>::get();
+  static base::NoDestructor<PlatformKeysServiceFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -169,7 +170,12 @@ void PlatformKeysServiceFactory::SetTestingMode(bool is_testing_mode) {
 PlatformKeysServiceFactory::PlatformKeysServiceFactory()
     : ProfileKeyedServiceFactory(
           "PlatformKeysService",
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   DependsOn(NssServiceFactory::GetInstance());
 }
 

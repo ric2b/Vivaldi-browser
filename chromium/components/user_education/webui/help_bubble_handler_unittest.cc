@@ -172,7 +172,7 @@ class HelpBubbleHandlerTest : public testing::Test {
     return test_handler_.get();
   }
 
-  base::raw_ptr<TestHelpBubbleHandler::MockVisibilityProvider>
+  raw_ptr<TestHelpBubbleHandler::MockVisibilityProvider, DanglingUntriaged>
       visibility_provider_ = nullptr;
   std::unique_ptr<TestHelpBubbleHandler> test_handler_;
   HelpBubbleFactoryRegistry help_bubble_factory_registry_;

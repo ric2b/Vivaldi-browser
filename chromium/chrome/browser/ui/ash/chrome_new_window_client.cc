@@ -23,7 +23,6 @@
 #include "chrome/browser/apps/app_service/intent_util.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/metrics/app_service_metrics.h"
-#include "chrome/browser/apps/intent_helper/metrics/intent_handling_metrics.h"
 #include "chrome/browser/ash/apps/apk_web_app_service.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/file_manager/app_id.h"
@@ -314,6 +313,8 @@ WindowOpenDisposition ToWindowOpenDisposition(
       return WindowOpenDisposition::NEW_FOREGROUND_TAB;
     case ash::NewWindowDelegate::Disposition::kNewWindow:
       return WindowOpenDisposition::NEW_WINDOW;
+    case ash::NewWindowDelegate::Disposition::kOffTheRecord:
+      return WindowOpenDisposition::OFF_THE_RECORD;
     case ash::NewWindowDelegate::Disposition::kSwitchToTab:
       return WindowOpenDisposition::SWITCH_TO_TAB;
   }
@@ -370,9 +371,6 @@ void ChromeNewWindowClient::OpenUrl(const GURL& url,
     // Add a flag to remember this tab originated in the ARC context.
     tab->SetUserData(&arc::ArcWebContentsData::kArcTransitionFlag,
                      std::make_unique<arc::ArcWebContentsData>(tab));
-
-    apps::IntentHandlingMetrics::RecordOpenBrowserMetrics(
-        apps::IntentHandlingMetrics::AppType::kArc);
   }
 }
 

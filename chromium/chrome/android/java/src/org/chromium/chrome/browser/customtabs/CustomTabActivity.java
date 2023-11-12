@@ -56,8 +56,6 @@ import org.chromium.ui.util.ColorUtils;
  * The activity for custom tabs. It will be launched on top of a client's task.
  */
 public class CustomTabActivity extends BaseCustomTabActivity {
-    private static final String TAG = "CustomTabActivity";
-
     private CustomTabsSessionToken mSession;
 
     private final CustomTabsConnection mConnection = CustomTabsConnection.getInstance();
@@ -249,6 +247,10 @@ public class CustomTabActivity extends BaseCustomTabActivity {
                     mRootUiCoordinator.getMerchantTrustSignalsCoordinatorSupplier()::get,
                     mRootUiCoordinator.getEphemeralTabCoordinatorSupplier())
                     .show(tab, ChromePageInfoHighlight.noHighlight());
+            return true;
+        } else if (id == R.id.page_insights_id) {
+            assert mBaseCustomTabRootUiCoordinator.getPageInsightsCoordinator() != null;
+            mBaseCustomTabRootUiCoordinator.getPageInsightsCoordinator().launch();
             return true;
         }
         return super.onMenuOrKeyboardAction(id, fromMenu);

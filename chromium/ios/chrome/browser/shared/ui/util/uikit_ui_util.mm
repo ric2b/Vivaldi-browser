@@ -18,8 +18,8 @@
 #import "base/mac/foundation_util.h"
 #import "base/notreached.h"
 #import "base/numerics/math_constants.h"
-#import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/dynamic_type_util.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
@@ -289,6 +289,31 @@ UIView* GetFirstResponderSubview(UIView* view) {
 UIResponder* GetFirstResponder() {
   DCHECK(NSThread.isMainThread);
   return GetFirstResponderSubview(GetAnyKeyWindow());
+}
+
+UIResponder* GetFirstResponderInWindowScene(UIWindowScene* windowScene) {
+  DCHECK(NSThread.isMainThread);
+  if (!windowScene) {
+    return nil;
+  }
+
+  // First checking the key window for this window scene.
+  UIResponder* responder = GetFirstResponderSubview(windowScene.keyWindow);
+  if (responder) {
+    return responder;
+  }
+
+  for (UIWindow* window in windowScene.windows) {
+    if (window.isKeyWindow) {
+      continue;
+    }
+    responder = GetFirstResponderSubview(window);
+    if (responder) {
+      return responder;
+    }
+  }
+
+  return nil;
 }
 
 // Trigger a haptic vibration for the user selecting an action. This is a no-op

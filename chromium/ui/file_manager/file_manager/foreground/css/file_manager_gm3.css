@@ -39,7 +39,6 @@ body {
   display: flex;
   flex: auto;
   flex-direction: column;
-  font-size: 13px;
   height: 100%;
   margin: 0;
   padding: 0;
@@ -162,21 +161,29 @@ html.breadcrumb-elider-expanded #directory-tree {
   background-color: transparent;
   background-position: center;
   background-repeat: no-repeat;
-  background-size: 16px 16px;
+  background-size: 20px 20px;
 }
 
 #directory-tree .tree-row > .file-row > .label {
   display: block;
   flex: auto;
-  font-weight: 500;
+  font: var(--cros-button-2-font);
   margin-inline-start: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* The file label's direction is always LTR even in RTL mode
+   (.entry-name in common.css), so the inline-start above won't work in RTL
+   mode, we need to have the inline-end here. */
+html[dir='rtl'] #directory-tree .tree-row > .file-row > .label {
+  margin-inline-end: 8px;
+  margin-inline-start: 0;
+}
+
 #directory-tree .tree-row .rename-placeholder {
   flex: auto;
-  font-weight: 500;
+  font: var(--cros-button-2-font);
 }
 
 #directory-tree .tree-row .rename-placeholder > input {
@@ -232,7 +239,7 @@ html.drag-drop-active #directory-tree .tree-item.denies > .tree-row > .file-row 
 }
 
 html.drag-drop-active #directory-tree .tree-item.accepts > .tree-row > .file-row {
-  background-color: var(--cros-sys-hover_on_prominent);
+  background-color: var(--cros-sys-hover_on_subtle);
 }
 
 html.drag-drop-active #directory-tree
@@ -255,23 +262,28 @@ html.focus-outline-visible #directory-tree:focus .tree-row[selected] > .file-row
 }
 
 #directory-tree .tree-row > .file-row > .align-right-icon {
+  --ink-color: var(--cros-sys-ripple_neutral_on_subtle);
   --iron-icon-height: 20px;
   --iron-icon-width: 20px;
-  border-radius: 16px;
-  border-style: none;
+  --ripple-opacity: 100%;
+  border: none;
+  border-radius: 20px;
   box-sizing: border-box;
   flex: none;
-  height: 32px;
-  left: 1px;
+  height: 40px;
   position: relative;
-  right: 1px;
-  width: 32px;
+  right: -12px; /* Same as padding inline end of side nav. */
+  width: 40px;
   z-index: 1;
 }
 
+html[dir='rtl'] #directory-tree .tree-row > .file-row > .align-right-icon {
+  left: -12px; /* Same as padding inline end of side nav. */
+  right: unset;
+}
 
 #directory-tree .tree-row > .file-row > .external-link-icon iron-icon {
-  padding: 6px;
+  padding: 10px;
 }
 
 #directory-tree .tree-row > .file-row > .root-eject {
@@ -290,22 +302,27 @@ html.col-resize #directory-tree .tree-row > .file-row > .root-eject:hover {
 }
 
 #directory-tree .tree-row > .file-row > .root-eject:focus {
-  border: 1px solid var(--cros-sys-focus_ring);
+  outline: 2px solid var(--cros-sys-focus_ring);
+  outline-offset: 2px;
 }
 
 #directory-tree .tree-row[active] > .file-row > .root-eject:focus {
-  border: 1px solid var(--cros-sys-inverse_primary);
-}
-
-#directory-tree .tree-row > .file-row > .root-eject:active {
-  --ink-color: var(--cros-sys-ripple_neutral_on_subtle);
-  border-width: 0;
+  outline: 2px solid var(--cros-sys-inverse_primary);
+  outline-offset: 2px;
 }
 
 #directory-tree .tree-row[active] > .file-row > .root-eject:active {
   --ink-color: var(--cros-sys-ripple_neutral_on_prominent);
 }
 /* Can be removed after new directory replacement. -- END */
+
+#directory-tree xf-tree-item > input::selection {
+  background-color: var(--cros-sys-highlight_text);
+}
+
+#directory-tree xf-tree-item > .external-link-icon iron-icon {
+  padding: 10px;
+}
 
 /* Splitter. */
 /* Prevent the sudden flickering when opening the Files app. "div.splitter" is
@@ -342,19 +359,19 @@ html.col-resize .jelly-splitter:not(.splitter-active):hover {
 .dialog-header {
   align-items: center;
   background: none;
+  border-bottom: 1px solid transparent;
   box-sizing: border-box;
-  color: var(--cros-text-color-secondary);
+  color: var(--cros-sys-on_surface_variant);
   display: flex;
   flex: none;
   flex-direction: row;
-  font-size: 14px;
   height: 57px;
   overflow: hidden;
   transition: background 220ms ease;
 }
 
 body.check-select .dialog-header {
-  border-bottom: 1px solid var(--cros-separator-color);
+  border-bottom: 1px solid transparent;
   border-top: 1px solid transparent;
   color: var(--cros-sys-on_primary_container);
 }
@@ -362,7 +379,7 @@ body.check-select .dialog-header {
 /* Display a border during check-select mode if we're in a dialog. (This
    can only happen in an open-multi-file dialog). */
 body[type='open-multi-file'].check-select .dialog-header {
-  border-top: 1px solid var(--cros-bg-color);
+  border-top: 1px solid var(--cros-sys-app_base);
 }
 
 .dialog-header > .spacer {
@@ -382,7 +399,6 @@ body[type='open-multi-file'].check-select .dialog-header {
   height: 36px;
   min-width: 48px;
   position: relative;
-  text-transform: uppercase;
   z-index: 1;
 }
 
@@ -434,7 +450,7 @@ body.check-select .dialog-header
   height: 40px;
   margin: 4px;
   min-width: 40px;
-  padding: 0;
+  padding: 10px;
   width: 40px;
 }
 
@@ -456,6 +472,7 @@ body.check-select .dialog-header
 
 .dialog-header #tasks {
   color: var(--cros-sys-primary);
+  font: var(--cros-button-2-font);
   margin: 0 8px;
   padding-bottom: 0;
   padding-inline: 16px;
@@ -578,7 +595,7 @@ body:not(.check-select) #selection-menu-button {
 
 #files-selected-label {
   display: none;
-  font-weight: 500;
+  font: var(--cros-button-1-font);
 }
 
 body.files-ng #files-selected-label {
@@ -647,14 +664,19 @@ body.check-select #cancel-selection-button-wrapper {
 
 /* Search button */
 body.check-select-v1 #search-button {
-  display: none;
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+  visibility: hidden;
+  width: 0;
 }
 
 /* Search box */
 #search-box {
   display: flex;
   flex: none;
-  font-size: 14px;
+  font: var(--cros-body-2-font);
 }
 
 .dialog-header.files-ng #search-box cr-input::part(input) {
@@ -663,7 +685,7 @@ body.check-select-v1 #search-button {
 }
 
 body.check-select-v1 #search-box {
-  display: none;
+  visibility: hidden;
 }
 
 .dialog-header.files-ng #search-box.has-cursor,
@@ -698,7 +720,7 @@ body.check-select-v1 #search-box {
 }
 
 html:not(.pointer-active) .dialog-header.files-ng #search-box .clear:hover {
-  background-color: var(--cros-ripple-color);
+  background-color: var(--cros-sys-hover_on_subtle);
 }
 
 .dialog-header.files-ng #search-box .clear > .icon {
@@ -727,25 +749,9 @@ html[dir='rtl'] #search-box .clear {
 
 .dialog-header.files-ng #pinned-toggle-label {
   color: var(--cros-sys-on_surface);
-}
-
-.dialog-header.files-ng cr-toggle {
-  --cr-toggle-checked-bar-color: var(--cros-sys-primary);
-  /* bar color above already defines the opacity, so use 100% here */
-  --cr-toggle-checked-bar-opacity: 100%;
-  --cr-toggle-checked-button-color: var(--cros-sys-on_primary);
-  --cr-toggle-checked-ripple-color: var(--cros-focus-aura-color);
-  --cr-toggle-unchecked-bar-color: var(--cros-sys-secondary);
-  --cr-toggle-unchecked-button-color: var(--cros-sys-on_secondary);
-  --cr-toggle-unchecked-ripple-color: var(--cros-ripple-color);
-  --cr-toggle-box-shadow: var(--cros-elevation-1-shadow);
-  --cr-toggle-ripple-diameter: 32px;
-  margin-inline: 6px;
-}
-
-/* only show the ripple ring for tab navigation */
-html.focus-outline-visible .dialog-header.files-ng cr-toggle:focus {
-  --cr-toggle-ripple-ring: 2px solid var(--cros-focus-ring-color);
+  font: var(--cros-button-2-font);
+  margin-inline-end: 16px;
+  margin-inline-start: 12px;
 }
 
 /* Container for the detail and thumbnail list views. */
@@ -776,8 +782,8 @@ html.focus-outline-visible .dialog-header.files-ng cr-toggle:focus {
 /* Container for the ok/cancel buttons. */
 .dialog-footer {
   align-items: center;
-  background-color: var(--cros-bg-color);
-  border-top: 1px solid var(--cros-separator-color);
+  background-color: var(--cros-sys-app_base);
+  border-top: 1px solid var(--cros-sys-separator);
   display: flex;
   flex: none;
   flex-direction: row;
@@ -793,118 +799,40 @@ html.focus-outline-visible .dialog-header.files-ng cr-toggle:focus {
 }
 
 .dialog-footer cr-input {
-  --cr-input-background-color: var(--cros-textfield-background-color);
-  --cr-input-border-radius: 0;
-  --cr-input-color: var(--cros-textfield-input-color);
-  --cr-input-error-color: var(--cros-textfield-label-color-error);
+  --cr-input-background-color: var(--cros-sys-input_field_on_base);
+  --cr-input-border-radius: 8px;
+  --cr-input-color: var(--cros-sys-on_surface);
+  --cr-input-error-color: var(--cros-sys-error);
   --cr-input-error-display: none;
-  --cr-input-focus-color: var(--cros-textfield-label-color-focus);
-  --cr-input-min-height: 32px;
+  --cr-input-focus-color: var(--cros-sys-primary);
+  --cr-input-min-height: 36px;
+  --cr-input-padding-end: 16px;
+  --cr-input-padding-start: 16px;
+  --cr-input-placeholder-color: var(--cros-sys-secondary);
+  font: var(--cros-body-2-font);
   width: 100%;
+}
+
+cr-input::part(input)::selection {
+  background-color: var(--cros-sys-highlight_text);
 }
 
 .dialog-footer .buttonbar {
   display: flex;
-  height: 32px;
-}
-
-/* Copy style from paper-button for buttons on the footer. */
-.dialog-footer button {
-  border: 0;
-  border-image: none;
-  border-radius: 4px;
-  box-sizing: border-box;
-  cursor: pointer;
-  margin: 0;
-  outline: none;
-  padding: 1px 16px;
-  position: relative;
-  text-align: center;
-  user-select: none;
-  z-index: 0;
-}
-
-.dialog-footer button[disabled] {
-  cursor: auto;
-  pointer-events: none;
-}
-
-.dialog-footer button {
-  font-weight: 500;
-}
-
-.dialog-footer button:hover {
-  border-image: none;  /* Overrides the definition of common.css. */
-}
-
-.dialog-footer cr-button,
-.dialog-footer button {
-  height: 32px;
-  margin: 0 4px;
-  min-width: 92px;
-}
-
-.dialog-footer cr-button[disabled],
-.dialog-footer cr-button[disabled]:hover,
-.dialog-footer button[disabled],
-.dialog-footer button[disabled]:hover {
-  background-color:
-      var(--cros-button-background-color-primary-disabled);
-  color: var(--cros-button-label-color-primary-disabled);
-}
-
-.dialog-footer .primary {
-  background-color: var(--cros-button-background-color-primary);
-  color: var(--cros-button-label-color-primary);
-}
-
-.dialog-footer .primary:hover {
-   background: var(--cros-button-background-color-primary-hover-preblended);
-}
-
-.dialog-footer .primary paper-ripple {
-  --paper-ripple-opacity: var(--cros-button-primary-ripple-opacity);
-  color: var(--cros-button-ripple-color-primary);
-}
-
-.dialog-footer .primary:active {
-  box-shadow: 0 1px 2px var(--cros-button-active-shadow-color-key-primary),
-              0 1px 3px var(--cros-button-active-shadow-color-ambient-primary);
-}
-
-.dialog-footer .secondary {
-  background: transparent;
-  border: 1px solid var(--cros-button-stroke-color-secondary);
-  color: var(--cros-button-label-color-secondary);
-  margin-inline-end: 8px;
-}
-
-.dialog-footer .secondary:hover {
-  background: var(--cros-button-background-color-secondary-hover);
-  border: 1px solid var(--cros-button-stroke-color-secondary-hover);
-}
-
-.dialog-footer .secondary paper-ripple {
-  --paper-ripple-opacity: var(--cros-button-secondary-ripple-opacity);
-  color: var(--cros-button-ripple-color-secondary);
-}
-
-.dialog-footer .secondary:active {
-  box-shadow: 0 1px 2px var(--cros-button-active-shadow-color-key-secondary),
-              0 1px 3px var(--cros-button-active-shadow-color-ambient-secondary);
+  height: 36px;
 }
 
 .dialog-footer .select {
-  background-color: var(--cros-textfield-background-color);
+  background-color: var(--cros-sys-input_field_on_base);
   border: 0;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
   margin-inline-start: 16px;
   max-width: 152px;
-  min-height: 32px;
+  min-height: 36px;
   min-width: 104px;
   outline: none;
-  padding: 0 36px 0 16px;
+  padding: 0 48px 0 16px;
   position: relative;
 }
 
@@ -912,22 +840,21 @@ html.focus-outline-visible .dialog-header.files-ng cr-toggle:focus {
   -webkit-mask-image: url(../images/files/ui/sort_desc.svg);
   -webkit-mask-position: center;
   -webkit-mask-repeat: no-repeat;
-  background-color: var(--cros-icon-color-primary);
+  background-color: var(--cros-sys-secondary);
   content: '';
-  height: 32px;
+  height: 36px;
   position: absolute;
   right: 0;
-  width: 32px;
+  width: 36px;
 }
 
 .dialog-footer div.select:not(:active):focus {
-  box-shadow: 0 0 0 2px var(--cros-focus-ring-color);
+  outline: 2px solid var(--cros-sys-focus_ring);
 }
 
 .dialog-footer div.select > span {
-  color: var(--cros-text-color-primary);
   display: inline-block;
-  line-height: 32px;
+  line-height: 36px;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -936,8 +863,8 @@ html.focus-outline-visible .dialog-header.files-ng cr-toggle:focus {
 }
 
 .dialog-footer div.select > div.options {
-  background-color: var(--cros-bg-color-elevation-2);
-  border-radius: 4px;
+  background-color: var(--cros-sys-base_elevated);
+  border-radius: 8px;
   bottom: calc(100% + 2px);
   box-shadow: var(--cros-elevation-2-shadow);
   left: 0;
@@ -953,27 +880,46 @@ html.focus-outline-visible .dialog-header.files-ng cr-toggle:focus {
 }
 
 .dialog-footer div.select > div.options option {
-  color: var(--cros-menu-label-color);
-  line-height: 32px;
-  min-height: 32px;
-  padding: 0 12px 0 16px;
+  color: var(--cros-sys-on_surface);
+  font: var(--cros-button-2-font);
+  line-height: 36px;
+  min-height: 36px;
+  padding: 0 16px;
   vertical-align: middle;
 }
 
 .dialog-footer div.select > div.options option:hover,
 .dialog-footer div.select > div.options:not(:hover) option.selected {
-  background-color: var(--cros-menu-item-background-hover);
+  background-color: var(--cros-sys-hover_on_subtle);
 }
 
 .dialog-footer select:hover {
   border-image: none;
 }
 
-html.focus-outline-visible .dialog-footer .primary:focus,
-html.focus-outline-visible .dialog-footer .secondary:focus,
 html.focus-outline-visible .dialog-footer select:focus {
-  outline: 2px solid var(--cros-focus-ring-color);
+  outline: 2px solid var(--cros-sys-focus_ring);
   outline-offset: 2px;
+}
+
+/** Reset the hover color when using keyboard to navigate the dropdown items. */
+html.focus-outline-visible .dialog-footer div.select > div.options option:hover,
+html.focus-outline-visible
+    .dialog-footer div.select > div.options:not(:hover) option.selected {
+  background-color: unset;
+}
+
+html.focus-outline-visible
+    .dialog-footer div.select > div.options option:hover::after,
+html.focus-outline-visible
+    .dialog-footer div.select > div.options:not(:hover) option.selected::after {
+  border: 2px solid var(--cros-sys-focus_ring);
+  border-radius: 8px;
+  content: '';
+  height: 32px; /* option height - 2 x border width */
+  left: 0;
+  position: absolute;
+  width: calc(100% - 4px); /* 2 x border width */
 }
 
 .progressable:not([progress]) .progress-bar,
@@ -1004,7 +950,6 @@ html.focus-outline-visible .dialog-footer select:focus {
   flex-direction: row;
   overflow: hidden;
   padding-bottom: 4px;
-  padding-inline-start: 8px;
   padding-top: 4px;
 }
 
@@ -1024,13 +969,13 @@ body.check-select .breadcrumbs {
   padding-inline: 8px 12px;
 }
 
-body.check-select #read-only-indicator {
+body.check-select #read-only-indicator,
+body.check-select #offline-folder-indicator {
   display: none;
 }
 
 .dialog-header.files-ng #read-only-icon {
   -webkit-mask-image: url(../images/files/ui/visibility_ng.svg);
-  background-color: var(--cros-icon-color-secondary);
   height: 20px;
   margin-inline-end: 8px;
   width: 20px;
@@ -1038,8 +983,7 @@ body.check-select #read-only-indicator {
 
 #read-only-label {
   flex: none;
-  font-size: 13px;
-  font-weight: 500;
+  font: var(--cros-button-1-font);
 }
 
 .filelist-panel {
@@ -1088,6 +1032,18 @@ body.check-select #read-only-indicator {
   margin-top: 16px;
   text-align: center;
   width: 320px;
+  /* Ensure links in label are on top when not hidden so a click is not
+  absorbed by an empty file-list. */
+  z-index: 500;  /* Must be below the contextmenu (600). */
+}
+
+#empty-folder #empty-folder-title {
+  font: var(--cros-button-2-font);
+}
+
+#empty-folder > .label > span#empty-folder-desc > a {
+  color: var(--cros-sys-primary);
+  font: var(--cros-body-1-font);
 }
 
 #detail-table {
@@ -1104,11 +1060,12 @@ body.check-select #read-only-indicator {
 }
 
 #file-list .drag-selection-border {
-  background-color: rgba(var(--cros-bg-color-rgb), 30%);
-  border: 2px solid rgba(var(--cros-bg-color-rgb), 60%);
+  background-color: var(--cros-sys-highlight_shape);
+  border: 2px solid var(--cros-sys-primary);
+  border-radius: 4px;
   box-sizing: border-box;
   display: flex;
-  outline: 1px solid var(--cros-selection-outline);
+  outline: 1px solid var(--cros-sys-separator);
   position: absolute;
   z-index: 2;
 }
@@ -1173,15 +1130,17 @@ body.files-ng .banner-close {
      fully visible. */
   box-sizing: border-box;
   overflow-y: auto;
+  padding-inline: calc(20px - 16px); /* 16px is the padding of the thumbnail. */
   width: 100%;
 }
 
 body.files-ng grid .grid-title {
   box-sizing: border-box;
   color: var(--cros-sys-on_surface);
-  font-family: 'Roboto Medium';
+  font: var(--cros-button-2-font);
+  padding-bottom: 6px;
   padding-inline-start: 16px;
-  padding-top: 20px;
+  padding-top: 14px;
   /* Make sure clicking this area can unselect file grids. */
   pointer-events: none;
   width: 100%;
@@ -1231,13 +1190,16 @@ body.files-ng .thumbnail-frame > .img-container {
 }
 
 #list-container.thumbnail-view li.pinned:not([renaming]):not(.dim-offline) .inline-status,
-#list-container.thumbnail-view li.pinned:not([renaming]):not(.dim-offline) .inline-status xf-icon,
+#list-container.thumbnail-view li.pinned:not([renaming]):not(.dim-offline)[data-sync-status=not_found] .inline-status xf-icon,
 #list-container.thumbnail-view li:not([renaming])[data-sync-status]:not([data-sync-status=not_found]) .inline-status,
-#list-container.thumbnail-view li:not([renaming])[data-sync-status]:not([data-sync-status=not_found]) .inline-status .progress {
+#list-container.thumbnail-view li:not([renaming])[data-sync-status]:not([data-sync-status=not_found]) .inline-status .progress,
+#list-container.thumbnail-view li.cant-pin:not([renaming]) .inline-status,
+#list-container.thumbnail-view li.cant-pin:not([renaming]) .inline-status xf-icon[type=cant-pin] {
   display: flex;
 }
 
-#list-container.thumbnail-view li.pinned .inline-status xf-icon[type=offline] {
+#list-container.thumbnail-view li.pinned .inline-status xf-icon[type=offline],
+#list-container.thumbnail-view li.cant-pin .inline-status xf-icon[type=cant-pin] {
   --xf-icon-color: currentColor;
 }
 
@@ -1264,7 +1226,8 @@ body.check-select #list-container.thumbnail-view .thumbnail-grid:focus
 
 /* Only display outlines for entries with thumbnails. */
 #list-container.thumbnail-view li:has(.thumbnail) .inline-status .progress,
-#list-container.thumbnail-view li.pinned:has(.thumbnail) .inline-status xf-icon[type=offline] {
+#list-container.thumbnail-view li.pinned:has(.thumbnail) .inline-status xf-icon[type=offline],
+#list-container.thumbnail-view li.cant-pin:has(.thumbnail) .inline-status xf-icon[type=cant-pin] {
   --xf-icon-color-outline: var(--cros-sys-app_base);
 }
 
@@ -1295,7 +1258,7 @@ body[type='full-page'] .detail-name .detail-icon:active {
 
 .thumbnail-bottom .filename-label {
   flex: auto;
-  font-weight: normal;
+  font: var(--cros-body-2-font);
   padding-inline-end: 8px;
 }
 
@@ -1339,6 +1302,7 @@ grid .thumbnail-bottom .detail-icon:active {
 }
 
 .thumbnail-grid .thumbnail-frame {
+  background-color: var(--cros-sys-app_base_shaded);
   height: 100%;
   width: 100%;
 }
@@ -1360,6 +1324,7 @@ grid .thumbnail-bottom .detail-icon:active {
 }
 
 .thumbnail-grid .thumbnail-bottom {
+  background-color: var(--cros-sys-app_base);
   color: var(--cros-sys-on_surface);
   height: 48px;
 }
@@ -1369,7 +1334,9 @@ grid .thumbnail-bottom .detail-icon:active {
 .thumbnail-grid .thumbnail-item[selected].directory
     .thumbnail-bottom,
 .thumbnail-grid .thumbnail-item[lead].directory
-    .thumbnail-bottom {
+    .thumbnail-bottom,
+.thumbnail-grid .thumbnail-item[selected] .thumbnail-bottom .icon-badge,
+.thumbnail-grid .thumbnail-item[lead] .thumbnail-bottom .icon-badge {
   background-color: var(--cros-sys-surface_variant);
 }
 
@@ -1378,8 +1345,18 @@ grid .thumbnail-bottom .detail-icon:active {
 .thumbnail-grid:focus .thumbnail-item[selected].directory
     .thumbnail-bottom,
 .thumbnail-grid:focus .thumbnail-item[lead].directory
-    .thumbnail-bottom {
+    .thumbnail-bottom,
+.thumbnail-grid:focus .thumbnail-item[selected] .thumbnail-bottom .icon-badge,
+.thumbnail-grid:focus .thumbnail-item[lead] .thumbnail-bottom .icon-badge {
   background-color: var(--cros-sys-secondary_container);
+}
+
+.thumbnail-grid:focus .thumbnail-item[selected] .thumbnail-bottom,
+.thumbnail-grid:focus .thumbnail-item[lead] .thumbnail-bottom,
+.thumbnail-grid:focus .thumbnail-item[selected].directory
+    .thumbnail-bottom,
+.thumbnail-grid:focus .thumbnail-item[lead].directory
+    .thumbnail-bottom {
   color: var(--cros-sys-on_secondary_container);
 }
 
@@ -1451,6 +1428,7 @@ body.files-ng #default-tasks-list {
 }
 
 #default-tasks-list li {
+  border-radius: 8px;
   height: 40px;
   line-height: 40px;
 }
@@ -1477,13 +1455,20 @@ html[dir='rtl'] #default-tasks-list > li > .icon {
 body.files-ng #list-container list > li[selected],
 body.files-ng #list-container list > li:active,
 body.files-ng #list-container list > li.accepts,
-body.files-ng #list-container list > li[lead] {
+body.files-ng #list-container list > li[lead],
+body.files-ng #list-container list > li[selected] .icon-badge,
+body.files-ng #list-container list > li:active .icon-badge,
+body.files-ng #list-container list > li.accepts .icon-badge,
+body.files-ng #list-container list > li[lead] .icon-badge {
   background-color: var(--cros-sys-surface_variant);
 }
 
 body.files-ng #list-container list:focus > li[selected],
 body.files-ng #list-container list:focus > li.accepts[selected],
-body.files-ng #list-container list:focus > li[lead] {
+body.files-ng #list-container list:focus > li[lead],
+body.files-ng #list-container list:focus > li[selected] .icon-badge,
+body.files-ng #list-container list:focus > li.accepts[selected] .icon-badge,
+body.files-ng #list-container list:focus > li[lead] .icon-badge {
   background-color: var(--cros-sys-secondary_container);
 }
 
@@ -1521,11 +1506,11 @@ html[dir='rtl'] body.files-ng #default-tasks-list li[selected]::after {
 #list-container .group-heading {
   border-bottom: 1px solid var(--cros-separator-color);
   box-sizing: border-box;
-  color: var(--cros-text-color-secondary);
-  font-family: 'Roboto Medium';
+  color: var(--cros-sys-on_surface);
+  font: var(--cros-button-2-font);
   /* The desired height plus the border width. */
   height: calc(56px + 1px);
-  padding-inline-start: 16px;
+  padding-inline-start: 20px;
   padding-top: 20px;
   /* Make sure clicking this area can unselect file items. */
   pointer-events: none;
@@ -1555,8 +1540,8 @@ body.check-select #list-container list > li[lead] {
   border: 2px solid var(--cros-sys-on_surface_variant);
 }
 
-#list-container grid > .accepts {
-  background-color: var(--cros-highlight-color-hover)
+#list-container grid > .accepts .thumbnail-bottom {
+  background-color: var(--cros-sys-surface_variant);
 }
 
 #directory-tree .tree-item.accepts > .tree-row,
@@ -1568,7 +1553,7 @@ body.check-select #list-container list > li[lead] {
 @keyframes acceptsBlink {
   0% {
     background-color: transparent;
-    color: var(--cros-ripple-color);
+    color: var(--cros-sys-hover_on_prominent);
   }
 }
 
@@ -1607,7 +1592,7 @@ input.rename::selection,
 }
 
 input.rename {
-  font: inherit;
+  font: var(--cros-body-2-font);
   line-height: 1;
   text-align: inherit;
 }
@@ -1620,8 +1605,16 @@ input.rename {
   flex: auto;
 }
 
-body.files-ng #list-container input.rename {
+#list-container input.rename {
   margin-inline-end: 12px;
+}
+
+/* The file name's direction is always LTR even in RTL mode
+   (.entry-name in common.css), so the inline-end above won't work in RTL
+   mode, we need to have the inline-start here. */
+html[dir='rtl'] #list-container input.rename {
+  margin-inline-end: 0;
+  margin-inline-start: 12px;
 }
 
 li[renaming=''] .filename-label {
@@ -1672,7 +1665,6 @@ li[renaming=''] .filename-label {
   box-sizing: border-box;
   color: var(--cros-sys-on_surface);
   flex: none;
-  font-family: 'Roboto Medium';
   /* The desired height plus the border bottom. */
   height: calc(48px + 1px);
   line-height: 20px;
@@ -1681,8 +1673,7 @@ li[renaming=''] .filename-label {
 /* Text label in a table header. */
 .table-header-label {
   color: inherit;
-  font-weight: normal;
-  line-height: 20px;
+  font: var(--cros-button-2-font);
   margin: 0 10px;
   margin-inline-end: 0;
   margin-inline-start: 32px;
@@ -1723,7 +1714,6 @@ li[renaming=''] .filename-label {
   -webkit-mask-size: 16px 16px;
   background-color: currentColor;
   height: 24px;
-  margin-inline-end: 14px;
   margin-inline-start: auto;
   padding-inline-start: 8px;
   width: 24px;
@@ -1732,7 +1722,7 @@ li[renaming=''] .filename-label {
 #list-container list li .detail-icon {
   height: 48px;
   margin-inline-end: 20px;
-  margin-inline-start: 20px;
+  margin-inline-start: calc(18px - 2px); /* 2px is the border width of li. */
   width: 24px;
 }
 
@@ -1755,7 +1745,6 @@ body.check-select #list-container li[selected] .detail-checkmark {
 
 #list-container list li .detail-thumbnail > .thumbnail {
   -webkit-user-drag: none;
-  background-color: var(--cros-highlight-color-hover);
   background-position: center;
   background-size: cover;
   border-radius: 14px;
@@ -1829,8 +1818,8 @@ body.files-ng #drag-container {
 }
 
 body.files-ng #drag-container .drag-box {
-  background-color: var(--cros-bg-color-elevation-2);
-  border-radius: 2px;
+  background-color: var(--cros-sys-base_elevated);
+  border-radius: 8px;
   box-shadow: var(--cros-elevation-2-shadow);
   box-sizing: border-box;
   height: 40px;
@@ -1842,7 +1831,6 @@ body.files-ng #drag-container .drag-contents {
   align-items: center;
   display: flex;
   left: 8px;
-  padding-inline-end: 2px;
   padding-inline-start: 8px;
   right: 8px;
   top: 12px;
@@ -1860,11 +1848,12 @@ body.files-ng #drag-container .detail-icon {
 }
 
 body.files-ng #drag-container .detail-icon[file-type-icon] {
-  color: var(--cros-icon-color-primary);
+  color: var(--cros-sys-on_surface);
 }
 
 body.files-ng #drag-container .label {
-  color: var(--cros-text-color-primary);
+  color: var(--cros-sys-on_surface);
+  font: var(--cros-body-2-font);
   overflow: hidden;
   padding: 0 10px;
   text-overflow: ellipsis;
@@ -1872,11 +1861,10 @@ body.files-ng #drag-container .label {
 }
 
 body.files-ng #drag-container .drag-bubble {
-  background-color: var(--cros-icon-color-prominent);
+  background-color: var(--cros-sys-tertiary_container);
   border-radius: 12px;
-  color: var(--cros-bg-color);
-  font-size: 14px;
-  font-weight: 700;
+  color: var(--cros-sys-on_tertiary_container);
+  font: var(--cros-button-1-font);
   height: 24px;
   line-height: 24px;
   max-width: fit-content;
@@ -1889,25 +1877,6 @@ body.files-ng #drag-container .drag-bubble {
 html[dir=rtl] body.files-ng #drag-container .drag-bubble {
   left: calc(8px * 0.5);
   right: unset;
-}
-
-/* TODO(fukino): Gather menu-related definitions into one place. */
-cr-menu#file-context-menu {
-  min-width: 208px;
-  z-index: 600;  /* Must be below the overlay pane (1000). */
-}
-
-cr-menu#file-context-menu > :not(hr) {
-  padding-inline-end: 8px;
-}
-
-cr-menu#file-context-menu.toolbar-menu > .hide-on-toolbar {
-  display: none;
-}
-
-cr-menu.chrome-menu hr {
-  color: transparent;
-  font-size: 0;
 }
 
 body[drive='unmounted'] .dialog-container #list-container,
@@ -1997,8 +1966,8 @@ html.col-resize .table-header-label .sort-icon:not(:active):hover {
 #list-container li.table-row {
   background-color: var(--cros-sys-app_base);
   box-sizing: border-box;
+  font: var(--cros-body-2-font);
   height: 48px;
-  line-height: 20px;
 }
 
 .check-select #list-container list li[selected] .detail-thumbnail
@@ -2044,11 +2013,14 @@ list:focus li[selected] .table-row-cell .dlp-managed-icon,
 
 .table-row-cell > .dateholder {
   display: flex;
+  margin-inline-end: 14px;
 }
 
 .table-row-cell > .dateholder > .date {
   flex: 1 1;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
 }
 
 .table-row-cell > .dateholder > .dlp-managed-icon {
@@ -2069,7 +2041,7 @@ list:focus li[selected] .table-row-cell .dlp-managed-icon,
    * variable needs to be created and applied here.
    */
   --cr-icon-button-fill-color: var(--cros-sys-outline);
-  --cr-icon-button-hover-background-color: var(--cros-ripple-color);
+  --cr-icon-button-hover-background-color: var(--cros-sys-hover_on_subtle);
   --cr-icon-button-icon-size: 32px;
   --cr-icon-button-margin-start: 0px;
   --cr-icon-button-size: 32px;
@@ -2107,7 +2079,7 @@ html.col-resize .table-header-splitter .splitter-icon:not(:active):hover {
 }
 
 .check-select li[selected] .filename-label {
-  font-weight: 500;
+  font: var(--cros-button-2-font);
 }
 
 body.files-ng #list-container li .detail-checkmark {
@@ -2155,14 +2127,17 @@ body.files-ng #list-container li .detail-checkmark {
 #list-container .list li.encrypted:not([renaming]) .encryption-status,
 #list-container .list li.encrypted:not([renaming]) .encryption-status xf-icon[type=encrypted],
 #list-container .list li.pinned:not([renaming]):not(.dim-offline) .inline-status,
-#list-container .list li.pinned:not([renaming]):not(.dim-offline) .inline-status xf-icon,
+#list-container .list li.pinned:not([renaming]):not(.dim-offline)[data-sync-status=not_found] .inline-status xf-icon,
 #list-container .list li:not([renaming])[data-sync-status]:not([data-sync-status=not_found]) .inline-status,
-#list-container .list li:not([renaming])[data-sync-status]:not([data-sync-status=not_found]) .inline-status .progress {
+#list-container .list li:not([renaming])[data-sync-status]:not([data-sync-status=not_found]) .inline-status .progress,
+#list-container .list li.cant-pin:not([renaming]) .inline-status,
+#list-container .list li.cant-pin:not([renaming]) .inline-status xf-icon[type=cant-pin] {
   display: flex;
 }
 
 #list-container .list li.encrypted .encryption-status xf-icon[type=encrypted],
-#list-container .list li.pinned .inline-status xf-icon[type=offline] {
+#list-container .list li.pinned .inline-status xf-icon[type=offline],
+#list-container .list li.cant-pin .inline-status xf-icon[type=cant-pin] {
   --xf-icon-color: currentColor;
 }
 
@@ -2285,17 +2260,6 @@ list.autocomplete-suggestions > [lead] {
   background-color: var(--cros-menu-item-background-hover);
 }
 
-#gear-menu > cr-menu-item:not(.menuitem-button),
-#sort-menu > cr-menu-item {
-  margin-inline-end: 50px;
-}
-
-.cr-dialog-container.files-ng #suggest-app-dialog.cr-dialog-frame {
-  max-width: unset !important;
-  min-width: unset !important;
-  width: 735px;
-}
-
 .error-dialog-frame .error-dialog-img {
   background-image: -webkit-image-set(
     url(chrome://theme/IDR_ERROR_NETWORK_GENERIC) 1x,
@@ -2360,9 +2324,14 @@ files-toast {
   --ripple-opacity: 100%;
   --text-color: var(--cros-sys-on_surface);
   border-radius: 8px;
+  font: var(--cros-button-1-font);
   margin-inline: 4px;
   min-width: auto;
   padding-inline: 12px;
+}
+
+.file-type-filter-button:first-child {
+  margin-inline-start: 0;
 }
 
 .file-type-filter-button.active {
@@ -2418,5 +2387,5 @@ files-tooltip:not(:defined) {
 }
 
 #path-display-container {
-  background-color: var(--cros-sys-app_base_shaded);
+  background-color: var(--cros-sys-app_base);
 }

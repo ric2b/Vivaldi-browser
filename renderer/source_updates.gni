@@ -8,6 +8,8 @@ update_target("//chrome/renderer:renderer") {
     "//vivaldi/renderer/vivaldi_render_frame_blink_proxy_impl.h",
     "//vivaldi/renderer/blink/vivaldi_spatnav_quad.cc",
     "//vivaldi/renderer/blink/vivaldi_spatnav_quad.h",
+    "//vivaldi/renderer/blink/vivaldi_spatial_navigation_controller.cc",
+    "//vivaldi/renderer/blink/vivaldi_spatial_navigation_controller.h",
   ]
 }
 

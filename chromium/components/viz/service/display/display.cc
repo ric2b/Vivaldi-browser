@@ -44,6 +44,7 @@
 #include "components/viz/service/display/display_resource_provider_skia.h"
 #include "components/viz/service/display/display_resource_provider_software.h"
 #include "components/viz/service/display/display_scheduler.h"
+#include "components/viz/service/display/display_utils.h"
 #include "components/viz/service/display/null_renderer.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/renderer_utils.h"
@@ -276,10 +277,12 @@ void Display::PresentationGroupTiming::AddPresentationHelper(
 void Display::PresentationGroupTiming::OnDraw(
     base::TimeTicks frame_time,
     base::TimeTicks draw_start_timestamp,
-    base::flat_set<base::PlatformThreadId> thread_ids) {
+    base::flat_set<base::PlatformThreadId> thread_ids,
+    HintSession::BoostType boost_type) {
   frame_time_ = frame_time;
   draw_start_timestamp_ = draw_start_timestamp;
   thread_ids_ = std::move(thread_ids);
+  boost_type_ = boost_type;
 }
 
 void Display::PresentationGroupTiming::OnSwap(gfx::SwapTimings timings,
@@ -297,7 +300,8 @@ void Display::PresentationGroupTiming::OnSwap(gfx::SwapTimings timings,
   }
   // Can be nullptr in unittests.
   if (scheduler) {
-    scheduler->ReportFrameTime(frame_latency, std::move(thread_ids_));
+    scheduler->ReportFrameTime(frame_latency, std::move(thread_ids_),
+                               draw_start_timestamp_, boost_type_);
   }
 }
 
@@ -461,6 +465,10 @@ void Display::Resize(const gfx::Size& size) {
   damage_tracker_->DisplayResized();
 }
 
+void Display::SetOutputSurfaceClipRect(const gfx::Rect& clip_rect) {
+  renderer_->SetOutputSurfaceClipRect(clip_rect);
+}
+
 void Display::InvalidateCurrentSurfaceId() {
   current_surface_id_ = SurfaceId();
   // Force a gc as the display may not be visible (gc occurs after drawing,
@@ -614,9 +622,23 @@ void DebugDrawFrame(const AggregatedFrame& frame) {
       continue;
     }
 
-    DBG_LOG_OPT("frame.render_pass.numquads", DBG_OPT_BLUE,
-                "Num render pass quads=%d",
-                static_cast<int>(render_pass->quad_list.size()));
+    DBG_DRAW_RECT_OPT("frame.render_pass.output_rect", DBG_OPT_BLUE,
+                      render_pass->output_rect);
+    DBG_DRAW_RECT_OPT("frame.render_pass.damage", DBG_OPT_RED,
+                      render_pass->damage_rect);
+
+    DBG_LOG_OPT("frame.render_pass.meta", DBG_OPT_BLUE,
+                "Render pass id=%" PRIu64
+                ", output_rect=(%s), damage_rect=(%s), "
+                "quad_list.size=%zu",
+                render_pass->id.value(),
+                render_pass->output_rect.ToString().c_str(),
+                render_pass->damage_rect.ToString().c_str(),
+                render_pass->quad_list.size());
+    DBG_LOG_OPT(
+        "frame.render_pass.transform_to_root_target", DBG_OPT_BLUE,
+        "Render pass transform=%s",
+        render_pass->transform_to_root_target.ToDecomposedString().c_str());
 
     for (auto* quad : render_pass->quad_list) {
       auto* sqs = quad->shared_quad_state;
@@ -635,8 +657,6 @@ void DebugDrawFrame(const AggregatedFrame& frame) {
           base::NumberToString(quad->resources.ids[0].GetUnsafeValue()));
 
       DBG_DRAW_RECT("frame.render_pass.quad", display_rect);
-      DBG_DRAW_RECT_OPT("frame.render_pass.damage", DBG_OPT_RED,
-                        render_pass->damage_rect);
     }
   }
 }
@@ -906,8 +926,13 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
         thread_ids.insert(surface_thread_ids.begin(), surface_thread_ids.end());
       }
     }
+
+    HintSession::BoostType boost_type = HintSession::BoostType::kDefault;
+    if (IsScroll(frame.latency_info)) {
+      boost_type = HintSession::BoostType::kScrollBoost;
+    }
     presentation_group_timing.OnDraw(params.frame_time, draw_timer->Begin(),
-                                     std::move(thread_ids));
+                                     std::move(thread_ids), boost_type);
 
     for (const auto& surface_id : aggregator_->previous_contained_surfaces()) {
       surface = surface_manager_->GetSurfaceForId(surface_id);
@@ -1482,6 +1507,11 @@ void Display::InitDelegatedInkPointRendererReceiver(
                      /*create_if_necessary=*/true)) {
     ink_renderer->InitMessagePipeline(std::move(pending_receiver));
   }
+}
+
+void Display::ResetDisplayClientForTesting(DisplayClient* old_client) {
+  CHECK_EQ(client_, old_client);
+  client_ = nullptr;
 }
 
 }  // namespace viz

@@ -187,7 +187,6 @@
 <translation id="8150722005171944719">Súbor na adrese <ph name="URL" /> nie je možné prečítať. Je možné, že bol odstránený, presunutý alebo môžu v prístupe brániť povolenia súboru.</translation>
 <translation id="8184538546369750125">Použiť predvolené všeobecné nastavenie (Povoliť)</translation>
 <translation id="8211406090763984747">Pripojenie je bezpečné</translation>
-<translation id="8225771182978767009">Osoba, ktorá nastavila tento počítač, sa rozhodla daný web blokovať.</translation>
 <translation id="8241707690549784388">Vami hľadaná stránka použila informácie, ktoré ste zadali. Návrat na túto stránku môže spôsobiť zopakovanie akcie, ktorú ste vykonali. Chcete pokračovať?</translation>
 <translation id="8241712895048303527">Blokovať na tejto stránke</translation>
 <translation id="8286036467436129157">Prihlásenie</translation>
@@ -208,7 +207,6 @@
 <translation id="9062620674789239642">Mohol byť presunutý, upravený alebo odstránený.</translation>
 <translation id="9069693763241529744">Blokované rozšírením</translation>
 <translation id="9073799351042754113">Pre túto webovú stránku ste sa rozhodli vypnúť bezpečnostné upozornenia.</translation>
-<translation id="910924428752220542">Vivaldi heslá</translation>
 <translation id="9169664750068251925">Vždy blokovať na tejto stránke</translation>
 <translation id="9180553614777056266">Blokovač reklám</translation>
 <translation id="9183425211371246419">Web <ph name="HOST_NAME" /> využíva nepodporovaný protokol.</translation>

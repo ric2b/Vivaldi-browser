@@ -5,26 +5,29 @@
 #include "ash/clipboard/views/clipboard_history_bitmap_item_view.h"
 
 #include "ash/clipboard/clipboard_history_item.h"
-#include "ash/clipboard/clipboard_history_resource_manager.h"
-#include "ash/clipboard/views/clipboard_history_delete_button.h"
 #include "ash/clipboard/views/clipboard_history_view_constants.h"
+#include "ash/style/ash_color_id.h"
+#include "base/callback_list.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
-#include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view_class_properties.h"
 
@@ -42,45 +45,41 @@ constexpr base::TimeDelta kFadeInDurationMs = base::Milliseconds(200);
 
 ////////////////////////////////////////////////////////////////////////////////
 // FadeImageView
-// An ImageView which reacts to updates from ClipboardHistoryResourceManager by
-// fading out the old image, and fading in the new image. Used when HTML is done
+// An `ImageView` which reacts to updates from its `ClipboardHistoryItem` by
+// fading out the old image and fading in the new image. Used when HTML is done
 // rendering. Expected to transition at most once in its lifetime.
 class FadeImageView : public views::ImageView,
-                      public ui::ImplicitAnimationObserver,
-                      public ClipboardHistoryResourceManager::Observer {
+                      public ui::ImplicitAnimationObserver {
  public:
   FadeImageView(
       base::RepeatingCallback<const ClipboardHistoryItem*()> item_resolver,
-      const ClipboardHistoryResourceManager* resource_manager,
       base::RepeatingClosure update_callback)
-      : item_resolver_(item_resolver),
-        resource_manager_(resource_manager),
-        update_callback_(update_callback) {
-    DCHECK(item_resolver_);
-    resource_manager_->AddObserver(this);
+      : item_resolver_(item_resolver), update_callback_(update_callback) {
+    CHECK(item_resolver_);
+    CHECK(update_callback_);
+
+    const auto* item = item_resolver_.Run();
+    CHECK(item);
+    // Subscribe to be notified when `item`'s display image updates.
+    // `Unretained(this)` is safe because `this` owns the callback, and `item`
+    // will not notify `this` of display image changes if
+    // `display_image_updated_subscription_` is destroyed.
+    display_image_updated_subscription_ =
+        item->AddDisplayImageUpdatedCallback(base::BindRepeating(
+            &FadeImageView::OnDisplayImageUpdated, base::Unretained(this)));
+
     SetImageFromModel();
-    DCHECK(update_callback_);
   }
 
   FadeImageView(const FadeImageView& rhs) = delete;
 
   FadeImageView& operator=(const FadeImageView& rhs) = delete;
 
-  ~FadeImageView() override {
-    StopObservingImplicitAnimations();
-    resource_manager_->RemoveObserver(this);
-  }
+  ~FadeImageView() override { StopObservingImplicitAnimations(); }
 
-  // ClipboardHistoryResourceManager::Observer:
-  void OnCachedImageModelUpdated(
-      const std::vector<base::UnguessableToken>& item_ids) override {
-    const auto* item = item_resolver_.Run();
-    if (!item || !base::Contains(item_ids, item->id())) {
-      return;
-    }
-
+  void OnDisplayImageUpdated() {
     // Fade the old image out, then swap in the new image.
-    DCHECK_EQ(FadeAnimationState::kNoFadeAnimation, animation_state_);
+    CHECK_EQ(FadeAnimationState::kNoFadeAnimation, animation_state_);
     SetPaintToLayer();
     animation_state_ = FadeAnimationState::kFadeOut;
 
@@ -97,7 +96,7 @@ class FadeImageView : public views::ImageView,
         NOTREACHED();
         return;
       case FadeAnimationState::kFadeOut:
-        DCHECK_EQ(0.0f, layer()->opacity());
+        CHECK_EQ(layer()->opacity(), 0.0f);
         animation_state_ = FadeAnimationState::kFadeIn;
         SetImageFromModel();
         {
@@ -116,7 +115,7 @@ class FadeImageView : public views::ImageView,
 
   void SetImageFromModel() {
     if (const auto* item = item_resolver_.Run()) {
-      DCHECK(item->display_image().has_value());
+      CHECK(item->display_image().has_value());
       SetImage(item->display_image().value());
     }
 
@@ -141,12 +140,11 @@ class FadeImageView : public views::ImageView,
   // represented by this image.
   base::RepeatingCallback<const ClipboardHistoryItem*()> item_resolver_;
 
-  // Owned by `ClipboardHistoryController`.
-  const raw_ptr<const ClipboardHistoryResourceManager, ExperimentalAsh>
-      resource_manager_;
-
-  // Used to notify of image changes.
+  // Used to notify the contents view of image changes.
   base::RepeatingClosure update_callback_;
+
+  // Subscription notified when the clipboard history item's image changes.
+  base::CallbackListSubscription display_image_updated_subscription_;
 };
 
 }  // namespace
@@ -154,28 +152,35 @@ class FadeImageView : public views::ImageView,
 ////////////////////////////////////////////////////////////////////////////////
 // ClipboardHistoryBitmapItemView::BitmapContentsView
 
-class ClipboardHistoryBitmapItemView::BitmapContentsView
-    : public ClipboardHistoryBitmapItemView::ContentsView {
+class ClipboardHistoryBitmapItemView::BitmapContentsView : public views::View {
  public:
   METADATA_HEADER(BitmapContentsView);
   explicit BitmapContentsView(ClipboardHistoryBitmapItemView* container)
-      : ContentsView(container), container_(container) {
-    SetLayoutManager(std::make_unique<views::FillLayout>());
+      : container_(container) {
+    views::Builder<views::View>(this)
+        .SetLayoutManager(std::make_unique<views::FillLayout>())
+        .AddChild(
+            views::Builder<views::ImageView>(BuildImageView())
+                .CopyAddressTo(&image_view_)
+                .SetPreferredSize(gfx::Size(
+                    INT_MAX, ClipboardHistoryViews::kImageViewPreferredHeight)))
+        .BuildChildren();
 
-    auto image_view = BuildImageView();
-    image_view->SetPreferredSize(
-        gfx::Size(INT_MAX, ClipboardHistoryViews::kImageViewPreferredHeight));
-    image_view_ = AddChildView(std::move(image_view));
-
-    // `border_container_view_` should be above `image_view_`.
-    border_container_view_ = AddChildView(std::make_unique<views::View>());
-
-    border_container_view_->SetBorder(views::CreateThemedRoundedRectBorder(
-        ClipboardHistoryViews::kImageBorderThickness,
-        ClipboardHistoryViews::kImageRoundedCornerRadius,
-        kColorAshHairlineBorderColor));
-
-    InstallDeleteButton();
+    if (chromeos::features::IsClipboardHistoryRefreshEnabled()) {
+      // Distinguish the image from rest of the menu with a colored background.
+      SetBackground(views::CreateThemedRoundedRectBackground(
+          cros_tokens::kCrosSysSeparator,
+          ClipboardHistoryViews::kImageBackgroundCornerRadius));
+    } else {
+      // Distinguish the image from rest of the menu with a border.
+      views::Builder<views::View>(this)
+          .AddChild(views::Builder<views::View>().SetBorder(
+              views::CreateThemedRoundedRectBorder(
+                  ClipboardHistoryViews::kImageBorderThickness,
+                  ClipboardHistoryViews::kImageBorderCornerRadius,
+                  kColorAshHairlineBorderColor)))
+          .BuildChildren();
+    }
   }
   BitmapContentsView(const BitmapContentsView& rhs) = delete;
   BitmapContentsView& operator=(const BitmapContentsView& rhs) = delete;
@@ -183,28 +188,6 @@ class ClipboardHistoryBitmapItemView::BitmapContentsView
 
  private:
   // ContentsView:
-  ClipboardHistoryDeleteButton* CreateDeleteButton() override {
-    auto delete_button_container = std::make_unique<views::View>();
-    auto* layout_manager = delete_button_container->SetLayoutManager(
-        std::make_unique<views::BoxLayout>(
-            views::BoxLayout::Orientation::kHorizontal));
-    layout_manager->set_main_axis_alignment(
-        views::BoxLayout::MainAxisAlignment::kEnd);
-    layout_manager->set_cross_axis_alignment(
-        views::BoxLayout::CrossAxisAlignment::kStart);
-
-    auto delete_button =
-        std::make_unique<ClipboardHistoryDeleteButton>(container_);
-    delete_button->SetProperty(
-        views::kMarginsKey,
-        ClipboardHistoryViews::kBitmapItemDeleteButtonMargins);
-    ClipboardHistoryDeleteButton* delete_button_ptr =
-        delete_button_container->AddChildView(std::move(delete_button));
-    AddChildView(std::move(delete_button_container));
-
-    return delete_button_ptr;
-  }
-
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override {
     // Create rounded corners around the contents area through the clip path
     // instead of layer clip. Because we have to avoid using any layer here.
@@ -214,7 +197,9 @@ class ClipboardHistoryBitmapItemView::BitmapContentsView
     // context menu is in overflow.
     const SkRect local_bounds = gfx::RectToSkRect(GetContentsBounds());
     const SkScalar radius =
-        SkIntToScalar(ClipboardHistoryViews::kImageRoundedCornerRadius);
+        SkIntToScalar(chromeos::features::IsClipboardHistoryRefreshEnabled()
+                          ? ClipboardHistoryViews::kImageBackgroundCornerRadius
+                          : ClipboardHistoryViews::kImageBorderCornerRadius);
     SetClipPath(SkPath::RRect(local_bounds, radius, radius));
 
     UpdateImageViewSize();
@@ -222,19 +207,29 @@ class ClipboardHistoryBitmapItemView::BitmapContentsView
 
   std::unique_ptr<views::ImageView> BuildImageView() {
     const auto* clipboard_history_item = container_->GetClipboardHistoryItem();
-    DCHECK(clipboard_history_item);
+    CHECK(clipboard_history_item);
     return std::make_unique<FadeImageView>(
         // `Unretained()` is safe because `this` owns the `FadeImageView` being
         // created, and `container_` owns `this`.
         base::BindRepeating(
             &ClipboardHistoryBitmapItemView::GetClipboardHistoryItem,
             base::Unretained(container_)),
-        container_->resource_manager_,
         base::BindRepeating(&BitmapContentsView::UpdateImageViewSize,
                             base::Unretained(this)));
   }
 
   void UpdateImageViewSize() {
+    if (chromeos::features::IsClipboardHistoryRefreshEnabled() &&
+        image_view_->GetImageModel() ==
+            clipboard_history_util::GetHtmlPreviewPlaceholder()) {
+      // The bitmap item placeholder icon's size does not depend on the
+      // available space.
+      image_view_->SetImageSize(
+          gfx::Size(ClipboardHistoryViews::kBitmapItemPlaceholderIconSize,
+                    ClipboardHistoryViews::kBitmapItemPlaceholderIconSize));
+      return;
+    }
+
     const gfx::Size image_size = image_view_->GetImage().size();
     gfx::Rect contents_bounds = GetContentsBounds();
 
@@ -261,7 +256,7 @@ class ClipboardHistoryBitmapItemView::BitmapContentsView
         break;
     }
 
-    DCHECK_GT(scaling_up_ratio, 0.f);
+    CHECK_GT(scaling_up_ratio, 0.f);
 
     image_view_->SetImageSize(
         gfx::Size(image_size.width() / scaling_up_ratio,
@@ -270,12 +265,9 @@ class ClipboardHistoryBitmapItemView::BitmapContentsView
 
   const raw_ptr<ClipboardHistoryBitmapItemView, ExperimentalAsh> container_;
   raw_ptr<views::ImageView, ExperimentalAsh> image_view_ = nullptr;
-
-  // Helps to place a border above `image_view_`.
-  raw_ptr<views::View, ExperimentalAsh> border_container_view_ = nullptr;
 };
 
-BEGIN_METADATA(ClipboardHistoryBitmapItemView, BitmapContentsView, ContentsView)
+BEGIN_METADATA(ClipboardHistoryBitmapItemView, BitmapContentsView, views::View)
 END_METADATA
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -284,10 +276,8 @@ END_METADATA
 ClipboardHistoryBitmapItemView::ClipboardHistoryBitmapItemView(
     const base::UnguessableToken& item_id,
     const ClipboardHistory* clipboard_history,
-    const ClipboardHistoryResourceManager* resource_manager,
     views::MenuItemView* container)
     : ClipboardHistoryItemView(item_id, clipboard_history, container),
-      resource_manager_(resource_manager),
       data_format_(GetClipboardHistoryItem()->main_format()) {
   switch (data_format_) {
     case ui::ClipboardInternalFormat::kHtml:
@@ -305,7 +295,7 @@ ClipboardHistoryBitmapItemView::ClipboardHistoryBitmapItemView(
 
 ClipboardHistoryBitmapItemView::~ClipboardHistoryBitmapItemView() = default;
 
-std::unique_ptr<ClipboardHistoryBitmapItemView::ContentsView>
+std::unique_ptr<views::View>
 ClipboardHistoryBitmapItemView::CreateContentsView() {
   return std::make_unique<BitmapContentsView>(this);
 }

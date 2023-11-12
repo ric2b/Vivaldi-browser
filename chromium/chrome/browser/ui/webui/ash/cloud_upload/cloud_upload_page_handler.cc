@@ -6,13 +6,12 @@
 #include <cstddef>
 
 #include "base/functional/bind.h"
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/crosapi/web_app_service_ash.h"
 #include "chrome/browser/ash/file_manager/file_tasks.h"
-#include "chrome/browser/ash/file_system_provider/provided_file_system_info.h"
-#include "chrome/browser/ash/file_system_provider/service.h"
 #include "chrome/browser/chromeos/office_web_app/office_web_app.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload.mojom.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_dialog.h"
@@ -21,9 +20,6 @@
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 
 namespace ash::cloud_upload {
-
-using ash::file_system_provider::ProviderId;
-using ash::file_system_provider::Service;
 
 CloudUploadPageHandler::CloudUploadPageHandler(
     content::WebUI* web_ui,
@@ -96,12 +92,9 @@ void CloudUploadPageHandler::IsODFSMounted(IsODFSMountedCallback callback) {
 
 void CloudUploadPageHandler::SignInToOneDrive(
     SignInToOneDriveCallback callback) {
-  Service* service = Service::Get(profile_);
-  ProviderId provider_id = ProviderId::CreateFromExtensionId(
-      file_manager::file_tasks::GetODFSExtensionId(profile_));
   web_ui_->GetWebContents()->GetTopLevelNativeWindow()->Hide();
-  service->RequestMount(
-      provider_id,
+  CloudUploadDialog::RequestODFSMount(
+      profile_,
       base::BindOnce(&CloudUploadPageHandler::OnMountResponse,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -122,13 +115,19 @@ void CloudUploadPageHandler::RespondWithLocalTaskAndClose(int task_position) {
 void CloudUploadPageHandler::SetOfficeAsDefaultHandler() {
   using file_manager::file_tasks::kActionIdOpenInOffice;
 
+  // TODO(b:275912658): Only set handlers if that group has no type set already
   file_manager::file_tasks::SetWordFileHandlerToFilesSWA(profile_,
                                                          kActionIdOpenInOffice);
   file_manager::file_tasks::SetExcelFileHandlerToFilesSWA(
       profile_, kActionIdOpenInOffice);
   file_manager::file_tasks::SetPowerPointFileHandlerToFilesSWA(
       profile_, kActionIdOpenInOffice);
-  file_manager::file_tasks::SetOfficeSetupComplete(profile_);
+}
+
+void CloudUploadPageHandler::GetAlwaysMoveOfficeFilesToDrive(
+    GetAlwaysMoveOfficeFilesToDriveCallback callback) {
+  std::move(callback).Run(
+      file_manager::file_tasks::GetAlwaysMoveOfficeFilesToDrive(profile_));
 }
 
 void CloudUploadPageHandler::SetAlwaysMoveOfficeFilesToDrive(bool always_move) {
@@ -136,15 +135,16 @@ void CloudUploadPageHandler::SetAlwaysMoveOfficeFilesToDrive(bool always_move) {
                                                             always_move);
 }
 
+void CloudUploadPageHandler::GetAlwaysMoveOfficeFilesToOneDrive(
+    GetAlwaysMoveOfficeFilesToOneDriveCallback callback) {
+  std::move(callback).Run(
+      file_manager::file_tasks::GetAlwaysMoveOfficeFilesToOneDrive(profile_));
+}
+
 void CloudUploadPageHandler::SetAlwaysMoveOfficeFilesToOneDrive(
     bool always_move) {
   file_manager::file_tasks::SetAlwaysMoveOfficeFilesToOneDrive(profile_,
                                                                always_move);
-}
-
-void CloudUploadPageHandler::SetOfficeMoveConfirmationShownForDriveTrue() {
-  file_manager::file_tasks::SetOfficeMoveConfirmationShownForDrive(profile_,
-                                                                   true);
 }
 
 void CloudUploadPageHandler::GetOfficeMoveConfirmationShownForDrive(
@@ -154,16 +154,16 @@ void CloudUploadPageHandler::GetOfficeMoveConfirmationShownForDrive(
           profile_));
 }
 
-void CloudUploadPageHandler::SetOfficeMoveConfirmationShownForOneDriveTrue() {
-  file_manager::file_tasks::SetOfficeMoveConfirmationShownForOneDrive(profile_,
-                                                                      true);
-}
-
 void CloudUploadPageHandler::GetOfficeMoveConfirmationShownForOneDrive(
     GetOfficeMoveConfirmationShownForOneDriveCallback callback) {
   std::move(callback).Run(
       file_manager::file_tasks::GetOfficeMoveConfirmationShownForOneDrive(
           profile_));
+}
+
+void CloudUploadPageHandler::RecordCancel(
+    mojom::MetricsRecordedSetupPage page) {
+  UMA_HISTOGRAM_ENUMERATION("FileBrowser.OfficeFiles.Setup.CancelPage", page);
 }
 
 }  // namespace ash::cloud_upload

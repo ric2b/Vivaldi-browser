@@ -74,6 +74,7 @@ class WalletCreditCardCloudTokenData;
 class WalletMaskedCreditCard;
 class WalletMetadataSpecifics;
 class WalletPostalAddress;
+class WebApkSpecifics;
 class WebAppSpecifics;
 class WebauthnCredentialSpecifics;
 class WifiConfigurationSpecifics;
@@ -267,6 +268,9 @@ base::Value WalletMetadataSpecificsToValue(
 
 base::Value WalletPostalAddressToValue(
     const sync_pb::WalletPostalAddress& wallet_postal_address);
+
+base::Value WebApkSpecificsToValue(
+    const sync_pb::WebApkSpecifics& web_apk_specifics);
 
 base::Value WebAppSpecificsToValue(
     const sync_pb::WebAppSpecifics& web_app_specifics);

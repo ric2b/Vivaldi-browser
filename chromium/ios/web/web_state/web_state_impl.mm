@@ -580,8 +580,9 @@ const GURL& WebStateImpl::GetLastCommittedURL() const {
                         : saved_->GetLastCommittedURL();
 }
 
-GURL WebStateImpl::GetCurrentURL(URLVerificationTrustLevel* trust_level) const {
-  return LIKELY(pimpl_) ? pimpl_->GetCurrentURL(trust_level) : GURL();
+absl::optional<GURL> WebStateImpl::GetLastCommittedURLIfTrusted() const {
+  return LIKELY(pimpl_) ? pimpl_->GetLastCommittedURLIfTrusted()
+                        : saved_->GetLastCommittedURL();
 }
 
 id<CRWWebViewProxy> WebStateImpl::GetWebViewProxy() const {
@@ -710,6 +711,13 @@ id WebStateImpl::GetActivityItem() API_AVAILABLE(ios(16.4)) {
     return nil;
   }
   return [GetWebController() activityItem];
+}
+
+UIColor* WebStateImpl::GetThemeColor() {
+  if (UNLIKELY(!IsRealized())) {
+    return nil;
+  }
+  return [GetWebController() themeColor];
 }
 
 #pragma mark - WebStateImpl private methods

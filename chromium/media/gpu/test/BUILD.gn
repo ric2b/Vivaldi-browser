@@ -22,6 +22,7 @@ if (enable_av1_decoder && (use_v4l2_codec || use_vaapi)) {
       ":video_player_test_environment",
       "//media:test_support",
       "//media/gpu:buildflags",
+      "//media/gpu/chromeos:common",
       "//testing/gtest",
     ]
   }
@@ -85,8 +86,10 @@ source_set("helpers") {
     "image.h",
     "image_quality_metrics.cc",
     "image_quality_metrics.h",
-    "video.cc",
-    "video.h",
+    "raw_video.cc",
+    "raw_video.h",
+    "video_bitstream.cc",
+    "video_bitstream.h",
     "video_frame_helpers.cc",
     "video_frame_helpers.h",
   ]

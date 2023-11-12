@@ -537,7 +537,7 @@ ServiceWorkerExternalRequestResult
 ServiceWorkerContextWrapper::StartingExternalRequest(
     int64_t service_worker_version_id,
     ServiceWorkerExternalRequestTimeoutType timeout_type,
-    const std::string& request_uuid) {
+    const base::Uuid& request_uuid) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!context())
     return ServiceWorkerExternalRequestResult::kNullContext;
@@ -566,7 +566,7 @@ bool ServiceWorkerContextWrapper::ExecuteScriptForTest(
 ServiceWorkerExternalRequestResult
 ServiceWorkerContextWrapper::FinishedExternalRequest(
     int64_t service_worker_version_id,
-    const std::string& request_uuid) {
+    const base::Uuid& request_uuid) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!context())
     return ServiceWorkerExternalRequestResult::kNullContext;
@@ -644,12 +644,23 @@ void ServiceWorkerContextWrapper::CheckHasServiceWorker(
     CheckHasServiceWorkerCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  if (!context_core_) {
+  // Checking OriginCanAccessServiceWorkers() is for performance optimization.
+  // Without this check, following FindRegistrationForClientUrl() can detect if
+  // the given URL has service worker registration or not. But
+  // FindRegistrationForClientUrl() takes time to compute. Hence avoid calling
+  // it when the given URL clearly doesn't register service workers.
+  if (!context_core_ || !OriginCanAccessServiceWorkers(url)) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback),
                                   ServiceWorkerCapability::NO_SERVICE_WORKER));
     return;
   }
+
+  DCHECK(url.is_valid());
+  TRACE_EVENT1("ServiceWorker",
+               "ServiceWorkerContextWrapper::CheckHasServiceWorker", "url",
+               url.spec());
+
   context()->CheckHasServiceWorker(net::SimplifyUrlForRequest(url), key,
                                    std::move(callback));
 }
@@ -809,8 +820,6 @@ void ServiceWorkerContextWrapper::StartServiceWorkerForNavigationHint(
     const GURL& document_url,
     const blink::StorageKey& key,
     StartServiceWorkerForNavigationHintCallback callback) {
-  TRACE_EVENT1("ServiceWorker", "StartServiceWorkerForNavigationHint",
-               "document_url", document_url.spec());
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (!context_core_) {
@@ -829,12 +838,48 @@ void ServiceWorkerContextWrapper::StartServiceWorkerForNavigationHint(
     return;
   }
 
+  DCHECK(document_url.is_valid());
+  TRACE_EVENT1("ServiceWorker", "StartServiceWorkerForNavigationHint",
+               "document_url", document_url.spec());
+
   context_core_->registry()->FindRegistrationForClientUrl(
       ServiceWorkerRegistry::Purpose::kNotForNavigation,
       net::SimplifyUrlForRequest(document_url), key,
       base::BindOnce(
           &ServiceWorkerContextWrapper::DidFindRegistrationForNavigationHint,
           this, std::move(callback)));
+}
+
+void ServiceWorkerContextWrapper::WarmUpServiceWorker(
+    const GURL& document_url,
+    const blink::StorageKey& key,
+    ServiceWorkerContextCore::WarmUpServiceWorkerCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  if (!context_core_) {
+    std::move(callback).Run();
+    return;
+  }
+
+  // Checking this is for performance optimization. Without this check,
+  // following FindRegistrationForClientUrl() can detect if the given URL has
+  // service worker registration or not. But FindRegistrationForClientUrl()
+  // takes time to compute. Hence avoid calling it when the given URL clearly
+  // doesn't register service workers.
+  if (!OriginCanAccessServiceWorkers(document_url)) {
+    std::move(callback).Run();
+    return;
+  }
+
+  context_core_->AddWarmUpRequest(document_url, key, std::move(callback));
+
+  // If a service worker warm-up process is already running, do not call
+  // `MaybeProcessPendingWarmUpRequest()` here. Instead, expect that
+  // `MaybeProcessPendingWarmUpRequest()` will be called at the end of the
+  // current warm-up process.
+  if (!context_core_->IsProcessingWarmingUp()) {
+    MaybeProcessPendingWarmUpRequest();
+  }
 }
 
 void ServiceWorkerContextWrapper::StopAllServiceWorkersForStorageKey(
@@ -1336,6 +1381,32 @@ void ServiceWorkerContextWrapper::FindRegistrationForScopeImpl(
           include_installing_version, std::move(callback)));
 }
 
+void ServiceWorkerContextWrapper::MaybeProcessPendingWarmUpRequest() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  context_core_->EndProcessingWarmingUp();
+
+  absl::optional<ServiceWorkerContextCore::WarmUpRequest> request =
+      context_core_->PopNextWarmUpRequest();
+
+  if (!request) {
+    return;
+  }
+
+  auto [document_url, key, callback] = std::move(*request);
+
+  DCHECK(document_url.is_valid());
+  TRACE_EVENT1("ServiceWorker",
+               "ServiceWorkerContextWrapper::MaybeProcessPendingWarmUpRequest",
+               "document_url", document_url.spec());
+
+  context_core_->registry()->FindRegistrationForClientUrl(
+      ServiceWorkerRegistry::Purpose::kNotForNavigation,
+      net::SimplifyUrlForRequest(document_url), key,
+      base::BindOnce(&ServiceWorkerContextWrapper::DidFindRegistrationForWarmUp,
+                     this, std::move(callback)));
+}
+
 void ServiceWorkerContextWrapper::DidFindRegistrationForFindImpl(
     bool include_installing_version,
     FindRegistrationCallback callback,
@@ -1507,6 +1578,46 @@ void ServiceWorkerContextWrapper::DidStartServiceWorkerForNavigationHint(
       code == blink::ServiceWorkerStatusCode::kOk
           ? StartServiceWorkerForNavigationHintResult::STARTED
           : StartServiceWorkerForNavigationHintResult::FAILED);
+}
+
+void ServiceWorkerContextWrapper::DidFindRegistrationForWarmUp(
+    ServiceWorkerContextCore::WarmUpServiceWorkerCallback callback,
+    blink::ServiceWorkerStatusCode status,
+    scoped_refptr<ServiceWorkerRegistration> registration) {
+  TRACE_EVENT1("ServiceWorker", "DidFindRegistrationForWarmUp", "status",
+               blink::ServiceWorkerStatusToString(status));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  if (!registration) {
+    CHECK_NE(status, blink::ServiceWorkerStatusCode::kOk);
+  }
+  if (!registration || !registration->active_version() ||
+      registration->active_version()->fetch_handler_existence() ==
+          ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST ||
+      registration->active_version()->running_status() ==
+          EmbeddedWorkerStatus::RUNNING) {
+    std::move(callback).Run();
+    MaybeProcessPendingWarmUpRequest();
+    return;
+  }
+
+  registration->active_version()->StartWorker(
+      ServiceWorkerMetrics::EventType::WARM_UP,
+      base::BindOnce(&ServiceWorkerContextWrapper::DidWarmUpServiceWorker, this,
+                     registration->scope(), std::move(callback)));
+}
+
+void ServiceWorkerContextWrapper::DidWarmUpServiceWorker(
+    const GURL& scope,
+    ServiceWorkerContextCore::WarmUpServiceWorkerCallback callback,
+    blink::ServiceWorkerStatusCode code) {
+  TRACE_EVENT2("ServiceWorker", "DidWarmUpServiceWorker", "url", scope.spec(),
+               "code", blink::ServiceWorkerStatusToString(code));
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  std::move(callback).Run();
+
+  MaybeProcessPendingWarmUpRequest();
 }
 
 ServiceWorkerContextCore* ServiceWorkerContextWrapper::context() {
@@ -1683,7 +1794,8 @@ ServiceWorkerContextWrapper::GetLoaderFactoryForBrowserInitiatedRequest(
       scope_origin, /*navigation_id=*/absl::nullopt, ukm::kInvalidSourceIdObj,
       &pending_receiver, &header_client, &bypass_redirect_checks,
       /*disable_secure_dns=*/nullptr,
-      /*factory_override=*/nullptr);
+      /*factory_override=*/nullptr,
+      /*navigation_response_task_runner=*/nullptr);
 
   // If we have a version_id, we are fetching a worker main script. We have a
   // DevtoolsAgentHost ready for the worker and we can add the devtools override
@@ -1728,7 +1840,7 @@ ServiceWorkerContextWrapper::GetLoaderFactoryForBrowserInitiatedRequest(
           context()->loader_factory_bundle_for_update_check()->Clone();
 
   if (auto* config = content::WebUIConfigMap::GetInstance().GetConfig(
-          browser_context(), scope_origin)) {
+          browser_context(), scope)) {
     // If this is a Service Worker for a WebUI, the WebUI's URLDataSource
     // needs to be registered. Registering a URLDataSource allows the
     // WebUIURLLoaderFactory below to serve the resources for the WebUI. We

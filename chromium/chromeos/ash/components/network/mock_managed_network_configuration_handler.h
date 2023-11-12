@@ -45,6 +45,11 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) MockManagedNetworkConfigurationHandler
                     const base::Value::Dict& user_settings,
                     base::OnceClosure callback,
                     network_handler::ErrorCallback error_callback));
+  MOCK_METHOD4(ClearShillProperties,
+               void(const std::string& service_path,
+                    const std::vector<std::string>& names,
+                    base::OnceClosure callback,
+                    network_handler::ErrorCallback error_callback));
   MOCK_CONST_METHOD4(CreateConfiguration,
                      void(const std::string& userhash,
                           const base::Value::Dict& properties,
@@ -96,6 +101,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) MockManagedNetworkConfigurationHandler
   MOCK_CONST_METHOD1(NotifyPolicyAppliedToNetwork,
                      void(const std::string& service_path));
   MOCK_METHOD1(OnCellularPoliciesApplied, void(const NetworkProfile& profile));
+  MOCK_CONST_METHOD0(OnEnterpriseMonitoredWebPoliciesApplied, void());
   MOCK_CONST_METHOD0(AllowCellularSimLock, bool());
   MOCK_CONST_METHOD0(AllowOnlyPolicyCellularNetworks, bool());
   MOCK_CONST_METHOD0(AllowOnlyPolicyWiFiToConnect, bool());

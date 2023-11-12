@@ -91,10 +91,9 @@ namespace {
 // Password is considered not generated when user edits it below 4 characters.
 constexpr int kMinimumLengthForEditedPassword = 4;
 
-// The string ' •••' appended to the username in the suggestion.
-NSString* const kSuggestionSuffix = @" ••••••••";
-
 }  // namespace
+
+NSString* const kPasswordFormSuggestionSuffix = @" ••••••••";
 
 @interface SharedPasswordController ()
 
@@ -107,7 +106,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
 // Tracks current potential generated password until accepted or rejected.
 @property(nonatomic, copy) NSString* generatedPotentialPassword;
 
-- (BOOL)isIncognito;
+- (BOOL)IsOffTheRecord;
 
 @end
 
@@ -193,9 +192,9 @@ NSString* const kSuggestionSuffix = @" ••••••••";
   }
 }
 
-- (BOOL)isIncognito {
+- (BOOL)IsOffTheRecord {
   DCHECK(_delegate.passwordManagerClient);
-  return _delegate.passwordManagerClient->IsIncognito();
+  return _delegate.passwordManagerClient->IsOffTheRecord();
 }
 
 #pragma mark - PasswordGenerationProvider
@@ -307,13 +306,10 @@ NSString* const kSuggestionSuffix = @" ••••••••";
   // Casting is safe, as this code is run on iOS Chrome & WebView only.
   auto* driver = static_cast<IOSPasswordManagerDriver*>(
       [_driverHelper PasswordManagerDriver:webFrame]);
-  if (driver)
-    driver->ProcessFrameDeletion();
 
   auto fieldDataManager =
       UniqueIDDataTabHelper::FromWebState(_webState)->GetFieldDataManager();
-  _passwordManager->OnIframeDetach(webFrame->GetFrameId(), driver,
-                                   *fieldDataManager);
+  _passwordManager->OnIframeDetach(frameId, driver, *fieldDataManager);
 }
 
 - (void)webStateDestroyed:(web::WebState*)webState {
@@ -431,9 +427,9 @@ NSString* const kSuggestionSuffix = @" ••••••••";
 
   password_manager::PasswordManagerJavaScriptFeature* feature =
       password_manager::PasswordManagerJavaScriptFeature::GetInstance();
+  const std::string frameId = SysNSStringToUTF8(formQuery.frameID);
   web::WebFrame* frame =
-      feature->GetWebFramesManager(_webState)->GetFrameWithId(
-          SysNSStringToUTF8(formQuery.frameID));
+      feature->GetWebFramesManager(_webState)->GetFrameWithId(frameId);
 
   if (frame == nullptr) {
     completion({}, self);
@@ -442,7 +438,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
   NSArray<FormSuggestion*>* rawSuggestions = [self.suggestionHelper
       retrieveSuggestionsWithFormID:formQuery.uniqueFormID
                     fieldIdentifier:formQuery.uniqueFieldID
-                            inFrame:frame
+                         forFrameId:frameId
                           fieldType:formQuery.fieldType];
 
   NSMutableArray<FormSuggestion*>* suggestions = [NSMutableArray array];
@@ -460,14 +456,15 @@ NSString* const kSuggestionSuffix = @" ••••••••";
       continue;
     }
     DCHECK(self.delegate.passwordManagerClient);
-    NSString* value =
-        [rawSuggestion.value stringByAppendingString:kSuggestionSuffix];
-    FormSuggestion* suggestion =
-        [FormSuggestion suggestionWithValue:value
-                         displayDescription:rawSuggestion.displayDescription
-                                       icon:nil
-                                 identifier:0
-                             requiresReauth:YES];
+    NSString* value = [rawSuggestion.value
+        stringByAppendingString:kPasswordFormSuggestionSuffix];
+    FormSuggestion* suggestion = [FormSuggestion
+        suggestionWithValue:value
+         displayDescription:rawSuggestion.displayDescription
+                       icon:nil
+                popupItemId:autofill::PopupItemId::kAutocompleteEntry
+          backendIdentifier:nil
+             requiresReauth:YES];
     [suggestions addObject:suggestion];
   }
   absl::optional<PasswordDropdownState> suggestionState;
@@ -485,7 +482,8 @@ NSString* const kSuggestionSuffix = @" ••••••••";
         suggestionWithValue:suggestPassword
          displayDescription:nil
                        icon:nil
-                 identifier:autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY
+                popupItemId:autofill::PopupItemId::kGeneratePasswordEntry
+          backendIdentifier:nil
              requiresReauth:NO];
 
     [suggestions addObject:suggestion];
@@ -493,7 +491,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
   }
 
   if (suggestionState) {
-    LogPasswordDropdownShown(*suggestionState, [self isIncognito]);
+    LogPasswordDropdownShown(*suggestionState, [self IsOffTheRecord]);
   }
 
   if (suggestions.count == 0 || ![_delegate shouldShowAccountStorageNotice]) {
@@ -528,20 +526,20 @@ NSString* const kSuggestionSuffix = @" ••••••••";
           completionHandler:(SuggestionHandledCompletion)completion {
   password_manager::PasswordManagerJavaScriptFeature* feature =
       password_manager::PasswordManagerJavaScriptFeature::GetInstance();
+  const std::string frameId = SysNSStringToUTF8(frameID);
   web::WebFrame* frame =
-      feature->GetWebFramesManager(_webState)->GetFrameWithId(
-          SysNSStringToUTF8(frameID));
+      feature->GetWebFramesManager(_webState)->GetFrameWithId(frameId);
 
-  switch (suggestion.identifier) {
-    case autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY: {
+  switch (suggestion.popupItemId) {
+    case autofill::PopupItemId::kAllSavedPasswordsEntry: {
       completion();
       password_manager::metrics_util::LogPasswordDropdownItemSelected(
           password_manager::metrics_util::PasswordDropdownSelectedOption::
               kShowAll,
-          [self isIncognito]);
+          [self IsOffTheRecord]);
       return;
     }
-    case autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY: {
+    case autofill::PopupItemId::kGeneratePasswordEntry: {
       // Don't call completion because current suggestion state should remain
       // whether user injects a generated password or cancels.
       [self generatePasswordForFormId:uniqueFormID
@@ -551,20 +549,21 @@ NSString* const kSuggestionSuffix = @" ••••••••";
       password_manager::metrics_util::LogPasswordDropdownItemSelected(
           password_manager::metrics_util::PasswordDropdownSelectedOption::
               kGenerate,
-          [self isIncognito]);
+          [self IsOffTheRecord]);
       return;
     }
     default: {
       password_manager::metrics_util::LogPasswordDropdownItemSelected(
           password_manager::metrics_util::PasswordDropdownSelectedOption::
               kPassword,
-          [self isIncognito]);
-      DCHECK([suggestion.value hasSuffix:kSuggestionSuffix]);
+          [self IsOffTheRecord]);
+      DCHECK([suggestion.value hasSuffix:kPasswordFormSuggestionSuffix]);
       NSString* username = [suggestion.value
-          substringToIndex:suggestion.value.length - kSuggestionSuffix.length];
+          substringToIndex:suggestion.value.length -
+                           kPasswordFormSuggestionSuffix.length];
       std::unique_ptr<password_manager::FillData> fillData =
           [self.suggestionHelper passwordFillDataForUsername:username
-                                                     inFrame:frame];
+                                                  forFrameId:frameId];
 
       if (!fillData) {
         completion();
@@ -600,20 +599,21 @@ NSString* const kSuggestionSuffix = @" ••••••••";
 
 - (void)processPasswordFormFillData:
             (const autofill::PasswordFormFillData&)formData
-                            inFrame:(web::WebFrame*)frame
+                         forFrameId:(const std::string&)frameId
                         isMainFrame:(BOOL)isMainFrame
                   forSecurityOrigin:(const GURL&)origin {
   // Biometric auth is always enabled on iOS so wait_for_username is
   // specifically set to prevent filling without user confirmation.
   DCHECK(formData.wait_for_username);
   [self.suggestionHelper processWithPasswordFormFillData:formData
-                                                 inFrame:frame
+                                              forFrameId:frameId
                                              isMainFrame:isMainFrame
                                        forSecurityOrigin:origin];
 }
 
-- (void)onNoSavedCredentials {
-  [self.suggestionHelper processWithNoSavedCredentials];
+- (void)onNoSavedCredentialsWithFrameId:(const std::string&)frameId {
+  [self.suggestionHelper processWithNoSavedCredentialsWithFrameId:frameId];
+  [self detachListenersForBottomSheet:frameId];
 }
 
 - (void)formEligibleForGenerationFound:(const PasswordFormGenerationData&)form {
@@ -649,8 +649,12 @@ NSString* const kSuggestionSuffix = @" ••••••••";
 
 - (void)attachListenersForBottomSheet:
             (const std::vector<autofill::FieldRendererId>&)rendererIds
-                              inFrame:(web::WebFrame*)frame {
-  [self.delegate attachListenersForBottomSheet:rendererIds inFrame:frame];
+                           forFrameId:(const std::string&)frameId {
+  [self.delegate attachListenersForBottomSheet:rendererIds forFrameId:frameId];
+}
+
+- (void)detachListenersForBottomSheet:(const std::string&)frameId {
+  [self.delegate detachListenersForBottomSheet:frameId];
 }
 
 #pragma mark - Private methods
@@ -676,8 +680,8 @@ NSString* const kSuggestionSuffix = @" ••••••••";
     // Invoke the password manager callback to autofill password forms
     // on the loaded page.
     _passwordManager->OnPasswordFormsParsed(driver, forms);
-  } else {
-    [self onNoSavedCredentials];
+  } else if (frame) {
+    [self onNoSavedCredentialsWithFrameId:frame->GetFrameId()];
   }
   // Invoke the password manager callback to check if password was
   // accepted or rejected. If accepted, infobar is presented. If

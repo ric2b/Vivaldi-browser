@@ -14,6 +14,7 @@
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/bookmarks/browser/bookmark_model.h"
+#import "components/bookmarks/common/bookmark_features.h"
 #import "ios/chrome/browser/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/shared/ui/symbols/chrome_icon.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
@@ -35,10 +36,10 @@
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
-#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_folder_selection_header_view.h"
-#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_item.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmark_folder_selection_header_view.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_item.h"
 
 using vivaldi_bookmark_kit::GetSpeeddial;
 using vivaldi::IsVivaldiRunning;
@@ -196,7 +197,13 @@ using bookmarks::BookmarkNode;
   if (_allowsNewFolders) {
     NSInteger itemType = [self.tableViewModel itemTypeForIndexPath:indexPath];
     if (itemType == ItemTypeCreateNewFolder) {
-      const BookmarkNode* parentNode = [_dataSource selectedFolderNode];
+      // Set the 'Mobile Bookmarks' folder of the corresponding section to be
+      // the parent folder.
+      const BookmarkNode* parentNode = nullptr;
+      if (!base::FeatureList::IsEnabled(
+              bookmarks::kEnableBookmarksAccountStorage)) {
+        parentNode = [_dataSource selectedFolderNode];
+      }
       if (!parentNode) {
         // If `parent` (selected folder) is `nullptr`, set the root folder of
         // the corresponding section to be the parent folder.
@@ -299,6 +306,10 @@ using bookmarks::BookmarkNode;
         [[TableViewBookmarksFolderItem alloc]
             initWithType:ItemTypeCreateNewFolder
                    style:BookmarksFolderStyleNewFolder];
+    createFolderItem.accessibilityIdentifier =
+        (sectionID == SectionIdentifierProfileBookmarks)
+            ? kBookmarkCreateNewProfileFolderCellIdentifier
+            : kBookmarkCreateNewAccountFolderCellIdentifier;
     createFolderItem.shouldDisplayCloudSlashIcon =
         (sectionID == SectionIdentifierProfileBookmarks) &&
         [_dataSource shouldDisplayCloudIconForProfileBookmarks];
@@ -323,6 +334,7 @@ using bookmarks::BookmarkNode;
                    style:BookmarksFolderStyleFolderEntry];
     folderItem.title = bookmark_utils_ios::TitleForBookmarkNode(folderNode);
     folderItem.currentFolder = ([_dataSource selectedFolderNode] == folderNode);
+    folderItem.accessibilityIdentifier = folderItem.title;
     folderItem.shouldDisplayCloudSlashIcon =
         (sectionID == SectionIdentifierProfileBookmarks) &&
         [_dataSource shouldDisplayCloudIconForProfileBookmarks];

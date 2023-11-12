@@ -48,12 +48,14 @@ MATCHER_P(MemoryEq, other, "Eq matcher for base::RefCountedMemory contents") {
 class MockDataDecoderDelegate
     : public SanitizedImageSource::DataDecoderDelegate {
  public:
-  MOCK_METHOD2(DecodeImage,
-               void(const std::string& data,
-                    SanitizedImageSource::DecodeImageCallback callback));
-  MOCK_METHOD2(DecodeAnimation,
-               void(const std::string& data,
-                    SanitizedImageSource::DecodeAnimationCallback callback));
+  MOCK_METHOD(void,
+              DecodeImage,
+              (const std::string& data,
+               SanitizedImageSource::DecodeImageCallback callback));
+  MOCK_METHOD(void,
+              DecodeAnimation,
+              (const std::string& data,
+               SanitizedImageSource::DecodeAnimationCallback callback));
 };
 
 class SanitizedImageSourceTest : public testing::Test {
@@ -79,7 +81,8 @@ class SanitizedImageSourceTest : public testing::Test {
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> profile_;
   network::TestURLLoaderFactory test_url_loader_factory_;
-  raw_ptr<MockDataDecoderDelegate> mock_data_decoder_delegate_;
+  raw_ptr<MockDataDecoderDelegate, DanglingUntriaged>
+      mock_data_decoder_delegate_;
   std::unique_ptr<SanitizedImageSource> sanitized_image_source_;
 };
 

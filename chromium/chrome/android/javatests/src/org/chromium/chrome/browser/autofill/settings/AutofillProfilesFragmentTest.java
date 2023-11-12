@@ -38,18 +38,19 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.Source;
-import org.chromium.chrome.browser.autofill.prefeditor.EditorDialog;
+import org.chromium.chrome.browser.autofill.editors.EditorDialogView;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
-import org.chromium.chrome.browser.sync.SyncService;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.sync.SyncService;
 import org.chromium.components.sync.UserSelectableType;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.KeyboardVisibilityDelegate;
@@ -66,15 +67,37 @@ import java.util.concurrent.TimeoutException;
 
 @RunWith(ChromeJUnit4ClassRunner.class)
 @Batch(Batch.PER_CLASS)
+@Features.EnableFeatures({ChromeFeatureList.AUTOFILL_ACCOUNT_PROFILE_STORAGE,
+        ChromeFeatureList.SYNC_ENABLE_CONTACT_INFO_DATA_TYPE,
+        ChromeFeatureList.SYNC_ENABLE_CONTACT_INFO_DATA_TYPE_IN_TRANSPORT_MODE})
 public class AutofillProfilesFragmentTest {
     private static final AutofillProfile sLocalOrSyncProfile =
-            new AutofillProfile("", "https://example.com", true, "" /* honorific prefix */,
-                    "Seb Doe", "Google", "111 First St", "CA", "Los Angeles", "", "90291", "", "US",
-                    "650-253-0000", "first@gmail.com", "en-US");
-    private static final AutofillProfile sAccountProfile = new AutofillProfile("",
-            "https://example.com", true, Source.ACCOUNT, "" /* honorific prefix */, "Artik Doe",
-            "Google", "999 Fourth St", "California", "Los Angeles", "", "90291", "", "US",
-            "650-253-0000", "artik@gmail.com", "en-US");
+            AutofillProfile.builder()
+                    .setFullName("Seb Doe")
+                    .setCompanyName("Google")
+                    .setStreetAddress("111 First St")
+                    .setRegion("CA")
+                    .setLocality("Los Angeles")
+                    .setPostalCode("90291")
+                    .setCountryCode("US")
+                    .setPhoneNumber("650-253-0000")
+                    .setEmailAddress("first@gmail.com")
+                    .setLanguageCode("en-US")
+                    .build();
+    private static final AutofillProfile sAccountProfile =
+            AutofillProfile.builder()
+                    .setSource(Source.ACCOUNT)
+                    .setFullName("Artik Doe")
+                    .setCompanyName("Google")
+                    .setStreetAddress("999 Fourth St")
+                    .setRegion("California")
+                    .setLocality("Los Angeles")
+                    .setPostalCode("90291")
+                    .setCountryCode("US")
+                    .setPhoneNumber("650-253-0000")
+                    .setEmailAddress("artik@gmail.com")
+                    .setLanguageCode("en-US")
+                    .build();
 
     @Rule
     public final AutofillTestRule rule = new AutofillTestRule();
@@ -104,17 +127,44 @@ public class AutofillProfilesFragmentTest {
     @Before
     public void setUp() throws TimeoutException {
         mHelper.setProfile(sLocalOrSyncProfile);
-        mHelper.setProfile(new AutofillProfile("", "https://example.com", true,
-                "" /* honorific prefix */, "John Doe", "Google", "111 Second St", "CA",
-                "Los Angeles", "", "90291", "", "US", "650-253-0000", "second@gmail.com", "en-US"));
+        mHelper.setProfile(AutofillProfile.builder()
+                                   .setFullName("John Doe")
+                                   .setCompanyName("Google")
+                                   .setStreetAddress("111 Second St")
+                                   .setRegion("CA")
+                                   .setLocality("Los Angeles")
+                                   .setPostalCode("90291")
+                                   .setCountryCode("US")
+                                   .setPhoneNumber("650-253-0000")
+                                   .setEmailAddress("second@gmail.com")
+                                   .setLanguageCode("en-US")
+                                   .build());
         // Invalid state should not cause a crash on the state dropdown list.
-        mHelper.setProfile(new AutofillProfile("", "https://example.com", true,
-                "" /* honorific prefix */, "Bill Doe", "Google", "111 Third St", "XXXYYY",
-                "Los Angeles", "", "90291", "", "US", "650-253-0000", "third@gmail.com", "en-US"));
+        mHelper.setProfile(AutofillProfile.builder()
+                                   .setFullName("Bill Doe")
+                                   .setCompanyName("Google")
+                                   .setStreetAddress("111 Third St")
+                                   .setRegion("XXXYYY")
+                                   .setLocality("Los Angeles")
+                                   .setPostalCode("90291")
+                                   .setCountryCode("US")
+                                   .setPhoneNumber("650-253-0000")
+                                   .setEmailAddress("third@gmail.com")
+                                   .setLanguageCode("en-US")
+                                   .build());
         // Full value for state should show up correctly on the dropdown list.
-        mHelper.setProfile(new AutofillProfile("", "https://example.com", true,
-                "" /* honorific prefix */, "Bob Doe", "Google", "111 Fourth St", "California",
-                "Los Angeles", "", "90291", "", "US", "650-253-0000", "fourth@gmail.com", "en-US"));
+        mHelper.setProfile(AutofillProfile.builder()
+                                   .setFullName("Bob Doe")
+                                   .setCompanyName("Google")
+                                   .setStreetAddress("111 Fourth St")
+                                   .setRegion("California")
+                                   .setLocality("Los Angeles")
+                                   .setPostalCode("90291")
+                                   .setCountryCode("US")
+                                   .setPhoneNumber("650-253-0000")
+                                   .setEmailAddress("fourth@gmail.com")
+                                   .setLanguageCode("en-US")
+                                   .build());
     }
 
     @After
@@ -228,7 +278,7 @@ public class AutofillProfilesFragmentTest {
 
         // Delete the profile, but cancel on confirmation.
         TestThreadUtils.runOnUiThreadBlocking(sebProfile::performClick);
-        EditorDialog editorDialog = autofillProfileFragment.getEditorDialogForTest();
+        EditorDialogView editorDialog = autofillProfileFragment.getEditorDialogForTest();
         rule.setEditorDialogAndWait(editorDialog);
         rule.clickInEditorAndWaitForConfirmationDialog(R.id.delete_menu_id);
 
@@ -285,7 +335,7 @@ public class AutofillProfilesFragmentTest {
 
         // Delete Artik's account profile.
         TestThreadUtils.runOnUiThreadBlocking(artikProfile::performClick);
-        EditorDialog editorDialog = autofillProfileFragment.getEditorDialogForTest();
+        EditorDialogView editorDialog = autofillProfileFragment.getEditorDialogForTest();
         rule.setEditorDialogAndWait(editorDialog);
         rule.clickInEditorAndWaitForConfirmationDialog(R.id.delete_menu_id);
 
@@ -326,7 +376,7 @@ public class AutofillProfilesFragmentTest {
 
         // Edit a profile.
         TestThreadUtils.runOnUiThreadBlocking(johnProfile::performClick);
-        EditorDialog editorDialog = autofillProfileFragment.getEditorDialogForTest();
+        EditorDialogView editorDialog = autofillProfileFragment.getEditorDialogForTest();
         rule.setEditorDialogAndWait(editorDialog);
         rule.setTextInEditorAndWait(new String[] {"Dr.", "Emily Doe", "Google", "111 Edited St",
                 "Los Angeles", "CA", "90291", "650-253-0000", "edit@profile.com"});
@@ -358,10 +408,19 @@ public class AutofillProfilesFragmentTest {
         String email = "test@account";
         setUpMockPrimaryAccount(email);
 
-        mHelper.setProfile(new AutofillProfile("", "https://example.com", true, Source.ACCOUNT,
-                "" /* honorific prefix */, "Account Updated #0", "Google", "111 Fourth St",
-                "California", "Los Angeles", "", "90291", "", "US", "650-253-0000",
-                "fourth@gmail.com", "en-US"));
+        mHelper.setProfile(AutofillProfile.builder()
+                                   .setSource(Source.ACCOUNT)
+                                   .setFullName("Account Updated #0")
+                                   .setCompanyName("Google")
+                                   .setStreetAddress("111 Fourth St")
+                                   .setRegion("California")
+                                   .setLocality("Los Angeles")
+                                   .setPostalCode("90291")
+                                   .setCountryCode("US")
+                                   .setPhoneNumber("650-253-0000")
+                                   .setEmailAddress("fourth@gmail.com")
+                                   .setLanguageCode("en-US")
+                                   .build());
 
         AutofillProfilesFragment autofillProfileFragment = sSettingsActivityTestRule.getFragment();
         Context context = autofillProfileFragment.getContext();
@@ -374,7 +433,7 @@ public class AutofillProfilesFragmentTest {
         Assert.assertNotNull(johnProfile);
 
         TestThreadUtils.runOnUiThreadBlocking(johnProfile::performClick);
-        EditorDialog editorDialog = autofillProfileFragment.getEditorDialogForTest();
+        EditorDialogView editorDialog = autofillProfileFragment.getEditorDialogForTest();
         rule.setEditorDialogAndWait(editorDialog);
 
         // Verify the profile source notice.
@@ -411,10 +470,21 @@ public class AutofillProfilesFragmentTest {
     @Feature({"Preferences"})
     @Features.EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_SUPPORT_FOR_HONORIFIC_PREFIXES})
     public void testEditInvalidAccountProfile() throws Exception {
-        mHelper.setProfile(new AutofillProfile("", "https://example.com", true, Source.ACCOUNT,
-                "" /* honorific prefix */, "Account Updated #0", "Google",
-                "" /** Street address is required in US but already missing. */, "California",
-                "Los Angeles", "", "90291", "", "US", "650-253-0000", "fourth@gmail.com", "en-US"));
+        mHelper.setProfile(
+                AutofillProfile.builder()
+                        .setSource(Source.ACCOUNT)
+                        .setFullName("Account Updated #0")
+                        .setCompanyName("Google")
+                        .setStreetAddress(
+                                "") /** Street address is required in US but already missing. */
+                        .setRegion("California")
+                        .setLocality("Los Angeles")
+                        .setPostalCode("90291")
+                        .setCountryCode("US")
+                        .setPhoneNumber("650-253-0000")
+                        .setEmailAddress("fourth@gmail.com")
+                        .setLanguageCode("en-US")
+                        .build());
 
         AutofillProfilesFragment autofillProfileFragment = sSettingsActivityTestRule.getFragment();
 
@@ -526,7 +596,55 @@ public class AutofillProfilesFragmentTest {
     @Test
     @MediumTest
     @Feature({"Preferences"})
+    public void testLocalProfiles_UserNotSignedIn() throws Exception {
+        IdentityServicesProvider.setInstanceForTests(mIdentityServicesProvider);
+        when(IdentityServicesProvider.get().getIdentityManager(any()))
+                .thenReturn(mIdentityManagerMock);
+        when(mIdentityManagerMock.hasPrimaryAccount(ConsentLevel.SIGNIN)).thenReturn(false);
+        setUpMockSyncService(false, new HashSet());
+        AutofillProfilesFragment autofillProfileFragment = sSettingsActivityTestRule.getFragment();
+
+        // Trigger address profile list rebuild.
+        mHelper.setProfile(sAccountProfile);
+        Assert.assertEquals(0,
+                autofillProfileFragment.findPreference(sAccountProfile.getFullName())
+                        .getWidgetLayoutResource());
+        Assert.assertEquals(0,
+                autofillProfileFragment.findPreference(sLocalOrSyncProfile.getFullName())
+                        .getWidgetLayoutResource());
+    }
+
+    /**
+     * Cloud off icons are shown conditionally depending on the 3 feature flags
+     * being turned on.
+     */
+    @Test
+    @MediumTest
+    @Feature({"Preferences"})
+    @Features.DisableFeatures({ChromeFeatureList.AUTOFILL_ACCOUNT_PROFILE_STORAGE,
+            ChromeFeatureList.SYNC_ENABLE_CONTACT_INFO_DATA_TYPE,
+            ChromeFeatureList.SYNC_ENABLE_CONTACT_INFO_DATA_TYPE_IN_TRANSPORT_MODE})
+    public void
+    testLocalProfiles_NoRequiredFeatureFlags() throws Exception {
+        setUpMockPrimaryAccount("test@account.com");
+        setUpMockSyncService(false, new HashSet());
+        AutofillProfilesFragment autofillProfileFragment = sSettingsActivityTestRule.getFragment();
+
+        // Trigger address profile list rebuild.
+        mHelper.setProfile(sAccountProfile);
+        Assert.assertEquals(0,
+                autofillProfileFragment.findPreference(sAccountProfile.getFullName())
+                        .getWidgetLayoutResource());
+        Assert.assertEquals(0,
+                autofillProfileFragment.findPreference(sLocalOrSyncProfile.getFullName())
+                        .getWidgetLayoutResource());
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"Preferences"})
     public void testLocalProfiles_NoSync() throws Exception {
+        setUpMockPrimaryAccount("test@account.com");
         setUpMockSyncService(false, new HashSet());
         AutofillProfilesFragment autofillProfileFragment = sSettingsActivityTestRule.getFragment();
 
@@ -544,6 +662,7 @@ public class AutofillProfilesFragmentTest {
     @MediumTest
     @Feature({"Preferences"})
     public void testLocalProfiles_AddressesNotSynced() throws Exception {
+        setUpMockPrimaryAccount("test@account.com");
         setUpMockSyncService(true, new HashSet());
         AutofillProfilesFragment autofillProfileFragment = sSettingsActivityTestRule.getFragment();
 
@@ -561,6 +680,7 @@ public class AutofillProfilesFragmentTest {
     @MediumTest
     @Feature({"Preferences"})
     public void testLocalProfiles_AddressesSynced() throws Exception {
+        setUpMockPrimaryAccount("test@account.com");
         setUpMockSyncService(true, Collections.singleton(UserSelectableType.AUTOFILL));
         AutofillProfilesFragment autofillProfileFragment = sSettingsActivityTestRule.getFragment();
 
@@ -606,10 +726,12 @@ public class AutofillProfilesFragmentTest {
                 .thenReturn(mIdentityManagerMock);
         when(mIdentityManagerMock.getPrimaryAccountInfo(ConsentLevel.SIGNIN))
                 .thenReturn(coreAccountInfo);
+        when(mIdentityManagerMock.hasPrimaryAccount(ConsentLevel.SIGNIN)).thenReturn(true);
     }
 
     private void setUpMockSyncService(boolean enabled, Set<Integer> selectedTypes) {
-        TestThreadUtils.runOnUiThreadBlocking(() -> SyncService.overrideForTests(mSyncService));
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> SyncServiceFactory.overrideForTests(mSyncService));
         when(mSyncService.isSyncFeatureEnabled()).thenReturn(enabled);
         when(mSyncService.getSelectedTypes()).thenReturn(selectedTypes);
     }

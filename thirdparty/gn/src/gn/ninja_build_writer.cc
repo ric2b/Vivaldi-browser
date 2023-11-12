@@ -224,7 +224,7 @@ bool NinjaBuildWriter::Run(Err* err) {
 bool NinjaBuildWriter::RunAndWriteFile(const BuildSettings* build_settings,
                                        const Builder& builder,
                                        Err* err) {
-  ScopedTrace trace(TraceItem::TRACE_FILE_WRITE, "build.ninja");
+  ScopedTrace trace(TraceItem::TRACE_FILE_WRITE_NINJA, "build.ninja");
 
   std::vector<const Target*> all_targets = builder.GetAllResolvedTargets();
   std::unordered_map<const Settings*, const Toolchain*> used_toolchains;

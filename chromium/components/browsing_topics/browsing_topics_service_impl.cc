@@ -18,7 +18,6 @@
 #include "components/browsing_topics/common/common_types.h"
 #include "components/browsing_topics/mojom/browsing_topics_internals.mojom.h"
 #include "components/browsing_topics/util.h"
-#include "components/optimization_guide/content/browser/page_content_annotations_service.h"
 #include "components/privacy_sandbox/canonical_topic.h"
 #include "content/public/browser/browsing_topics_site_data_manager.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
@@ -38,8 +37,9 @@ namespace {
 bool ShouldClearTopicsOnStartup(
     const BrowsingTopicsState& browsing_topics_state,
     base::Time browsing_topics_data_accessible_since) {
-  if (browsing_topics_state.epochs().empty())
+  if (browsing_topics_state.epochs().empty()) {
     return false;
+  }
 
   // Here we rely on the fact that `browsing_topics_data_accessible_since` can
   // only be updated to base::Time::Now() due to data deletion. So we'll either
@@ -67,8 +67,9 @@ std::vector<privacy_sandbox::CanonicalTopic> TopTopicsToClearOnStartup(
   for (const EpochTopics& epoch : browsing_topics_state.epochs()) {
     for (const TopicAndDomains& topic_and_domains :
          epoch.top_topics_and_observing_domains()) {
-      if (!topic_and_domains.IsValid())
+      if (!topic_and_domains.IsValid()) {
         continue;
+      }
       privacy_sandbox::CanonicalTopic canonical_topic =
           privacy_sandbox::CanonicalTopic(topic_and_domains.topic(),
                                           epoch.taxonomy_version());
@@ -322,26 +323,21 @@ BrowsingTopicsServiceImpl::BrowsingTopicsServiceImpl(
     privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings,
     history::HistoryService* history_service,
     content::BrowsingTopicsSiteDataManager* site_data_manager,
-    optimization_guide::PageContentAnnotationsService* annotations_service,
+    std::unique_ptr<Annotator> annotator,
     TopicAccessedCallback topic_accessed_callback)
     : privacy_sandbox_settings_(privacy_sandbox_settings),
       history_service_(history_service),
       site_data_manager_(site_data_manager),
-      annotations_service_(annotations_service),
       browsing_topics_state_(
           profile_path,
           base::BindOnce(
               &BrowsingTopicsServiceImpl::OnBrowsingTopicsStateLoaded,
               base::Unretained(this))),
+      annotator_(std::move(annotator)),
       topic_accessed_callback_(std::move(topic_accessed_callback)) {
   DCHECK(topic_accessed_callback_);
   privacy_sandbox_settings_observation_.Observe(privacy_sandbox_settings);
   history_service_observation_.Observe(history_service);
-
-  // Greedily request the model to be available to reduce the latency in later
-  // topics calculation.
-  annotations_service_->RequestAndNotifyWhenModelAvailable(
-      optimization_guide::AnnotationType::kPageTopics, base::DoNothing());
 }
 
 bool BrowsingTopicsServiceImpl::HandleTopicsWebApi(
@@ -393,8 +389,9 @@ bool BrowsingTopicsServiceImpl::HandleTopicsWebApi(
         ->OnBrowsingTopicsApiUsed(hashed_context_domain, history_service_);
   }
 
-  if (!get_topics)
+  if (!get_topics) {
     return true;
+  }
 
   std::string top_domain =
       net::registry_controlled_domains::GetDomainAndRegistry(
@@ -408,8 +405,9 @@ bool BrowsingTopicsServiceImpl::HandleTopicsWebApi(
     CandidateTopic candidate_topic = epoch->CandidateTopicForSite(
         top_domain, hashed_context_domain, browsing_topics_state_.hmac_key());
 
-    if (!candidate_topic.IsValid())
+    if (!candidate_topic.IsValid()) {
       continue;
+    }
 
     // Although a top topic can never be in the disallowed state, the returned
     // `candidate_topic` may be the random one. Thus we still need this check.
@@ -426,8 +424,9 @@ bool BrowsingTopicsServiceImpl::HandleTopicsWebApi(
   RecordBrowsingTopicsApiResultMetrics(valid_candidate_topics, main_frame);
 
   for (const CandidateTopic& candidate_topic : valid_candidate_topics) {
-    if (candidate_topic.should_be_filtered())
+    if (candidate_topic.should_be_filtered()) {
       continue;
+    }
 
     // `PageSpecificContentSettings` should only observe true top topics
     // accessed on the page. It's okay to notify the same topic multiple
@@ -442,9 +441,8 @@ bool BrowsingTopicsServiceImpl::HandleTopicsWebApi(
 
     auto result_topic = blink::mojom::EpochTopic::New();
     result_topic->topic = candidate_topic.topic().value();
-    result_topic->config_version = base::StrCat(
-        {"chrome.", base::NumberToString(
-                        blink::features::kBrowsingTopicsConfigVersion.Get())});
+    result_topic->config_version =
+        base::StrCat({"chrome.", base::NumberToString(CurrentConfigVersion())});
     result_topic->model_version =
         base::NumberToString(candidate_topic.model_version());
     result_topic->taxonomy_version =
@@ -455,12 +453,45 @@ bool BrowsingTopicsServiceImpl::HandleTopicsWebApi(
     topics.emplace_back(std::move(result_topic));
   }
 
-  std::sort(topics.begin(), topics.end());
+  // Sort result based on the version first, and then based on the topic ID.
+  // This groups the topics with the same version together, so that when
+  // transforming into the header format, all duplicate versions can be omitted.
+  std::sort(topics.begin(), topics.end(),
+            [](const blink::mojom::EpochTopicPtr& left,
+               const blink::mojom::EpochTopicPtr& right) {
+              if (left->version != right->version) {
+                return left->version < right->version;
+              }
+
+              return left->topic < right->topic;
+            });
 
   // Remove duplicate entries.
   topics.erase(std::unique(topics.begin(), topics.end()), topics.end());
 
   return true;
+}
+
+int BrowsingTopicsServiceImpl::NumVersionsInEpochs(
+    const url::Origin& main_frame_origin) const {
+  CHECK(browsing_topics_state_loaded_);
+  CHECK(privacy_sandbox_settings_->IsTopicsAllowed());
+
+  std::string main_frame_domain =
+      net::registry_controlled_domains::GetDomainAndRegistry(
+          main_frame_origin.GetURL(),
+          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+
+  std::set<std::pair<int, int64_t>> distinct_versions;
+  for (const EpochTopics* epoch :
+       browsing_topics_state_.EpochsForSite(main_frame_domain)) {
+    if (epoch->HasValidVersions()) {
+      distinct_versions.emplace(epoch->taxonomy_version(),
+                                epoch->model_version());
+    }
+  }
+
+  return distinct_versions.size();
 }
 
 void BrowsingTopicsServiceImpl::GetBrowsingTopicsStateForWebUi(
@@ -488,7 +519,7 @@ void BrowsingTopicsServiceImpl::GetBrowsingTopicsStateForWebUi(
     get_state_for_webui_callbacks_.push_back(std::move(callback));
 
     schedule_calculate_timer_.AbandonAndStop();
-    CalculateBrowsingTopics();
+    CalculateBrowsingTopics(/*is_manually_triggered=*/true);
     return;
   }
 
@@ -510,8 +541,9 @@ BrowsingTopicsServiceImpl::GetTopTopicsForDisplay() const {
       const TopicAndDomains& topic_and_domains =
           epoch.top_topics_and_observing_domains()[i];
 
-      if (!topic_and_domains.IsValid())
+      if (!topic_and_domains.IsValid()) {
         continue;
+      }
 
       // A top topic can never be in the disallowed state (i.e. it will be
       // cleared when it becomes diallowed).
@@ -526,13 +558,17 @@ BrowsingTopicsServiceImpl::GetTopTopicsForDisplay() const {
   return result;
 }
 
+Annotator* BrowsingTopicsServiceImpl::GetAnnotator() {
+  return annotator_.get();
+}
+
 void BrowsingTopicsServiceImpl::ClearTopic(
     const privacy_sandbox::CanonicalTopic& canonical_topic) {
-  if (!browsing_topics_state_loaded_)
+  if (!browsing_topics_state_loaded_) {
     return;
+  }
 
-  browsing_topics_state_.ClearTopic(canonical_topic.topic_id(),
-                                    canonical_topic.taxonomy_version());
+  browsing_topics_state_.ClearTopic(canonical_topic.topic_id());
 }
 
 void BrowsingTopicsServiceImpl::ClearTopicsDataForOrigin(
@@ -553,8 +589,9 @@ void BrowsingTopicsServiceImpl::ClearTopicsDataForOrigin(
 }
 
 void BrowsingTopicsServiceImpl::ClearAllTopicsData() {
-  if (!browsing_topics_state_loaded_)
+  if (!browsing_topics_state_loaded_) {
     return;
+  }
 
   browsing_topics_state_.ClearAllTopics();
   site_data_manager_->ExpireDataBefore(base::Time::Now());
@@ -565,12 +602,13 @@ BrowsingTopicsServiceImpl::CreateCalculator(
     privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings,
     history::HistoryService* history_service,
     content::BrowsingTopicsSiteDataManager* site_data_manager,
-    optimization_guide::PageContentAnnotationsService* annotations_service,
+    Annotator* annotator,
     const base::circular_deque<EpochTopics>& epochs,
+    bool is_manually_triggered,
     BrowsingTopicsCalculator::CalculateCompletedCallback callback) {
   return std::make_unique<BrowsingTopicsCalculator>(
-      privacy_sandbox_settings, history_service, site_data_manager,
-      annotations_service, epochs, std::move(callback));
+      privacy_sandbox_settings, history_service, site_data_manager, annotator,
+      epochs, is_manually_triggered, std::move(callback));
 }
 
 const BrowsingTopicsState& BrowsingTopicsServiceImpl::browsing_topics_state() {
@@ -586,10 +624,11 @@ void BrowsingTopicsServiceImpl::ScheduleBrowsingTopicsCalculation(
   schedule_calculate_timer_.Start(
       FROM_HERE, delay,
       base::BindOnce(&BrowsingTopicsServiceImpl::CalculateBrowsingTopics,
-                     base::Unretained(this)));
+                     base::Unretained(this), /*is_manually_triggered=*/false));
 }
 
-void BrowsingTopicsServiceImpl::CalculateBrowsingTopics() {
+void BrowsingTopicsServiceImpl::CalculateBrowsingTopics(
+    bool is_manually_triggered) {
   DCHECK(browsing_topics_state_loaded_);
 
   DCHECK(!topics_calculator_);
@@ -598,7 +637,7 @@ void BrowsingTopicsServiceImpl::CalculateBrowsingTopics() {
   // the callback once it's destroyed.
   topics_calculator_ = CreateCalculator(
       privacy_sandbox_settings_, history_service_, site_data_manager_,
-      annotations_service_, browsing_topics_state_.epochs(),
+      annotator_.get(), browsing_topics_state_.epochs(), is_manually_triggered,
       base::BindOnce(
           &BrowsingTopicsServiceImpl::OnCalculateBrowsingTopicsCompleted,
           base::Unretained(this)));
@@ -647,8 +686,7 @@ void BrowsingTopicsServiceImpl::OnBrowsingTopicsStateLoaded() {
   } else if (!decision.topics_to_clear.empty()) {
     for (const privacy_sandbox::CanonicalTopic& canonical_topic :
          decision.topics_to_clear) {
-      browsing_topics_state_.ClearTopic(canonical_topic.topic_id(),
-                                        canonical_topic.taxonomy_version());
+      browsing_topics_state_.ClearTopic(canonical_topic.topic_id());
     }
   }
 
@@ -663,8 +701,9 @@ void BrowsingTopicsServiceImpl::Shutdown() {
 }
 
 void BrowsingTopicsServiceImpl::OnTopicsDataAccessibleSinceUpdated() {
-  if (!browsing_topics_state_loaded_)
+  if (!browsing_topics_state_loaded_) {
     return;
+  }
 
   // Here we rely on the fact that `browsing_topics_data_accessible_since` can
   // only be updated to base::Time::Now() due to data deletion. In this case, we
@@ -677,26 +716,30 @@ void BrowsingTopicsServiceImpl::OnTopicsDataAccessibleSinceUpdated() {
   if (topics_calculator_) {
     DCHECK(!schedule_calculate_timer_.IsRunning());
 
+    bool is_manually_triggered = topics_calculator_->is_manually_triggered();
     topics_calculator_.reset();
-    CalculateBrowsingTopics();
+    CalculateBrowsingTopics(is_manually_triggered);
   }
 }
 
 void BrowsingTopicsServiceImpl::OnURLsDeleted(
     history::HistoryService* history_service,
     const history::DeletionInfo& deletion_info) {
-  if (!browsing_topics_state_loaded_)
+  if (!browsing_topics_state_loaded_) {
     return;
+  }
 
   // Ignore invalid time_range.
-  if (!deletion_info.IsAllHistory() && !deletion_info.time_range().IsValid())
+  if (!deletion_info.IsAllHistory() && !deletion_info.time_range().IsValid()) {
     return;
+  }
 
   for (size_t i = 0; i < browsing_topics_state_.epochs().size(); ++i) {
     const EpochTopics& epoch_topics = browsing_topics_state_.epochs()[i];
 
-    if (epoch_topics.empty())
+    if (epoch_topics.empty()) {
       continue;
+    }
 
     // The typical case is assumed here. We cannot always derive the original
     // history start time, as the necessary data (e.g. its previous epoch's
@@ -709,16 +752,18 @@ void BrowsingTopicsServiceImpl::OnURLsDeleted(
         epoch_topics.calculation_time() >= deletion_info.time_range().begin() &&
         history_data_start_time <= deletion_info.time_range().end();
 
-    if (time_range_overlap)
+    if (time_range_overlap) {
       browsing_topics_state_.ClearOneEpoch(i);
+    }
   }
 
   // If there's an outstanding topics calculation, abort and restart it.
   if (topics_calculator_) {
     DCHECK(!schedule_calculate_timer_.IsRunning());
 
+    bool is_manually_triggered = topics_calculator_->is_manually_triggered();
     topics_calculator_.reset();
-    CalculateBrowsingTopics();
+    CalculateBrowsingTopics(is_manually_triggered);
   }
 }
 

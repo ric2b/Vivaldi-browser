@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "base/no_destructor.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
@@ -151,7 +151,7 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
   DCHECK(parent_entity);
 
   const syncer::UniquePosition unique_position =
-      ComputePosition(*parent, index, node->guid().AsLowercaseString());
+      ComputePosition(*parent, index, node->uuid().AsLowercaseString());
 
   sync_pb::EntitySpecifics specifics =
       CreateSpecificsFromNoteNode(node, model, unique_position.ToProto());
@@ -160,7 +160,7 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
   // the tombstone was not committed yet. In that case the existing entity
   // should be updated.
   const SyncedNoteTrackerEntity* entity =
-      note_tracker_->GetEntityForGUID(node->guid());
+      note_tracker_->GetEntityForUuid(node->uuid());
   const base::Time creation_time = base::Time::Now();
   if (entity) {
     // If there is a tracked entity with the same client tag hash (effectively
@@ -171,7 +171,7 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
     note_tracker_->Update(entity, entity->metadata().server_version(),
                           creation_time, specifics);
   } else {
-    entity = note_tracker_->Add(node, node->guid().AsLowercaseString(),
+    entity = note_tracker_->Add(node, node->uuid().AsLowercaseString(),
                                 syncer::kUncommittedVersion, creation_time,
                                 specifics);
   }

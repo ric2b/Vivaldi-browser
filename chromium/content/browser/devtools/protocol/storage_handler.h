@@ -135,8 +135,7 @@ class StorageHandler
       bool enable) override;
 
   DispatchResponse DeleteStorageBucket(
-      const std::string& serialized_storage_key,
-      const std::string& bucket_name) override;
+      std::unique_ptr<protocol::Storage::StorageBucket> bucket) override;
 
  private:
   // See definition for lifetime information.
@@ -170,13 +169,13 @@ class StorageHandler
       const std::string& owner_origin,
       const SharedStorageEventParams& params);
 
-  void NotifyCacheStorageListChanged(const blink::StorageKey& storage_key);
-  void NotifyCacheStorageContentChanged(const blink::StorageKey& storage_key,
-                                        const std::string& name);
-  void NotifyIndexedDBListChanged(const std::string& origin,
-                                  const std::string& storage_key);
-  void NotifyIndexedDBContentChanged(const std::string& origin,
-                                     const std::string& storage_key,
+  void NotifyCacheStorageListChanged(
+      const storage::BucketLocator& bucket_locator);
+  void NotifyCacheStorageContentChanged(
+      const storage::BucketLocator& bucket_locator,
+      const std::string& name);
+  void NotifyIndexedDBListChanged(storage::BucketLocator bucket_locator);
+  void NotifyIndexedDBContentChanged(storage::BucketLocator bucket_locator,
                                      const std::u16string& database_name,
                                      const std::u16string& object_store_name);
   void NotifyCreateOrUpdateBucket(const storage::BucketInfo& bucket_info);

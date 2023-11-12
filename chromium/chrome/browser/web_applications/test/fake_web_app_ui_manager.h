@@ -71,9 +71,11 @@ class FakeWebAppUiManager : public WebAppUiManager {
                            AppLock& lock) override;
   void MaybeTransferAppAttributes(const AppId& from_extension_or_app,
                                   const AppId& to_app) override;
+  content::WebContents* CreateNewTab() override;
+  void TriggerInstallDialog(content::WebContents* web_contents) override;
 
  private:
-  std::map<AppId, size_t> app_id_to_num_windows_map_;
+  base::flat_map<AppId, size_t> app_id_to_num_windows_map_;
   int num_reparent_tab_calls_ = 0;
   OnLaunchWebAppCallback on_launch_web_app_callback_;
 };

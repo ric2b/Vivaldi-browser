@@ -35,7 +35,9 @@ class OverviewItemView;
 class RoundedLabelWidget;
 class SystemShadow;
 
-// This class represents an item in overview mode.
+// This class represents an item in overview mode. It handles placing the window
+// in the correct bounds given by `OverviewGrid`, and owns a widget which
+// contains an item's overview specific ui (title, icon, close button, etc.).
 class ASH_EXPORT OverviewItem : public aura::WindowObserver,
                                 public WindowStateObserver {
  public:
@@ -48,8 +50,6 @@ class ASH_EXPORT OverviewItem : public aura::WindowObserver,
 
   ~OverviewItem() override;
 
-  SystemShadow* shadow() { return shadow_.get(); }
-
   aura::Window* GetWindow();
 
   // Returns true if |target| is contained in this OverviewItem.
@@ -61,17 +61,16 @@ class ASH_EXPORT OverviewItem : public aura::WindowObserver,
   void OnMovingWindowToAnotherDesk();
 
   // Restores and animates the managed window to its non overview mode state.
-  // Doesn't animate if |was_saved_desk_library_showing| is true. If
-  // |reset_transform| equals false, the window's transform will not be reset to
-  // identity transform when exiting overview mode. It's needed when dragging an
-  // Arc app window in overview mode to put it in split screen. In this case the
-  // restore of its transform needs to be deferred until the Arc app window is
-  // snapped successfully, otherwise the animation will look very ugly (the Arc
-  // app window enlarges itself to maximized window bounds and then shrinks to
-  // its snapped window bounds). Note if the window's transform is not reset
-  // here, it must be reset by someone else at some point.
-  void RestoreWindow(bool reset_transform,
-                     bool was_saved_desk_library_showing = false);
+  // Doesn't animate if `animate` is true. If `reset_transform` equals false,
+  // the window's transform will not be reset to identity transform when exiting
+  // overview mode. It's needed when dragging an Arc app window in overview mode
+  // to put it in split screen. In this case the restore of its transform needs
+  // to be deferred until the Arc app window is snapped successfully, otherwise
+  // the animation will look very ugly (the Arc app window enlarges itself to
+  // maximized window bounds and then shrinks to its snapped window bounds).
+  // Note if the window's transform is not reset here, it must be reset by
+  // someone else at some point.
+  void RestoreWindow(bool reset_transform, bool animate);
 
   // Ensures that a possibly minimized window becomes visible after restore.
   void EnsureVisible();
@@ -153,13 +152,6 @@ class ASH_EXPORT OverviewItem : public aura::WindowObserver,
   // |window_|'s bounds change.
   void UpdateWindowDimensionsType();
 
-  // TODO(minch): Do not actually scale up the item to get the bounds.
-  // http://crbug.com/876567.
-  // Returns the bounds of the selected item, which will be scaled up a little
-  // bit and header view will be hidden after being selected. Note, the item
-  // will be restored back after scaled up.
-  gfx::Rect GetBoundsOfSelectedItem();
-
   // Increases the bounds of the dragged item.
   void ScaleUpSelectedItem(OverviewAnimationType animation_type);
 
@@ -167,7 +159,7 @@ class ASH_EXPORT OverviewItem : public aura::WindowObserver,
   void UpdateItemContentViewForMinimizedWindow();
 
   // Checks if this item is currently being dragged.
-  bool IsDragItem();
+  bool IsDragItem() const;
 
   // Inserts the window back to its original stacking order so that the order of
   // windows is the same as when entering overview.
@@ -200,10 +192,11 @@ class ASH_EXPORT OverviewItem : public aura::WindowObserver,
   void SetOpacity(float opacity);
   float GetOpacity();
 
-  OverviewAnimationType GetExitOverviewAnimationType();
-  OverviewAnimationType GetExitTransformAnimationType();
+  OverviewAnimationType GetExitOverviewAnimationType() const;
+  OverviewAnimationType GetExitTransformAnimationType() const;
 
-  // If kNewOverviewLayout is on, use this function for handling events.
+  // If in tablet mode, maybe forward events to `OverviewGridEventHandler` as we
+  // might want to process scroll events on the item.
   void HandleGestureEventForTabletModeLayout(ui::GestureEvent* event);
 
   // Handles events forwarded from |overview_item_view_|.
@@ -279,25 +272,13 @@ class ASH_EXPORT OverviewItem : public aura::WindowObserver,
     return scrolling_bounds_;
   }
 
-  gfx::Rect GetShadowBoundsForTesting();
-  RoundedLabelWidget* cannot_snap_widget_for_testing() {
-    return cannot_snap_widget_.get();
-  }
-
   void set_target_bounds_for_testing(const gfx::RectF& target_bounds) {
     target_bounds_ = target_bounds;
-  }
-  void set_animating_to_close_for_testing(bool val) {
-    animating_to_close_ = val;
   }
 
  private:
   friend class OverviewTestBase;
   FRIEND_TEST_ALL_PREFIXES(SplitViewOverviewSessionTest, Clipping);
-
-  // The shadow should match the size of the transformed window or preview
-  // window if unclipped.
-  gfx::RectF GetUnclippedShadowBounds() const;
 
   // Functions to be called back when their associated animations complete.
   void OnWindowCloseAnimationCompleted();
@@ -328,6 +309,11 @@ class ASH_EXPORT OverviewItem : public aura::WindowObserver,
   // Updates the |item_widget|'s bounds. Any change in bounds will be animated
   // from the current bounds to the new bounds as per the |animation_type|.
   void UpdateHeaderLayout(OverviewAnimationType animation_type);
+
+  // Updates the bounds of `item_widget` if the feature flag Jellyroll is
+  // enabled. Once the feature is fully launched, this function will be renamed
+  // to `UpdateHeaderLayout` and the function above should be removed.
+  void UpdateHeaderLayoutCrOSNext(OverviewAnimationType animation_type);
 
   // Animates opacity of the |transform_window_| and its caption to |opacity|
   // using |animation_type|.

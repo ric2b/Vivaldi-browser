@@ -149,6 +149,17 @@ void DIPSStorage::RemoveRows(const std::vector<std::string>& sites) {
   db_->RemoveRows(sites);
 }
 
+void DIPSStorage::RemoveRowsWithoutInteraction(
+    const std::set<std::string>& sites) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(db_);
+
+  std::set<std::string> filtered_sites = FilterSitesWithoutInteraction(sites);
+
+  RemoveRows(
+      std::vector<std::string>(filtered_sites.begin(), filtered_sites.end()));
+}
+
 // DIPSTabHelper Function Impls ------------------------------------------------
 
 void DIPSStorage::RecordStorage(const GURL& url,
@@ -216,21 +227,21 @@ std::set<std::string> DIPSStorage::FilterSitesWithoutInteraction(
 }
 
 std::vector<std::string> DIPSStorage::GetSitesThatBounced(
-    const base::TimeDelta& grace_period) const {
+    base::TimeDelta grace_period) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(db_);
   return db_->GetSitesThatBounced(grace_period);
 }
 
 std::vector<std::string> DIPSStorage::GetSitesThatBouncedWithState(
-    const base::TimeDelta& grace_period) const {
+    base::TimeDelta grace_period) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(db_);
   return db_->GetSitesThatBouncedWithState(grace_period);
 }
 
 std::vector<std::string> DIPSStorage::GetSitesThatUsedStorage(
-    const base::TimeDelta& grace_period) const {
+    base::TimeDelta grace_period) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(db_);
   return db_->GetSitesThatUsedStorage(grace_period);
@@ -261,6 +272,13 @@ std::vector<std::string> DIPSStorage::GetSitesToClear(
   }
 
   return sites_to_clear;
+}
+
+bool DIPSStorage::DidSiteHaveInteractionSince(const GURL& url,
+                                              base::Time bound) {
+  const DIPSState state = Read(url);
+  return state.user_interaction_times().has_value() &&
+         state.user_interaction_times()->second >= bound;
 }
 
 /* static */

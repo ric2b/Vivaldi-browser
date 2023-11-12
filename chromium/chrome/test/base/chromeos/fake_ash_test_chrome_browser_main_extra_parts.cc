@@ -4,8 +4,8 @@
 
 #include "fake_ash_test_chrome_browser_main_extra_parts.h"
 
+#include "ash/test/ui_controls_ash.h"
 #include "ash/multi_device_setup/multi_device_notification_presenter.h"
-#include "ash/test/ui_controls_factory_ash.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -15,8 +15,8 @@
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/crosapi/test_controller_ash.h"
 #include "chrome/browser/ash/login/signin/signin_error_notifier.h"
+#include "chrome/browser/speech/extension_api/tts_engine_extension_api.h"
 #include "chromeos/services/machine_learning/public/cpp/fake_service_connection.h"
-#include "ui/base/test/ui_controls.h"
 #include "ui/views/input_event_activation_protector.h"
 
 namespace test {
@@ -54,11 +54,16 @@ void AshIsReadyForTesting() {
 
 void FakeAshTestChromeBrowserMainExtraParts::PreProfileInit() {
   crosapi::BrowserManager::DisableForTesting();
+  // TODO(crbug.com/1422469): Explore whether there is a better place to disable
+  // the built-in tts engine other than FakeAshTestChromeBrowserMainExtraParts,
+  // which may make test_ash_chrome behavior differs from production ash chrome.
+  TtsExtensionEngine::GetInstance()->DisableBuiltInTTSEngineForTesting();
 }
 
 void FakeAshTestChromeBrowserMainExtraParts::PreBrowserStart() {
   // These are used by exo's weston-test protocol for event injection.
-  ui_controls::InstallUIControlsAura(ash::test::CreateAshUIControls());
+  // TODO(oshima): Move this to the test protocol side.
+  ash::test::EnableUIControlsAsh();
 }
 
 void FakeAshTestChromeBrowserMainExtraParts::PostBrowserStart() {

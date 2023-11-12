@@ -35,10 +35,6 @@ Destination DestinationForStringName(std::string destination) {
     return overflow_menu::Destination::WhatsNew;
   } else if (destination == "overflow_menu::Destination::SpotlightDebugger") {
     return overflow_menu::Destination::SpotlightDebugger;
-  // Vivaldi
-  } else if (destination == "overflow_menu::Destination::Notes") {
-      return overflow_menu::Destination::Bookmarks;
-  // End Vivaldi
   } else {
     NOTREACHED();
     // Randomly chosen destination which should never be returned due to
@@ -73,11 +69,6 @@ std::string StringNameForDestination(Destination destination) {
       return "overflow_menu::Destination::WhatsNew";
     case overflow_menu::Destination::SpotlightDebugger:
       return "overflow_menu::Destination::SpotlightDebugger";
-
-    // Vivaldi
-    case overflow_menu::Destination::Notes:
-      return "overflow_menu::Destination::Notes";
-    // End Vivaldi
   }
 }
 
@@ -120,11 +111,6 @@ void RecordUmaActionForDestination(Destination destination) {
     case overflow_menu::Destination::SpotlightDebugger:
       // No need to log metrics for a debug-only feature.
       break;
-
-    // Vivaldi
-    case Destination::Notes:
-      break;
-    // End Vivaldi
   }
 }
 }  // namespace overflow_menu

@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {TestRunner} from 'test_runner';
+import {ApplicationTestRunner} from 'application_test_runner';
+import {ConsoleTestRunner} from 'console_test_runner';
+
 (async function() {
   TestRunner.addResult(
       `Tests that data is correctly loaded by IndexedDBModel from IndexedDB object store and index.\n`);
-  await TestRunner.loadLegacyModule('console'); await TestRunner.loadTestModule('application_test_runner');
+  await TestRunner.loadLegacyModule('console');
     // Note: every test that uses a storage API must manually clean-up state from previous tests.
   await ApplicationTestRunner.resetState();
 
@@ -16,7 +20,7 @@
   var objectStoreName1 = 'testObjectStore1';
   var objectStoreName2 = 'testObjectStore2';
   var indexName = 'testIndexName';
-  var databaseId = new Resources.IndexedDBModel.DatabaseId(storageKey, databaseName);
+  var databaseId = new Resources.IndexedDBModel.DatabaseId({storageKey}, databaseName);
 
   /**
    * @param {number} count
@@ -87,7 +91,7 @@
     }
   }
 
-  TestRunner.addSniffer(Resources.IndexedDBModel.prototype, 'updateStorageKeyDatabaseNames', fillDatabase, false);
+  fillDatabase();
 
   function fillDatabase() {
     ApplicationTestRunner.createDatabase(mainFrameId, databaseName, step2);

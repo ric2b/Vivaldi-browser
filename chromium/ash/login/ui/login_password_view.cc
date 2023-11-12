@@ -6,6 +6,7 @@
 
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/constants/ash_features.h"
+#include "ash/login/login_screen_controller.h"
 #include "ash/login/ui/arrow_button_view.h"
 #include "ash/login/ui/horizontal_image_sequence_animation_decoder.h"
 #include "ash/login/ui/hover_notifier.h"
@@ -20,15 +21,18 @@
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/color_util.h"
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -48,6 +52,7 @@
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/highlight_border.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
@@ -204,7 +209,14 @@ class AnimationWillRepeatObserver : public ui::LayerAnimationObserver {
 // and indicators (easy unlock, display password, caps lock enabled).
 class LoginPasswordView::LoginPasswordRow : public views::View {
  public:
-  explicit LoginPasswordRow() = default;
+  explicit LoginPasswordRow() {
+    if (chromeos::features::IsJellyrollEnabled()) {
+      SetBackground(views::CreateThemedRoundedRectBackground(
+          cros_tokens::kCrosSysSystemBaseElevated, 8));
+      SetBorder(std::make_unique<views::HighlightBorder>(
+          8, views::HighlightBorder::Type::kHighlightBorderNoShadow));
+    }
+  }
 
   ~LoginPasswordRow() override = default;
   LoginPasswordRow(const LoginPasswordRow&) = delete;
@@ -213,12 +225,15 @@ class LoginPasswordView::LoginPasswordRow : public views::View {
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
     views::View::OnPaint(canvas);
-    cc::PaintFlags flags;
-    flags.setStyle(cc::PaintFlags::kFill_Style);
-    flags.setColor(AshColorProvider::Get()->GetControlsLayerColor(
-        AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive));
-    canvas->DrawRoundRect(GetContentsBounds(), kPasswordRowCornerRadiusDp,
-                          flags);
+    if (!chromeos::features::IsJellyrollEnabled()) {
+      cc::PaintFlags flags;
+      flags.setStyle(cc::PaintFlags::kFill_Style);
+      flags.setColor(AshColorProvider::Get()->GetControlsLayerColor(
+          AshColorProvider::ControlsLayerType::
+              kControlBackgroundColorInactive));
+      canvas->DrawRoundRect(GetContentsBounds(), kPasswordRowCornerRadiusDp,
+                            flags);
+    }
   }
 };
 
@@ -454,14 +469,20 @@ class LoginPasswordView::DisplayPasswordButton
     SetInstallFocusRingOnFocus(true);
     views::FocusRing::Get(this)->SetColorId(ui::kColorAshFocusRing);
 
-    const ui::ImageModel invisible_icon =
-        ui::ImageModel::FromVectorIcon(kLockScreenPasswordInvisibleIcon,
-                                       kColorAshIconColorPrimary, kIconSizeDp);
+    const bool is_jelly = chromeos::features::IsJellyrollEnabled();
+    const ui::ColorId enabled_icon_color_id =
+        is_jelly ? static_cast<ui::ColorId>(cros_tokens::kCrosSysOnSurface)
+                 : kColorAshIconColorPrimary;
+    const ui::ColorId disabled_icon_color_id =
+        is_jelly ? static_cast<ui::ColorId>(cros_tokens::kCrosSysDisabled)
+                 : kColorAshIconPrimaryDisabledColor;
+
+    const ui::ImageModel invisible_icon = ui::ImageModel::FromVectorIcon(
+        kLockScreenPasswordInvisibleIcon, enabled_icon_color_id, kIconSizeDp);
     const ui::ImageModel visible_icon = ui::ImageModel::FromVectorIcon(
-        kLockScreenPasswordVisibleIcon, kColorAshIconColorPrimary, kIconSizeDp);
+        kLockScreenPasswordVisibleIcon, enabled_icon_color_id, kIconSizeDp);
     const ui::ImageModel visible_icon_disabled = ui::ImageModel::FromVectorIcon(
-        kLockScreenPasswordVisibleIcon, kColorAshIconPrimaryDisabledColor,
-        kIconSizeDp);
+        kLockScreenPasswordVisibleIcon, disabled_icon_color_id, kIconSizeDp);
     SetImageModel(views::Button::STATE_NORMAL, visible_icon);
     SetImageModel(views::Button::STATE_DISABLED, visible_icon_disabled);
     SetToggledImageModel(views::Button::STATE_NORMAL, invisible_icon);
@@ -767,6 +788,13 @@ void LoginPasswordView::SetPlaceholderText(
 }
 
 void LoginPasswordView::SetReadOnly(bool read_only) {
+  if (!read_only &&
+      Shell::Get()->login_screen_controller()->IsAuthenticating()) {
+    // TODO(b/276246832): We shouldn't enable the LoginPasswordView during
+    // Authentication.
+    LOG(WARNING) << "LoginPasswordView::SetReadOnly called with false during "
+                    "Authentication.";
+  }
   textfield_->SetReadOnly(read_only);
   textfield_->SetCursorEnabled(!read_only);
   UpdateUiState();
@@ -938,9 +966,17 @@ void LoginPasswordView::SubmitPassword() {
 
 void LoginPasswordView::SetCapsLockHighlighted(bool highlight) {
   is_capslock_higlight_ = highlight;
+
+  const bool is_jelly = chromeos::features::IsJellyrollEnabled();
+  const ui::ColorId enabled_icon_color_id =
+      is_jelly ? static_cast<ui::ColorId>(cros_tokens::kCrosSysOnSurface)
+               : kColorAshIconColorPrimary;
+  const ui::ColorId disabled_icon_color_id =
+      is_jelly ? static_cast<ui::ColorId>(cros_tokens::kCrosSysDisabled)
+               : kColorAshIconPrimaryDisabledColor;
   capslock_icon_->SetImage(ui::ImageModel::FromVectorIcon(
-      kLockScreenCapsLockIcon, highlight ? kColorAshIconColorPrimary
-                                         : kColorAshIconPrimaryDisabledColor));
+      kLockScreenCapsLockIcon,
+      highlight ? enabled_icon_color_id : disabled_icon_color_id));
 }
 
 BEGIN_METADATA(LoginPasswordView, views::View)

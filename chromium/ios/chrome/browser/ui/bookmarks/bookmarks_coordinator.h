@@ -51,11 +51,8 @@ class GURL;
 #endif
 // End Vivaldi
 
-// Called before the instance is deallocated.
-- (void)shutdown;
-
 // Adds a bookmark for `URL` with the given `title`.
-- (void)bookmarkURL:(const GURL&)URL title:(NSString*)title;
+- (void)createBookmarkURL:(const GURL&)URL title:(NSString*)title;
 
 // Presents the bookmark UI to edit an existing bookmark with `URL`.
 - (void)presentBookmarkEditorForURL:(const GURL&)URL;

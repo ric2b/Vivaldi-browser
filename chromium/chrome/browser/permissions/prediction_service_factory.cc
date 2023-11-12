@@ -4,7 +4,7 @@
 
 #include "chrome/browser/permissions/prediction_service_factory.h"
 
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/permissions/prediction_service/prediction_service.h"
@@ -19,13 +19,19 @@ permissions::PredictionService* PredictionServiceFactory::GetForProfile(
 
 // static
 PredictionServiceFactory* PredictionServiceFactory::GetInstance() {
-  return base::Singleton<PredictionServiceFactory>::get();
+  static base::NoDestructor<PredictionServiceFactory> instance;
+  return instance.get();
 }
 
 PredictionServiceFactory::PredictionServiceFactory()
     : ProfileKeyedServiceFactory(
           "PredictionService",
-          ProfileSelections::BuildForRegularAndIncognito()) {}
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {}
 
 PredictionServiceFactory::~PredictionServiceFactory() = default;
 

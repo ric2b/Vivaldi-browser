@@ -8,18 +8,23 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/fake_target_device_connection_broker.h"
+#include "chrome/browser/ash/login/oobe_quick_start/connectivity/target_device_connection_broker.h"
 #include "chrome/browser/ash/login/oobe_quick_start/oobe_quick_start_pref_names.h"
 #include "chrome/browser/nearby_sharing/fake_nearby_connections_manager.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "chromeos/ash/services/nearby/public/mojom/quick_start_decoder_types.mojom-shared.h"
+#include "chromeos/ash/services/nearby/public/mojom/quick_start_decoder_types.mojom.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
+#include "ui/chromeos/devicetype_utils.h"
 
 namespace ash::quick_start {
 
@@ -69,25 +74,38 @@ class TargetDeviceBootstrapControllerTest : public testing::Test {
   }
 
   void CreateBootstrapController() {
-    TargetDeviceConnectionBrokerFactory::SetFactoryForTesting(
-        &connection_broker_factory_);
+    std::unique_ptr<FakeTargetDeviceConnectionBroker>
+        fake_target_device_connection_broker =
+            std::make_unique<FakeTargetDeviceConnectionBroker>();
+    fake_target_device_connection_broker_ =
+        fake_target_device_connection_broker.get();
 
     bootstrap_controller_ = std::make_unique<TargetDeviceBootstrapController>(
-        fake_nearby_connections_manager_.GetWeakPtr());
+        std::move(fake_target_device_connection_broker));
     fake_observer_ = std::make_unique<FakeObserver>();
     bootstrap_controller_->AddObserver(fake_observer_.get());
   }
 
-  FakeTargetDeviceConnectionBroker* connection_broker() {
-    EXPECT_EQ(1u, connection_broker_factory_.instances().size());
-    return connection_broker_factory_.instances().back();
+  void BootstrapConnection() {
+    bootstrap_controller_->StartAdvertising();
+    fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+        /*success=*/true);
+    fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
+    fake_target_device_connection_broker_->AuthenticateConnection(
+        kSourceDeviceId);
+    ASSERT_EQ(fake_observer_->last_status.step, Step::CONNECTING_TO_WIFI);
+  }
+
+  void NotifySourceOfUpdateResponse(bool ack_successful) {
+    bootstrap_controller_->OnNotifySourceOfUpdateResponse(ack_successful);
   }
 
   PrefService* GetLocalState() { return local_state_.Get(); }
 
  protected:
   base::test::SingleThreadTaskEnvironment task_environment_;
-  FakeTargetDeviceConnectionBroker::Factory connection_broker_factory_;
+  raw_ptr<FakeTargetDeviceConnectionBroker, ExperimentalAsh>
+      fake_target_device_connection_broker_;
   FakeNearbyConnectionsManager fake_nearby_connections_manager_;
   std::unique_ptr<FakeObserver> fake_observer_;
   std::unique_ptr<TargetDeviceBootstrapController> bootstrap_controller_;
@@ -96,17 +114,21 @@ class TargetDeviceBootstrapControllerTest : public testing::Test {
 
 TEST_F(TargetDeviceBootstrapControllerTest, StartAdvertising) {
   bootstrap_controller_->StartAdvertising();
-  EXPECT_EQ(1u, connection_broker()->num_start_advertising_calls());
-  EXPECT_EQ(bootstrap_controller_.get(),
-            connection_broker()->connection_lifecycle_listener());
+  EXPECT_EQ(
+      1u, fake_target_device_connection_broker_->num_start_advertising_calls());
+  EXPECT_EQ(
+      bootstrap_controller_.get(),
+      fake_target_device_connection_broker_->connection_lifecycle_listener());
 
-  connection_broker()->on_start_advertising_callback().Run(/*success=*/true);
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
   EXPECT_EQ(fake_observer_->last_status.step, Step::ADVERTISING);
 }
 
 TEST_F(TargetDeviceBootstrapControllerTest, StartAdvertisingFail) {
   bootstrap_controller_->StartAdvertising();
-  connection_broker()->on_start_advertising_callback().Run(/*success=*/false);
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/false);
   EXPECT_EQ(fake_observer_->last_status.step, Step::ERROR);
   ASSERT_TRUE(
       absl::holds_alternative<ErrorCode>(fake_observer_->last_status.payload));
@@ -116,25 +138,28 @@ TEST_F(TargetDeviceBootstrapControllerTest, StartAdvertisingFail) {
 
 TEST_F(TargetDeviceBootstrapControllerTest, StopAdvertising) {
   bootstrap_controller_->StartAdvertising();
-  connection_broker()->on_start_advertising_callback().Run(/*success=*/true);
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
   ASSERT_EQ(fake_observer_->last_status.step, Step::ADVERTISING);
 
   bootstrap_controller_->StopAdvertising();
-  EXPECT_EQ(1u, connection_broker()->num_stop_advertising_calls());
+  EXPECT_EQ(
+      1u, fake_target_device_connection_broker_->num_stop_advertising_calls());
 
   // Status changes only after the `on_stop_advertising_callback` run.
   EXPECT_EQ(fake_observer_->last_status.step, Step::ADVERTISING);
 
-  connection_broker()->on_stop_advertising_callback().Run();
+  fake_target_device_connection_broker_->on_stop_advertising_callback().Run();
   EXPECT_EQ(fake_observer_->last_status.step, Step::NONE);
 }
 
 TEST_F(TargetDeviceBootstrapControllerTest, InitiateConnection_QRCode) {
   bootstrap_controller_->StartAdvertising();
-  connection_broker()->on_start_advertising_callback().Run(/*success=*/true);
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
   ASSERT_EQ(fake_observer_->last_status.step, Step::ADVERTISING);
 
-  connection_broker()->InitiateConnection(kSourceDeviceId);
+  fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
 
   EXPECT_EQ(fake_observer_->last_status.step, Step::QR_CODE_VERIFICATION);
   using QRCodePixelData = TargetDeviceBootstrapController::QRCodePixelData;
@@ -143,12 +168,13 @@ TEST_F(TargetDeviceBootstrapControllerTest, InitiateConnection_QRCode) {
 }
 
 TEST_F(TargetDeviceBootstrapControllerTest, InitiateConnection_Pin) {
-  connection_broker()->set_use_pin_authentication(true);
+  fake_target_device_connection_broker_->set_use_pin_authentication(true);
   bootstrap_controller_->StartAdvertising();
-  connection_broker()->on_start_advertising_callback().Run(/*success=*/true);
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
   ASSERT_EQ(fake_observer_->last_status.step, Step::ADVERTISING);
 
-  connection_broker()->InitiateConnection(kSourceDeviceId);
+  fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
 
   EXPECT_EQ(fake_observer_->last_status.step, Step::PIN_VERIFICATION);
   // TODO: Test PIN payload
@@ -157,12 +183,7 @@ TEST_F(TargetDeviceBootstrapControllerTest, InitiateConnection_Pin) {
 }
 
 TEST_F(TargetDeviceBootstrapControllerTest, AuthenticateConnection) {
-  bootstrap_controller_->StartAdvertising();
-  connection_broker()->on_start_advertising_callback().Run(/*success=*/true);
-  connection_broker()->InitiateConnection(kSourceDeviceId);
-  connection_broker()->AuthenticateConnection(kSourceDeviceId);
-
-  EXPECT_EQ(fake_observer_->last_status.step, Step::CONNECTED);
+  BootstrapConnection();
   EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
       fake_observer_->last_status.payload));
 }
@@ -171,7 +192,7 @@ TEST_F(TargetDeviceBootstrapControllerTest, FeatureSupportStatus) {
   absl::optional<TargetDeviceConnectionBroker::FeatureSupportStatus>
       feature_status;
 
-  connection_broker()->set_feature_support_status(
+  fake_target_device_connection_broker_->set_feature_support_status(
       FakeTargetDeviceConnectionBroker::FeatureSupportStatus::kUndetermined);
 
   bootstrap_controller_->GetFeatureSupportStatusAsync(
@@ -181,7 +202,7 @@ TEST_F(TargetDeviceBootstrapControllerTest, FeatureSupportStatus) {
           }));
   EXPECT_FALSE(feature_status.has_value());
 
-  connection_broker()->set_feature_support_status(
+  fake_target_device_connection_broker_->set_feature_support_status(
       FakeTargetDeviceConnectionBroker::FeatureSupportStatus::kNotSupported);
   ASSERT_TRUE(feature_status.has_value());
   EXPECT_EQ(
@@ -191,10 +212,11 @@ TEST_F(TargetDeviceBootstrapControllerTest, FeatureSupportStatus) {
 
 TEST_F(TargetDeviceBootstrapControllerTest, RejectConnection) {
   bootstrap_controller_->StartAdvertising();
-  connection_broker()->on_start_advertising_callback().Run(/*success=*/true);
-  connection_broker()->InitiateConnection(kSourceDeviceId);
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
+  fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
 
-  connection_broker()->RejectConnection();
+  fake_target_device_connection_broker_->RejectConnection();
 
   EXPECT_EQ(fake_observer_->last_status.step, Step::ERROR);
   ASSERT_TRUE(
@@ -205,10 +227,12 @@ TEST_F(TargetDeviceBootstrapControllerTest, RejectConnection) {
 
 TEST_F(TargetDeviceBootstrapControllerTest, CloseConnection) {
   bootstrap_controller_->StartAdvertising();
-  connection_broker()->on_start_advertising_callback().Run(/*success=*/true);
-  connection_broker()->InitiateConnection(kSourceDeviceId);
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
+  fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
 
-  connection_broker()->CloseConnection(ConnectionClosedReason::kConnectionLost);
+  fake_target_device_connection_broker_->CloseConnection(
+      ConnectionClosedReason::kConnectionLost);
 
   EXPECT_EQ(fake_observer_->last_status.step, Step::ERROR);
   ASSERT_TRUE(
@@ -218,60 +242,220 @@ TEST_F(TargetDeviceBootstrapControllerTest, CloseConnection) {
 }
 
 TEST_F(TargetDeviceBootstrapControllerTest, GetPhoneInstanceId) {
-  // TODO(b/234655072): Build out this unittest once phone instance ID is
-  // retrieved from Gaia credentials exchange.
-  ASSERT_TRUE(bootstrap_controller_->GetPhoneInstanceId().empty());
+  // Authenticate connection.
+  bootstrap_controller_->StartAdvertising();
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
+  fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
+  fake_target_device_connection_broker_->AuthenticateConnection(
+      kSourceDeviceId);
+
+  // Set phone instance ID.
+  std::vector<uint8_t> phone_instance_id = {0x01, 0x02, 0x03};
+  std::string expected_phone_instance_id(phone_instance_id.begin(),
+                                         phone_instance_id.end());
+  fake_target_device_connection_broker_->GetFakeConnection()
+      ->set_phone_instance_id(expected_phone_instance_id);
+
+  EXPECT_EQ(bootstrap_controller_->GetPhoneInstanceId(),
+            expected_phone_instance_id);
 }
 
-TEST_F(TargetDeviceBootstrapControllerTest, PrepareForUpdate_NotConnected) {
+TEST_F(TargetDeviceBootstrapControllerTest,
+       OnNotifySourceOfUpdateResponse_AckSuccessful) {
   ASSERT_FALSE(
       GetLocalState()->GetBoolean(prefs::kShouldResumeQuickStartAfterReboot));
   ASSERT_TRUE(GetLocalState()
                   ->GetDict(prefs::kResumeQuickStartAfterRebootInfo)
                   .empty());
+  BootstrapConnection();
 
-  // PrepareForUpdate() shouldn't do anything if the connection is not
-  // established.
-  bootstrap_controller_->StartAdvertising();
-  connection_broker()->on_start_advertising_callback().Run(/*success=*/true);
-  ASSERT_NE(fake_observer_->last_status.step, Step::CONNECTED);
+  NotifySourceOfUpdateResponse(/*ack_successful=*/true);
 
-  bootstrap_controller_->PrepareForUpdate();
-  EXPECT_FALSE(
-      GetLocalState()->GetBoolean(prefs::kShouldResumeQuickStartAfterReboot));
-  EXPECT_TRUE(GetLocalState()
-                  ->GetDict(prefs::kResumeQuickStartAfterRebootInfo)
-                  .empty());
-}
-
-TEST_F(TargetDeviceBootstrapControllerTest, PrepareForUpdate) {
-  ASSERT_FALSE(
-      GetLocalState()->GetBoolean(prefs::kShouldResumeQuickStartAfterReboot));
-  ASSERT_TRUE(GetLocalState()
-                  ->GetDict(prefs::kResumeQuickStartAfterRebootInfo)
-                  .empty());
-
-  bootstrap_controller_->StartAdvertising();
-  connection_broker()->on_start_advertising_callback().Run(/*success=*/true);
-  connection_broker()->InitiateConnection(kSourceDeviceId);
-  connection_broker()->AuthenticateConnection(kSourceDeviceId);
-  ASSERT_EQ(fake_observer_->last_status.step, Step::CONNECTED);
-
-  bootstrap_controller_->PrepareForUpdate();
-  // Pref shouldn't change until the connection is closed.
-  EXPECT_FALSE(
-      GetLocalState()->GetBoolean(prefs::kShouldResumeQuickStartAfterReboot));
-  EXPECT_TRUE(GetLocalState()
-                  ->GetDict(prefs::kResumeQuickStartAfterRebootInfo)
-                  .empty());
-  connection_broker()->CloseConnection(ConnectionClosedReason::kConnectionLost);
+  ASSERT_TRUE(
+      absl::holds_alternative<ErrorCode>(fake_observer_->last_status.payload));
+  EXPECT_EQ(absl::get<ErrorCode>(fake_observer_->last_status.payload),
+            ErrorCode::CONNECTION_CLOSED);
   EXPECT_TRUE(
       GetLocalState()->GetBoolean(prefs::kShouldResumeQuickStartAfterReboot));
   EXPECT_FALSE(GetLocalState()
                    ->GetDict(prefs::kResumeQuickStartAfterRebootInfo)
                    .empty());
-  GetLocalState()->ClearPref(prefs::kShouldResumeQuickStartAfterReboot);
-  GetLocalState()->ClearPref(prefs::kResumeQuickStartAfterRebootInfo);
+}
+
+TEST_F(TargetDeviceBootstrapControllerTest,
+       OnNotifySourceOfUpdateResponse_AckUnsuccessful) {
+  ASSERT_FALSE(
+      GetLocalState()->GetBoolean(prefs::kShouldResumeQuickStartAfterReboot));
+  ASSERT_TRUE(GetLocalState()
+                  ->GetDict(prefs::kResumeQuickStartAfterRebootInfo)
+                  .empty());
+  BootstrapConnection();
+
+  NotifySourceOfUpdateResponse(/*ack_successful=*/false);
+
+  ASSERT_TRUE(
+      absl::holds_alternative<ErrorCode>(fake_observer_->last_status.payload));
+  EXPECT_EQ(absl::get<ErrorCode>(fake_observer_->last_status.payload),
+            ErrorCode::CONNECTION_CLOSED);
+  EXPECT_FALSE(
+      GetLocalState()->GetBoolean(prefs::kShouldResumeQuickStartAfterReboot));
+  EXPECT_TRUE(GetLocalState()
+                  ->GetDict(prefs::kResumeQuickStartAfterRebootInfo)
+                  .empty());
+}
+
+TEST_F(TargetDeviceBootstrapControllerTest, RequestWifiCredentials) {
+  bootstrap_controller_->StartAdvertising();
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
+  fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
+  fake_target_device_connection_broker_->AuthenticateConnection(
+      kSourceDeviceId);
+
+  EXPECT_EQ(fake_observer_->last_status.step, Step::CONNECTING_TO_WIFI);
+  EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
+      fake_observer_->last_status.payload));
+
+  fake_target_device_connection_broker_->GetFakeConnection()->VerifyUser(
+      mojom::UserVerificationResponse(
+          mojom::UserVerificationResult::kUserVerified,
+          /*is_first_user_verification=*/true));
+
+  fake_target_device_connection_broker_->GetFakeConnection()
+      ->SendWifiCredentials(
+          mojom::WifiCredentials("ssid", mojom::WifiSecurityType::kWEP,
+                                 /*is_hidden=*/true, "password"));
+
+  EXPECT_EQ(fake_observer_->last_status.step, Step::CONNECTED_TO_WIFI);
+  EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
+      fake_observer_->last_status.payload));
+}
+
+TEST_F(TargetDeviceBootstrapControllerTest,
+       RequestWifiCredentials_FailsIfNoResult) {
+  bootstrap_controller_->StartAdvertising();
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
+  fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
+  fake_target_device_connection_broker_->AuthenticateConnection(
+      kSourceDeviceId);
+
+  fake_target_device_connection_broker_->GetFakeConnection()->VerifyUser(
+      mojom::UserVerificationResponse(
+          mojom::UserVerificationResult::kUserVerified,
+          /*is_first_user_verification=*/true));
+
+  fake_target_device_connection_broker_->GetFakeConnection()
+      ->SendWifiCredentials(absl::nullopt);
+
+  EXPECT_EQ(fake_observer_->last_status.step, Step::ERROR);
+  EXPECT_EQ(absl::get<ErrorCode>(fake_observer_->last_status.payload),
+            ErrorCode::WIFI_CREDENTIALS_NOT_RECEIVED);
+}
+
+TEST_F(TargetDeviceBootstrapControllerTest,
+       RequestWifiCredentialsFailsIfUserNotVerified) {
+  bootstrap_controller_->StartAdvertising();
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
+  fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
+  fake_target_device_connection_broker_->AuthenticateConnection(
+      kSourceDeviceId);
+
+  EXPECT_EQ(fake_observer_->last_status.step, Step::CONNECTING_TO_WIFI);
+  EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
+      fake_observer_->last_status.payload));
+
+  fake_target_device_connection_broker_->GetFakeConnection()->VerifyUser(
+      mojom::UserVerificationResponse(
+          mojom::UserVerificationResult::kUserNotVerified,
+          /*is_first_user_verification=*/true));
+
+  EXPECT_EQ(fake_observer_->last_status.step, Step::ERROR);
+  EXPECT_EQ(absl::get<ErrorCode>(fake_observer_->last_status.payload),
+            ErrorCode::USER_VERIFICATION_FAILED);
+}
+
+TEST_F(TargetDeviceBootstrapControllerTest,
+       RequestWifiCredentialsFailsIfEmptyVerificationResult) {
+  bootstrap_controller_->StartAdvertising();
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
+  fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
+  fake_target_device_connection_broker_->AuthenticateConnection(
+      kSourceDeviceId);
+
+  EXPECT_EQ(fake_observer_->last_status.step, Step::CONNECTING_TO_WIFI);
+  EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
+      fake_observer_->last_status.payload));
+
+  fake_target_device_connection_broker_->GetFakeConnection()->VerifyUser(
+      absl::nullopt);
+
+  EXPECT_EQ(fake_observer_->last_status.step, Step::ERROR);
+  EXPECT_EQ(absl::get<ErrorCode>(fake_observer_->last_status.payload),
+            ErrorCode::USER_VERIFICATION_FAILED);
+}
+
+TEST_F(TargetDeviceBootstrapControllerTest,
+       TransferGaiaAccountDetailsSucceeds) {
+  bootstrap_controller_->StartAdvertising();
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
+  fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
+  fake_target_device_connection_broker_->AuthenticateConnection(
+      kSourceDeviceId);
+
+  bootstrap_controller_->AttemptGoogleAccountTransfer();
+
+  EXPECT_EQ(fake_observer_->last_status.step,
+            Step::TRANSFERRING_GOOGLE_ACCOUNT_DETAILS);
+  EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
+      fake_observer_->last_status.payload));
+
+  fake_target_device_connection_broker_->GetFakeConnection()
+      ->SendAccountTransferAssertionInfo(FidoAssertionInfo());
+
+  EXPECT_EQ(fake_observer_->last_status.step,
+            Step::TRANSFERRED_GOOGLE_ACCOUNT_DETAILS);
+  EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
+      fake_observer_->last_status.payload));
+}
+
+TEST_F(TargetDeviceBootstrapControllerTest,
+       TransferGaiaAccountDetailsFailsIfEmpty) {
+  bootstrap_controller_->StartAdvertising();
+  fake_target_device_connection_broker_->on_start_advertising_callback().Run(
+      /*success=*/true);
+  fake_target_device_connection_broker_->InitiateConnection(kSourceDeviceId);
+  fake_target_device_connection_broker_->AuthenticateConnection(
+      kSourceDeviceId);
+
+  bootstrap_controller_->AttemptGoogleAccountTransfer();
+
+  EXPECT_EQ(fake_observer_->last_status.step,
+            Step::TRANSFERRING_GOOGLE_ACCOUNT_DETAILS);
+  EXPECT_TRUE(absl::holds_alternative<absl::monostate>(
+      fake_observer_->last_status.payload));
+
+  fake_target_device_connection_broker_->GetFakeConnection()
+      ->SendAccountTransferAssertionInfo(absl::nullopt);
+
+  EXPECT_EQ(fake_observer_->last_status.step, Step::ERROR);
+  EXPECT_EQ(absl::get<ErrorCode>(fake_observer_->last_status.payload),
+            ErrorCode::GAIA_ASSERTION_NOT_RECEIVED);
+}
+
+// Ensures that the discoverable name that is shown Chromebook (123) matches
+// the one returned by RandomSessionId
+TEST_F(TargetDeviceBootstrapControllerTest, DiscoverableName) {
+  std::string device_type = base::UTF16ToUTF8(ui::GetChromeOSDeviceName());
+  std::string code =
+      fake_target_device_connection_broker_->GetSessionIdDisplayCode();
+  auto expected_string = device_type + " (" + code + ")";
+
+  EXPECT_EQ(bootstrap_controller_->GetDiscoverableName(), expected_string);
 }
 
 }  // namespace ash::quick_start

@@ -18,7 +18,7 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/sync/base/user_selectable_type.h"
-#include "components/sync/driver/sync_user_settings.h"
+#include "components/sync/service/sync_user_settings.h"
 #include "components/sync/test/test_sync_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -1052,8 +1052,7 @@ TEST_F(PasswordManagerSettingsServiceAndroidImplTest,
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
       /*enabled_features=*/
-      {password_manager::features::kUnifiedPasswordManagerAndroid,
-       password_manager::features::kUnifiedPasswordManagerErrorMessages},
+      {password_manager::features::kUnifiedPasswordManagerAndroid},
       /*disabled_features=*/{});
   InitializeSettingsService(/*password_sync_enabled=*/true,
                             /*setting_sync_enabled=*/true);
@@ -1074,8 +1073,7 @@ TEST_F(PasswordManagerSettingsServiceAndroidImplTest,
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
       /*enabled_features=*/
-      {password_manager::features::kUnifiedPasswordManagerAndroid,
-       password_manager::features::kUnifiedPasswordManagerErrorMessages},
+      {password_manager::features::kUnifiedPasswordManagerAndroid},
       /*disabled_features=*/{});
   InitializeSettingsService(/*password_sync_enabled=*/false,
                             /*setting_sync_enabled=*/true);
@@ -1095,8 +1093,7 @@ TEST_F(PasswordManagerSettingsServiceAndroidImplTest,
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
       /*enabled_features=*/
-      {password_manager::features::kUnifiedPasswordManagerAndroid,
-       password_manager::features::kUnifiedPasswordManagerErrorMessages},
+      {password_manager::features::kUnifiedPasswordManagerAndroid},
       /*disabled_features=*/{});
   InitializeSettingsService(/*password_sync_enabled=*/false,
                             /*setting_sync_enabled=*/true);
@@ -1119,8 +1116,7 @@ TEST_F(PasswordManagerSettingsServiceAndroidImplTest,
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
       /*enabled_features=*/
-      {password_manager::features::kUnifiedPasswordManagerAndroid,
-       password_manager::features::kUnifiedPasswordManagerErrorMessages},
+      {password_manager::features::kUnifiedPasswordManagerAndroid},
       /*disabled_features=*/{});
   InitializeSettingsService(/*password_sync_enabled=*/false,
                             /*setting_sync_enabled=*/true);
@@ -1132,27 +1128,6 @@ TEST_F(PasswordManagerSettingsServiceAndroidImplTest,
   pref_service()->SetBoolean(
       password_manager::prefs::kUnenrolledFromGoogleMobileServicesDueToErrors,
       true);
-  pref_service()->SetBoolean(
-      password_manager::prefs::kSavePasswordsSuspendedByError, true);
-  EXPECT_TRUE(settings_service()->IsSettingEnabled(
-      PasswordManagerSetting::kOfferToSavePasswords));
-}
-
-TEST_F(PasswordManagerSettingsServiceAndroidImplTest,
-       IgnoreOverriddenValueForOfferToSaveWithoutFeature) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      /*enabled_features=*/{password_manager::features::
-                                kUnifiedPasswordManagerAndroid},
-      /*disabled_features=*/{
-          password_manager::features::kUnifiedPasswordManagerErrorMessages});
-  InitializeSettingsService(/*password_sync_enabled=*/true,
-                            /*setting_sync_enabled=*/true);
-  pref_service()->SetUserPref(
-      password_manager::prefs::kCredentialsEnableService, base::Value(true));
-  pref_service()->SetUserPref(
-      password_manager::prefs::kOfferToSavePasswordsEnabledGMS,
-      base::Value(true));
   pref_service()->SetBoolean(
       password_manager::prefs::kSavePasswordsSuspendedByError, true);
   EXPECT_TRUE(settings_service()->IsSettingEnabled(

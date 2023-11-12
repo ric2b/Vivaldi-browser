@@ -17,13 +17,19 @@ PermissionActionsHistoryFactory::GetForProfile(Profile* profile) {
 // static
 PermissionActionsHistoryFactory*
 PermissionActionsHistoryFactory::GetInstance() {
-  return base::Singleton<PermissionActionsHistoryFactory>::get();
+  static base::NoDestructor<PermissionActionsHistoryFactory> instance;
+  return instance.get();
 }
 
 PermissionActionsHistoryFactory::PermissionActionsHistoryFactory()
     : ProfileKeyedServiceFactory(
           "PermissionActionsHistory",
-          ProfileSelections::BuildForRegularAndIncognito()) {}
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {}
 
 PermissionActionsHistoryFactory::~PermissionActionsHistoryFactory() = default;
 

@@ -183,6 +183,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [editCell.identifyingIconButton addTarget:self
                                          action:@selector(togglePasswordMasking)
                                forControlEvents:UIControlEventTouchUpInside];
+      editCell.textField.delegate = self;
       break;
     }
     default:
@@ -192,6 +193,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
   return cell;
 }
 
+#pragma mark - UITextFieldDelegate
+
+- (BOOL)textFieldShouldReturn:(UITextField*)textField {
+  [self saveButtonPressed:nil];
+  return NO;
+}
 
 #pragma mark - Private Methods
 

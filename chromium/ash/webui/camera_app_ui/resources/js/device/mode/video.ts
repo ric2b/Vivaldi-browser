@@ -45,6 +45,7 @@ import {getFpsRangeFromConstraints} from '../../util.js';
 import {WaitableEvent} from '../../waitable_event.js';
 import {StreamConstraints} from '../stream_constraints.js';
 import {StreamManager} from '../stream_manager.js';
+import {StreamManagerChrome} from '../stream_manager_chrome.js';
 
 import {ModeBase, ModeFactory} from './mode_base.js';
 import {PhotoResult} from './photo.js';
@@ -86,7 +87,7 @@ const GRAB_GIF_FRAME_RATIO = 2;
 /**
  * Initial speed for time-lapse recording.
  */
-const TIME_LAPSE_INITIAL_SPEED = 5;
+export const TIME_LAPSE_INITIAL_SPEED = 5;
 
 /**
  * Minimum bitrate multiplier for time lapse recording.
@@ -123,8 +124,6 @@ function getVideoMimeType(param: h264.EncoderParameters|null): string {
 
 /**
  * Gets VideoEncoder's config from current h264 params and resolutions.
- *
- * @return VideoEncoderConfig.
  */
 function getVideoEncoderConfig(
     param: h264.EncoderParameters, resolution: Resolution): VideoEncoderConfig {
@@ -301,10 +300,13 @@ export class Video extends ModeBase {
 
   override async clear(): Promise<void> {
     await this.stopCapture();
-    if (this.captureStream !== null) {
+
+    if (StreamManagerChrome.getInstance().getCaptureStream() !== null) {
+      StreamManagerChrome.getInstance().stopCaptureStream();
+    } else if (this.captureStream !== null) {
       await StreamManager.getInstance().closeCaptureStream(this.captureStream);
-      this.captureStream = null;
     }
+    this.captureStream = null;
   }
 
   /**
@@ -546,8 +548,12 @@ export class Video extends ModeBase {
   /**
    * Gets video track of recording stream.
    */
-  private getVideoTrack(): MediaStreamTrack {
-    return this.getRecordingStream().getVideoTracks()[0];
+  private getVideoTrack(): MediaStreamVideoTrack {
+    // The type annotation on MediaStream.getVideoTracks() in @types/webrtc is
+    // not specific enough.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    return this.getRecordingStream().getVideoTracks()[0] as
+        MediaStreamVideoTrack;
   }
 
   async start(): Promise<[Promise<void>]> {
@@ -573,9 +579,16 @@ export class Video extends ModeBase {
       throw new CanceledError('Recording sound is canceled');
     }
 
-    if (this.captureConstraints !== null && this.captureStream === null) {
-      this.captureStream = await StreamManager.getInstance().openCaptureStream(
-          this.captureConstraints);
+    if (this.captureStream === null) {
+      if (expert.isEnabled(
+              expert.ExpertOption.ENABLE_MULTISTREAM_RECORDING_CHROME)) {
+        this.captureStream =
+            assertExists(StreamManagerChrome.getInstance().getCaptureStream());
+      } else if (this.captureConstraints !== null) {
+        this.captureStream =
+            await StreamManager.getInstance().openCaptureStream(
+                this.captureConstraints);
+      }
     }
     if (this.recordingImageCapture === null) {
       this.recordingImageCapture = new CrosImageCapture(this.getVideoTrack());
@@ -637,6 +650,9 @@ export class Video extends ModeBase {
         duration: this.gifRecordTime.inMilliseconds(),
       })];
     } else if (this.recordingType === RecordType.TIME_LAPSE) {
+      // TODO(b/279865370): Don't pause when the confirm dialog is shown.
+      window.addEventListener('beforeunload', beforeUnloadListener);
+
       this.recordTime.start({resume: false});
       let timeLapseSaver: TimeLapseSaver|null = null;
       try {
@@ -645,6 +661,7 @@ export class Video extends ModeBase {
       } finally {
         state.set(state.State.RECORDING, false);
         this.recordTime.stop({pause: false});
+        window.removeEventListener('beforeunload', beforeUnloadListener);
       }
 
       if (this.recordTime.inMilliseconds() <
@@ -722,7 +739,7 @@ export class Video extends ModeBase {
     } else {
       sound.cancel(dom.get('#sound-rec-start', HTMLAudioElement));
 
-      if (this.mediaRecorder &&
+      if (this.mediaRecorder !== null &&
           (this.mediaRecorder.state === 'recording' ||
            this.mediaRecorder.state === 'paused')) {
         this.mediaRecorder.stop();
@@ -792,7 +809,6 @@ export class Video extends ModeBase {
   private async captureTimeLapse(param: h264.EncoderParameters):
       Promise<TimeLapseSaver> {
     const encoderConfig = getVideoEncoderConfig(param, this.captureResolution);
-    const video = this.video.video;
 
     // Creates a saver given the initial speed.
     const saver = await TimeLapseSaver.create(
@@ -800,7 +816,7 @@ export class Video extends ModeBase {
         TIME_LAPSE_INITIAL_SPEED);
 
     // Creates a frame reader from track processor.
-    const track = this.getVideoTrack() as MediaStreamVideoTrack;
+    const track = this.getVideoTrack();
     const trackProcessor = new MediaStreamTrackProcessor({track});
     const reader = trackProcessor.readable.getReader();
 
@@ -808,35 +824,45 @@ export class Video extends ModeBase {
     const frames = await new Promise<number>((resolve, reject) => {
       let frameCount = 0;
       let writtenFrameCount = 0;
-      // TODO(b/236800499): Investigate whether we should use async, or use
-      // reader.read().then() instead.
+
+      async function onError(error: unknown) {
+        await saver.cancel();
+        reject(error);
+      }
+      saver.setErrorCallback(onError);
+
       async function updateFrame(): Promise<void> {
         if (!state.get(state.State.RECORDING)) {
           resolve(writtenFrameCount);
           return;
         }
         if (state.get(state.State.RECORDING_PAUSED)) {
-          video.requestVideoFrameCallback(updateFrame);
+          state.addOneTimeObserver(state.State.RECORDING_PAUSED, updateFrame);
           return;
         }
-        if (frameCount % saver.speed === 0) {
-          try {
-            const {done, value: frame} = await reader.read();
-            if (done) {
-              resolve(writtenFrameCount);
-              return;
-            }
+        let frame: VideoFrame|null = null;
+        try {
+          const {done, value} = await reader.read();
+          if (done) {
+            resolve(writtenFrameCount);
+            return;
+          }
+          frame = value;
+          if (frameCount % saver.speed === 0) {
             saver.write(frame, frameCount);
             writtenFrameCount++;
+          }
+        } catch (e) {
+          onError(e);
+        } finally {
+          if (frame !== null) {
             frame.close();
-          } catch (e) {
-            reject(e);
           }
         }
         frameCount++;
-        video.requestVideoFrameCallback(updateFrame);
+        updateFrame();
       }
-      video.requestVideoFrameCallback(updateFrame);
+      updateFrame();
     });
 
     if (frames === 0) {
@@ -858,7 +884,7 @@ export class Video extends ModeBase {
         let noChunk = true;
 
         function onDataAvailable(event: BlobEvent) {
-          if (event.data && event.data.size > 0) {
+          if (event.data.size > 0) {
             noChunk = false;
             saver.write(event.data);
           }

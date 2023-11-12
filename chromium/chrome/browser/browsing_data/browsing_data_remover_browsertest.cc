@@ -25,6 +25,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/media/clear_key_cdm_test_helper.h"
+#include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -32,6 +33,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/history/core/common/pref_names.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/password_manager/core/browser/password_manager_features_util.h"
@@ -43,11 +45,11 @@
 #include "components/sync/test/test_sync_service.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/clear_site_data_utils.h"
+#include "content/public/browser/network_service_util.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_usage_info.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/network_service_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browsing_data_remover_test_util.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -150,6 +152,13 @@ class BrowsingDataRemoverBrowserTest
   void SetUpOnMainThread() override {
     BrowsingDataRemoverBrowserTestBase::SetUpOnMainThread();
     host_resolver()->AddRule(kExampleHost, "127.0.0.1");
+
+    // Explicitly disable session restore. Otherwise tests that restart the
+    // browser can get tab data persisted across sessions when we thought we
+    // deleted it.
+    SessionStartupPref::SetStartupPref(
+        GetProfile()->GetPrefs(),
+        SessionStartupPref(SessionStartupPref::DEFAULT));
   }
   void RemoveAndWait(uint64_t remove_mask) {
     RemoveAndWait(remove_mask, TimeEnum::kDefault, TimeEnum::kMax);
@@ -199,7 +208,10 @@ class BrowsingDataRemoverBrowserTest
 
     SetDataForType(type);
     EXPECT_EQ(1, GetSiteDataCount());
-    ExpectCookieTreeModelCount(1);
+    // TODO(crbug.com/1307796): Use a different approach to determine presence
+    // of data that does not depend on UI code and has a better resolution when
+    // 3PSP is fully enabled. ExpectCookieTreeModelCount(1) is not always true
+    // here.
     EXPECT_TRUE(HasDataForType(type));
 
     RemoveAndWait(chrome_browsing_data_remover::DATA_TYPE_SITE_DATA,
@@ -221,7 +233,10 @@ class BrowsingDataRemoverBrowserTest
     // Opening a store of this type creates a site data entry.
     EXPECT_FALSE(HasDataForType(type));
     EXPECT_EQ(1, GetSiteDataCount());
-    ExpectCookieTreeModelCount(1);
+    // TODO(crbug.com/1307796): Use a different approach to determine presence
+    // of data that does not depend on UI code and has a better resolution when
+    // 3PSP is fully enabled. ExpectCookieTreeModelCount(1) is not always true
+    // here.
     RemoveAndWait(chrome_browsing_data_remover::DATA_TYPE_SITE_DATA,
                   delete_begin);
 
@@ -1482,6 +1497,10 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
 
 // Restart after creating the data to ensure that everything was written to
 // disk.
+//
+// This depends on session restore being explicitly disabled by the test harness
+// above. Otherwise, we'll restore the tabs, delete the data on disk, and the
+// still-open tabs can get re-persisted.
 IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
                        PRE_StorageRemovedFromDisk) {
   EXPECT_EQ(1, GetSiteDataCount());
@@ -1492,7 +1511,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
   // LocalStorage are counted. TODO(crbug.com/1307796): Use a different approach
   // to determine presence of data that does not depend on UI code and has a
   // better resolution when 3PSP is fully enabled.
-  ExpectCookieTreeModelCount(kStorageTypes.size() - 2, 2);
+  ExpectCookieTreeModelCount(kStorageTypes.size() - 2, 3);
   RemoveAndWait(chrome_browsing_data_remover::DATA_TYPE_SITE_DATA |
                 content::BrowsingDataRemover::DATA_TYPE_CACHE |
                 chrome_browsing_data_remover::DATA_TYPE_HISTORY |
@@ -1548,7 +1567,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
   // Cookies and LocalStorage are counted. TODO(crbug.com/1307796): Use a
   // different approach to determine presence of data that does not depend on UI
   // code and has a better resolution when 3PSP is fully enabled.
-  ExpectCookieTreeModelCount(kSessionOnlyStorageTestTypes.size() - 1, 2);
+  ExpectCookieTreeModelCount(kSessionOnlyStorageTestTypes.size() - 1, 3);
   HostContentSettingsMapFactory::GetForProfile(GetBrowser()->profile())
       ->SetDefaultContentSetting(ContentSettingsType::COOKIES,
                                  CONTENT_SETTING_SESSION_ONLY);

@@ -178,7 +178,7 @@ void EmitTimeInStageHistogram(base::TimeDelta duration,
       break;
     case mojom::InstallerState::kConfigureContainer:
       name = "Crostini.RestarterTimeInState2.ConfigureContainer";
-      return;
+      break;
   }
   base::UmaHistogramCustomTimes(name, duration, base::Milliseconds(10),
                                 base::Hours(6), 50);
@@ -649,8 +649,7 @@ void CrostiniManager::CrostiniRestarter::ContinueRestart() {
   StartStage(mojom::InstallerState::kInstallImageLoader);
   crostini_manager_->InstallTermina(
       base::BindOnce(&CrostiniRestarter::LoadComponentFinished,
-                     weak_ptr_factory_.GetWeakPtr()),
-      is_initial_install_);
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void CrostiniManager::CrostiniRestarter::LoadComponentFinished(
@@ -1357,41 +1356,38 @@ void CrostiniManager::MaybeUpdateCrostiniAfterChecks() {
   }
 }
 
-void CrostiniManager::InstallTermina(CrostiniResultCallback callback,
-                                     bool is_initial_install) {
+void CrostiniManager::InstallTermina(CrostiniResultCallback callback) {
   if (install_termina_never_completes_for_testing_) {
     LOG(ERROR)
         << "Dropping InstallTermina request. This is only used in tests.";
     return;
   }
-  termina_installer_.Install(
-      base::BindOnce(
-          [](CrostiniResultCallback callback,
-             TerminaInstaller::InstallResult result) {
-            CrostiniResult res;
-            if (result == TerminaInstaller::InstallResult::Success) {
-              res = CrostiniResult::SUCCESS;
-            } else if (result == TerminaInstaller::InstallResult::Offline) {
-              LOG(ERROR) << "Installing Termina failed: offline";
-              res = CrostiniResult::OFFLINE_WHEN_UPGRADE_REQUIRED;
-            } else if (result == TerminaInstaller::InstallResult::Failure) {
-              LOG(ERROR) << "Installing Termina failed";
-              res = CrostiniResult::LOAD_COMPONENT_FAILED;
-            } else if (result == TerminaInstaller::InstallResult::NeedUpdate) {
-              LOG(ERROR) << "Installing Termina failed: need update";
-              res = CrostiniResult::NEED_UPDATE;
-            } else if (result == TerminaInstaller::InstallResult::Cancelled) {
-              LOG(ERROR) << "Installing Termina failed: cancelled";
-              res = CrostiniResult::INSTALL_TERMINA_CANCELLED;
-            } else {
-              CHECK(false)
-                  << "Got unexpected value of TerminaInstaller::InstallResult";
-              res = CrostiniResult::LOAD_COMPONENT_FAILED;
-            }
-            std::move(callback).Run(res);
-          },
-          std::move(callback)),
-      is_initial_install);
+  termina_installer_.Install(base::BindOnce(
+      [](CrostiniResultCallback callback,
+         TerminaInstaller::InstallResult result) {
+        CrostiniResult res;
+        if (result == TerminaInstaller::InstallResult::Success) {
+          res = CrostiniResult::SUCCESS;
+        } else if (result == TerminaInstaller::InstallResult::Offline) {
+          LOG(ERROR) << "Installing Termina failed: offline";
+          res = CrostiniResult::OFFLINE_WHEN_UPGRADE_REQUIRED;
+        } else if (result == TerminaInstaller::InstallResult::Failure) {
+          LOG(ERROR) << "Installing Termina failed";
+          res = CrostiniResult::LOAD_COMPONENT_FAILED;
+        } else if (result == TerminaInstaller::InstallResult::NeedUpdate) {
+          LOG(ERROR) << "Installing Termina failed: need update";
+          res = CrostiniResult::NEED_UPDATE;
+        } else if (result == TerminaInstaller::InstallResult::Cancelled) {
+          LOG(ERROR) << "Installing Termina failed: cancelled";
+          res = CrostiniResult::INSTALL_TERMINA_CANCELLED;
+        } else {
+          CHECK(false)
+              << "Got unexpected value of TerminaInstaller::InstallResult";
+          res = CrostiniResult::LOAD_COMPONENT_FAILED;
+        }
+        std::move(callback).Run(res);
+      },
+      std::move(callback)));
 }
 
 void CrostiniManager::CancelInstallTermina() {
@@ -1480,7 +1476,9 @@ void CrostiniManager::StartTerminaVm(std::string name,
       profile_->GetPrefs()->GetBoolean(::prefs::kAudioCaptureAllowed)) {
     request.set_enable_audio_capture(true);
   }
-  request.add_features(vm_tools::concierge::StartVmRequest::LXD_4_LTS);
+  if (base::FeatureList::IsEnabled(ash::features::kCrostiniUseLxd5)) {
+    request.add_features(vm_tools::concierge::StartVmRequest::LXD_5_LTS);
+  }
   const int32_t cpus = base::SysInfo::NumberOfProcessors() - num_cores_disabled;
   DCHECK_LT(0, cpus);
   request.set_cpus(cpus);
@@ -2631,7 +2629,7 @@ void CrostiniManager::OnContainerStarted(
         container_id,
         base::BindOnce(
             &CrostiniManager::DeallocateForwardedPortsCallback,
-            weak_ptr_factory_.GetWeakPtr(), std::move(profile_),
+            weak_ptr_factory_.GetWeakPtr(), profile_,
             guest_os::GuestId(kCrostiniDefaultVmType, signal.vm_name(),
                               signal.container_name())));
   }
@@ -3883,20 +3881,18 @@ void CrostiniManager::GetInstallLocation(
     return;
   }
 
-  InstallTermina(
-      base::BindOnce(
-          [](base::WeakPtr<CrostiniManager> weak_this,
-             base::OnceCallback<void(base::FilePath)> callback,
-             CrostiniResult result) {
-            if (result != CrostiniResult::SUCCESS || !weak_this) {
-              std::move(callback).Run(base::FilePath());
-            } else {
-              std::move(callback).Run(
-                  weak_this->termina_installer_.GetInstallLocation());
-            }
-          },
-          weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
-      false);
+  InstallTermina(base::BindOnce(
+      [](base::WeakPtr<CrostiniManager> weak_this,
+         base::OnceCallback<void(base::FilePath)> callback,
+         CrostiniResult result) {
+        if (result != CrostiniResult::SUCCESS || !weak_this) {
+          std::move(callback).Run(base::FilePath());
+        } else {
+          std::move(callback).Run(
+              weak_this->termina_installer_.GetInstallLocation());
+        }
+      },
+      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void CrostiniManager::CallRestarterStartLxdContainerFinishedForTesting(

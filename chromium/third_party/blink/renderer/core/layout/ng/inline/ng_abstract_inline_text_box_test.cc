@@ -6,7 +6,10 @@
 
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
+#include "third_party/blink/renderer/platform/heap/heap_test_objects.h"
+#include "third_party/blink/renderer/platform/heap/heap_test_utilities.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
@@ -21,7 +24,7 @@ TEST_F(NGAbstractInlineTextBoxTest, GetTextWithCollapsedWhiteSpace) {
 
   const Element& target = *GetDocument().getElementById("target");
   auto& layout_text = *To<LayoutText>(target.firstChild()->GetLayoutObject());
-  auto inline_text_box = layout_text.FirstAbstractInlineTextBox();
+  auto* inline_text_box = layout_text.FirstAbstractInlineTextBox();
 
   EXPECT_EQ("abc", inline_text_box->GetText());
   EXPECT_EQ(3u, inline_text_box->Len());
@@ -37,7 +40,7 @@ TEST_F(NGAbstractInlineTextBoxTest, GetTextWithLineBreakAtCollapsedWhiteSpace) {
 
   const Element& label = *GetDocument().getElementById("label");
   auto& layout_text = *To<LayoutText>(label.firstChild()->GetLayoutObject());
-  auto inline_text_box = layout_text.FirstAbstractInlineTextBox();
+  auto* inline_text_box = layout_text.FirstAbstractInlineTextBox();
 
   EXPECT_EQ("abc:", inline_text_box->GetText());
   EXPECT_EQ(4u, inline_text_box->Len());
@@ -54,7 +57,7 @@ TEST_F(NGAbstractInlineTextBoxTest,
 
   const Element& target = *GetDocument().getElementById("target");
   auto& layout_text = *To<LayoutText>(target.firstChild()->GetLayoutObject());
-  auto inline_text_box = layout_text.FirstAbstractInlineTextBox();
+  auto* inline_text_box = layout_text.FirstAbstractInlineTextBox();
 
   EXPECT_EQ("012 ", inline_text_box->GetText());
   EXPECT_EQ(4u, inline_text_box->Len());
@@ -71,7 +74,7 @@ TEST_F(NGAbstractInlineTextBoxTest,
 
   const Element& target1 = *GetDocument().getElementById("t1");
   auto& layout_text1 = *To<LayoutText>(target1.firstChild()->GetLayoutObject());
-  auto inline_text_box1 = layout_text1.FirstAbstractInlineTextBox();
+  auto* inline_text_box1 = layout_text1.FirstAbstractInlineTextBox();
 
   EXPECT_EQ("012", inline_text_box1->GetText());
   EXPECT_EQ(3u, inline_text_box1->Len());
@@ -79,7 +82,7 @@ TEST_F(NGAbstractInlineTextBoxTest,
 
   const Element& target2 = *GetDocument().getElementById("t2");
   auto& layout_text2 = *To<LayoutText>(target2.firstChild()->GetLayoutObject());
-  auto inline_text_box2 = layout_text2.FirstAbstractInlineTextBox();
+  auto* inline_text_box2 = layout_text2.FirstAbstractInlineTextBox();
 
   EXPECT_EQ(nullptr, inline_text_box2)
       << "We don't have inline box when <span> "
@@ -95,7 +98,7 @@ TEST_F(NGAbstractInlineTextBoxTest, GetTextWithLineBreakAtTrailingWhiteSpace) {
 
   const Element& label = *GetDocument().getElementById("label");
   auto& layout_text = *To<LayoutText>(label.firstChild()->GetLayoutObject());
-  auto inline_text_box = layout_text.FirstAbstractInlineTextBox();
+  auto* inline_text_box = layout_text.FirstAbstractInlineTextBox();
 
   EXPECT_EQ("abc: ", inline_text_box->GetText());
   EXPECT_EQ(5u, inline_text_box->Len());
@@ -128,7 +131,7 @@ TEST_F(NGAbstractInlineTextBoxTest, GetTextOffsetInFormattingContext) {
   // both LayoutNG and Legacy, even though Legacy doesn't collapse the
   // white spaces at the end of an NGAbstractInlineTextBox. White spaces at the
   // beginning of the third and fifth inline text box should be collapsed.
-  auto inline_text_box = layout_text.FirstAbstractInlineTextBox();
+  auto* inline_text_box = layout_text.FirstAbstractInlineTextBox();
   String text = "First sentence";
   EXPECT_EQ(text, inline_text_box->GetText());
   EXPECT_EQ(6u, inline_text_box->TextOffsetInFormattingContext(0));
@@ -161,7 +164,7 @@ TEST_F(NGAbstractInlineTextBoxTest, CharacterWidths) {
 
   const Element& div = *GetDocument().getElementById("div");
   auto& layout_text = *To<LayoutText>(div.firstChild()->GetLayoutObject());
-  auto inline_text_box = layout_text.FirstAbstractInlineTextBox();
+  auto* inline_text_box = layout_text.FirstAbstractInlineTextBox();
 
   Vector<float> widths;
   inline_text_box->CharacterWidths(widths);
@@ -169,6 +172,30 @@ TEST_F(NGAbstractInlineTextBoxTest, CharacterWidths) {
   // the width of the trailing space should be included.
   EXPECT_EQ(4u, widths.size());
   EXPECT_TRUE(inline_text_box->NeedsTrailingSpace());
+}
+
+TEST_F(NGAbstractInlineTextBoxTest, HeapCompactionNoCrash) {
+  using TestVector = HeapVector<Member<LinkedObject>>;
+  Persistent<TestVector> vector(MakeGarbageCollected<TestVector>(100));
+  SetBodyInnerHTML(R"HTML(<div id="div">012 345</div>)HTML");
+
+  const Element& div = *GetDocument().getElementById("div");
+  auto* inline_text_box = To<LayoutText>(div.firstChild()->GetLayoutObject())
+                              ->FirstAbstractInlineTextBox();
+  const auto* items = div.GetLayoutBox()->GetPhysicalFragment(0)->Items();
+
+  const auto* vector_buffer_before_gc = items->Items().data();
+  vector.Clear();
+  CompactionTestDriver compaction_driver(ThreadState::Current());
+  compaction_driver.ForceCompactionForNextGC();
+  TestSupportingGC::PreciselyCollectGarbage();
+  // We assume the above code caused heap compaction, and moved the buffer
+  // of HeapVector<NGFragmentItem>.
+  ASSERT_NE(vector_buffer_before_gc, items->Items().data());
+
+  // LocalBounds() calls GetCursor(), which crashed in this scenario.
+  inline_text_box->LocalBounds();
+  // Pass if no crashes.
 }
 
 }  // namespace blink

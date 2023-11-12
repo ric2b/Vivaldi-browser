@@ -36,7 +36,7 @@ void sendRequestToServer(base::Value::Dict dict, NSURL* url,
   [task resume];
 }
 
-NSString* GetBackupEncryptionKeyPath() {
+NSString* GetDocumentsFolderPath() {
   NSArray* paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,
                                                        NSUserDomainMask, YES);
   if ([paths count] < 1)

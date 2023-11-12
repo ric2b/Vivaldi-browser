@@ -8,7 +8,7 @@
 #import "base/values.h"
 #import "components/language/core/browser/pref_names.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -165,7 +165,19 @@ typedef NS_ENUM(NSInteger, ItemType) {
         forControlEvents:UIControlEventTouchUpInside];
     editCell.label.delegate = self;
   }
+  if (itemType == ItemTypeActivationCode) {
+    VivaldiTableViewTextEditCell* editCell =
+        base::mac::ObjCCastStrict<VivaldiTableViewTextEditCell>(cell);
+    editCell.textField.delegate = self;
+  }
   return cell;
+}
+
+#pragma mark - UITextFieldDelegate
+
+- (BOOL)textFieldShouldReturn:(UITextField*)textField {
+  [self activateButtonPressed:nil];
+  return NO;
 }
 
 #pragma mark - UITextViewDelegate

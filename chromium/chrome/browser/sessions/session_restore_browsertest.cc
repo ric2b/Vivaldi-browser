@@ -683,6 +683,8 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
   // there is no guarantee that the SessionID for the tab has remained the same.
   base::Time timestamp;
   int http_status_code = 0;
+  ui_test_utils::BrowserChangeObserver browser_change_observer(
+      nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
   for (const auto& tab_ptr : window->tabs) {
     const sessions::TabRestoreService::Tab& tab = *tab_ptr;
     // If this tab held url2, then restore this single tab.
@@ -710,10 +712,11 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
       service->entries().front().get());
   EXPECT_EQ(2U, window->tabs.size());
 
+  Browser* restored_browser = browser_change_observer.Wait();
   // Make sure that the restored tab was restored with the correct
   // timestamp and status code.
   content::WebContents* contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
+      restored_browser->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(contents);
   content::NavigationEntry* entry =
       contents->GetController().GetLastCommittedEntry();
@@ -2168,7 +2171,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, TabWithDownloadDoesNotGetRestored) {
     ui_test_utils::NavigateToURLWithDisposition(
         new_browser, second_download_url,
         WindowOpenDisposition::NEW_FOREGROUND_TAB,
-        ui_test_utils::BROWSER_TEST_NONE);
+        ui_test_utils::BROWSER_TEST_NO_WAIT);
     ASSERT_EQ(2, new_browser->tab_strip_model()->count());
 
     observer.WaitForFinished();
@@ -3998,7 +4001,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreNavigationApiTest,
       "meta.name = 'referrer';"
       "meta.content = 'no-referrer';"
       "document.head.appendChild(meta)";
-  EXPECT_TRUE(content::ExecuteScript(contents, kNoReferrerJS));
+  EXPECT_TRUE(content::ExecJs(contents, kNoReferrerJS));
 
   // Navigate the tab to url 3.
   ui_test_utils::NavigateToURLWithDisposition(

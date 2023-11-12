@@ -27,9 +27,9 @@
 #import "components/prefs/pref_service.h"
 #import "components/version_info/version_info.h"
 #import "ios/chrome/app/tests_hook.h"
-#import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state_manager.h"
 #import "ios/chrome/browser/browser_state_metrics/browser_state_metrics.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state_manager.h"
 #import "ios/chrome/browser/upgrade/upgrade_constants.h"
 #import "ios/chrome/browser/upgrade/upgrade_recommended_details.h"
 #import "ios/chrome/common/channel_info.h"
@@ -624,10 +624,10 @@ std::string OmahaService::GetCurrentPingContent() {
   // An install retry ping only makes sense if an install event must be send.
   DCHECK(sending_install_event_ || !IsNextPingInstallRetry());
   std::string request_id = GetNextPingRequestId(ping_content);
-  return GetPingContent(request_id, ios::device_util::GetRandomId(),
-                        version_info::GetVersionNumber(), GetChannelString(),
-                        base::Time::FromTimeT(application_install_date_),
-                        ping_content);
+  return GetPingContent(
+      request_id, ios::device_util::GetRandomId(),
+      std::string(version_info::GetVersionNumber()), GetChannelString(),
+      base::Time::FromTimeT(application_install_date_), ping_content);
 }
 
 void OmahaService::SendPing() {

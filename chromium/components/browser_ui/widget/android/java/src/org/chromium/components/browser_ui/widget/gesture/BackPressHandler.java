@@ -34,14 +34,15 @@ public interface BackPressHandler {
         int VR_DELEGATE = 1;
         int XR_DELEGATE = 2;
         int SCENE_OVERLAY = 3;
-        int START_SURFACE = 4;
-        int SELECTION_POPUP = 5;
-        int MANUAL_FILLING = 6;
+        int BOTTOM_SHEET = 4;
+        int START_SURFACE = 5;
+        int TAB_SWITCHER = 6;
+        // Fullscreen must be before selection popup. crbug.com/1454817.
         int FULLSCREEN = 7;
-        int BOTTOM_SHEET = 8;
-        int LOCATION_BAR = 9;
-        int TAB_MODAL_HANDLER = 10;
-        int TAB_SWITCHER = 11;
+        int SELECTION_POPUP = 8;
+        int MANUAL_FILLING = 9;
+        int LOCATION_BAR = 10;
+        int TAB_MODAL_HANDLER = 11;
         int CLOSE_WATCHER = 12;
         int FIND_TOOLBAR = 13;
         int TAB_HISTORY = 14;

@@ -759,6 +759,8 @@ void SyncedBookmarkTracker::UpdateSyncIdIfNeeded(
   sync_id_to_entities_map_[sync_id] = std::move(owned_entity);
   sync_id_to_entities_map_.erase(old_id);
 
+  if (!entity->bookmark_node())
+    return;
   auto thumbnail_checksum =
       VivaldiGetSyncedThumbnailChecksumFromNode(entity->bookmark_node());
   if (vivaldi_synced_file_store_ && thumbnail_checksum)

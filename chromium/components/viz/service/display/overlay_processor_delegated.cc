@@ -79,6 +79,10 @@ void RecordFDUsageUMA() {
   DBG_LOG("delegated.fd.usage", "FD usage: %d / %d - time us: %f",
           active_fd_count, fd_max, delta_time_taken.InMicrosecondsF());
 }
+
+// Block delegation if there has been a copy request in the last 3 frames.
+constexpr int kCopyRequestBlockFrames = 3;
+
 }  // namespace
 
 namespace viz {
@@ -117,9 +121,6 @@ constexpr size_t kTooManyQuads = 64;
 
 DBG_FLAG_FBOOL("delegated.disable.delegation", disable_delegation)
 
-// TODO(rivr): Enable clip_rect delegation by default.
-DBG_FLAG_FBOOL("candidate.enable.clip_rect", enable_clip_rect)
-
 bool OverlayProcessorDelegated::AttemptWithStrategies(
     const SkM44& output_color_matrix,
     const OverlayProcessorInterface::FilterOperationsMap& render_pass_filters,
@@ -134,15 +135,20 @@ bool OverlayProcessorDelegated::AttemptWithStrategies(
   DCHECK(candidates->empty());
   auto* render_pass = render_pass_list->back().get();
   QuadList* quad_list = &render_pass->quad_list;
-  constexpr bool is_delegated_context = true;
   delegated_status_ = DelegationStatus::kCompositedOther;
+
+  if (!features::IsDelegatedCompositingEnabled()) {
+    delegated_status_ = DelegationStatus::kCompositedFeatureDisabled;
+    return false;
+  }
 
   if (disable_delegation())
     return false;
 
-  // Do not delegated when we have copy requests otherwise we will end up with
-  // the delegated quads missing from the frame buffer.
-  if (!render_pass->copy_requests.empty()) {
+  // Do not delegate when we have copy requests on the root render pass or we
+  // will end up with the delegated quads missing from the frame buffer.
+  // Delegating with copy requests also increases power usage.
+  if (BlockForCopyRequests(render_pass_list)) {
     delegated_status_ = DelegationStatus::kCompositedCopyRequest;
     return false;
   }
@@ -157,11 +163,17 @@ bool OverlayProcessorDelegated::AttemptWithStrategies(
     return false;
   }
 
+  const OverlayCandidateFactory::OverlayContext context = {
+      .is_delegated_context = true,
+      .supports_clip_rect = supports_clip_rect_,
+      .supports_mask_filter = true};
+
   OverlayCandidateFactory candidate_factory = OverlayCandidateFactory(
       render_pass, resource_provider, surface_damage_rect_list,
       &output_color_matrix, GetPrimaryPlaneDisplayRect(primary_plane),
-      &render_pass_filters, is_delegated_context,
-      supports_clip_rect_ && enable_clip_rect());
+      &render_pass_filters, context);
+
+  unassigned_damage_ = gfx::RectF(candidate_factory.GetUnassignedDamage());
 
   const auto kExtraCandiates = needs_background_image_ ? 1 : 0;
   candidates->reserve(quad_list->size() + kExtraCandiates);
@@ -192,7 +204,8 @@ bool OverlayProcessorDelegated::AttemptWithStrategies(
       num_quads_skipped++;
     } else {
       DBG_DRAW_RECT("delegated.overlay.failed", display_rect);
-      DBG_LOG("delegated.overlay.failed", "error code %d", candidate_status);
+      DBG_LOG("delegated.overlay.failed", "error code %d",
+              static_cast<int>(candidate_status));
 
       switch (candidate_status) {
         case OverlayCandidate::CandidateStatus::kFailNotAxisAligned:
@@ -296,10 +309,14 @@ void OverlayProcessorDelegated::ProcessForOverlays(
     // Add in all the damage from all fully delegated frames.
     damage_rect->Union(previous_frame_overlay_rect_);
     previous_frame_overlay_rect_ = gfx::Rect();
+    // This is only relevant when delegating.
+    unassigned_damage_ = gfx::RectF();
   }
 
   UMA_HISTOGRAM_ENUMERATION("Viz.DelegatedCompositing.Status",
                             delegated_status_);
+  DBG_LOG("delegation_status", "delegation status: %d",
+          static_cast<int>(delegated_status_));
   DBG_DRAW_RECT("delegated.outgoing.damage", (*damage_rect));
 
   TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("viz.debug.overlay_planes"),
@@ -321,6 +338,29 @@ void OverlayProcessorDelegated::AdjustOutputSurfaceOverlay(
   // fullscreen overlay code.
   if (delegated_status_ == DelegationStatus::kFullDelegation)
     output_surface_plane->reset();
+}
+
+gfx::RectF OverlayProcessorDelegated::GetUnassignedDamage() const {
+  return unassigned_damage_;
+}
+
+bool OverlayProcessorDelegated::BlockForCopyRequests(
+    const AggregatedRenderPassList* render_pass_list) {
+  bool has_copy = false;
+  for (auto& pass : *render_pass_list) {
+    if (!pass->copy_requests.empty()) {
+      has_copy = true;
+      break;
+    }
+  }
+
+  if (has_copy) {
+    copy_request_counter_ = kCopyRequestBlockFrames;
+  } else {
+    copy_request_counter_ = std::max(0, copy_request_counter_ - 1);
+  }
+
+  return copy_request_counter_ > 0;
 }
 
 }  // namespace viz

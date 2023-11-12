@@ -250,7 +250,8 @@ class CONTENT_EXPORT WebContentsViewAura
   void OnWindowDestroyed(aura::Window* window) override;
   void OnWindowTargetVisibilityChanged(bool visible) override;
   void OnWindowOcclusionChanged(
-      aura::Window::OcclusionState occlusion_state) override;
+      aura::Window::OcclusionState old_occlusion_state,
+      aura::Window::OcclusionState new_occlusion_state) override;
   bool HasHitTestMask() const override;
   void GetHitTestMask(SkPath* mask) const override;
 
@@ -346,6 +347,9 @@ class CONTENT_EXPORT WebContentsViewAura
 
   // The WebContentsImpl whose contents we display.
   raw_ptr<WebContentsImpl> web_contents_;
+
+  // Vivaldi: Used in PrepareDragData to set correct referrer.
+  raw_ptr<WebContentsImpl> dragowner_webcontents_ = nullptr;
 
   std::unique_ptr<WebContentsViewDelegate> delegate_;
 

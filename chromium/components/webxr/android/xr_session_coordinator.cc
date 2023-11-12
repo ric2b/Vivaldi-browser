@@ -170,9 +170,22 @@ bool XrSessionCoordinator::EnsureARCoreLoaded() {
 #endif
 }
 
+ScopedJavaLocalRef<jobject> XrSessionCoordinator::GetCurrentActivityContext() {
+  JNIEnv* env = AttachCurrentThread();
+  return Java_XrSessionCoordinator_getCurrentActivityContext(env);
+}
+
+// static
 ScopedJavaLocalRef<jobject> XrSessionCoordinator::GetApplicationContext() {
   JNIEnv* env = AttachCurrentThread();
   return Java_XrSessionCoordinator_getApplicationContext(env);
+}
+
+// static
+ScopedJavaLocalRef<jobject> XrSessionCoordinator::GetActivity(
+    ScopedJavaLocalRef<jobject> web_contents) {
+  JNIEnv* env = AttachCurrentThread();
+  return Java_XrSessionCoordinator_getActivity(env, web_contents);
 }
 
 }  // namespace webxr

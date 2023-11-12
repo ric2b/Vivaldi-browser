@@ -28,6 +28,7 @@ source_set("path_parser") {
   ]
 
   if (is_mac) {
+    configs += [ "//build/config/compiler:enable_arc" ]
     deps += [ "//build:branding_buildflags" ]
   } else if (is_win) {
     deps += [ "//chrome/install_static:install_static_util" ]
@@ -181,7 +182,6 @@ source_set("policy_specific_browser_tests") {
     "policy_network_browsertest.cc",
     "site_isolation_policy_browsertest.cc",
     "test/certificate_transparency_policy_browsertest.cc",
-    "test/event_path_policy_browsertest.cc",
     "test/hsts_policy_browsertest.cc",
     "test/network_prediction_policy_browsertest.cc",
     "test/offset_parent_new_spec_behavior_policy_browsertest.cc",
@@ -194,10 +194,6 @@ source_set("policy_specific_browser_tests") {
   ]
   if (is_chromeos) {
     sources += [ "test/policy_certs_browsertest.cc" ]
-  }
-
-  if (enable_nacl) {
-    sources += [ "test/ppb_video_decoder_dev_api_policy_browsertest.cc" ]
   }
 
   deps = [
@@ -385,6 +381,7 @@ source_set("browser_tests") {
       "cloud/chrome_browser_cloud_management_browsertest_mac_util.h",
       "cloud/chrome_browser_cloud_management_browsertest_mac_util.mm",
     ]
+    configs += [ "//build/config/compiler:enable_arc" ]
   }
 
   if (is_win) {

@@ -22,6 +22,8 @@ import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.RecyclerView.LayoutManager;
 
+import org.chromium.base.ApplicationState;
+import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
@@ -46,27 +48,28 @@ import org.chromium.chrome.browser.share.ChromeShareExtras;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.xsurface.FeedActionsHandler;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.ListLayoutHelper;
 import org.chromium.chrome.browser.xsurface.LoggingParameters;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler.OpenMode;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler.OpenWebFeedEntryPoint;
-import org.chromium.chrome.browser.xsurface.SurfaceScope;
+import org.chromium.chrome.browser.xsurface.feed.FeedActionsHandler;
+import org.chromium.chrome.browser.xsurface.feed.FeedSurfaceScope;
+import org.chromium.chrome.browser.xsurface.feed.FeedUserInteractionReliabilityLogger.ClosedReason;
 import org.chromium.chrome.browser.xsurface.feed.StreamType;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.components.browser_ui.share.ShareParams;
-import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.components.feed.proto.FeedUiProto;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.display.DisplayAndroid;
+import org.chromium.ui.interpolators.Interpolators;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 import org.chromium.url.GURL;
 
@@ -296,6 +299,7 @@ public class FeedStream implements Stream {
             if (disposition != WindowOpenDisposition.NEW_BACKGROUND_TAB
                     && mReliabilityLogger != null) {
                 mReliabilityLogger.onOpenCard();
+                mClosedReason = ClosedReason.OPEN_CARD;
             }
 
             LoadUrlParams params = new LoadUrlParams(url, PageTransition.AUTO_BOOKMARK);
@@ -389,8 +393,7 @@ public class FeedStream implements Stream {
     /**
      * Implementation of FeedActionsHandler methods.
      */
-    class FeedActionsHandlerImpl
-            implements org.chromium.chrome.browser.xsurface.FeedActionsHandler {
+    class FeedActionsHandlerImpl implements FeedActionsHandler {
         private static final int SNACKBAR_DURATION_MS_SHORT = 4000;
         private static final int SNACKBAR_DURATION_MS_LONG = 10000;
         // This is based on the menu animation time (218ms) from BottomSheet.java.
@@ -456,37 +459,13 @@ public class FeedStream implements Stream {
                     mNativeFeedStream, FeedStream.this, changeId);
         }
 
-        private @org.chromium.chrome.browser.xsurface.feed.FeedActionsHandler.SnackbarDuration
-        int convertDuration(SnackbarDuration duration) {
-            switch (duration) {
-                case SHORT:
-                    return org.chromium.chrome.browser.xsurface.feed.FeedActionsHandler
-                            .SnackbarDuration.SHORT;
-                case LONG:
-                    return org.chromium.chrome.browser.xsurface.feed.FeedActionsHandler
-                            .SnackbarDuration.LONG;
-            }
-            return org.chromium.chrome.browser.xsurface.feed.FeedActionsHandler.SnackbarDuration
-                    .SHORT;
-        }
-
-        @Override
-        public void showSnackbar(String text, String actionLabel, SnackbarDuration duration,
-                SnackbarController controller) {
-            showSnackbar(text, actionLabel, convertDuration(duration), controller);
-        }
-
         @Override
         public void showSnackbar(String text, String actionLabel,
-                @org.chromium.chrome.browser.xsurface.feed.FeedActionsHandler.SnackbarDuration
-                int duration,
-                org.chromium.chrome.browser.xsurface.feed.FeedActionsHandler
-                        .SnackbarController delegateController) {
+                @FeedActionsHandler.SnackbarDuration int duration,
+                FeedActionsHandler.SnackbarController delegateController) {
             assert ThreadUtils.runningOnUiThread();
             int durationMs = SNACKBAR_DURATION_MS_SHORT;
-            if (duration
-                    == org.chromium.chrome.browser.xsurface.feed.FeedActionsHandler.SnackbarDuration
-                               .LONG) {
+            if (duration == FeedActionsHandler.SnackbarDuration.LONG) {
                 durationMs = SNACKBAR_DURATION_MS_LONG;
             }
             SnackbarManager.SnackbarController controller =
@@ -505,7 +484,8 @@ public class FeedStream implements Stream {
             mSnackManager.showSnackbar(Snackbar.make(text, controller, Snackbar.TYPE_ACTION,
                                                        Snackbar.UMA_FEED_NTP_STREAM)
                                                .setAction(actionLabel, /*actionData=*/null)
-                                               .setDuration(durationMs));
+                                               .setDuration(durationMs)
+                                               .setSingleLine(false));
         }
 
         @Override
@@ -514,14 +494,6 @@ public class FeedStream implements Stream {
             mShareHelper.share(url, title);
             FeedStreamJni.get().reportOtherUserAction(
                     mNativeFeedStream, FeedStream.this, FeedUserActionType.SHARE);
-        }
-
-        @Override
-        public void openAutoplaySettings() {
-            assert ThreadUtils.runningOnUiThread();
-            FeedStreamJni.get().reportOtherUserAction(mNativeFeedStream, FeedStream.this,
-                    FeedUserActionType.OPENED_AUTOPLAY_SETTINGS);
-            mFeedAutoplaySettingsDelegate.launchAutoplaySettings();
         }
 
         @Override
@@ -566,6 +538,12 @@ public class FeedStream implements Stream {
             FeedStreamJni.get().resetInfoCardStates(mNativeFeedStream, FeedStream.this, type);
         }
 
+        @Override
+        public void contentViewed(long docId) {
+            assert ThreadUtils.runningOnUiThread();
+            FeedStreamJni.get().contentViewed(mNativeFeedStream, docId);
+        }
+
         private @StreamType int feedIdentifierToType(@FeedIdentifier int fid) {
             switch (fid) {
                 case FeedIdentifier.MAIN_FEED:
@@ -584,6 +562,13 @@ public class FeedStream implements Stream {
                 FeedStreamJni.get().invalidateContentCacheFor(
                         mNativeFeedStream, FeedStream.this, feedKindToInvalidate);
             }
+        }
+
+        @Override
+        public void triggerManualRefresh() {
+            FeedStreamJni.get().reportOtherUserAction(mNativeFeedStream, FeedStream.this,
+                    FeedUserActionType.NON_SWIPE_MANUAL_REFRESH);
+            mStreamsMediator.refreshStream();
         }
     }
 
@@ -608,12 +593,12 @@ public class FeedStream implements Stream {
     private final ObserverList<ContentChangedListener> mContentChangedListeners =
             new ObserverList<>();
     private final int mStreamKind;
+    private @ClosedReason int mClosedReason = ClosedReason.LEAVE_FEED;
     // Various helpers/controllers.
     private ShareHelperWrapper mShareHelper;
     private SnackbarManager mSnackManager;
     private HelpAndFeedbackLauncher mHelpAndFeedbackLauncher;
     private WindowAndroid mWindowAndroid;
-    private final FeedAutoplaySettingsDelegate mFeedAutoplaySettingsDelegate;
     private UnreadContentObserver mUnreadContentObserver;
     FeedContentFirstLoadWatcher mFeedContentFirstLoadWatcher;
     private Stream.StreamsMediator mStreamsMediator;
@@ -640,7 +625,7 @@ public class FeedStream implements Stream {
     // Things valid only when bound.
     private @Nullable RecyclerView mRecyclerView;
     private @Nullable FeedListContentManager mContentManager;
-    private @Nullable SurfaceScope mSurfaceScope;
+    private @Nullable FeedSurfaceScope mSurfaceScope;
     private @Nullable HybridListRenderer mRenderer;
     private FeedScrollState mScrollStateToRestore;
     private int mHeaderCount;
@@ -667,7 +652,6 @@ public class FeedStream implements Stream {
      * @param windowAndroid The {@link WindowAndroid} this is shown on.
      * @param shareDelegateSupplier The supplier for {@link ShareDelegate} for sharing actions.
      * @param streamKind Kind of stream data this feed stream serves.
-     * @param feedAutoplaySettingsDelegate The delegate to invoke autoplay settings.
      * @param actionDelegate Implements some Feed actions.
      * @param helpAndFeedbackLauncher A HelpAndFeedbackLauncher.
      * @param feedContentFirstLoadWatcher a listener for events about feed loading.
@@ -677,8 +661,8 @@ public class FeedStream implements Stream {
     public FeedStream(Activity activity, SnackbarManager snackbarManager,
             BottomSheetController bottomSheetController, boolean isPlaceholderShown,
             WindowAndroid windowAndroid, Supplier<ShareDelegate> shareDelegateSupplier,
-            int streamKind, FeedAutoplaySettingsDelegate feedAutoplaySettingsDelegate,
-            FeedActionDelegate actionDelegate, HelpAndFeedbackLauncher helpAndFeedbackLauncher,
+            int streamKind, FeedActionDelegate actionDelegate,
+            HelpAndFeedbackLauncher helpAndFeedbackLauncher,
             FeedContentFirstLoadWatcher feedContentFirstLoadWatcher,
             Stream.StreamsMediator streamsMediator,
             SingleWebFeedParameters singleWebFeedParameters) {
@@ -700,7 +684,6 @@ public class FeedStream implements Stream {
         mHelpAndFeedbackLauncher = helpAndFeedbackLauncher;
         mIsPlaceholderShown = isPlaceholderShown;
         mWindowAndroid = windowAndroid;
-        mFeedAutoplaySettingsDelegate = feedAutoplaySettingsDelegate;
         mRotationObserver = new RotationObserver();
         mFeedContentFirstLoadWatcher = feedContentFirstLoadWatcher;
         mStreamsMediator = streamsMediator;
@@ -768,8 +751,7 @@ public class FeedStream implements Stream {
     }
 
     @Override
-    @StreamKind
-    public int getStreamKind() {
+    public @StreamKind int getStreamKind() {
         return mStreamKind;
     }
 
@@ -780,7 +762,7 @@ public class FeedStream implements Stream {
 
     @Override
     public void bind(RecyclerView rootView, FeedListContentManager manager,
-            FeedScrollState savedInstanceState, SurfaceScope surfaceScope,
+            FeedScrollState savedInstanceState, FeedSurfaceScope surfaceScope,
             HybridListRenderer renderer, @Nullable FeedReliabilityLogger reliabilityLogger,
             int headerCount) {
         mReliabilityLogger = reliabilityLogger;
@@ -793,7 +775,7 @@ public class FeedStream implements Stream {
         mScrollStateToRestore = savedInstanceState;
         manager.setHandlers(mHandlersMap);
         mSliceViewTracker = new FeedSliceViewTracker(rootView, mActivity, manager,
-                renderer.getListLayoutHelper(), /* watchForBarelyVisibleChange= */
+                renderer.getListLayoutHelper(), /* watchForUserInteractionReliabilityReport= */
                 (mReliabilityLogger != null
                         && mReliabilityLogger.getUserInteractionLogger() != null),
                 new FeedStream.ViewTrackerObserver());
@@ -809,6 +791,7 @@ public class FeedStream implements Stream {
         if (mWindowAndroid.getDisplay() != null) {
             mWindowAndroid.getDisplay().addObserver(mRotationObserver);
         }
+        mClosedReason = ClosedReason.LEAVE_FEED;
 
         if (isPlaceholderShown()) {
             // Set recyclerView as transparent until first batch of articles are loaded. Before
@@ -835,11 +818,19 @@ public class FeedStream implements Stream {
     }
 
     @Override
-    public void unbind(boolean shouldPlaceSpacer) {
+    public void unbind(boolean shouldPlaceSpacer, boolean switchingStream) {
+        // Find out the specific reason for unbinding the stream.
+        if (switchingStream) {
+            mClosedReason = ClosedReason.SWITCH_STREAM;
+        } else if (ApplicationStatus.getStateForApplication()
+                == ApplicationState.HAS_STOPPED_ACTIVITIES) {
+            mClosedReason = ClosedReason.SUSPEND_APP;
+        }
+
         // This is the catch-all feed launch end event to ensure a complete flow is logged
         // even if we don't know a more specific reason for the stream unbinding.
         if (mReliabilityLogger != null) {
-            mReliabilityLogger.onUnbindStream();
+            mReliabilityLogger.onUnbindStream(mClosedReason);
         }
 
         dismissSnackbars();
@@ -897,7 +888,7 @@ public class FeedStream implements Stream {
         dismissSnackbars();
         mInProgressWorkTracker.postTaskAfterWorkComplete(() -> {
             if (mRenderer != null) {
-                mRenderer.onPullToRefreshStarted();
+                mRenderer.onManualRefreshStarted();
             }
             FeedStreamJni.get().manualRefresh(mNativeFeedStream, FeedStream.this, callback);
         });
@@ -1365,6 +1356,12 @@ public class FeedStream implements Stream {
                 mReliabilityLogger.onViewFirstRendered(view);
             }
         }
+        @Override
+        public void reportLoadMoreIndicatorVisible() {
+            if (mReliabilityLogger != null) {
+                mReliabilityLogger.onPaginationIndicatorShown();
+            }
+        }
     }
 
     /**
@@ -1423,7 +1420,7 @@ public class FeedStream implements Stream {
     }
 
     @NativeMethods
-    @VisibleForTesting
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public interface Natives {
         long init(FeedStream caller, @StreamKind int streamKind,
                 long nativeFeedReliabilityLoggingBridge);
@@ -1460,5 +1457,6 @@ public class FeedStream implements Stream {
                 long nativeFeedStream, FeedStream caller, @StreamType int feedToInvalidate);
         void reportContentSliceVisibleTimeForGoodVisits(
                 long nativeFeedStream, FeedStream caller, long elapsedMs);
+        void contentViewed(long nativeFeedStream, long docid);
     }
 }

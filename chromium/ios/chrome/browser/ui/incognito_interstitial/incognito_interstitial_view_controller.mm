@@ -23,6 +23,15 @@
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/ntp/vivaldi_private_mode_view.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -79,18 +88,35 @@ const CGFloat kTitleLabelLineHeightMultiple = 1.3;
   self.view.accessibilityIdentifier =
       kIncognitoInterstitialAccessibilityIdentifier;
 
+  if (IsVivaldiRunning()) {
+    self.bannerName = @"vivaldi_open_in_private_tab";
+  } else {
   self.bannerName = kIncognitoInterstitialBannerName;
+  } // End Vivaldi
+
   self.isTallBanner = NO;
   self.shouldBannerFillTopSpace = YES;
   self.shouldHideBanner = IsCompactHeight(self.traitCollection);
 
   NSString* title =
       l10n_util::GetNSString(IDS_IOS_INCOGNITO_INTERSTITIAL_TITLE);
+
+  if (IsVivaldiRunning())
+    title = l10n_util::GetNSString(IDS_VIVALDI_IOS_PRIVATE_INTERSTITIAL_TITLE);
+  // End Vivaldi
+
   self.title = title;
   self.titleText = title;
   self.titleHorizontalMargin = 0;
+
+  if (IsVivaldiRunning()) {
+    self.primaryActionString = l10n_util::GetNSString(
+        IDS_VIVALDI_IOS_PRIVATE_INTERSTITIAL_OPEN_IN_VIVALDI_PRIVATE);
+  } else {
   self.primaryActionString = l10n_util::GetNSString(
       IDS_IOS_INCOGNITO_INTERSTITIAL_OPEN_IN_CHROME_INCOGNITO);
+  } // End Vivaldi
+
   self.secondaryActionString =
       l10n_util::GetNSString(IDS_IOS_INCOGNITO_INTERSTITIAL_OPEN_IN_CHROME);
 
@@ -108,6 +134,14 @@ const CGFloat kTitleLabelLineHeightMultiple = 1.3;
 
   // Creating the Incognito view (same one as NTP).
   UIScrollView* incognitoView = NULL;
+
+  if (IsVivaldiRunning()) {
+    VivaldiPrivateModeView* privateView =
+      [[VivaldiPrivateModeView alloc] initWithFrame:CGRectZero
+                     showTopIncognitoImageAndTitle:NO];
+    incognitoView = privateView;
+    privateView.URLLoaderDelegate = self.URLLoaderDelegate;
+  } else {
   if (base::FeatureList::IsEnabled(kIncognitoNtpRevamp)) {
     RevampedIncognitoView* revampedIncognitoView =
         [[RevampedIncognitoView alloc] initWithFrame:CGRectZero
@@ -125,6 +159,8 @@ const CGFloat kTitleLabelLineHeightMultiple = 1.3;
     revampedIncognitoView.URLLoaderDelegate = self.URLLoaderDelegate;
     incognitoView = revampedIncognitoView;
   }
+  } // End Vivaldi
+
   incognitoView.translatesAutoresizingMaskIntoConstraints = NO;
   incognitoView.bounces = NO;
 

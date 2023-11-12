@@ -17,7 +17,8 @@ import {AppManagementBrowserProxy} from './browser_proxy.js';
 
 const AppManagementAppDetailsItemBase = I18nMixin(PolymerElement);
 
-class AppManagementAppDetailsItem extends AppManagementAppDetailsItemBase {
+export class AppManagementAppDetailsItem extends
+    AppManagementAppDetailsItemBase {
   static get is() {
     return 'app-management-app-details-item';
   }
@@ -87,10 +88,12 @@ class AppManagementAppDetailsItem extends AppManagementAppDetailsItemBase {
     return Boolean(app.dataSize);
   }
   /**
-   * The info icon is only shown for apps installed from the Chrome browser.
+   * The info icon is only shown for System apps and apps installed from the
+   * Chrome browser.
    */
   private shouldShowInfoIcon_(app: App): boolean {
-    return app.installSource === InstallSource.kBrowser;
+    return app.installSource === InstallSource.kBrowser ||
+        app.installSource === InstallSource.kSystem;
   }
 
   /**
@@ -98,7 +101,8 @@ class AppManagementAppDetailsItem extends AppManagementAppDetailsItemBase {
    * Store and Google Play Store.
    */
   private shouldShowLaunchIcon_(app: App): boolean {
-    return Boolean(app.dataSize);
+    return app.installSource === InstallSource.kChromeWebStore ||
+        app.installSource === InstallSource.kPlayStore;
   }
 
   private getTypeString_(app: App): string {
@@ -174,8 +178,10 @@ class AppManagementAppDetailsItem extends AppManagementAppDetailsItemBase {
   private onStoreLinkClicked_(e: CustomEvent<{event: Event}>) {
     // A place holder href with the value "#" is used to have a compliant link.
     // This prevents the browser from navigating the window to "#"
-    e.detail.event.preventDefault();
-    e.stopPropagation();
+    if (e.detail.event) {  // When the store link is clicked
+      e.detail.event.preventDefault();
+      e.stopPropagation();
+    }
 
     if (this.app !== null) {
       AppManagementBrowserProxy.getInstance().handler.openStorePage(
@@ -190,11 +196,18 @@ class AppManagementAppDetailsItem extends AppManagementAppDetailsItemBase {
   }
 
   /**
-   * Returns the sanitized URL for apps downloaded from
-   * the Chrome browser, to be shown in the tooltip.
+   * Returns the sanitized URL for apps downloaded from the Chrome browser, or a
+   * message for system apps, to be shown in the tooltip.
    */
-  private getSanitizedUrl_(app: App): string {
-    return app.publisherId.replace(/\?.*$/g, '');
+  private getTooltipText_(app: App): string {
+    switch (app.installSource) {
+      case InstallSource.kSystem:
+        return this.i18n('appManagementAppDetailsTooltipSystem');
+      case InstallSource.kBrowser:
+        return app.publisherId.replace(/\?.*$/g, '');
+      default:
+        return '';
+    }
   }
 }
 

@@ -43,6 +43,7 @@
 #include "base/win/sid.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
+#include "build/build_config.h"
 #include "components/services/screen_ai/buildflags/buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
@@ -439,34 +440,6 @@ bool IsAppContainerEnabled() {
   return base::FeatureList::IsEnabled(features::kRendererAppContainer);
 }
 
-void SetJobMemoryLimit(Sandbox sandbox_type, TargetConfig* config) {
-#ifdef _WIN64
-  size_t memory_limit = static_cast<size_t>(kDataSizeLimit);
-
-  if (sandbox_type == Sandbox::kGpu || sandbox_type == Sandbox::kRenderer) {
-    constexpr uint64_t GB = 1024 * 1024 * 1024;
-    // Allow the GPU/RENDERER process's sandbox to access more physical memory
-    // if it's available on the system.
-    //
-    // Renderer processes are allowed to access 16 GB; the GPU process, up
-    // to 64 GB.
-    uint64_t physical_memory = base::SysInfo::AmountOfPhysicalMemory();
-    if (sandbox_type == Sandbox::kGpu && physical_memory > 64 * GB) {
-      memory_limit = 64 * GB;
-    } else if (sandbox_type == Sandbox::kGpu && physical_memory > 32 * GB) {
-      memory_limit = 32 * GB;
-    } else if (physical_memory > 16 * GB) {
-      memory_limit = 16 * GB;
-    } else {
-      memory_limit = 8 * GB;
-    }
-  }
-  config->SetJobMemoryLimit(memory_limit);
-#else
-  return;
-#endif
-}
-
 // Generate a unique sandbox AC profile for the appcontainer based on the SHA1
 // hash of the appcontainer_id. This does not need to be secure so using SHA1
 // isn't a security concern.
@@ -635,9 +608,17 @@ ResultCode GenerateConfigForSandboxedProcess(const base::CommandLine& cmd_line,
     return result;
 
   if (process_type == switches::kRendererProcess) {
+    if (base::FeatureList::IsEnabled(features::kWinSboxRendererCloseKsecDD)) {
+      // TODO(crbug.com/74242) Remove if we can avoid loading cryptbase.dll.
+      result = config->AddKernelObjectToClose(L"File", L"\\Device\\KsecDD");
+      if (result != SBOX_ALL_OK) {
+        return result;
+      }
+    }
     result = SandboxWin::AddWin32kLockdownPolicy(config);
-    if (result != SBOX_ALL_OK)
+    if (result != SBOX_ALL_OK) {
       return result;
+    }
   }
 
   if (!delegate->DisableDefaultPolicy()) {
@@ -778,7 +759,10 @@ ResultCode SandboxWin::SetJobLevel(Sandbox sandbox_type,
   if (ret != SBOX_ALL_OK)
     return ret;
 
-  SetJobMemoryLimit(sandbox_type, config);
+  absl::optional<size_t> memory_limit = GetJobMemoryLimit(sandbox_type);
+  if (memory_limit) {
+    config->SetJobMemoryLimit(*memory_limit);
+  }
   return SBOX_ALL_OK;
 }
 
@@ -1108,8 +1092,6 @@ std::string SandboxWin::GetSandboxTypeInEnglish(Sandbox sandbox_type) {
       return "Icon Reader";
     case Sandbox::kWindowsSystemProxyResolver:
       return "Windows System Proxy Resolver";
-    case Sandbox::kFileUtil:
-      return "File Util";
   }
 }
 
@@ -1121,6 +1103,46 @@ std::string SandboxWin::GetSandboxTagForDelegate(
   std::ostringstream stream;
   stream << prefix << "!" << sandbox_type;
   return stream.str();
+}
+
+// static
+absl::optional<size_t> SandboxWin::GetJobMemoryLimit(Sandbox sandbox_type) {
+  // Trigger feature list initialization here to ensure no population bias in
+  // the experimental and control groups.
+  [[maybe_unused]] const bool high_renderer_limits =
+      base::FeatureList::IsEnabled(
+          sandbox::policy::features::kWinSboxHighRendererJobMemoryLimits);
+
+#if defined(ARCH_CPU_64_BITS)
+  size_t memory_limit = static_cast<size_t>(kDataSizeLimit);
+
+  if (sandbox_type == Sandbox::kGpu || sandbox_type == Sandbox::kRenderer) {
+    constexpr uint64_t GB = 1024 * 1024 * 1024;
+    // Allow the GPU/RENDERER process's sandbox to access more physical memory
+    // if it's available on the system.
+    //
+    // Renderer processes are allowed to access 16 GB; the GPU process, up
+    // to 64 GB.
+    uint64_t physical_memory = base::SysInfo::AmountOfPhysicalMemory();
+    if (sandbox_type == Sandbox::kGpu && physical_memory > 64 * GB) {
+      memory_limit = 64 * GB;
+    } else if (sandbox_type == Sandbox::kGpu && physical_memory > 32 * GB) {
+      memory_limit = 32 * GB;
+    } else if (physical_memory > 16 * GB) {
+      memory_limit = 16 * GB;
+    } else {
+      memory_limit = 8 * GB;
+    }
+
+    if (sandbox_type == Sandbox::kRenderer && high_renderer_limits) {
+      // Set limit to 1Tb.
+      memory_limit = 1024 * GB;
+    }
+  }
+  return memory_limit;
+#else
+  return absl::nullopt;
+#endif
 }
 
 }  // namespace policy

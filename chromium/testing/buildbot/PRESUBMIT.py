@@ -9,7 +9,6 @@ for more details on the presubmit API built into depot_tools.
 """
 
 PRESUBMIT_VERSION = '2.0.0'
-USE_PYTHON3 = True
 
 _IGNORE_FREEZE_FOOTER = 'Ignore-Freeze'
 
@@ -56,13 +55,17 @@ def CheckSourceSideSpecs(input_api, output_api):
 
 
 def CheckTests(input_api, output_api):
+  for f in input_api.AffectedFiles():
+    # If the only files changed here match //testing/buildbot/*.(pyl|json),
+    # then we can assume the unit tests are unaffected.
+    if (len(f.LocalPath().split(input_api.os_path.sep)) != 3
+        or not f.LocalPath().endswith(('.json', '.pyl'))):
+      break
+  else:
+    return []
   glob = input_api.os_path.join(input_api.PresubmitLocalPath(), '*test.py')
-  tests = input_api.canned_checks.GetUnitTests(input_api,
-                                               output_api,
-                                               input_api.glob(glob),
-                                               run_on_python2=False,
-                                               run_on_python3=True,
-                                               skip_shebang_check=True)
+  tests = input_api.canned_checks.GetUnitTests(input_api, output_api,
+                                               input_api.glob(glob))
   return input_api.RunTests(tests)
 
 
@@ -76,25 +79,16 @@ def CheckManageJsonFiles(input_api, output_api):
   ])
 
 
-# TODO(gbeaty) pinpoint runs builds against revisions that aren't tip-of-tree,
-# so recipe side config can't be updated to refer to
-# //infra/config/generated/testing/gn_isolate_map.pyl until all of the revisions
-# that pinpoint will run against have that file. To workaround this, we'll copy
-# the generated file to //testing/buildbot/gn_isiolate_map.pyl. Once pinpoint is
-# only building revisions that contain
-# //infra/config/generated/testing/gn_isolate_map.pyl, the recipe configs can be
-# updated and we can remove this presubmit check,
-# //testing/buildbot/gn_isiolate_map.pyl and
-# //infra/config/scripts/sync-isolate-map.py.
-def CheckGnIsolateMapPylSynced(input_api, output_api):
-  if ('testing/buildbot/gn_isolate_map.pyl' in input_api.change.LocalPaths()
-      and 'infra/config/generated/testing/gn_isolate_map.pyl'
-      not in input_api.change.LocalPaths()):
-    return [
-        output_api.PresubmitError(
-            '//testing/buildbot/gn_isolate_map.pyl should not be edited'
-            ' manually, instead modify //infra/config/targets/targets.star,'
-            ' run //infra/config/main.star and run'
-            ' //infra/config/scripts/sync-isolate-map.py')
-    ]
-  return []
+def CheckPylFilesSynced(input_api, output_api):
+  return input_api.RunTests([
+      input_api.Command(
+          name='check-pyl-files-synced',
+          cmd=[
+              input_api.python3_executable,
+              '../../infra/config/scripts/sync-pyl-files.py',
+              '--check',
+          ],
+          kwargs={},
+          message=output_api.PresubmitError,
+      ),
+  ])

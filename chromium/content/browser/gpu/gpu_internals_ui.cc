@@ -46,7 +46,6 @@
 #include "gpu/config/gpu_lists_version.h"
 #include "gpu/config/gpu_util.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
-#include "gpu/ipc/host/gpu_memory_buffer_support.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "skia/ext/skia_commit_hash.h"
 #include "third_party/angle/src/common/angle_version_info.h"
@@ -348,8 +347,6 @@ base::Value::List CompositorInfo() {
 base::Value::List GpuMemoryBufferInfo(const gfx::GpuExtraInfo& gpu_extra_info) {
   base::Value::List gpu_memory_buffer_info;
 
-  gpu::GpuMemoryBufferSupport gpu_memory_buffer_support;
-
   gpu::GpuMemoryBufferConfigurationSet native_config;
 #if defined(USE_OZONE_PLATFORM_X11)
   if (ui::OzonePlatform::GetInstance()
@@ -362,7 +359,7 @@ base::Value::List GpuMemoryBufferInfo(const gfx::GpuExtraInfo& gpu_extra_info) {
 #endif
   if (native_config.empty()) {
     native_config =
-        gpu::GetNativeGpuMemoryBufferConfigurations(&gpu_memory_buffer_support);
+        gpu::GpuMemoryBufferSupport::GetNativeGpuMemoryBufferConfigurations();
   }
   for (size_t format = 0;
        format < static_cast<size_t>(gfx::BufferFormat::LAST) + 1; format++) {
@@ -700,6 +697,8 @@ class GpuMessageHandler
 
   // WebUIMessageHandler implementation.
   void RegisterMessages() override;
+  void OnJavascriptAllowed() override;
+  void OnJavascriptDisallowed() override;
 
   // GpuDataManagerObserver implementation.
   void OnGpuInfoUpdate() override;
@@ -708,17 +707,13 @@ class GpuMessageHandler
   void OnGpuSwitched(gl::GpuPreference) override;
 
   // Messages
-  void OnBrowserBridgeInitialized(const base::Value::List& list);
-  void OnCallAsync(const base::Value::List& list);
+  void HandleGetGpuInfo(const base::Value::List& list);
+  void HandleGetClientInfo(const base::Value::List& list);
+  void HandleGetLogMessages(const base::Value::List& list);
 
-  // Submessages dispatched from OnCallAsync
-  base::Value::Dict OnRequestClientInfo();
-  base::Value::List OnRequestLogMessages();
-
- private:
-  // True if observing the GpuDataManager (re-attaching as observer would
-  // DCHECK).
-  bool observing_;
+  base::Value::Dict GetClientInfo();
+  base::Value::List GetLogMessages();
+  base::Value::Dict GetGpuInfoDict();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -727,13 +722,10 @@ class GpuMessageHandler
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-GpuMessageHandler::GpuMessageHandler()
-    : observing_(false) {
-}
+GpuMessageHandler::GpuMessageHandler() = default;
 
 GpuMessageHandler::~GpuMessageHandler() {
-  ui::GpuSwitchingManager::GetInstance()->RemoveObserver(this);
-  GpuDataManagerImpl::GetInstance()->RemoveObserver(this);
+  OnJavascriptDisallowed();
 }
 
 /* BrowserBridge.callAsync prepends a requestID to these messages. */
@@ -741,49 +733,46 @@ void GpuMessageHandler::RegisterMessages() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   web_ui()->RegisterMessageCallback(
-      "browserBridgeInitialized",
-      base::BindRepeating(&GpuMessageHandler::OnBrowserBridgeInitialized,
+      "getGpuInfo", base::BindRepeating(&GpuMessageHandler::HandleGetGpuInfo,
+                                        base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getClientInfo",
+      base::BindRepeating(&GpuMessageHandler::HandleGetClientInfo,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "callAsync", base::BindRepeating(&GpuMessageHandler::OnCallAsync,
-                                       base::Unretained(this)));
+      "getLogMessages",
+      base::BindRepeating(&GpuMessageHandler::HandleGetLogMessages,
+                          base::Unretained(this)));
 }
 
-void GpuMessageHandler::OnCallAsync(const base::Value::List& args_list) {
-  DCHECK_GE(args_list.size(), 2u);
-  DCHECK(args_list[1].is_string()) << "submessage isn't string";
-
-  // unpack args into requestId, submessage and submessageArgs
-  const base::Value& requestId = args_list[0];
-  std::string submessage;
-  submessage = args_list[1].GetString();
-
-  // call the submessage handler
-  if (submessage == "requestClientInfo") {
-    web_ui()->CallJavascriptFunctionUnsafe("browserBridge.onCallAsyncReply",
-                                           requestId, OnRequestClientInfo());
-  } else if (submessage == "requestLogMessages") {
-    web_ui()->CallJavascriptFunctionUnsafe("browserBridge.onCallAsyncReply",
-                                           requestId, OnRequestLogMessages());
-  } else {  // unrecognized submessage
-    NOTREACHED();
-
-    web_ui()->CallJavascriptFunctionUnsafe("browserBridge.onCallAsyncReply",
-                                           requestId);
-    return;
-  }
+void GpuMessageHandler::OnJavascriptAllowed() {
+  GpuDataManagerImpl::GetInstance()->AddObserver(this);
+  ui::GpuSwitchingManager::GetInstance()->AddObserver(this);
 }
 
-void GpuMessageHandler::OnBrowserBridgeInitialized(
-    const base::Value::List& args) {
+void GpuMessageHandler::OnJavascriptDisallowed() {
+  ui::GpuSwitchingManager::GetInstance()->RemoveObserver(this);
+  GpuDataManagerImpl::GetInstance()->RemoveObserver(this);
+}
+
+void GpuMessageHandler::HandleGetClientInfo(const base::Value::List& args) {
+  CHECK_EQ(1U, args.size());
+  AllowJavascript();
+  const base::Value& callback_id = args[0];
+  ResolveJavascriptCallback(callback_id, GetClientInfo());
+}
+
+void GpuMessageHandler::HandleGetLogMessages(const base::Value::List& args) {
+  CHECK_EQ(1U, args.size());
+  AllowJavascript();
+  const base::Value& callback_id = args[0];
+  ResolveJavascriptCallback(callback_id, GetLogMessages());
+}
+
+void GpuMessageHandler::HandleGetGpuInfo(const base::Value::List& args) {
+  CHECK_EQ(1U, args.size());
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  // Watch for changes in GPUInfo
-  if (!observing_) {
-    GpuDataManagerImpl::GetInstance()->AddObserver(this);
-    ui::GpuSwitchingManager::GetInstance()->AddObserver(this);
-  }
-  observing_ = true;
+  AllowJavascript();
 
   // Tell GpuDataManager it should have full GpuInfo. If the
   // Gpu process has not run yet, this will trigger its launch.
@@ -792,12 +781,13 @@ void GpuMessageHandler::OnBrowserBridgeInitialized(
           GpuDataManagerImpl::kGpuInfoRequestAll,
           /*delayed=*/false);
 
-  // Run callback immediately in case the info is ready and no update in the
-  // future.
-  OnGpuInfoUpdate();
+  // Send current snapshot of gpu info. Any future updates will be communicated
+  // via the OnGpuInfoUpdate() callback.
+  const base::Value& callback_id = args[0];
+  ResolveJavascriptCallback(callback_id, GetGpuInfoDict());
 }
 
-base::Value::Dict GpuMessageHandler::OnRequestClientInfo() {
+base::Value::Dict GpuMessageHandler::GetClientInfo() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   base::Value::Dict dict;
@@ -820,13 +810,13 @@ base::Value::Dict GpuMessageHandler::OnRequestClientInfo() {
   return dict;
 }
 
-base::Value::List GpuMessageHandler::OnRequestLogMessages() {
+base::Value::List GpuMessageHandler::GetLogMessages() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   return GpuDataManagerImpl::GetInstance()->GetLogMessages();
 }
 
-void GpuMessageHandler::OnGpuInfoUpdate() {
+base::Value::Dict GpuMessageHandler::GetGpuInfoDict() {
   // Get GPU Info.
   const gpu::GPUInfo gpu_info = GpuDataManagerImpl::GetInstance()->GetGPUInfo();
   const gfx::GpuExtraInfo gpu_extra_info =
@@ -875,9 +865,11 @@ void GpuMessageHandler::OnGpuInfoUpdate() {
   gpu_info_val.Set("devicePerfInfo", GetDevicePerfInfo());
   gpu_info_val.Set("dawnInfo", GetDawnInfo());
 
-  // Send GPU Info to javascript.
-  web_ui()->CallJavascriptFunctionUnsafe("browserBridge.onGpuInfoUpdate",
-                                         std::move(gpu_info_val));
+  return gpu_info_val;
+}
+
+void GpuMessageHandler::OnGpuInfoUpdate() {
+  FireWebUIListener("gpu-info-updated", GetGpuInfoDict());
 }
 
 void GpuMessageHandler::OnGpuSwitched(gl::GpuPreference active_gpu_heuristic) {

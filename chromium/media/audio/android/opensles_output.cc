@@ -451,6 +451,9 @@ void OpenSLESOutputStream::CacheHardwareLatencyIfNeeded() {
     return;
 
   hardware_latency_ = audio_manager_->GetOutputLatency();
+  #if defined(OEM_MERCEDES_BUILD)
+  LOG(INFO) << "Vivaldi OEM: hardware_latency_ = " << hardware_latency_;
+  #endif
 }
 
 base::TimeDelta OpenSLESOutputStream::AdjustPositionForHardwareLatency(

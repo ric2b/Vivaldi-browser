@@ -18,6 +18,7 @@
 @protocol TabStripPresentation;
 @class ViewRevealingVerticalPanHandler;
 class Browser;
+@class LayoutGuideCenter;
 
 // Controller class for the tabstrip.  Manages displaying tabs and keeping the
 // display in sync with a Browser's WebStateList.  This controller is only
@@ -46,6 +47,7 @@ class Browser;
 - (instancetype)initWithBaseViewController:(UIViewController*)baseViewController
                                    browser:(Browser*)browser
                                      style:(TabStripStyle)style
+                         layoutGuideCenter:(LayoutGuideCenter*)layoutGuideCenter
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
@@ -62,7 +64,7 @@ class Browser;
 - (void)tabStripSizeDidChange;
 
 // Vivaldi
-- (void)scrollToSelectedTab:(web::WebState*)webState;
+- (void)scrollToSelectedTab:(web::WebState*)webState animated:(BOOL)animated;
 // End Vivaldi
 
 @end

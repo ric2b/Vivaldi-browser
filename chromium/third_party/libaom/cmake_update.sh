@@ -143,8 +143,11 @@ gen_config_files linux/generic "-DAOM_TARGET_CPU=generic ${all_platforms}"
 # Strip .pl files from gni
 sed -i.bak '/\.pl",$/d' libaom_srcs.gni
 rm libaom_srcs.gni.bak
-# libaom_srcs.gni and aom_version.h are shared.
+# libaom_srcs.gni, libaom_test_srcs.gni, usage_exit.c
+# and aom_version.h are shared.
 cp libaom_srcs.gni "${BASE}"
+cp libaom_test_srcs.gni "${BASE}"
+cp gen_src/usage_exit.c "${BASE}/source/gen_src"
 cp config/aom_version.h "${CFG}/config/"
 
 reset_dirs linux/ia32
@@ -188,11 +191,18 @@ reset_dirs linux/arm64
 gen_config_files linux/arm64 \
   "${toolchain}/arm64-linux-gcc.cmake ${all_platforms}"
 
+# CMAKE_INSTALL_NAME_TOOL is set to a non-empty/true value to allow this
+# configuration to complete on platforms without `install_name`. The build
+# commands are not invoked so the value doesn't matter.
 reset_dirs ios/arm-neon
-gen_config_files ios/arm-neon "${toolchain}/armv7-ios.cmake ${all_platforms}"
+gen_config_files ios/arm-neon \
+  "${toolchain}/armv7-ios.cmake -DCMAKE_INSTALL_NAME_TOOL=no-such-command \
+   ${all_platforms}"
 
 reset_dirs ios/arm64
-gen_config_files ios/arm64 "${toolchain}/arm64-ios.cmake ${all_platforms}"
+gen_config_files ios/arm64 \
+  "${toolchain}/arm64-ios.cmake -DCMAKE_INSTALL_NAME_TOOL=no-such-command \
+   ${all_platforms}"
 
 # Copy linux configurations and modify for Windows.
 reset_dirs win/arm64

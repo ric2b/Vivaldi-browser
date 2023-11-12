@@ -12,8 +12,8 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-import '../../settings_shared.css.js';
-import '../../settings_vars.css.js';
+import '../settings_shared.css.js';
+import '../settings_vars.css.js';
 import './multidevice_combined_setup_item.js';
 import './multidevice_feature_item.js';
 import './multidevice_feature_toggle.js';
@@ -27,16 +27,15 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route} from '../router.js';
+import {Route, routes} from '../router.js';
 
 import {MultiDeviceBrowserProxy, MultiDeviceBrowserProxyImpl} from './multidevice_browser_proxy.js';
 import {MultiDeviceFeature, MultiDeviceFeatureState, MultiDeviceSettingsMode, PhoneHubFeatureAccessProhibitedReason, PhoneHubPermissionsSetupFeatureCombination} from './multidevice_constants.js';
 import {MultiDeviceFeatureMixin} from './multidevice_feature_mixin.js';
 import {getTemplate} from './multidevice_subpage.html.js';
 
-interface SettingsMultideviceSubpageElement {
+export interface SettingsMultideviceSubpageElement {
   $: {
     forgetDeviceDialog: CrDialogElement,
   };
@@ -45,7 +44,7 @@ interface SettingsMultideviceSubpageElement {
 const SettingsMultideviceSubpageElementBase = MultiDeviceFeatureMixin(
     DeepLinkingMixin(RouteObserverMixin(PolymerElement)));
 
-class SettingsMultideviceSubpageElement extends
+export class SettingsMultideviceSubpageElement extends
     SettingsMultideviceSubpageElementBase {
   static get is() {
     return 'settings-multidevice-subpage' as const;

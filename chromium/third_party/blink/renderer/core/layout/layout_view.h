@@ -38,6 +38,7 @@
 namespace blink {
 
 class LayoutQuote;
+class LayoutViewTransitionRoot;
 class LocalFrameView;
 class ViewFragmentationContext;
 
@@ -98,12 +99,19 @@ class CORE_EXPORT LayoutView : public LayoutBlockFlow {
     return kNormalPaintLayer;
   }
 
+  void AddChild(LayoutObject* new_child,
+                LayoutObject* before_child = nullptr) override;
+
   bool IsChildAllowed(LayoutObject*, const ComputedStyle&) const override;
 
-  void UpdateLayout() override;
+  void UpdateLayout() override {
+    NOT_DESTROYED();
+    NOTREACHED_NORETURN();
+  }
   void ComputeLogicalHeight(LayoutUnit logical_height,
                             LayoutUnit logical_top,
                             LogicalExtentComputedValues&) const override;
+  LayoutUnit ComputeMinimumWidth();
 
   // Based on LocalFrameView::LayoutSize, but:
   // - checks for null LocalFrameView
@@ -199,6 +207,10 @@ class CORE_EXPORT LayoutView : public LayoutBlockFlow {
     NOT_DESTROYED();
     page_size_ = size;
   }
+  PhysicalSize PageSize() const {
+    NOT_DESTROYED();
+    return page_size_;
+  }
 
   // TODO(1229581): Make non-virtual.
   virtual AtomicString NamedPageAtIndex(wtf_size_t page_index) const = 0;
@@ -251,6 +263,12 @@ class CORE_EXPORT LayoutView : public LayoutBlockFlow {
   void SetNeedsMarkerOrCounterUpdate() {
     NOT_DESTROYED();
     needs_marker_counter_update_ = true;
+  }
+
+  // Return true if laying out with a new initial containing block size.
+  bool IsResizingInitialContainingBlock() const {
+    NOT_DESTROYED();
+    return is_resizing_initial_containing_block_;
   }
 
   // Update generated markers and counters after style and layout tree update.
@@ -329,6 +347,8 @@ class CORE_EXPORT LayoutView : public LayoutBlockFlow {
 
   TrackedDescendantsMap& SvgTextDescendantsMap();
 
+  LayoutViewTransitionRoot* GetViewTransitionRoot() const;
+
  protected:
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
   int ViewLogicalWidthForBoxSizing() const {
@@ -339,6 +359,10 @@ class CORE_EXPORT LayoutView : public LayoutBlockFlow {
     NOT_DESTROYED();
     return ViewLogicalHeight(kIncludeScrollbars);
   }
+
+  // Set to true if laying out with a new initial containing block size. Always
+  // set back to false after layout.
+  bool is_resizing_initial_containing_block_ = false;
 
  private:
   bool CanHaveChildren() const override;
@@ -351,8 +375,7 @@ class CORE_EXPORT LayoutView : public LayoutBlockFlow {
     return false;
   }
 
-  Member<LocalFrameView> frame_view_;
-
+ protected:
   // The page size.
   // This is only used during printing to split the content into pages.
   // Outside of printing, this is 0x0.
@@ -360,6 +383,8 @@ class CORE_EXPORT LayoutView : public LayoutBlockFlow {
 
   Member<ViewFragmentationContext> fragmentation_context_;
 
+ private:
+  Member<LocalFrameView> frame_view_;
   Member<LayoutQuote> layout_quote_head_;
   unsigned layout_counter_count_ = 0;
   unsigned layout_list_item_count_ = 0;

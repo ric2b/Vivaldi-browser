@@ -53,10 +53,6 @@ BASE_FEATURE(kEnableFullscreenAPI,
              "EnableFullscreenAPI",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kMediaPermissionsControl,
-             "MediaPermissionsControl",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kUseLoadSimulatedRequestForOfflinePage,
              "UseLoadSimulatedRequestForErrorPageNavigation",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -93,13 +89,6 @@ BASE_FEATURE(kEnableSessionSerializationOptimizations,
              "EnableSessionSerializationOptimizations",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-bool IsMediaPermissionsControlEnabled() {
-  if (@available(iOS 15, *)) {
-    return base::FeatureList::IsEnabled(kMediaPermissionsControl);
-  }
-  return false;
-}
-
 bool IsLoadSimulatedRequestAPIEnabled() {
   if (@available(iOS 15, *)) {
     return base::FeatureList::IsEnabled(kUseLoadSimulatedRequestForOfflinePage);
@@ -108,8 +97,15 @@ bool IsLoadSimulatedRequestAPIEnabled() {
 }
 
 bool IsFullscreenAPIEnabled() {
-  if (@available(iOS 16.0, *)) {
+  if (@available(iOS 16.4, *)) {
     return base::FeatureList::IsEnabled(kEnableFullscreenAPI);
+  }
+  return false;
+}
+
+bool IsWebInspectorSupportEnabled() {
+  if (@available(iOS 16.4, *)) {
+    return base::FeatureList::IsEnabled(kEnableWebInspector);
   }
   return false;
 }

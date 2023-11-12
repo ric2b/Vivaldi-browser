@@ -66,6 +66,12 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) ManagedNetworkConfigurationHandlerImpl
                      base::OnceClosure callback,
                      network_handler::ErrorCallback error_callback) override;
 
+  void ClearShillProperties(
+      const std::string& service_path,
+      const std::vector<std::string>& names,
+      base::OnceClosure callback,
+      network_handler::ErrorCallback error_callback) override;
+
   void CreateConfiguration(
       const std::string& userhash,
       const base::Value::Dict& properties,
@@ -156,6 +162,8 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) ManagedNetworkConfigurationHandlerImpl
       const base::Value::Dict& existing_properties,
       const base::Value::Dict& new_properties,
       base::OnceClosure callback) override;
+
+  void OnEnterpriseMonitoredWebPoliciesApplied() const override;
 
   void OnPoliciesApplied(
       const NetworkProfile& profile,

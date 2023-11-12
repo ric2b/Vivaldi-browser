@@ -32,6 +32,10 @@ BASE_FEATURE(kSafetyCheckUnusedSitePermissions,
              "SafetyCheckUnusedSitePermissions",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kActiveContentSettingExpiry,
+             "ActiveContentSettingExpiry",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 const base::FeatureParam<base::TimeDelta>
     kSafetyCheckUnusedSitePermissionsRepeatedUpdateInterval{
         &kSafetyCheckUnusedSitePermissions,
@@ -54,6 +58,11 @@ const base::FeatureParam<base::TimeDelta>
     kSafetyCheckUnusedSitePermissionsRevocationCleanUpThreshold{
         &kSafetyCheckUnusedSitePermissions,
         "unused-site-permissions-revocation-cleanup-threshold", base::Days(30)};
+
+BASE_FEATURE(kUserBypassUI, "UserBypassUI", base::FEATURE_DISABLED_BY_DEFAULT);
+
+const base::FeatureParam<base::TimeDelta> kUserBypassUIExceptionExpiration{
+    &kUserBypassUI, "expiration", base::Days(90)};
 
 }  // namespace features
 }  // namespace content_settings

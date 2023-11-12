@@ -21,7 +21,8 @@
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 // End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -468,6 +469,10 @@ const CGFloat kSymbolSearchImagePointSize = 22;
 
   UIImage* searchImage =
       DefaultSymbolWithPointSize(kSearchSymbol, kSymbolSearchImagePointSize);
+
+  if (vivaldi::IsVivaldiRunning())
+    searchImage = [UIImage imageNamed:vSearch]; // End Vivaldi
+
   _searchButton =
       [[UIBarButtonItem alloc] initWithImage:searchImage
                                        style:UIBarButtonItemStylePlain

@@ -126,6 +126,7 @@ class ASH_EXPORT EcheTray
 
   // TrayBackgroundView:
   void ClickedOutsideBubble() override;
+  void UpdateTrayItemColor(bool is_active) override;
   std::u16string GetAccessibleNameForTray() override;
   void HandleLocaleChange() override;
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
@@ -232,6 +233,8 @@ class ASH_EXPORT EcheTray
   // Starts graceful close to ensure the connection resource is released before
   // the window is closed.
   void StartGracefulClose();
+
+  void OnBackgroundConnectionTimeout();
 
   void SetEcheConnectionStatusHandler(
       eche_app::EcheConnectionStatusHandler* eche_connection_status_handler);
@@ -347,7 +350,9 @@ class ASH_EXPORT EcheTray
   // attach to.
   std::unique_ptr<AshWebView> initializer_webview_{};
   std::unique_ptr<base::DelayTimer> initializer_timeout_{};
+  base::OnceClosure on_initializer_closed_;
   bool has_reported_initializer_result_ = false;
+  bool has_retried_initializer_ = false;
 
   raw_ptr<eche_app::EcheConnectionStatusHandler, ExperimentalAsh>
       eche_connection_status_handler_ = nullptr;

@@ -54,11 +54,13 @@
 <translation id="2117093051794889870">Berdasar Konten</translation>
 <translation id="2129408066358825297">Umur</translation>
 <translation id="2148384276939959392">Sinkronisasi Dipilih</translation>
+<translation id="21693288559538605">Ringkasan pemblokir Iklan dan Pelacak</translation>
 <translation id="2195713384412091023">Ini akan menghapus semua data sinkronisasi yang disimpan di server kami, mengatur ulang sandi enkripsi Anda, dan mengeluarkan Anda.</translation>
 <translation id="2243210264130642074">Catatan disimpan</translation>
 <translation id="2272338747456392228">Akun telah dikunci</translation>
 <translation id="2273327106802955778">Menu lebih banyak</translation>
 <translation id="2324160330092901720">Kode verifikasi telah dikirimkan ke <ph name="EMAIL_ID" /></translation>
+<translation id="2336309953058658733">Kosongkan sampah</translation>
 <translation id="2359808026110333948">Lanjutkan</translation>
 <translation id="2386793615875593361">1 dipilih</translation>
 <translation id="2388224692799337242">Saat Anda mulai menjelajah, riwayat Anda akan tampil di sini</translation>
@@ -117,6 +119,7 @@ diblokir</translation>
 <translation id="3699026013955941879">Kode kedaluwarsa. Silakan minta kode aktivasi baru.</translation>
 <translation id="3700829948786686853">Selamat datang di Vivaldi</translation>
 <translation id="3766350025418769949">Anda dapat menggunakan sandi yang disimpan di Pengelola Sandi Vivaldi di aplikasi lain di iPad Anda.</translation>
+<translation id="3845564230651302310">Menerapkan Pengaturan Blokir Baru ...</translation>
 <translation id="3858860766373142691">Nama</translation>
 <translation id="3866249974567520381">Deskripsi</translation>
 <translation id="3872195896030547485">Silakan masukkan alamat email yang valid.</translation>
@@ -225,6 +228,7 @@ diblokir</translation>
 <translation id="6406506848690869874">Sinkronisasi</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> dipilih</translation>
 <translation id="6468130661190228905">Maaf, sepertinya Anda perlu menunggu beberapa saat sebelum bergabung dengan komunitas. Kami mewajibkan usia minimal 16 tahun untuk bergabung di sini.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Impor<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Kunci enkripsi cadangan</translation>
 <translation id="6527303717912515753">Bagikan</translation>
 <translation id="6535988230515403205">Polandia (<ph name="ORIGIN" />)</translation>
@@ -270,7 +274,6 @@ diblokir</translation>
 <translation id="7461899062138731833">SUMBER</translation>
 <translation id="750493650310597496">0 terpilih</translation>
 <translation id="7525067979554623046">Buat Baru</translation>
-<translation id="7541020606126512786">Ringkasan pemblokir Iklan dan Pelacak</translation>
 <translation id="7573518470897278603">Lihat Situs Versi Mobile</translation>
 <translation id="7574321014880720413">Tambah Domain Baru</translation>
 <translation id="7587132259180664054">Email berhasil dikirim</translation>

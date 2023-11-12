@@ -34,7 +34,7 @@ class BundleData {
 
   // Adds a bundle_data target to the recursive collection of all bundle_data
   // that the target depends on.
-  void AddBundleData(const Target* target);
+  void AddBundleData(const Target* target, bool is_create_bundle);
 
   // Called upon resolution of the target owning this instance of BundleData.
   // |owning_target| is the owning target.
@@ -110,6 +110,9 @@ class BundleData {
     return xcode_extra_attributes_;
   }
 
+  bool transparent() const { return transparent_; }
+  void set_transparent(bool value) { transparent_ = value; }
+
   std::string& product_type() { return product_type_; }
   const std::string& product_type() const { return product_type_; }
 
@@ -162,6 +165,12 @@ class BundleData {
   // Recursive collection of all bundle_data that the target depends on.
   const UniqueTargets& bundle_deps() const { return bundle_deps_; }
 
+  // Recursive collection of all forwarded bundle_data that the target
+  // depends on (but does not use, see `transparent` in `create_bundle`).
+  const UniqueTargets& forwarded_bundle_deps() const {
+    return forwarded_bundle_deps_;
+  }
+
   // Returns whether the bundle is an application bundle.
   bool is_application() const {
     return product_type_ == "com.apple.product-type.application";
@@ -177,6 +186,7 @@ class BundleData {
   std::vector<const Target*> assets_catalog_deps_;
   BundleFileRules file_rules_;
   UniqueTargets bundle_deps_;
+  UniqueTargets forwarded_bundle_deps_;
   std::vector<LabelPattern> bundle_deps_filter_;
 
   // All those values are subdirectories relative to root_build_dir, and apart
@@ -193,6 +203,11 @@ class BundleData {
   // This is the target type as known to Xcode. This is only used to generate
   // the Xcode project file when using --ide=xcode.
   std::string product_type_;
+
+  // Whether the bundle should be considered "transparent". A transparent
+  // `create_bundle` target includes only the `bundle_data` with the same
+  // `product_type` as itself.
+  bool transparent_ = false;
 
   // Each Xcode unit test or ui test target must have a test application target,
   // and this value corresponds to the target name. This is only used to

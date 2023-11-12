@@ -8,8 +8,8 @@
 #import <Foundation/Foundation.h>
 #include <Security/Authorization.h>
 
+#include "base/apple/bundle_locations.h"
 #include "base/mac/authorization_util.h"
-#include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_logging.h"
 #include "base/mac/scoped_authorizationref.h"
@@ -18,13 +18,17 @@
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 
 NSString* UserAuthenticationRightName() {
   // The authentication right name is of the form
   // `org.chromium.Chromium.access-passwords` or
   // `com.google.Chrome.access-passwords`.
-  return [[base::mac::MainBundle() bundleIdentifier]
+  return [[base::apple::MainBundle() bundleIdentifier]
       stringByAppendingString:@".access-passwords"];
 }
 
@@ -70,14 +74,14 @@ bool AuthenticateUser(std::u16string prompt_string) {
   AuthorizationItem right_items[] = {{rightName.UTF8String, 0, nullptr, 0}};
   AuthorizationRights rights = {std::size(right_items), right_items};
 
-  NSString* prompt = base::SysUTF16ToNSString(prompt_string);
+  base::ScopedCFTypeRef<CFStringRef> prompt =
+      base::SysUTF16ToCFStringRef(prompt_string);
 
   // Pass kAuthorizationFlagDestroyRights to prevent the OS from saving the
   // authorization and not prompting the user when future requests are made.
   base::mac::ScopedAuthorizationRef authorization =
       base::mac::GetAuthorizationRightsWithPrompt(
-          &rights, base::mac::NSToCFCast(prompt),
-          kAuthorizationFlagDestroyRights);
+          &rights, prompt, kAuthorizationFlagDestroyRights);
   return static_cast<bool>(authorization);
 }
 

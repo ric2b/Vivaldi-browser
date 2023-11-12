@@ -9,7 +9,8 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -22,49 +23,7 @@ namespace {
 const CGFloat kSymbolSize = 18;
 }  // namespace
 
-NSString* GetOmniboxSuggestionIconTypeAssetName(
-    OmniboxSuggestionIconType icon_type) {
-  DCHECK(!UseSymbolsInOmnibox());
-  switch (icon_type) {
-    case OmniboxSuggestionIconType::kCalculator:
-      return @"answer_calculator";
-    case OmniboxSuggestionIconType::kDefaultFavicon:
-
-      if (IsVivaldiRunning())
-        return vNTPSDFallbackFavicon;
-      // End Vivaldi
-
-      return @"favicon_fallback";
-    case OmniboxSuggestionIconType::kSearch:
-      return @"search";
-    case OmniboxSuggestionIconType::kSearchHistory:
-      return @"omnibox_popup_recent_query";
-    case OmniboxSuggestionIconType::kConversion:
-      return @"answer_conversion";
-    case OmniboxSuggestionIconType::kDictionary:
-      return @"answer_dictionary";
-    case OmniboxSuggestionIconType::kStock:
-      return @"answer_stock";
-    case OmniboxSuggestionIconType::kSunrise:
-      return @"answer_sunrise";
-    case OmniboxSuggestionIconType::kWhenIs:
-      return @"answer_when_is";
-    case OmniboxSuggestionIconType::kTranslation:
-      return @"answer_translation";
-    case OmniboxSuggestionIconType::kFallbackAnswer:
-      return @"search";
-    case OmniboxSuggestionIconType::kCount:
-      NOTREACHED();
-
-      if (IsVivaldiRunning())
-        return vNTPSDFallbackFavicon;
-      // End Vivaldi
-
-      return @"favicon_fallback";
-  }
-}
-
-UIImage* GetOmniboxSuggestionSymbol(OmniboxSuggestionIconType icon_type) {
+UIImage* GetOmniboxSuggestionIcon(OmniboxSuggestionIconType icon_type) {
   NSString* symbol_name = kGlobeSymbol;
   bool default_symbol = true;
   switch (icon_type) {
@@ -122,8 +81,11 @@ UIImage* GetOmniboxSuggestionSymbol(OmniboxSuggestionIconType icon_type) {
       return [[UIImage imageNamed:vNTPSDFallbackFavicon]
                 imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     case OmniboxSuggestionIconType::kCount:
-      NOTREACHED();
       return [[UIImage imageNamed:vNTPSDFallbackFavicon]
+                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    case OmniboxSuggestionIconType::kSearch:
+    case OmniboxSuggestionIconType::kFallbackAnswer:
+      return [[UIImage imageNamed:vSearch]
                 imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     default:
       break;
@@ -136,20 +98,9 @@ UIImage* GetOmniboxSuggestionSymbol(OmniboxSuggestionIconType icon_type) {
   return CustomSymbolWithPointSize(symbol_name, kSymbolSize);
 }
 
-UIImage* GetOmniboxSuggestionIcon(OmniboxSuggestionIconType icon_type) {
-  if (UseSymbolsInOmnibox()) {
-    return GetOmniboxSuggestionSymbol(icon_type);
-  }
-
-  NSString* imageName = GetOmniboxSuggestionIconTypeAssetName(icon_type);
-  return [[UIImage imageNamed:imageName]
-      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-}
-
 #if BUILDFLAG(IOS_USE_BRANDED_SYMBOLS)
-UIImage* GetBrandedGoogleIcon() {
-  DCHECK(UseSymbolsInOmnibox());
-  return MakeSymbolMulticolor(
+UIImage* GetBrandedGoogleIconForOmnibox() {
+  return MakeSymbolMonochrome(
       CustomSymbolWithPointSize(kGoogleIconSymbol, kSymbolSize));
 }
 #endif  // BUILDFLAG(IOS_USE_BRANDED_SYMBOLS)

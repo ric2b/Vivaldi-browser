@@ -14,6 +14,7 @@ generate_jni("jni_headers") {
 }
 
 android_library("java") {
+  srcjar_deps = [ ":jni_headers" ]
   sources = [
     "java/src/org/chromium/components/webauthn/AuthenticatorFactory.java",
     "java/src/org/chromium/components/webauthn/AuthenticatorImpl.java",
@@ -30,7 +31,7 @@ android_library("java") {
     "java/src/org/chromium/components/webauthn/WebAuthnBrowserBridge.java",
     "java/src/org/chromium/components/webauthn/WebAuthnCredentialDetails.java",
   ]
-  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+
   deps = [
     "$google_play_services_package:google_play_services_base_java",
     "$google_play_services_package:google_play_services_basement_java",
@@ -39,7 +40,9 @@ android_library("java") {
     "//base:jni_java",
     "//build/android:build_java",
     "//components/externalauth/android:java",
+    "//components/password_manager/core/common:features",
     "//components/payments/content/android:feature_list_java",
+    "//components/version_info/android:version_constants_java",
     "//content/public/android:content_java",
     "//content/public/common:common_java",
     "//mojo/public/java:bindings_java",
@@ -62,13 +65,23 @@ android_library("java") {
 android_library("test_support_java") {
   testonly = true
   sources = [
+    "java/src/org/chromium/components/webauthn/Fido2ApiTestHelper.java",
     "java/src/org/chromium/components/webauthn/MockFido2CredentialRequest.java",
   ]
   deps = [
     ":java",
+    "//base:base_java_test_support",
+    "//components/payments/content/android:feature_list_java",
+    "//components/payments/mojom:mojom_java",
     "//content/public/android:content_java",
+    "//mojo/public/mojom/base:base_java",
+    "//third_party/android_deps:guava_android_java",
+    "//third_party/androidx:androidx_annotation_annotation_java",
     "//third_party/blink/public/mojom:android_mojo_bindings_java",
+    "//third_party/junit:junit",
     "//url:origin_java",
+    "//url/mojom:url_mojom_gurl_java",
+    "//url/mojom:url_mojom_origin_java",
   ]
 }
 
@@ -84,6 +97,8 @@ source_set("android") {
     "webauthn_client_android.h",
     "webauthn_cred_man_delegate.cc",
     "webauthn_cred_man_delegate.h",
+    "webauthn_cred_man_delegate_factory.cc",
+    "webauthn_cred_man_delegate_factory.h",
   ]
   deps = [
     ":jni_headers",
@@ -95,5 +110,21 @@ source_set("android") {
     "//device/fido",
     "//third_party/blink/public/mojom:android_mojo_bindings_blink",
     "//third_party/boringssl",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "webauthn_cred_man_delegate_factory_unittest.cc",
+    "webauthn_cred_man_delegate_unittest.cc",
+  ]
+  deps = [
+    ":android",
+    "//base/test:test_support",
+    "//content/public/browser",
+    "//content/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
   ]
 }

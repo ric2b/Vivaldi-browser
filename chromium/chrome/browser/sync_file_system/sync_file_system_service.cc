@@ -31,8 +31,8 @@
 #include "chrome/browser/sync_file_system/sync_status_code.h"
 #include "chrome/browser/sync_file_system/syncable_file_system_util.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "components/sync/driver/sync_service.h"
-#include "components/sync/driver/sync_user_settings.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_user_settings.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extension_prefs.h"
@@ -573,8 +573,9 @@ void SyncFileSystemService::DidDumpFiles(const GURL& origin,
 
   // After all metadata loaded, sync status can be added to each entry.
   for (base::Value& file : files) {
+    const base::Value::Dict* file_dict = file.GetIfDict();
     const std::string* path_string =
-      file.is_dict() ? file.FindStringKey("path") : nullptr;
+        file_dict ? file_dict->FindString("path") : nullptr;
     if (!path_string) {
       NOTREACHED();
       accumulate_callback.Run(nullptr, SYNC_FILE_ERROR_FAILED,
@@ -717,8 +718,9 @@ void SyncFileSystemService::OnFileStatusChanged(
 
 void SyncFileSystemService::UpdateSyncEnabledStatus(
     syncer::SyncService* sync_service) {
-  if (!sync_service->GetUserSettings()->IsFirstSetupComplete())
+  if (!sync_service->GetUserSettings()->IsInitialSyncFeatureSetupComplete()) {
     return;
+  }
   bool old_sync_enabled = sync_enabled_;
   sync_enabled_ = sync_service->GetActiveDataTypes().Has(syncer::APPS);
   remote_service_->SetSyncEnabled(sync_enabled_);

@@ -642,6 +642,19 @@ std::string SerializeClientSideDetectionType(ClientSideDetectionType csd_type) {
   return "UNKNOWN_ENUM_SPECIFIED";
 }
 
+base::Value::Dict SerializeImageFeatureEmbedding(
+    ImageFeatureEmbedding image_feature_embedding) {
+  base::Value::Dict dict;
+  base::Value::List embedding_values;
+  for (const auto& value : image_feature_embedding.embedding_value()) {
+    embedding_values.Append(value);
+  }
+  dict.Set("embedding_model_version",
+           image_feature_embedding.embedding_model_version());
+  dict.Set("embedding_value", std::move(embedding_values));
+  return dict;
+}
+
 base::Value::Dict SerializeChromeUserPopulation(
     const ChromeUserPopulation& population) {
   base::Value::Dict population_dict;
@@ -826,6 +839,8 @@ base::Value::Dict SerializeReferrer(const ReferrerChainEntry& referrer) {
     case ReferrerChainEntry::RENDERER_INITIATED_WITH_USER_GESTURE:
       navigation_initiation = "RENDERER_INITIATED_WITH_USER_GESTURE";
       break;
+    case ReferrerChainEntry::COPY_PASTE_USER_INITIATED:
+      navigation_initiation = "COPY_PASTE_USER_INITIATED";
   }
   referrer_dict.Set("navigation_initiation", navigation_initiation);
 
@@ -866,8 +881,6 @@ std::string SerializeClientDownloadRequest(const ClientDownloadRequest& cdr) {
     dict.Set("length", static_cast<int>(cdr.length()));
   if (cdr.has_file_basename())
     dict.Set("file_basename", cdr.file_basename());
-  if (cdr.has_archive_valid())
-    dict.Set("archive_valid", cdr.archive_valid());
 
   if (!cdr.archived_binary().empty()) {
     base::Value::List archived_binaries;
@@ -905,12 +918,6 @@ std::string SerializeClientDownloadRequest(const ClientDownloadRequest& cdr) {
 
   if (cdr.has_request_ap_verdicts())
     dict.Set("request_ap_verdicts", cdr.request_ap_verdicts());
-
-  if (cdr.has_archive_file_count())
-    dict.Set("archive_file_count", cdr.archive_file_count());
-
-  if (cdr.has_archive_directory_count())
-    dict.Set("archive_directory_count", cdr.archive_directory_count());
 
   if (!cdr.access_token().empty())
     dict.Set("access_token", cdr.access_token());
@@ -1086,6 +1093,11 @@ std::string SerializeClientPhishingRequest(
     dict.Set(
         "client_side_detection_type",
         SerializeClientSideDetectionType(cpr.client_side_detection_type()));
+  }
+
+  if (cpr.has_image_feature_embedding()) {
+    dict.Set("image_feature_embedding",
+             SerializeImageFeatureEmbedding(cpr.image_feature_embedding()));
   }
 
   base::Value::List features;
@@ -1378,6 +1390,8 @@ std::string UrlRequestDestinationToString(
       return "FENCED_FRAME";
     case ClientSafeBrowsingReportRequest::WEB_IDENTITY:
       return "WEB_IDENTITY";
+    case ClientSafeBrowsingReportRequest::DICTIONARY:
+      return "DICTIONARY";
   }
 }
 
@@ -1505,6 +1519,9 @@ std::string SerializeCSBRR(const ClientSafeBrowsingReportRequest& report) {
       case ClientSafeBrowsingReportRequest::HASH_PREFIX_REAL_TIME_EXPERIMENT:
         report_type = "HASH_PREFIX_REAL_TIME_EXPERIMENT";
         break;
+      case ClientSafeBrowsingReportRequest::PHISHY_SITE_INTERACTIONS:
+        report_type = "PHISHY_SITE_INTERACTIONS";
+        break;
     }
     report_request.Set("type", report_type);
   }
@@ -1627,8 +1644,11 @@ std::string SerializeHitReport(const HitReport& hit_report) {
     case ThreatSource::CLIENT_SIDE_DETECTION:
       threat_source = "CLIENT_SIDE_DETECTION";
       break;
-    case ThreatSource::REAL_TIME_CHECK:
-      threat_source = "REAL_TIME_CHECK";
+    case ThreatSource::URL_REAL_TIME_CHECK:
+      threat_source = "URL_REAL_TIME_CHECK";
+      break;
+    case ThreatSource::NATIVE_PVER5_REAL_TIME:
+      threat_source = "NATIVE_PVER5_REAL_TIME";
       break;
     case ThreatSource::UNKNOWN:
       threat_source = "UNKNOWN";

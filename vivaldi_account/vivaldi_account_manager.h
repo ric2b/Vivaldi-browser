@@ -10,7 +10,7 @@
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/sync/driver/sync_token_status.h"
+#include "components/sync/service/sync_token_status.h"
 #include "vivaldi_account/vivaldi_account_password_handler.h"
 
 namespace network {

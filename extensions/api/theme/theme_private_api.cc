@@ -82,7 +82,7 @@ ExtensionFunction::ResponseAction ThemePrivateExportFunction::Run() {
           Error("Both dialogTitle and windowId must be specified"));
     }
     base::FilePath theme_filename =
-        base::FilePath::FromUTF8Unsafe(*theme_object_.FindStringKey("name"));
+        base::FilePath::FromUTF8Unsafe(*theme_object_.GetDict().FindString("name"));
     net::GenerateSafeFileName("application/zip", /*ignore_extension=*/true,
                               &theme_filename);
 

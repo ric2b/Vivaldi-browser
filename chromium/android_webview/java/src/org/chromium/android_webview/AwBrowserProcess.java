@@ -19,6 +19,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 
 import org.chromium.android_webview.common.AwFeatures;
 import org.chromium.android_webview.common.AwSwitches;
+import org.chromium.android_webview.common.Lifetime;
 import org.chromium.android_webview.common.PlatformServiceBridge;
 import org.chromium.android_webview.common.services.ICrashReceiverService;
 import org.chromium.android_webview.common.services.IMetricsBridgeService;
@@ -73,6 +74,7 @@ import java.util.concurrent.TimeUnit;
  * Wrapper for the steps needed to initialize the java and native sides of webview chromium.
  */
 @JNINamespace("android_webview")
+@Lifetime.Singleton
 public final class AwBrowserProcess {
     private static final String TAG = "AwBrowserProcess";
 
@@ -513,14 +515,13 @@ public final class AwBrowserProcess {
      * Initialize the metrics uploader.
      */
     public static void initializeMetricsLogUploader() {
-        boolean useDefaultUploadQos = AwFeatureList.isEnabled(
+        boolean useDefaultUploadQos = AwFeatureMap.isEnabled(
                 AwFeatures.WEBVIEW_UMA_UPLOAD_QUALITY_OF_SERVICE_SET_TO_DEFAULT);
 
-        if (AwFeatureList.isEnabled(AwFeatures.WEBVIEW_USE_METRICS_UPLOAD_SERVICE)) {
-            boolean waitForResults = AwFeatureList.isEnabled(
+        if (AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_USE_METRICS_UPLOAD_SERVICE)) {
+            boolean isAsync = AwFeatureMap.isEnabled(
                     AndroidMetricsFeatures.ANDROID_METRICS_ASYNC_METRIC_LOGGING);
-            AwMetricsLogUploader uploader =
-                    new AwMetricsLogUploader(waitForResults, useDefaultUploadQos);
+            AwMetricsLogUploader uploader = new AwMetricsLogUploader(isAsync, useDefaultUploadQos);
             // Open a connection during startup while connecting to other services such as
             // ComponentsProviderService and VariationSeedServer to try to avoid spinning the
             // nonembedded ":webview_service" twice.

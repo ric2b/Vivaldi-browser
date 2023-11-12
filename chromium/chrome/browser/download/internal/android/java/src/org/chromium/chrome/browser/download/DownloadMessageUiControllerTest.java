@@ -7,7 +7,7 @@ package org.chromium.chrome.browser.download;
 import android.content.Context;
 
 import androidx.annotation.Nullable;
-import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Matchers;
@@ -70,20 +70,17 @@ public class DownloadMessageUiControllerTest {
 
     static class TestDelegate implements DownloadMessageUiController.Delegate {
         @Override
-        @Nullable
-        public Context getContext() {
-            return InstrumentationRegistry.getTargetContext();
+        public @Nullable Context getContext() {
+            return ApplicationProvider.getApplicationContext();
         }
 
         @Override
-        @Nullable
-        public MessageDispatcher getMessageDispatcher() {
+        public @Nullable MessageDispatcher getMessageDispatcher() {
             return null;
         }
 
         @Override
-        @Nullable
-        public ModalDialogManager getModalDialogManager() {
+        public @Nullable ModalDialogManager getModalDialogManager() {
             return null;
         }
 

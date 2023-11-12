@@ -4,7 +4,7 @@
 
 import 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 
-import {FakeInputDeviceSettingsProvider, fakeKeyboards, PolicyStatus, Router, routes, setInputDeviceSettingsProviderForTesting, SettingsPerDeviceKeyboardSubsectionElement, SettingsToggleButtonElement} from 'chrome://os-settings/chromeos/os_settings.js';
+import {FakeInputDeviceSettingsProvider, fakeKeyboards, MetaKey, PolicyStatus, Router, routes, setInputDeviceSettingsProviderForTesting, SettingsPerDeviceKeyboardSubsectionElement, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
 import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
@@ -39,7 +39,11 @@ suite('<settings-per-device-keyboard-subsection>', () => {
    * Changes the external state of the keyboard.
    */
   function changeIsExternalState(isExternal: boolean): Promise<void> {
-    const keyboard = {...subsection.get('keyboard'), isExternal: isExternal};
+    const keyboard = {
+      ...subsection.get('keyboard'),
+      isExternal: isExternal,
+      metaKey: isExternal ? MetaKey.kExternalMeta : MetaKey.kSearch,
+    };
     subsection.set('keyboard', keyboard);
     return flushTasks();
   }
@@ -117,7 +121,7 @@ suite('<settings-per-device-keyboard-subsection>', () => {
    * Test that keyboard settings are correctly show or hidden based on internal
    * vs external.
    */
-  test('Verify keyboard settings visbility', async () => {
+  test('Verify keyboard settings visibility', async () => {
     // Change the isExternal state to true.
     await changeIsExternalState(true);
     // Verify external top-row are function keys toggle button is visible in the
@@ -183,7 +187,7 @@ suite('<settings-per-device-keyboard-subsection>', () => {
         subsection.shadowRoot!.querySelector('#remapKeyboardKeys');
     assert(remapKeysRow);
     assertEquals(
-        'Remap keyboard keys',
+        'Customize keyboard keys',
         remapKeysRow.shadowRoot!.querySelector('#label')!.textContent!.trim());
 
     const remapKeysSubLabel =
@@ -193,7 +197,7 @@ suite('<settings-per-device-keyboard-subsection>', () => {
         2,
         Object.keys(subsection.get('keyboard.settings.modifierRemappings'))
             .length);
-    assertEquals('2 remapped keys', remapKeysSubLabel.textContent!.trim());
+    assertEquals('2 customized keys', remapKeysSubLabel.textContent!.trim());
 
     subsection.set('keyboard', fakeKeyboards[2]);
     await flushTasks();
@@ -201,7 +205,7 @@ suite('<settings-per-device-keyboard-subsection>', () => {
         1,
         Object.keys(subsection.get('keyboard.settings.modifierRemappings'))
             .length);
-    assertEquals('1 remapped key', remapKeysSubLabel.textContent!.trim());
+    assertEquals('1 customized key', remapKeysSubLabel.textContent!.trim());
 
     subsection.set('keyboard', fakeKeyboards[1]);
     await flushTasks();
@@ -209,7 +213,7 @@ suite('<settings-per-device-keyboard-subsection>', () => {
         0,
         Object.keys(subsection.get('keyboard.settings.modifierRemappings'))
             .length);
-    assertEquals('No keys remapped', remapKeysSubLabel.textContent!.trim());
+    assertEquals('No keys customized', remapKeysSubLabel.textContent!.trim());
   });
 
   /**

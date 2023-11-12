@@ -76,8 +76,23 @@ protocol::Network::CorsError RendererCorsIssueCodeToProtocol(
       return protocol::Network::CorsErrorEnum::DisallowedByMode;
   }
 }
+}  // namespace
 
-protocol::Audits::GenericIssueErrorType GenericIssueErrorTypeToProtocol(
+std::unique_ptr<protocol::Audits::SourceCodeLocation> CreateProtocolLocation(
+    const SourceLocation& location) {
+  auto protocol_location = protocol::Audits::SourceCodeLocation::create()
+                               .setUrl(location.Url())
+                               .setLineNumber(location.LineNumber() - 1)
+                               .setColumnNumber(location.ColumnNumber())
+                               .build();
+  if (location.ScriptId()) {
+    protocol_location->setScriptId(WTF::String::Number(location.ScriptId()));
+  }
+  return protocol_location;
+}
+
+protocol::Audits::GenericIssueErrorType
+AuditsIssue::GenericIssueErrorTypeToProtocol(
     mojom::blink::GenericIssueErrorType error_type) {
   switch (error_type) {
     case mojom::blink::GenericIssueErrorType::
@@ -121,21 +136,6 @@ protocol::Audits::GenericIssueErrorType GenericIssueErrorTypeToProtocol(
       return protocol::Audits::GenericIssueErrorTypeEnum::
           FormInputHasWrongButWellIntendedAutocompleteValueError;
   }
-}
-
-}  // namespace
-
-std::unique_ptr<protocol::Audits::SourceCodeLocation> CreateProtocolLocation(
-    const SourceLocation& location) {
-  auto protocol_location = protocol::Audits::SourceCodeLocation::create()
-                               .setUrl(location.Url())
-                               .setLineNumber(location.LineNumber() - 1)
-                               .setColumnNumber(location.ColumnNumber())
-                               .build();
-  if (location.ScriptId()) {
-    protocol_location->setScriptId(WTF::String::Number(location.ScriptId()));
-  }
-  return protocol_location;
 }
 
 void AuditsIssue::ReportCorsIssue(
@@ -668,6 +668,85 @@ void AuditsIssue::ReportGenericIssue(
           .build();
 
   frame->DomWindow()->AddInspectorIssue(AuditsIssue(std::move(issue)));
+}
+
+void AuditsIssue::ReportStylesheetLoadingLateImportIssue(
+    Document* document,
+    const KURL& url,
+    WTF::OrdinalNumber line,
+    WTF::OrdinalNumber column) {
+  if (!document || !document->GetExecutionContext()) {
+    return;
+  }
+  auto sourceCodeLocation = protocol::Audits::SourceCodeLocation::create()
+                                .setUrl(url)
+                                .setLineNumber(line.ZeroBasedInt())
+                                .setColumnNumber(column.ZeroBasedInt())
+                                .build();
+  auto details = protocol::Audits::StylesheetLoadingIssueDetails::create()
+                     .setSourceCodeLocation(std::move(sourceCodeLocation))
+                     .setStyleSheetLoadingIssueReason(
+                         protocol::Audits::StyleSheetLoadingIssueReasonEnum::
+                             LateImportRule)
+                     .build();
+
+  auto issue =
+      protocol::Audits::InspectorIssue::create()
+          .setCode(
+              protocol::Audits::InspectorIssueCodeEnum::StylesheetLoadingIssue)
+          .setDetails(protocol::Audits::InspectorIssueDetails::create()
+                          .setStylesheetLoadingIssueDetails(std::move(details))
+                          .build())
+          .build();
+
+  document->GetExecutionContext()->AddInspectorIssue(
+      AuditsIssue(std::move(issue)));
+}
+
+void AuditsIssue::ReportStylesheetLoadingRequestFailedIssue(
+    Document* document,
+    const KURL& url,
+    const absl::optional<String>& requestId,
+    const KURL& initiator_url,
+    WTF::OrdinalNumber initiator_line,
+    WTF::OrdinalNumber initiator_column,
+    const String& failureMessage) {
+  if (!document || !document->GetExecutionContext()) {
+    return;
+  }
+  auto sourceCodeLocation =
+      protocol::Audits::SourceCodeLocation::create()
+          .setUrl(initiator_url)
+          .setLineNumber(initiator_line.ZeroBasedInt())
+          .setColumnNumber(initiator_column.ZeroBasedInt())
+          .build();
+  auto requestDetails = protocol::Audits::FailedRequestInfo::create()
+                            .setUrl(url)
+                            .setFailureMessage(failureMessage)
+                            .build();
+
+  if (requestId) {
+    requestDetails->setRequestId(*requestId);
+  }
+  auto details =
+      protocol::Audits::StylesheetLoadingIssueDetails::create()
+          .setSourceCodeLocation(std::move(sourceCodeLocation))
+          .setFailedRequestInfo(std::move(requestDetails))
+          .setStyleSheetLoadingIssueReason(
+              protocol::Audits::StyleSheetLoadingIssueReasonEnum::RequestFailed)
+          .build();
+
+  auto issue =
+      protocol::Audits::InspectorIssue::create()
+          .setCode(
+              protocol::Audits::InspectorIssueCodeEnum::StylesheetLoadingIssue)
+          .setDetails(protocol::Audits::InspectorIssueDetails::create()
+                          .setStylesheetLoadingIssueDetails(std::move(details))
+                          .build())
+          .build();
+
+  document->GetExecutionContext()->AddInspectorIssue(
+      AuditsIssue(std::move(issue)));
 }
 
 AuditsIssue AuditsIssue::CreateContentSecurityPolicyIssue(

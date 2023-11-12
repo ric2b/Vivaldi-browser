@@ -50,6 +50,7 @@
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
+#include "extensions/common/manifest_url_handlers.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "skia/ext/image_operations.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -292,6 +293,42 @@ void ExtensionActionUtil::PrefsChange() {
 
 ExtensionActionUtil::~ExtensionActionUtil() {}
 
+void ExtensionActionUtil::GetExtensionsInfo(
+    const ExtensionSet& extensions,
+    extensions::ToolbarExtensionInfoList* extension_list) {
+  extensions::ExtensionActionManager* action_manager =
+      extensions::ExtensionActionManager::Get(profile_);
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(profile_);
+
+  for (ExtensionSet::const_iterator it = extensions.begin();
+       it != extensions.end(); ++it) {
+    const Extension* extension = it->get();
+
+    if (extensions::Manifest::IsComponentLocation(extension->location())) {
+      continue;
+    }
+
+    vivaldi::extension_action_utils::ExtensionInfo info;
+
+    info.name = extension->name();
+    info.id = extension->id();
+    info.enabled = registry->enabled_extensions().Contains(info.id);
+    info.optionspage = OptionsPageInfo::GetOptionsPage(extension).spec();
+    info.homepage = ManifestURL::GetHomepageURL(extension).spec();
+
+    // Extensions that has an action needs to be exposed in
+    // ExtensionActionToolbar and require all information.
+    // However, Quick Commands only require the barebone of extension
+    // information, sat above.
+    ExtensionAction* action = action_manager->GetExtensionAction(*extension);
+    if (action)
+      FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId);
+
+    extension_list->push_back(std::move(info));
+  }
+}
+
 void ExtensionActionUtil::FillInfoForTabId(
     vivaldi::extension_action_utils::ExtensionInfo* info,
     ExtensionAction* action,
@@ -306,8 +343,8 @@ void ExtensionActionUtil::FillInfoForTabId(
   // If the extension has a non-specific tabId badgetext, used for all tabs.
   info->badge_text = action->GetDisplayBadgeText(tab_id);
 
-  info->badge_background_color = color_utils::SkColorToRgbaString(
-          action->GetBadgeBackgroundColor(tab_id));
+  info->badge_background_color =
+      color_utils::SkColorToRgbaString(action->GetBadgeBackgroundColor(tab_id));
 
   info->badge_text_color =
       color_utils::SkColorToRgbaString(action->GetBadgeTextColor(tab_id));
@@ -571,44 +608,20 @@ ExtensionActionUtilsGetToolbarExtensionsFunction::Run() {
   namespace Results =
       vivaldi::extension_action_utils::GetToolbarExtensions::Results;
 
-  std::vector<vivaldi::extension_action_utils::ExtensionInfo>
-      toolbar_extensionactions;
+  extensions::ToolbarExtensionInfoList toolbar_extensionactions;
 
-  const extensions::ExtensionSet& extensions =
-      extensions::ExtensionRegistry::Get(browser_context())
-          ->enabled_extensions();
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(browser_context());
 
-  extensions::ExtensionActionManager* action_manager =
-      extensions::ExtensionActionManager::Get(browser_context());
+  ExtensionActionUtil* utilsTest =
+      ExtensionActionUtilFactory::GetForBrowserContext(browser_context());
 
-  for (ExtensionSet::const_iterator it = extensions.begin();
-       it != extensions.end(); ++it) {
-    const Extension* extension = it->get();
-
-    ExtensionAction* action = action_manager->GetExtensionAction(*extension);
-
-    if (action &&
-        !extensions::Manifest::IsComponentLocation(extension->location())) {
-      vivaldi::extension_action_utils::ExtensionInfo info;
-
-      ExtensionActionUtil* utils =
-          ExtensionActionUtilFactory::GetForBrowserContext(browser_context());
-
-      utils->FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId);
-      info.name = extension->name();
-
-      const std::string* manifest_string =
-          extension->manifest()->FindStringPath(manifest_keys::kHomepageURL);
-      if (manifest_string) {
-        info.homepage = *manifest_string;
-      }
-      manifest_string = extension->manifest()->FindStringPath(manifest_keys::kOptionsPage);
-      if (manifest_string) {
-        info.optionspage = *manifest_string;
-      }
-      toolbar_extensionactions.push_back(std::move(info));
-    }
-  }
+  utilsTest->GetExtensionsInfo(registry->enabled_extensions(),
+                               &toolbar_extensionactions);
+  utilsTest->GetExtensionsInfo(registry->disabled_extensions(),
+                               &toolbar_extensionactions);
+  utilsTest->GetExtensionsInfo(registry->terminated_extensions(),
+                               &toolbar_extensionactions);
 
   return RespondNow(ArgumentList(Results::Create(toolbar_extensionactions)));
 }

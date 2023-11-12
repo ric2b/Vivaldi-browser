@@ -896,7 +896,7 @@ TEST_F(NinjaRustBinaryTargetWriterTest, NonRustDeps) {
         "  source_file_part = lib.rs\n"
         "  source_name_part = lib\n"
         "  externs =\n"
-        "  rustdeps = -Lnative=obj/foo -Clink-arg=-Bdynamic "
+        "  rustdeps = -Lnative=obj/foo -Clink-arg=-Balternative-dynamic "
         "-Clink-arg=obj/foo/libstatic.a\n"
         "  ldflags =\n"
         "  sources = ../../baz/lib.rs\n";

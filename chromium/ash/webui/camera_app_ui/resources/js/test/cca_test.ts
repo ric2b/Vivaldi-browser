@@ -3,13 +3,18 @@
 // found in the LICENSE file.
 
 import {assert, assertExists, assertInstanceof} from '../assert.js';
+import {TIME_LAPSE_INITIAL_SPEED} from '../device/mode/video.js';
 import * as dom from '../dom.js';
 import * as localStorage from '../models/local_storage.js';
+import {
+  TIME_LAPSE_MAX_DURATION,
+  TimeLapseSaver,
+} from '../models/video_saver.js';
 import {ChromeHelper} from '../mojo/chrome_helper.js';
 import {DeviceOperator} from '../mojo/device_operator.js';
 import * as state from '../state.js';
-import {Facing, Resolution} from '../type.js';
-import {sleep} from '../util.js';
+import {Facing, Mode, Resolution} from '../type.js';
+import {assertEnumVariant, FpsObserver, sleep} from '../util.js';
 import {windowController} from '../window_controller.js';
 
 import {
@@ -21,10 +26,6 @@ import {
   UIComponent,
 } from './cca_type.js';
 
-/**
- * Possible HTMLElement types that can have a boolean attribute "disabled".
- */
-type HTMLElementWithDisabled = HTMLElement&{disabled: boolean};
 interface Coordinate {
   x: number;
   y: number;
@@ -139,10 +140,6 @@ export class CCATest {
    * Checks if mojo connection could be constructed without error. In this check
    * we only check if the path works and does not check for the correctness of
    * each mojo calls.
-   *
-   * @param shouldSupportDeviceOperator True if the device should support
-   * DeviceOperator.
-   * @return The promise resolves successfully if the check passes.
    */
   static async checkMojoConnection(shouldSupportDeviceOperator: boolean):
       Promise<void> {
@@ -196,30 +193,24 @@ export class CCATest {
   }
 
   /**
-   * Returns the number of ui elements of the specified component.
+   * Returns the number of visible ui elements of the specified component.
    */
   static countVisibleUI(component: UIComponent): number {
     return getVisibleElementList(component).length;
   }
 
   /**
-   * Returns whether the UI exist in the current DOM tree.
+   * Returns whether the UI exists in the current DOM tree.
    */
   static exists(component: UIComponent): boolean {
     const elements = getElementList(component);
     return elements.length > 0;
   }
 
-  /**
-   * Focuses the window.
-   */
   static focusWindow(): Promise<void> {
     return windowController.focus();
   }
 
-  /**
-   * Makes the window fullscreen.
-   */
   static fullscreenWindow(): Promise<void> {
     return windowController.fullscreen();
   }
@@ -250,7 +241,7 @@ export class CCATest {
   static async getFacing(): Promise<string> {
     const track = getPreviewVideoTrack();
     const deviceOperator = DeviceOperator.getInstance();
-    if (!deviceOperator) {
+    if (deviceOperator === null) {
       const facing = track.getSettings().facingMode;
       return facing ?? 'unknown';
     }
@@ -280,7 +271,7 @@ export class CCATest {
   }
 
   /**
-   * Gets number of camera devices.
+   * Gets the number of camera devices.
    */
   static async getNumOfCameras(): Promise<number> {
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -292,7 +283,7 @@ export class CCATest {
   }
 
   /**
-   * Return whether the state associated to the open is checked.
+   * Return whether the state associated to the option is checked.
    */
   static getOptionState(option: SettingOption): boolean {
     assert(option !== undefined, 'Invalid SettingOption value.');
@@ -314,9 +305,6 @@ export class CCATest {
     return ctx;
   }
 
-  /**
-   * Returns the screen orientation.
-   */
   static getScreenOrientation(): OrientationType {
     return window.screen.orientation.type;
   }
@@ -344,6 +332,28 @@ export class CCATest {
   }
 
   /**
+   * Gets current boolean value of |key|.
+   */
+  static getState(key: string): boolean {
+    const stateKey = state.assertState(key);
+    return state.get(stateKey);
+  }
+
+  /**
+   * Calculates the expected duration of the time-lapse video recorded for
+   * |recordDuration| seconds.
+   */
+  static getTimeLapseDuration(recordDuration: number): number {
+    let speed = TIME_LAPSE_INITIAL_SPEED;
+    let duration = recordDuration / speed;
+    while (duration >= TIME_LAPSE_MAX_DURATION) {
+      speed = TimeLapseSaver.getNextSpeed(speed);
+      duration = recordDuration / speed;
+    }
+    return duration;
+  }
+
+  /**
    * Performs mouse hold by sending pointerdown and pointerup events.
    */
   static async hold(component: UIComponent, ms: number, index?: number):
@@ -365,21 +375,17 @@ export class CCATest {
   }
 
   /**
-   * Returns disabled attribute of the component. In case the element with
+   * Returns disabled attribute of the component. In case the element without
    * "disabled" attribute, always returns false.
    */
   static isDisabled(component: UIComponent, index?: number): boolean {
     const element = resolveElement(component, index);
-    const withDisabledElement = element as HTMLElementWithDisabled;
-    if (withDisabledElement.disabled === undefined) {
-      return false;
+    if ('disabled' in element && typeof element.disabled === 'boolean') {
+      return element.disabled;
     }
-    return withDisabledElement.disabled;
+    return false;
   }
 
-  /**
-   * Checks whether the setting menu is opened.
-   */
   static isSettingMenuOpened(menu: SettingMenu): boolean {
     assert(menu !== undefined, 'Invalid SettingMenu value');
     const view = SETTING_MENU_MAP[menu].view;
@@ -389,8 +395,6 @@ export class CCATest {
   /**
    * Checks whether the preview video stream has been set and the stream status
    * is active.
-   *
-   * @return Whether the preview video is active.
    */
   static isVideoActive(): boolean {
     const video = getPreviewVideo();
@@ -398,23 +402,17 @@ export class CCATest {
   }
 
   /**
-   * Returns whether the UI component is current visible.
+   * Returns whether the UI component is currently visible.
    */
   static isVisible(component: UIComponent, index?: number): boolean {
     const element = resolveElement(component, index);
     return isVisibleElement(element);
   }
 
-  /**
-   * Maximizes the window.
-   */
   static maximizeWindow(): Promise<void> {
     return windowController.maximize();
   }
 
-  /**
-   * Minimizes the window.
-   */
   static minimizeWindow(): Promise<void> {
     return windowController.minimize();
   }
@@ -452,12 +450,23 @@ export class CCATest {
   static setRangeInputValue(component: UIComponent, value: number): void {
     const {max, min} = CCATest.getInputRange(component);
     if (value < min || value > max) {
-      new Error(`Invalid value ${value} within range ${min}-${max}`);
+      throw new Error(`Invalid value ${value} within range ${min}-${max}`);
     }
 
     const element = getRangeInputComponent(component);
     element.value = value.toString();
     element.dispatchEvent(new Event('change'));
+  }
+
+  /**
+   * Switches to the specified camera mode.
+   */
+  static switchMode(mode: Mode): void {
+    assertEnumVariant(Mode, mode);
+    const modeSelector =
+        dom.get(`.mode-item>input[data-mode="${mode}"]`, HTMLInputElement);
+    assert(isVisibleElement(modeSelector), 'Mode selector is not visible');
+    modeSelector.click();
   }
 
   /**
@@ -489,5 +498,33 @@ export class CCATest {
     assert(option !== undefined, 'Invalid SettingOption value.');
     const component = SETTING_OPTION_MAP[option].component;
     CCATest.click(component);
+  }
+
+  static getFpsObserver(): FpsObserver {
+    return new FpsObserver(getPreviewVideo());
+  }
+
+  /**
+   * Waits until the state |key| is changed to |expected| and resolves the
+   * millisecond unix timestamp of the state change.
+   */
+  static waitStateChange(key: string, expected: boolean): Promise<number> {
+    const stateKey = state.assertState(key);
+    const current = state.get(stateKey);
+    if (current === expected) {
+      throw new Error(`Cannot start observing because the state of ${
+          stateKey} is already ${expected}`);
+    }
+    return new Promise((resolve, reject) => {
+      function onChange(newState: boolean) {
+        state.removeObserver(stateKey, onChange);
+        if (newState !== expected) {
+          reject(
+              new Error(`The changed "${stateKey}" state is not ${expected}`));
+        }
+        resolve(Date.now());
+      }
+      state.addObserver(stateKey, onChange);
+    });
   }
 }

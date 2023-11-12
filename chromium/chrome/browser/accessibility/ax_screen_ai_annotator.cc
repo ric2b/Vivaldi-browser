@@ -11,9 +11,9 @@
 #include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/screen_ai/screen_ai_service_router.h"
+#include "chrome/browser/screen_ai/screen_ai_service_router_factory.h"
 #include "chrome/browser/ui/browser.h"
-#include "components/services/screen_ai/public/cpp/screen_ai_service_router.h"
-#include "components/services/screen_ai/public/cpp/screen_ai_service_router_factory.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/accessibility/ax_tree_update.h"
@@ -92,7 +92,7 @@ void AXScreenAIAnnotator::AnnotateScreenshot(Browser* browser) {
 
   base::TimeTicks start_time = base::TimeTicks::Now();
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-  // TODO(https://crbug.com/1278249): Need to run GrabViewSnapshot() in a
+  // TODO(https://crbug.com/1443349): Need to run GrabViewSnapshot() in a
   // thread that is not the main UI thread.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTaskAndReplyWithResult(
       FROM_HERE, base::BindOnce(&GrabViewSnapshot, web_contents->GetWeakPtr()),
@@ -137,7 +137,7 @@ void AXScreenAIAnnotator::OnSemanticLayoutExtractionPerformed(
   VLOG(2) << base::StrCat({"AXScreenAIAnnotator received tree ids: parent: ",
                            parent_tree_id.ToString().c_str(), ", ScreenAI: ",
                            screen_ai_tree_id.ToString().c_str()});
-  // TODO(https://crbug.com/1278249): Use!
+  // TODO(https://crbug.com/1443349): Use!
   NOTIMPLEMENTED();
 }
 

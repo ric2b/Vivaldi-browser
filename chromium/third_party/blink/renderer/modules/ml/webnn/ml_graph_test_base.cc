@@ -36,6 +36,9 @@ std::string TestVarietyToString(
     case BackendType::kModelLoader:
       name += "ModelLoader_";
       break;
+    case BackendType::kWebNNService:
+      name += "WebNNService_";
+      break;
   }
 
   switch (execution_mode) {
@@ -69,7 +72,7 @@ MLGraphTestBase::BuildResult MLGraphTestBase::BuildGraph(
                            .exception = nullptr};
       } else {
         return BuildResult{.graph = nullptr,
-                           .exception = V8DOMException::ToImplWithTypeCheck(
+                           .exception = V8DOMException::ToWrappable(
                                scope.GetIsolate(), tester.Value().V8Value())};
       }
     }
@@ -119,8 +122,8 @@ DOMException* MLGraphTestBase::ComputeGraph(V8TestingScope& scope,
         outputs = results->outputs();
         return nullptr;
       } else {
-        return V8DOMException::ToImplWithTypeCheck(scope.GetIsolate(),
-                                                   tester.Value().V8Value());
+        return V8DOMException::ToWrappable(scope.GetIsolate(),
+                                           tester.Value().V8Value());
       }
     }
     case ExecutionMode::kSync: {

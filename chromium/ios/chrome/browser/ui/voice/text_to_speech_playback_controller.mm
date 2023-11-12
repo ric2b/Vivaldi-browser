@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/voice/text_to_speech_playback_controller.h"
 
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/ui/voice/text_to_speech_notification_handler.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/web/public/web_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -62,22 +62,45 @@ void TextToSpeechPlaybackController::Shutdown() {
 
 #pragma mark WebStateListObserver
 
-void TextToSpeechPlaybackController::WebStateInsertedAt(
+void TextToSpeechPlaybackController::WebStateListChanged(
     WebStateList* web_state_list,
-    web::WebState* web_state,
-    int index,
-    bool activating) {
-  if (activating)
-    SetWebState(web_state);
-}
-
-void TextToSpeechPlaybackController::WebStateReplacedAt(
-    WebStateList* web_state_list,
-    web::WebState* old_web_state,
-    web::WebState* new_web_state,
-    int index) {
-  if (new_web_state == web_state_list->GetActiveWebState())
-    SetWebState(new_web_state);
+    const WebStateListChange& change,
+    const WebStateSelection& selection) {
+  switch (change.type()) {
+    case WebStateListChange::Type::kSelectionOnly:
+      // TODO(crbug.com/1442546): Move the implementation from
+      // WebStateActivatedAt() to here. Note that here is reachable only when
+      // `reason` == ActiveWebStateChangeReason::Activated.
+      break;
+    case WebStateListChange::Type::kDetach: {
+      const WebStateListChangeDetach& detach_change =
+          change.As<WebStateListChangeDetach>();
+      if (web_state_ == detach_change.detached_web_state()) {
+        SetWebState(nullptr);
+      }
+      break;
+    }
+    case WebStateListChange::Type::kMove:
+      // Do nothing when a WebState is moved.
+      break;
+    case WebStateListChange::Type::kReplace: {
+      const WebStateListChangeReplace& replace_change =
+          change.As<WebStateListChangeReplace>();
+      web::WebState* inserted_web_state = replace_change.inserted_web_state();
+      if (inserted_web_state == web_state_list->GetActiveWebState()) {
+        SetWebState(inserted_web_state);
+      }
+      break;
+    }
+    case WebStateListChange::Type::kInsert: {
+      const WebStateListChangeInsert& insert_change =
+          change.As<WebStateListChangeInsert>();
+      if (selection.activating) {
+        SetWebState(insert_change.inserted_web_state());
+      }
+      break;
+    }
+  }
 }
 
 void TextToSpeechPlaybackController::WebStateActivatedAt(
@@ -87,14 +110,6 @@ void TextToSpeechPlaybackController::WebStateActivatedAt(
     int active_index,
     ActiveWebStateChangeReason reason) {
   SetWebState(new_web_state);
-}
-
-void TextToSpeechPlaybackController::WebStateDetachedAt(
-    WebStateList* web_state_list,
-    web::WebState* web_state,
-    int index) {
-  if (web_state_ == web_state)
-    SetWebState(nullptr);
 }
 
 void TextToSpeechPlaybackController::WillCloseWebStateAt(

@@ -13,7 +13,7 @@
  * and the other to a Learn More page for Phone Hub.
  */
 
-import '../../settings_shared.css.js';
+import '../settings_shared.css.js';
 
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -27,7 +27,7 @@ const SettingsMultideviceTaskContinuationDisabledLinkElementBase =
     I18nMixin(PolymerElement);
 
 /** @polymer */
-class SettingsMultideviceTaskContinuationDisabledLinkElement extends
+export class SettingsMultideviceTaskContinuationDisabledLinkElement extends
     SettingsMultideviceTaskContinuationDisabledLinkElementBase {
   static get is() {
     return 'settings-multidevice-task-continuation-disabled-link' as const;

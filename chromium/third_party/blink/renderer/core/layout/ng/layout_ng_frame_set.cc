@@ -43,13 +43,6 @@ void LayoutNGFrameSet::RemoveChild(LayoutObject* child) {
   To<HTMLFrameSetElement>(GetNode())->DirtyEdgeInfoAndFullPaintInvalidation();
 }
 
-void LayoutNGFrameSet::UpdateBlockLayout(bool relayout_children) {
-  if (IsOutOfFlowPositioned())
-    UpdateOutOfFlowBlockLayout();
-  else
-    UpdateInFlowBlockLayout();
-}
-
 CursorDirective LayoutNGFrameSet::GetCursor(const PhysicalOffset& point,
                                             ui::Cursor& cursor) const {
   NOT_DESTROYED();

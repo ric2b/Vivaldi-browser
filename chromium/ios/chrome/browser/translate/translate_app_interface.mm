@@ -16,7 +16,7 @@
 #import "components/translate/core/common/translate_util.h"
 #import "components/translate/ios/browser/js_translate_web_frame_manager.h"
 #import "components/translate/ios/browser/js_translate_web_frame_manager_factory.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
@@ -107,29 +107,27 @@ class FakeJSTranslateWebFrameManager : public JSTranslateWebFrameManager {
     // No need to set the `translate_script` JavaScript since it will never be
     // used by this fake object. Instead just invoke host with 'translate.ready'
     // followed by 'translate.status'.
-    base::Value translate_ready_dict(base::Value::Type::DICT);
-    translate_ready_dict.SetKey("command", base::Value("ready"));
-    translate_ready_dict.SetKey("errorCode", base::Value(0));
-    translate_ready_dict.SetKey("loadTime", base::Value(0));
-    translate_ready_dict.SetKey("readyTime", base::Value(0));
+    auto translate_ready_dict = base::Value::Dict()
+                                    .Set("command", "ready")
+                                    .Set("errorCode", 0)
+                                    .Set("loadTime", 0)
+                                    .Set("readyTime", 0);
+    web_frame_->CallJavaScriptFunction(
+        "common.sendWebKitMessage",
+        base::Value::List()
+            .Append("TranslateMessage")
+            .Append(std::move(translate_ready_dict)));
 
-    std::vector<base::Value> translate_ready_params;
-    translate_ready_params.push_back(base::Value("TranslateMessage"));
-    translate_ready_params.push_back(std::move(translate_ready_dict));
-    web_frame_->CallJavaScriptFunction("common.sendWebKitMessage",
-                                       translate_ready_params);
-
-    base::Value translate_status_dict(base::Value::Type::DICT);
-    translate_status_dict.SetKey("command", base::Value("status"));
-    translate_status_dict.SetKey("errorCode", base::Value(0));
-    translate_status_dict.SetKey("pageSourceLanguage", base::Value("fr"));
-    translate_status_dict.SetKey("translationTime", base::Value(0));
-
-    std::vector<base::Value> translate_status_params;
-    translate_status_params.push_back(base::Value("TranslateMessage"));
-    translate_status_params.push_back(std::move(translate_status_dict));
-    web_frame_->CallJavaScriptFunction("common.sendWebKitMessage",
-                                       translate_status_params);
+    auto translate_status_dict = base::Value::Dict()
+                                     .Set("command", "status")
+                                     .Set("errorCode", 0)
+                                     .Set("pageSourceLanguage", "fr")
+                                     .Set("translationTime", 0);
+    web_frame_->CallJavaScriptFunction(
+        "common.sendWebKitMessage",
+        base::Value::List()
+            .Append("TranslateMessage")
+            .Append(std::move(translate_status_dict)));
   }
 
   void StartTranslation(const std::string& source,

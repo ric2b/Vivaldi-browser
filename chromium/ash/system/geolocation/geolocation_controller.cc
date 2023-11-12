@@ -16,6 +16,7 @@
 #include "base/time/clock.h"
 #include "chromeos/ash/components/geolocation/geoposition.h"
 #include "chromeos/ash/components/geolocation/simple_geolocation_provider.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "third_party/icu/source/i18n/astro.h"
@@ -79,34 +80,41 @@ void GeolocationController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
 void GeolocationController::AddObserver(Observer* observer) {
   const bool is_first_observer = observers_.empty();
   observers_.AddObserver(observer);
-  if (is_first_observer)
+  if (is_first_observer && IsSystemGeolocationAllowed()) {
     ScheduleNextRequest(base::Seconds(0));
+  }
 }
 
 void GeolocationController::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
-  if (observers_.empty())
+  if (observers_.empty()) {
     timer_->Stop();
+  }
 }
 
 void GeolocationController::TimezoneChanged(const icu::TimeZone& timezone) {
   const std::u16string timezone_id =
       system::TimezoneSettings::GetTimezoneID(timezone);
-  if (current_timezone_id_ == timezone_id)
+  if (current_timezone_id_ == timezone_id) {
     return;
+  }
 
   current_timezone_id_ = timezone_id;
 
-  // On timezone changes, request an immediate geoposition.
-  ScheduleNextRequest(base::Seconds(0));
+  // On timezone changes, request an immediate geoposition if the system
+  // geolocation allows.
+  if (IsSystemGeolocationAllowed()) {
+    ScheduleNextRequest(base::Seconds(0));
+  }
 }
 
 void GeolocationController::SuspendDone(base::TimeDelta sleep_duration) {
-  if (sleep_duration >= kNextRequestDelayAfterSuccess)
+  if (sleep_duration >= kNextRequestDelayAfterSuccess) {
     ScheduleNextRequest(base::Seconds(0));
+  }
 }
 
-bool GeolocationController::IsPreciseGeolocationAllowed() const {
+bool GeolocationController::IsSystemGeolocationAllowed() const {
   // TODO(b/276715041): Refactor the `SimpleGeolocationProvider` class to
   // eliminate the `Shell`-dependency of this class.
   Shell* const shell = Shell::Get();
@@ -134,6 +142,18 @@ void GeolocationController::OnActiveUserPrefServiceChanged(
   LoadCachedGeopositionIfNeeded();
 }
 
+void GeolocationController::OnSystemGeolocationPermissionChanged(bool enabled) {
+  // Drop all pending requests when system geolocation is toggled OFF.
+  if (!enabled) {
+    timer_->Stop();
+    return;
+  }
+
+  // System geolocation toggled ON, post an immediate new geolocation request to
+  // resume continuous scheduling.
+  ScheduleNextRequest(base::Seconds(0));
+}
+
 // static
 base::TimeDelta
 GeolocationController::GetNextRequestDelayAfterSuccessForTesting() {
@@ -149,6 +169,11 @@ void GeolocationController::SetClockForTesting(base::Clock* clock) {
   clock_ = clock;
 }
 
+void GeolocationController::SetLocalTimeConverterForTesting(
+    const LocalTimeConverter* local_time_converter) {
+  local_time_converter_ = local_time_converter;
+}
+
 void GeolocationController::SetCurrentTimezoneIdForTesting(
     const std::u16string& timezone_id) {
   current_timezone_id_ = timezone_id;
@@ -157,6 +182,13 @@ void GeolocationController::SetCurrentTimezoneIdForTesting(
 void GeolocationController::OnGeoposition(const Geoposition& position,
                                           bool server_error,
                                           const base::TimeDelta elapsed) {
+  if (!IsSystemGeolocationAllowed() || observers_.empty()) {
+    // The request might come after the user disabled the system geolocation
+    // access or if all observers unsubscribed, in which case we should stop
+    // processing the geolocation responses.
+    return;
+  }
+
   if (server_error || !position.Valid() ||
       elapsed > kGeolocationRequestTimeout) {
     VLOG(1) << "Failed to get a valid geoposition. Trying again later.";
@@ -208,14 +240,22 @@ base::Time GeolocationController::GetNow() const {
 }
 
 void GeolocationController::ScheduleNextRequest(base::TimeDelta delay) {
+  // Drop all pending geolocation requests while system permission is
+  // denied. Toggling system geolocation ON will trigger a fresh geolocation
+  // request.
+  if (!IsSystemGeolocationAllowed()) {
+    return;
+  }
+
   timer_->Start(FROM_HERE, delay, this,
                 &GeolocationController::RequestGeoposition);
 }
 
 void GeolocationController::NotifyGeopositionChange(
     bool possible_change_in_timezone) {
-  for (Observer& observer : observers_)
+  for (Observer& observer : observers_) {
     observer.OnGeopositionChanged(possible_change_in_timezone);
+  }
 }
 
 void GeolocationController::RequestGeoposition() {
@@ -234,6 +274,7 @@ base::Time GeolocationController::GetSunRiseSet(bool sunrise) const {
     return TimeOfDay(sunrise ? kDefaultSunriseTimeOffsetMinutes
                              : kDefaultSunsetTimeOffsetMinutes)
         .SetClock(clock_)
+        .SetLocalTimeConverter(local_time_converter_)
         .ToTimeToday();
   }
 
@@ -246,10 +287,18 @@ base::Time GeolocationController::GetSunRiseSet(bool sunrise) const {
   // Note that the icu calendar works with milliseconds since epoch, and
   // base::Time::FromDoubleT() / ToDoubleT() work with seconds since epoch.
   const double midday_today_sec =
-      TimeOfDay(12 * 60).SetClock(clock_).ToTimeToday().ToDoubleT();
+      TimeOfDay(12 * 60)
+          .SetClock(clock_)
+          .SetLocalTimeConverter(local_time_converter_)
+          .ToTimeToday()
+          .ToDoubleT();
   astro.setTime(midday_today_sec * 1000.0);
   const double sun_rise_set_ms = astro.getSunRiseSet(sunrise);
-  return base::Time::FromDoubleT(sun_rise_set_ms / 1000.0);
+  // If there is 24 hours of daylight or darkness, `CalendarAstronomer` returns
+  // a very large negative value. Any timestamp before or at the epoch
+  // definitely does not make sense, so assume `kNoSunRiseSet`.
+  return sun_rise_set_ms > 0 ? base::Time::FromDoubleT(sun_rise_set_ms / 1000.0)
+                             : kNoSunRiseSet;
 }
 
 void GeolocationController::LoadCachedGeopositionIfNeeded() {

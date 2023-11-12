@@ -355,7 +355,7 @@ bool StatsReporterImpl::GeneratePingRequest(
   ReportingData os_profile_reporting_data;
   {
     std::string* unique_user_id =
-        os_profile_reporting_data_json->FindStringKey(kUniqueUserIdKey);
+        os_profile_reporting_data_json->GetDict().FindString(kUniqueUserIdKey);
     if (unique_user_id && IsValidUserId(*unique_user_id))
       os_profile_reporting_data.user_id = *unique_user_id;
 
@@ -396,12 +396,12 @@ bool StatsReporterImpl::GeneratePingRequest(
 
     if (os_profile_reporting_data.user_id.empty() && !legacy_user_id.empty()) {
       os_profile_reporting_data.user_id = legacy_user_id;
-      os_profile_reporting_data_json->SetStringKey(kUniqueUserIdKey,
+      os_profile_reporting_data_json->GetDict().Set(kUniqueUserIdKey,
                                                    legacy_user_id);
     }
 
     absl::optional<int> pings_since_last_month =
-        os_profile_reporting_data_json->FindIntKey(kPingsSinceLastMonthKey);
+        os_profile_reporting_data_json->GetDict().FindInt(kPingsSinceLastMonthKey);
     if (pings_since_last_month)
       os_profile_reporting_data.pings_since_last_month =
           *pings_since_last_month;
@@ -430,8 +430,8 @@ bool StatsReporterImpl::GeneratePingRequest(
   switch (installation_status) {
     case InstallationStatus::NEW_USER:
       user_id = base::StringPrintf("%016" PRIX64, base::RandUint64());
-      os_profile_reporting_data_json->SetStringKey(kUniqueUserIdKey, user_id);
-      os_profile_reporting_data_json->SetKey(
+      os_profile_reporting_data_json->GetDict().Set(kUniqueUserIdKey, user_id);
+      os_profile_reporting_data_json->GetDict().Set(
           kInstallationTimeKey,
           base::TimeToValue(local_state_reporting_data.installation_time));
       os_profile_reporting_data.installation_time =
@@ -456,7 +456,7 @@ bool StatsReporterImpl::GeneratePingRequest(
           (local_state_reporting_data.installation_time <
                os_profile_reporting_data.installation_time ||
            os_profile_reporting_data.installation_time.is_null())) {
-        os_profile_reporting_data_json->SetKey(
+        os_profile_reporting_data_json->GetDict().Set(
             kInstallationTimeKey,
             base::TimeToValue(local_state_reporting_data.installation_time));
         os_profile_reporting_data.installation_time =
@@ -639,22 +639,22 @@ bool StatsReporterImpl::GeneratePingRequest(
       new_pings_since_last_month;
 
   if (os_profile_reporting_data_json) {
-    os_profile_reporting_data_json->SetStringKey(kDescriptionKey,
+    os_profile_reporting_data_json->GetDict().Set(kDescriptionKey,
                                                  kDescriptionText);
 
-    os_profile_reporting_data_json->SetKey(
+    os_profile_reporting_data_json->GetDict().Set(
         kNextDailyPingKey, base::TimeToValue(new_next_pings.daily));
-    os_profile_reporting_data_json->SetKey(
+    os_profile_reporting_data_json->GetDict().Set(
         kNextWeeklyPingKey, base::TimeToValue(new_next_pings.weekly));
-    os_profile_reporting_data_json->SetKey(
+    os_profile_reporting_data_json->GetDict().Set(
         kNextMonthlyPingKey, base::TimeToValue(new_next_pings.monthly));
-    os_profile_reporting_data_json->SetKey(
+    os_profile_reporting_data_json->GetDict().Set(
         kNextTrimestrialPingKey, base::TimeToValue(new_next_pings.trimestrial));
-    os_profile_reporting_data_json->SetKey(
+    os_profile_reporting_data_json->GetDict().Set(
         kNextSemestrialPingKey, base::TimeToValue(new_next_pings.semestrial));
-    os_profile_reporting_data_json->SetKey(
+    os_profile_reporting_data_json->GetDict().Set(
         kNextYearlyPingKey, base::TimeToValue(new_next_pings.yearly));
-    os_profile_reporting_data_json->SetIntKey(kPingsSinceLastMonthKey,
+    os_profile_reporting_data_json->GetDict().Set(kPingsSinceLastMonthKey,
                                               new_pings_since_last_month);
   }
 

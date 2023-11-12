@@ -21,6 +21,8 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 
+#include "app/vivaldi_constants.h"
+
 namespace {
 
 const char* g_preinstalled_app_for_testing = nullptr;
@@ -122,6 +124,9 @@ bool IsExtensionUnsupportedDeprecatedApp(content::BrowserContext* context,
   if (testing::g_enable_chrome_apps_for_testing) {
     return false;
   }
+
+  if (extension_id == vivaldi::kVivaldiAppId)
+    return false;
 
   if (extension_id == extensions::kWebStoreAppId)
     return false;

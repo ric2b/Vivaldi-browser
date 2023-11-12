@@ -192,7 +192,6 @@
 <translation id="8150722005171944719"><ph name="URL" /> konumundaki dosya okunamıyor. Kaldırılmış ya da taşınmış olabilir veya dosya izinleri erişimi önlüyordur.</translation>
 <translation id="8184538546369750125">Genel varsayılanı kullan (İzin ver)</translation>
 <translation id="8211406090763984747">Bağlantı güvenli</translation>
-<translation id="8225771182978767009">Bu bilgisayarı kuran kişi bu siteyi engellemeyi seçmiş.</translation>
 <translation id="8241707690549784388">Aradığınız sayfa girdiğiniz bilgileri kullandı. O sayfaya dönmeniz gerçekleştirdiğiniz işlemlerin tekrarlanmasına neden olabilir. Devam etmek istiyor musunuz?</translation>
 <translation id="8241712895048303527">Bu sitede engelle</translation>
 <translation id="8286036467436129157">Giriş Yap</translation>
@@ -213,7 +212,6 @@
 <translation id="9062620674789239642">Taşınmış, dizenlenmiş veya silinmiş olabilir.</translation>
 <translation id="9069693763241529744">Bir eklenti tarafından engellendi</translation>
 <translation id="9073799351042754113">Bu site için güvenlik uyarılarını kapatmayı seçtiniz.</translation>
-<translation id="910924428752220542">Vivaldi Parolaları</translation>
 <translation id="9169664750068251925">Bu sitede her zaman engelle</translation>
 <translation id="9180553614777056266">Reklam Engelleyici</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> desteklenmeyen bir protokol kullanıyor.</translation>

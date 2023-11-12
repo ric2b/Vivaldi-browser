@@ -17,7 +17,7 @@
 #include "chrome/common/extensions/api/passwords_private.h"
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
-#include "components/sync/driver/sync_service.h"
+#include "components/sync/service/sync_service.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_function_registry.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -72,17 +72,37 @@ ResponseAction PasswordsPrivateChangeSavedPasswordFunction::Run() {
       "id."));
 }
 
-// PasswordsPrivateRemoveSavedPasswordFunction
-ResponseAction PasswordsPrivateRemoveSavedPasswordFunction::Run() {
+// PasswordsPrivateChangeCredentialFunction
+ResponseAction PasswordsPrivateChangeCredentialFunction::Run() {
   if (!GetDelegate(browser_context())) {
     return RespondNow(Error(kNoDelegateError));
   }
 
   auto parameters =
-      api::passwords_private::RemoveSavedPassword::Params::Create(args());
+      api::passwords_private::ChangeCredential::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(parameters);
+
+  bool success =
+      GetDelegate(browser_context())->ChangeCredential(parameters->credential);
+  if (success) {
+    return RespondNow(NoArguments());
+  }
+  return RespondNow(Error(
+      "Could not change the credential. Either the arguments are not valid or "
+      "the credential does not exist"));
+}
+
+// PasswordsPrivateRemoveCredentialFunction
+ResponseAction PasswordsPrivateRemoveCredentialFunction::Run() {
+  if (!GetDelegate(browser_context())) {
+    return RespondNow(Error(kNoDelegateError));
+  }
+
+  auto parameters =
+      api::passwords_private::RemoveCredential::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(parameters);
   GetDelegate(browser_context())
-      ->RemoveSavedPassword(parameters->id, parameters->from_stores);
+      ->RemoveCredential(parameters->id, parameters->from_stores);
   return RespondNow(NoArguments());
 }
 

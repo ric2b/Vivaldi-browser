@@ -392,7 +392,8 @@ class HttpStreamFactoryJobControllerTestBase : public TestWithTaskEnvironment {
   SpdySessionDependencies session_deps_;
   std::unique_ptr<HttpNetworkSession> session_;
   raw_ptr<HttpStreamFactory> factory_ = nullptr;
-  raw_ptr<HttpStreamFactory::JobController> job_controller_ = nullptr;
+  raw_ptr<HttpStreamFactory::JobController, DanglingUntriaged> job_controller_ =
+      nullptr;
   std::unique_ptr<HttpStreamRequest> request_;
   std::unique_ptr<SequencedSocketData> tcp_data_;
   std::unique_ptr<SequencedSocketData> tcp_data2_;
@@ -4157,30 +4158,28 @@ TEST_P(HttpStreamFactoryJobControllerTest,
       "h3-Q050=\":443\"; ma=2592000,"
       "h3-Q049=\":443\"; ma=2592000,"
       "h3-Q048=\":443\"; ma=2592000,"
-      "h3-Q046=\":443\"; ma=2592000,"
-      "h3-Q043=\":443\"; ma=2592000,",
+      "h3-Q046=\":443\"; ma=2592000,",
       quic::ParsedQuicVersion::Q050(), quic::AllSupportedVersions());
 }
 
 TEST_P(HttpStreamFactoryJobControllerTest,
        AltSvcVersionSelectionFindsFirstMatchInverse) {
   TestAltSvcVersionSelection(
-      "h3-Q043=\":443\"; ma=2592000,"
       "h3-Q046=\":443\"; ma=2592000,"
       "h3-Q048=\":443\"; ma=2592000,"
       "h3-Q049=\":443\"; ma=2592000,",
-      quic::ParsedQuicVersion::Q043(), quic::AllSupportedVersions());
+      quic::ParsedQuicVersion::Q046(), quic::AllSupportedVersions());
 }
 
 TEST_P(HttpStreamFactoryJobControllerTest,
        AltSvcVersionSelectionWithInverseOrderingNewFormat) {
-  // Server prefers Q043 but client prefers Q046.
+  // Server prefers Q046 but client prefers Q050.
   TestAltSvcVersionSelection(
-      "h3-Q043=\":443\"; ma=2592000,"
-      "h3-Q046=\":443\"; ma=2592000",
-      quic::ParsedQuicVersion::Q043(),
-      quic::ParsedQuicVersionVector{quic::ParsedQuicVersion::Q046(),
-                                    quic::ParsedQuicVersion::Q043()});
+      "h3-Q046=\":443\"; ma=2592000,"
+      "h3-Q050=\":443\"; ma=2592000",
+      quic::ParsedQuicVersion::Q046(),
+      quic::ParsedQuicVersionVector{quic::ParsedQuicVersion::Q050(),
+                                    quic::ParsedQuicVersion::Q046()});
 }
 
 // Tests that if HttpNetworkSession has a non-empty QUIC host allowlist,
@@ -4411,7 +4410,8 @@ class HttpStreamFactoryJobControllerDnsHttpsAlpnTest
         NetworkAnonymizationKey());
   }
 
-  raw_ptr<HttpStreamFactory::JobController> job_controller2_ = nullptr;
+  raw_ptr<HttpStreamFactory::JobController, DanglingUntriaged>
+      job_controller2_ = nullptr;
 
   MockHttpStreamRequestDelegate request_delegate2_;
 
@@ -4424,10 +4424,10 @@ class HttpStreamFactoryJobControllerDnsHttpsAlpnTest
                                quic::Perspective::IS_CLIENT, false);
   }
 
-  void CreateJobControllerImpl(
-      raw_ptr<HttpStreamFactory::JobController>* job_controller,
-      MockHttpStreamRequestDelegate* request_delegate,
-      const HttpRequestInfo& request_info) {
+  void CreateJobControllerImpl(raw_ptr<HttpStreamFactory::JobController,
+                                       DanglingUntriaged>* job_controller,
+                               MockHttpStreamRequestDelegate* request_delegate,
+                               const HttpRequestInfo& request_info) {
     auto controller = std::make_unique<HttpStreamFactory::JobController>(
         factory_, request_delegate, session_.get(), &default_job_factory_,
         request_info, is_preconnect_, false /* is_websocket */,
@@ -4438,7 +4438,8 @@ class HttpStreamFactoryJobControllerDnsHttpsAlpnTest
   }
 
   std::unique_ptr<HttpStreamRequest> CreateJobControllerAndStartImpl(
-      raw_ptr<HttpStreamFactory::JobController>* job_controller,
+      raw_ptr<HttpStreamFactory::JobController, DanglingUntriaged>*
+          job_controller,
       MockHttpStreamRequestDelegate* request_delegate,
       const HttpRequestInfo& request_info) {
     CreateJobControllerImpl(job_controller, request_delegate, request_info);

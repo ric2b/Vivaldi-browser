@@ -24,6 +24,7 @@
 #include "components/media_router/browser/media_router_metrics.h"
 #include "components/media_router/browser/media_routes_observer.h"
 #include "components/media_router/browser/media_sinks_observer.h"
+#include "components/media_router/browser/mirroring_media_controller_host_impl.h"
 #include "components/media_router/browser/presentation_connection_message_observer.h"
 #include "components/media_router/common/media_source.h"
 #include "components/media_router/common/providers/cast/cast_media_source.h"
@@ -762,28 +763,6 @@ void MediaRouterMojoImpl::OnRouteAdded(mojom::MediaRouteProviderId provider_id,
   routes_query_.NotifyObservers();
 }
 
-void MediaRouterMojoImpl::SyncStateToMediaRouteProvider(
-    mojom::MediaRouteProviderId provider_id) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  const auto& provider = media_route_providers_[provider_id];
-  // Sink queries.
-  for (const auto& it : sinks_queries_) {
-    // TODO(crbug.com/1090890): Don't allow MediaSource::ForAnyTab().id() to
-    // be passed here.
-    provider->StartObservingMediaSinks(it.first);
-  }
-
-  // Route updates.
-  if (routes_query_.HasObservers()) {
-    provider->StartObservingMediaRoutes();
-  }
-
-  // Route messages.
-  for (const auto& it : message_observers_) {
-    provider->StartListeningForRouteMessages(it.first);
-  }
-}
-
 void MediaRouterMojoImpl::DiscoverSinksNow() {
   for (const auto& provider : media_route_providers_) {
     provider.second->DiscoverSinksNow();
@@ -801,7 +780,7 @@ void MediaRouterMojoImpl::AddMirroringMediaControllerHost(
   mojo::Remote<media_router::mojom::MediaController> controller_remote;
   mojo::PendingReceiver<media_router::mojom::MediaController>
       controller_receiver = controller_remote.BindNewPipeAndPassReceiver();
-  auto host = std::make_unique<MirroringMediaControllerHost>(
+  auto host = std::make_unique<MirroringMediaControllerHostImpl>(
       std::move(controller_remote));
   auto observer_remote = host->GetMediaStatusObserverPendingRemote();
   GetMediaController(route.media_route_id(), std::move(controller_receiver),

@@ -18,14 +18,20 @@ OriginKeyedPermissionActionServiceFactory::GetForProfile(Profile* profile) {
 // static
 OriginKeyedPermissionActionServiceFactory*
 OriginKeyedPermissionActionServiceFactory::GetInstance() {
-  return base::Singleton<OriginKeyedPermissionActionServiceFactory>::get();
+  static base::NoDestructor<OriginKeyedPermissionActionServiceFactory> instance;
+  return instance.get();
 }
 
 OriginKeyedPermissionActionServiceFactory::
     OriginKeyedPermissionActionServiceFactory()
     : ProfileKeyedServiceFactory(
           "OriginKeyedPermissionActionService",
-          ProfileSelections::BuildForRegularAndIncognito()) {}
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {}
 
 OriginKeyedPermissionActionServiceFactory::
     ~OriginKeyedPermissionActionServiceFactory() = default;

@@ -20,7 +20,7 @@ import androidx.core.os.BuildCompat;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.Log;
 import org.chromium.blink_public.common.BlinkFeatures;
-import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.content_public.browser.StylusWritingHandler;
 import org.chromium.content_public.browser.StylusWritingImeCallback;
 import org.chromium.content_public.browser.WebContents;
@@ -41,11 +41,18 @@ public class AndroidStylusWritingHandler
     private final InputMethodManager mInputMethodManager;
     private View mTargetView;
 
+    @OptIn(markerClass = androidx.core.os.BuildCompat.PrereleaseSdkCheck.class)
     public static boolean isEnabled(Context context) {
         if (!BuildInfo.isAtLeastT()) return false;
 
-        int value = Settings.Global.getInt(
-                context.getContentResolver(), "stylus_handwriting_enabled", -1);
+        int value = -1;
+        if (BuildCompat.isAtLeastU()) {
+            value = Settings.Secure.getInt(
+                    context.getContentResolver(), "stylus_handwriting_enabled", 1);
+        } else {
+            value = Settings.Global.getInt(
+                    context.getContentResolver(), "stylus_handwriting_enabled", -1);
+        }
 
         if (value != 1) {
             Log.d(TAG, "Stylus feature disabled.", value);
@@ -133,7 +140,7 @@ public class AndroidStylusWritingHandler
     public boolean didHandleCursorUpdate(View currentView) {
         if (sHandwritingPointerType == null) return false;
         // Enable this icon behind feature flag that shows hover Icon in expanded area of target.
-        if (!ContentFeatureList.isEnabled(BlinkFeatures.STYLUS_POINTER_ADJUSTMENT)) return false;
+        if (!ContentFeatureMap.isEnabled(BlinkFeatures.STYLUS_POINTER_ADJUSTMENT)) return false;
 
         currentView.setPointerIcon(
                 PointerIcon.getSystemIcon(currentView.getContext(), sHandwritingPointerType));

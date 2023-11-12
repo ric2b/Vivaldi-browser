@@ -23,12 +23,14 @@
 #include "ash/system/tray/tri_view.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "device/bluetooth/chromeos/bluetooth_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/image_view.h"
@@ -86,14 +88,16 @@ void BluetoothDetailedViewImpl::UpdateBluetoothEnabledState(bool enabled) {
       enabled ? IDS_ASH_STATUS_TRAY_BLUETOOTH_ENABLED_SHORT
               : IDS_ASH_STATUS_TRAY_BLUETOOTH_DISABLED_SHORT));
 
-  // Update the toggle button tooltip.
-  std::u16string toggle_tooltip =
+  // Update the toggle row and button tooltips. The entire row is clickable.
+  std::u16string tooltip_template =
       enabled ? l10n_util::GetStringUTF16(
                     IDS_ASH_STATUS_TRAY_BLUETOOTH_ENABLED_TOOLTIP)
               : l10n_util::GetStringUTF16(
                     IDS_ASH_STATUS_TRAY_BLUETOOTH_DISABLED_TOOLTIP);
-  toggle_button_->SetTooltipText(l10n_util::GetStringFUTF16(
-      IDS_ASH_STATUS_TRAY_BLUETOOTH_TOGGLE_TOOLTIP, toggle_tooltip));
+  std::u16string tooltip_text = l10n_util::GetStringFUTF16(
+      IDS_ASH_STATUS_TRAY_BLUETOOTH_TOGGLE_TOOLTIP, tooltip_template);
+  toggle_row_->SetTooltipText(tooltip_text);
+  toggle_button_->SetTooltipText(tooltip_text);
 
   // Ensure the toggle button is in sync with the current Bluetooth state.
   if (toggle_button_->GetIsOn() != enabled) {
@@ -115,7 +119,7 @@ views::View* BluetoothDetailedViewImpl::AddDeviceListSubHeader(
   header->SetInsideBorderInsets(kSubHeaderInsets);
   std::unique_ptr<views::Label> label = bubble_utils::CreateLabel(
       TypographyToken::kCrosBody2, l10n_util::GetStringUTF16(text_id),
-      cros_tokens::kColorSecondary);
+      cros_tokens::kCrosSysOnSurfaceVariant);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label->SetSubpixelRenderingEnabled(false);
   header->AddChildView(std::move(label));
@@ -183,6 +187,8 @@ void BluetoothDetailedViewImpl::CreateTopContainer() {
   toggle_icon_ = icon.get();
   toggle_row_->AddViewAndLabel(std::move(icon), u"");
   toggle_row_->text_label()->SetEnabledColorId(cros_tokens::kCrosSysOnSurface);
+  TypographyProvider::Get()->StyleLabel(ash::TypographyToken::kCrosButton1,
+                                        *toggle_row_->text_label());
 
   auto toggle = std::make_unique<Switch>(base::BindRepeating(
       &BluetoothDetailedViewImpl::OnToggleClicked, weak_factory_.GetWeakPtr()));
@@ -193,6 +199,12 @@ void BluetoothDetailedViewImpl::CreateTopContainer() {
   // Allow the row to be taller than a typical tray menu item.
   toggle_row_->SetExpandable(true);
   toggle_row_->tri_view()->SetInsets(kToggleRowTriViewInsets);
+
+  // ChromeVox users will just use the `toggle_row_` to toggle. Otherwise there
+  // is too much repetition in the accessibility descriptions.
+  toggle_icon_->GetViewAccessibility().OverrideIsIgnored(true);
+  toggle_row_->text_label()->GetViewAccessibility().OverrideIsIgnored(true);
+  toggle_button_->GetViewAccessibility().OverrideIsIgnored(true);
 }
 
 void BluetoothDetailedViewImpl::CreateMainContainer() {
@@ -220,9 +232,8 @@ void BluetoothDetailedViewImpl::CreateMainContainer() {
 
   views::Label* label = pair_new_device_view_->text_label();
   label->SetEnabledColorId(cros_tokens::kCrosSysPrimary);
-  // TODO(b/252872600): Apply the correct font to the label.
-  TrayPopupUtils::SetLabelFontList(
-      label, TrayPopupUtils::FontStyle::kDetailedViewLabel);
+  ash::TypographyProvider::Get()->StyleLabel(ash::TypographyToken::kCrosButton2,
+                                             *label);
 
   // The device list is a separate view because it cannot contain the "pair new
   // device" row.

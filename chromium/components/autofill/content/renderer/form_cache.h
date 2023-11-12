@@ -73,20 +73,18 @@ class FormCache {
   // To reduce the computational cost, we limit the number of fields and frames
   // summed over all forms, in addition to the per-form limits in
   // form_util::FormOrFieldsetsToFormData():
-  // - if the number of fields over all forms exceeds |kMaxParseableFields|,
+  // - if the number of fields over all forms exceeds |kMaxExtractableFields|,
   //   only a subset of forms is returned which does not exceed the limit;
-  // - if the number of frames over all forms exceeds kMaxParseableFrames, all
-  //   forms are returned but only a subset of them have non-empty
+  // - if the number of frames over all forms exceeds |kMaxExtractableFrames|,
+  //   all forms are returned but only a subset of them have non-empty
   //   FormData::child_frames.
   // In either case, the subset is chosen so that the returned list of forms
   // does not exceed the limits of fields and frames.
   //
-  // Updates |parsed_forms_| to contain the forms that are currently in the DOM.
+  // Updates |extracted_forms_| to contain the forms that are currently in the
+  // DOM.
   UpdateFormCacheResult UpdateFormCache(
       const FieldDataManager* field_data_manager);
-
-  // Resets the forms.
-  void Reset();
 
   // Clears the values of all input elements in the section of the form that
   // contains |element|.  Returns false if the form is not found.
@@ -108,12 +106,10 @@ class FormCache {
  private:
   friend class FormCacheTestApi;
 
-  // Scans |control_elements| and returns the number of editable elements.
-  // Also logs warning messages for deprecated attribute if
-  // |log_deprecation_messages| is set.
-  size_t ScanFormControlElements(
-      const std::vector<blink::WebFormControlElement>& control_elements,
-      bool log_deprecation_messages);
+  // Iterates through |control_elements| and returns whether there is an
+  // autofillable form control.
+  bool HasAutofillableFormControl(
+      const std::vector<blink::WebFormControlElement>& control_elements);
 
   // Saves initial state of checkbox and select elements.
   void SaveInitialValues(
@@ -132,10 +128,8 @@ class FormCache {
   // The frame this FormCache is associated with. Weak reference.
   blink::WebLocalFrame* frame_;
 
-  // Same as |parsed_forms_|, but moved to a different type. It is used only if
-  // `AutofillUseNewFormExtraction` feature is enabled.
-  // TODO(crbug/1215333): Remove |parsed_forms_| after the feature is deleted.
-  std::map<FormRendererId, FormData> parsed_forms_;
+  // The cached forms. Used to prevent re-extraction of forms.
+  std::map<FormRendererId, FormData> extracted_forms_;
 
   // The synthetic FormData is for all the fieldsets in the document without a
   // form owner.

@@ -93,6 +93,11 @@
               "optional": true,
               "description": "Background color for the badge text."
             },
+            "enabled": {
+              "type": "boolean",
+              "optional": true,
+              "description": "Whether the extension is enabled or not."
+            },
             "actionType": {
               "$ref": "ActionType",
               "optional": true,
@@ -120,7 +125,6 @@
             },
             "name": {
               "type": "string",
-              "optional": true,
               "description": "Name of extension."
             },
             "homepage": {

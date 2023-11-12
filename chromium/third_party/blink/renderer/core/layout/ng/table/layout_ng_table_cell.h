@@ -68,8 +68,6 @@ class CORE_EXPORT LayoutNGTableCell : public LayoutNGBlockFlow {
 
   // LayoutBlockFlow methods start.
 
-  void UpdateBlockLayout(bool relayout_children) override;
-
   void StyleDidChange(StyleDifference diff,
                       const ComputedStyle* old_style) final;
 
@@ -111,6 +109,12 @@ class CORE_EXPORT LayoutNGTableCell : public LayoutNGBlockFlow {
   bool IsOfType(LayoutObjectType type) const final {
     NOT_DESTROYED();
     return type == kLayoutObjectTableCell || LayoutNGBlockFlow::IsOfType(type);
+  }
+
+  // Table cell applies a special clip to its background.
+  bool ComputeCanCompositeBackgroundAttachmentFixed() const override {
+    NOT_DESTROYED();
+    return false;
   }
 
  private:

@@ -25,6 +25,7 @@ import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.omnibox.status.StatusView;
+import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.components.browser_ui.widget.CompositeTouchDelegate;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -55,6 +56,8 @@ public class LocationBarLayout extends FrameLayout {
     protected StatusCoordinator mStatusCoordinator;
 
     protected boolean mNativeInitialized;
+    protected boolean mHidingActionContainerForNarrowWindow;
+    protected int mMinimumUrlBarWidthPx;
 
     protected LinearLayout mUrlActionContainer;
 
@@ -83,6 +86,8 @@ public class LocationBarLayout extends FrameLayout {
         mUrlActionContainer = (LinearLayout) findViewById(R.id.url_action_container);
         mStatusViewLeftSpace = findViewById(R.id.location_bar_status_view_left_space);
         mStatusViewRightSpace = findViewById(R.id.location_bar_status_view_right_space);
+        mMinimumUrlBarWidthPx =
+                context.getResources().getDimensionPixelSize(R.dimen.location_bar_min_url_width);
 
         /** Vivaldi */
         mQrCodeButton = findViewById(R.id.qrcode_button);
@@ -113,7 +118,7 @@ public class LocationBarLayout extends FrameLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        updateLayoutParams();
+        updateLayoutParams(widthMeasureSpec);
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
     }
 
@@ -182,19 +187,20 @@ public class LocationBarLayout extends FrameLayout {
     }
 
     /**
-     * @return The margin to be applied to the URL bar based on the buttons currently visible next
-     *         to it, used to avoid text overlapping the buttons and vice versa.
+     * Returns the width of the url actions container, including its internal and external margins.
      */
-    private int getUrlContainerMarginEnd() {
+    private int getUrlActionContainerWidth() {
         int urlContainerMarginEnd = 0;
-        for (View childView : getUrlContainerViewsForMargin()) {
-            ViewGroup.MarginLayoutParams childLayoutParams =
-                    (ViewGroup.MarginLayoutParams) childView.getLayoutParams();
-            urlContainerMarginEnd += childLayoutParams.width
-                    + MarginLayoutParamsCompat.getMarginStart(childLayoutParams)
-                    + MarginLayoutParamsCompat.getMarginEnd(childLayoutParams);
-        }
-        if (mUrlActionContainer != null && mUrlActionContainer.getVisibility() == View.VISIBLE) {
+        // INVISIBLE views still take up space for the purpose of layout, so we consider the url
+        // action container's width unless it's GONE.
+        if (mUrlActionContainer != null && mUrlActionContainer.getVisibility() != View.GONE) {
+            for (View childView : getUrlContainerViewsForMargin()) {
+                ViewGroup.MarginLayoutParams childLayoutParams =
+                        (ViewGroup.MarginLayoutParams) childView.getLayoutParams();
+                urlContainerMarginEnd += childLayoutParams.width
+                        + MarginLayoutParamsCompat.getMarginStart(childLayoutParams)
+                        + MarginLayoutParamsCompat.getMarginEnd(childLayoutParams);
+            }
             ViewGroup.MarginLayoutParams urlActionContainerLayoutParams =
                     (ViewGroup.MarginLayoutParams) mUrlActionContainer.getLayoutParams();
             urlContainerMarginEnd +=
@@ -217,7 +223,7 @@ public class LocationBarLayout extends FrameLayout {
      * Updates the layout params for the location bar start aligned views.
      */
     @VisibleForTesting
-    void updateLayoutParams() {
+    void updateLayoutParams(int parentWidthMeasureSpec) {
         int startMargin = 0;
         for (int i = 0; i < getChildCount(); i++) {
             View childView = getChildAt(i);
@@ -256,10 +262,24 @@ public class LocationBarLayout extends FrameLayout {
             }
         }
 
-        int urlContainerMarginEnd = getUrlContainerMarginEnd();
+        int urlActionContainerWidth = getUrlActionContainerWidth();
+        int allocatedWidth = MeasureSpec.getSize(parentWidthMeasureSpec);
+        int availableWidth = allocatedWidth - startMargin - urlActionContainerWidth;
+        if (!mHidingActionContainerForNarrowWindow && availableWidth < mMinimumUrlBarWidthPx) {
+            mHidingActionContainerForNarrowWindow = true;
+            mUrlActionContainer.setVisibility(INVISIBLE);
+        } else if (mHidingActionContainerForNarrowWindow
+                && mUrlActionContainer.getVisibility() != VISIBLE
+                && availableWidth >= mMinimumUrlBarWidthPx) {
+            mHidingActionContainerForNarrowWindow = false;
+            mUrlActionContainer.setVisibility(VISIBLE);
+        }
+
+        int urlBarMarginEnd = mHidingActionContainerForNarrowWindow ? 0 : urlActionContainerWidth;
+
         LayoutParams urlLayoutParams = (LayoutParams) mUrlBar.getLayoutParams();
-        if (MarginLayoutParamsCompat.getMarginEnd(urlLayoutParams) != urlContainerMarginEnd) {
-            MarginLayoutParamsCompat.setMarginEnd(urlLayoutParams, urlContainerMarginEnd);
+        if (MarginLayoutParamsCompat.getMarginEnd(urlLayoutParams) != urlBarMarginEnd) {
+            MarginLayoutParamsCompat.setMarginEnd(urlLayoutParams, urlBarMarginEnd);
             mUrlBar.setLayoutParams(urlLayoutParams);
         }
     }
@@ -317,7 +337,11 @@ public class LocationBarLayout extends FrameLayout {
 
     /** Returns the increase in StatusView end padding, when the Url bar is focused. */
     public int getEndPaddingPixelSizeOnFocusDelta() {
-        return getResources().getDimensionPixelSize(R.dimen.location_bar_icon_end_padding_focused)
+        int focusedPaddingDimen = OmniboxFeatures.shouldShowModernizeVisualUpdate(getContext())
+                        && OmniboxFeatures.shouldShowSmallBottomMargin()
+                ? R.dimen.location_bar_icon_end_padding_focused_smaller
+                : R.dimen.location_bar_icon_end_padding_focused;
+        return getResources().getDimensionPixelSize(focusedPaddingDimen)
                 - getResources().getDimensionPixelSize(R.dimen.location_bar_icon_end_padding);
     }
 
@@ -344,9 +368,9 @@ public class LocationBarLayout extends FrameLayout {
 
         // Set the left space expansion width.
         ViewGroup.LayoutParams leftSpacingParams = mStatusViewLeftSpace.getLayoutParams();
-        leftSpacingParams.width = (int) (getResources().getDimensionPixelSize(
-                                                 R.dimen.location_bar_status_view_left_space_width)
-                * percent);
+        int fullSpacing = OmniboxResourceProvider.getFocusedStatusViewLeftSpacing(getContext());
+
+        leftSpacingParams.width = (int) (fullSpacing * percent);
         mStatusViewLeftSpace.setLayoutParams(leftSpacingParams);
     }
 

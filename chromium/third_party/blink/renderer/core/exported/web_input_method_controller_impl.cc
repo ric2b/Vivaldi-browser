@@ -156,9 +156,11 @@ bool WebInputMethodControllerImpl::CommitText(
   GetFrame()->GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kInput);
 
   if (!replacement_range.IsNull()) {
-    return GetInputMethodController().ReplaceText(
-        text, PlainTextRange(replacement_range.StartOffset(),
-                             replacement_range.EndOffset()));
+    return GetInputMethodController().ReplaceTextAndMoveCaret(
+        text,
+        PlainTextRange(replacement_range.StartOffset(),
+                       replacement_range.EndOffset()),
+        InputMethodController::MoveCaretBehavior::kDoNotMove);
   }
 
   return GetInputMethodController().CommitText(
@@ -201,7 +203,7 @@ bool WebInputMethodControllerImpl::IsVirtualKeyboardPolicyManual() const {
   return false;  // Default should always be automatic.
 }
 
-WebRange WebInputMethodControllerImpl::CompositionRange() {
+WebRange WebInputMethodControllerImpl::CompositionRange() const {
   if (IsEditContextActive()) {
     return GetInputMethodController()
         .GetActiveEditContext()

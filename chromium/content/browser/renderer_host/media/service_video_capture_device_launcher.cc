@@ -85,11 +85,8 @@ void ServiceVideoCaptureDeviceLauncher::LaunchDeviceAsync(
   auto scoped_trace = ScopedCaptureTrace::CreateIfEnabled(
       "ServiceVideoCaptureDeviceLauncher::LaunchDeviceAsync");
 
-  if (stream_type != blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE) {
-    // This launcher only supports MediaStreamType::DEVICE_VIDEO_CAPTURE.
-    NOTREACHED();
-    return;
-  }
+  // This launcher only supports MediaStreamType::DEVICE_VIDEO_CAPTURE.
+  CHECK_EQ(stream_type, blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE);
 
   connect_to_source_provider_cb_.Run(&service_connection_);
   if (!service_connection_->source_provider().is_bound()) {
@@ -154,11 +151,15 @@ void ServiceVideoCaptureDeviceLauncher::LaunchDeviceAsync(
       params.requested_format.pixel_format == media::PIXEL_FORMAT_NV12) {
     new_params.buffer_type = media::VideoCaptureBufferType::kGpuMemoryBuffer;
   }
-#else
+#elif BUILDFLAG(IS_MAC)
+  // For mac(https://crbug.com/1175142), zero-copy is always enabled unless the
+  // user explicitly asks to disable it.
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableVideoCaptureUseGpuMemoryBuffer) &&
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kVideoCaptureUseGpuMemoryBuffer)) {
+          switches::kDisableVideoCaptureUseGpuMemoryBuffer)) {
+    new_params.buffer_type = media::VideoCaptureBufferType::kGpuMemoryBuffer;
+  }
+#else
+  if (switches::IsVideoCaptureUseGpuMemoryBufferEnabled()) {
     new_params.buffer_type = media::VideoCaptureBufferType::kGpuMemoryBuffer;
   }
 #endif

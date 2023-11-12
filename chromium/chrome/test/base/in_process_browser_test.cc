@@ -15,6 +15,7 @@
 #include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
+#include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/sampling_heap_profiler/poisson_allocation_sampler.h"
@@ -201,7 +202,7 @@ class ChromeBrowserMainExtraPartsBrowserProcessInjection
         std::make_unique<device::FakeGeolocationManager>();
     fake_geolocation_manager->SetSystemPermission(
         device::LocationSystemPermissionStatus::kAllowed);
-    g_browser_process->SetGeolocationManager(
+    device::GeolocationManager::SetInstance(
         std::move(fake_geolocation_manager));
   }
 
@@ -520,14 +521,6 @@ void InProcessBrowserTest::TearDown() {
   ash::device_sync::DeviceSyncImpl::Factory::SetCustomFactory(nullptr);
   launch_browser_for_testing_ = nullptr;
 #endif
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (ash_process_.IsValid()) {
-    // Need to wait for the termination so the temporary user data dir
-    // can be cleaned up.
-    ash_process_.Terminate(0, /*wait=*/true);
-  }
-#endif
 }
 
 // static
@@ -783,9 +776,12 @@ void InProcessBrowserTest::PreRunTestOnMainThread() {
 
   SelectFirstBrowser();
   if (browser_) {
-    auto* tab = browser_->tab_strip_model()->GetActiveWebContents();
-    content::WaitForLoadStop(tab);
-    SetInitialWebContents(tab);
+    base::WeakPtr<content::WebContents> tab =
+        browser_->tab_strip_model()->GetActiveWebContents()->GetWeakPtr();
+    content::WaitForLoadStop(tab.get());
+    if (tab) {
+      SetInitialWebContents(tab.get());
+    }
   }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -878,17 +874,17 @@ void InProcessBrowserTest::StartUniqueAshChrome(
     const std::vector<std::string>& additional_cmdline_switches,
     const std::string& bug_number_and_reason) {
   DCHECK(!bug_number_and_reason.empty());
-  CHECK(!base::CommandLine::ForCurrentProcess()
-             ->GetSwitchValuePath("lacros-mojo-socket-for-testing")
-             .empty())
+  base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  CHECK(!cmdline->GetSwitchValuePath("lacros-mojo-socket-for-testing").empty())
       << "You can only start unique ash chrome when crosapi is enabled. "
       << "It should not be necessary otherwise.";
-  CHECK(unique_ash_user_data_dir_.CreateUniqueTempDir());
+  base::FilePath ash_dir_holder = cmdline->GetSwitchValuePath("unique-ash-dir");
+  CHECK(!ash_dir_holder.empty());
+  CHECK(unique_ash_user_data_dir_.CreateUniqueTempDirUnderPath(ash_dir_holder));
   base::FilePath socket_file =
       unique_ash_user_data_dir_.GetPath().Append("lacros.sock");
 
   // Reset the current test runner connecting to the unique ash chrome.
-  base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
   cmdline->RemoveSwitch("lacros-mojo-socket-for-testing");
   cmdline->AppendSwitchPath("lacros-mojo-socket-for-testing", socket_file);
   // Need unique socket name for wayland globally. So for each ash and lacros

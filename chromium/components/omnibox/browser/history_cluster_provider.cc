@@ -53,10 +53,9 @@ void HistoryClusterProvider::CompleteHistoryClustersMatch(
   // the traditional History/Journeys WebUI. As a side effect, it will also
   // record the action-centric metrics.
   DCHECK(match->actions.empty());
-  match->actions.push_back(
+  match->takeover_action =
       base::MakeRefCounted<history_clusters::HistoryClustersAction>(
-          matching_text, std::move(matched_keyword_data),
-          /*takes_over_match=*/true));
+          matching_text, std::move(matched_keyword_data));
 }
 
 void HistoryClusterProvider::Start(const AutocompleteInput& input,
@@ -66,8 +65,8 @@ void HistoryClusterProvider::Start(const AutocompleteInput& input,
   if (input.omit_asynchronous_matches())
     return;
 
-  if (!IsJourneysEnabledInOmnibox(client_->GetHistoryClustersService(),
-                                  client_->GetPrefs())) {
+  if (!client_->GetHistoryClustersService() ||
+      !client_->GetHistoryClustersService()->IsJourneysEnabledAndVisible()) {
     return;
   }
 
@@ -160,11 +159,7 @@ AutocompleteMatch HistoryClusterProvider::CreateMatch(
   //  Ideally, relevance would depend on how many keywords matched, how
   //  significant the keywords were, how significant their clusters were etc.
   match.relevance =
-      history_clusters::GetConfig()
-              .omnibox_history_cluster_provider_inherit_search_match_score
-          ? search_match.relevance - 1
-          : history_clusters::GetConfig()
-                .omnibox_history_cluster_provider_score;
+      history_clusters::GetConfig().omnibox_history_cluster_provider_score;
 
   const auto& text = search_match.contents;
 

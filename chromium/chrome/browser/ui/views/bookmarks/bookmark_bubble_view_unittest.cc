@@ -102,7 +102,7 @@ class BookmarkBubbleViewTest : public BrowserWithTestWindowTest {
     return factories;
   }
 
-  raw_ptr<BookmarkModel> GetBookmarkModel() { return bookmark_model_; }
+  BookmarkModel* GetBookmarkModel() { return bookmark_model_; }
 
  protected:
   // Creates a bookmark bubble view.
@@ -148,8 +148,8 @@ class BookmarkBubbleViewTest : public BrowserWithTestWindowTest {
  private:
   views::UniqueWidgetPtr anchor_widget_;
   base::test::ScopedFeatureList test_features_;
-  raw_ptr<BookmarkModel> bookmark_model_;
-  raw_ptr<MockShoppingListUiTabHelper> mock_tab_helper_;
+  raw_ptr<BookmarkModel, DanglingUntriaged> bookmark_model_;
+  raw_ptr<MockShoppingListUiTabHelper, DanglingUntriaged> mock_tab_helper_;
 };
 
 // Verifies that the sync promo is not displayed for a signed in user.
@@ -183,9 +183,10 @@ TEST_F(BookmarkBubbleViewTest, PriceTrackingViewIsVisible) {
 
   SimulateProductImageIsAvailable(/*with_valid_image=*/true);
 
+  commerce::ProductInfo info;
+  info.product_cluster_id.emplace(12345L);
   mock_shopping_service->SetIsSubscribedCallbackValue(false);
-  mock_shopping_service->SetResponseForGetProductInfoForUrl(
-      commerce::ProductInfo());
+  mock_shopping_service->SetResponseForGetProductInfoForUrl(info);
   CreateBubbleView();
   // Verify the view is displayed with toggle off.
   auto* price_tracking_view = GetPriceTrackingView();
@@ -227,8 +228,9 @@ TEST_F(BookmarkBubbleViewTest, PriceTrackingViewWithToggleOn) {
   commerce::MockShoppingService* mock_shopping_service =
       static_cast<commerce::MockShoppingService*>(
           commerce::ShoppingServiceFactory::GetForBrowserContext(profile()));
-  mock_shopping_service->SetResponseForGetProductInfoForUrl(
-      commerce::ProductInfo());
+  commerce::ProductInfo info;
+  info.product_cluster_id.emplace(12345L);
+  mock_shopping_service->SetResponseForGetProductInfoForUrl(info);
   SimulateProductImageIsAvailable(/*with_valid_image=*/true);
 
   CreateBubbleView();
@@ -269,8 +271,9 @@ TEST_P(PriceTrackingViewFeatureFlagTest, PriceTrackingViewCreation) {
   commerce::MockShoppingService* mock_shopping_service =
       static_cast<commerce::MockShoppingService*>(
           commerce::ShoppingServiceFactory::GetForBrowserContext(profile()));
-  mock_shopping_service->SetResponseForGetProductInfoForUrl(
-      commerce::ProductInfo());
+  commerce::ProductInfo info;
+  info.product_cluster_id.emplace(12345L);
+  mock_shopping_service->SetResponseForGetProductInfoForUrl(info);
 
   const bool is_feature_enabled = GetParam();
   mock_shopping_service->SetIsShoppingListEligible(is_feature_enabled);

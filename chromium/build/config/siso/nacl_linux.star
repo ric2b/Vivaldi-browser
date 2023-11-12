@@ -31,6 +31,19 @@ __filegroups = {
         "type": "glob",
         "includes": ["cc1", "cc1plus", "collect2"],
     },
+    # for precomputed subtrees
+    "native_client/toolchain/linux_x86/nacl_x86_glibc:header-files": {
+        "type": "glob",
+        "includes": ["*.h", "*/include/c++/*/*", "*/include/c++/*/*/*"],
+    },
+    "native_client/toolchain/linux_x86/pnacl_newlib:header-files": {
+        "type": "glob",
+        "includes": ["*.h", "*/include/c++/*/*", "*/include/c++/*/*/*"],
+    },
+    "native_client/toolchain/linux_x86/saigo_newlib:header-files": {
+        "type": "glob",
+        "includes": ["*.h", "*/include/c++/*/*", "*/include/c++/*/*/*"],
+    },
 }
 
 __handlers = {}
@@ -46,6 +59,7 @@ def __step_config(ctx, step_config):
             ],
             "remote": True,
             "input_root_absolute_path": True,
+            "timeout": "2m",
         },
         {
             "name": "nacl_linux/pnacl-clang",
@@ -56,6 +70,7 @@ def __step_config(ctx, step_config):
             ],
             "remote": True,
             "input_root_absolute_path": True,
+            "timeout": "2m",
         },
         {
             "name": "nacl_linux/glibc/x86_64-nacl-gcc",
@@ -90,6 +105,7 @@ def __step_config(ctx, step_config):
             ],
             "remote": True,
             "input_root_absolute_path": True,
+            "timeout": "2m",
         },
         {
             "name": "nacl_linux/pnacl_newlib/x86_64-nacl-clang",
@@ -100,6 +116,7 @@ def __step_config(ctx, step_config):
             ],
             "remote": True,
             "input_root_absolute_path": True,
+            "timeout": "2m",
         },
         {
             "name": "nacl_linux/saigo_newlib/x86_64-nacl-clang++",
@@ -110,6 +127,7 @@ def __step_config(ctx, step_config):
             ],
             "remote": True,
             "input_root_absolute_path": True,
+            "timeout": "2m",
         },
         {
             "name": "nacl_linux/saigo_newlib/x86_64-nacl-clang",
@@ -120,10 +138,28 @@ def __step_config(ctx, step_config):
             ],
             "remote": True,
             "input_root_absolute_path": True,
+            "timeout": "2m",
         },
     ])
 
     step_config["input_deps"].update({
+        "native_client/toolchain/linux_x86/nacl_x86_glibc:headers": [
+            "native_client/toolchain/linux_x86/nacl_x86_glibc/bin/x86_64-nacl-gcc",
+            "native_client/toolchain/linux_x86/nacl_x86_glibc/bin/x86_64-nacl-g++",
+            "native_client/toolchain/linux_x86/nacl_x86_glibc:header-files",
+        ],
+        "native_client/toolchain/linux_x86/pnacl_newlib:headers": [
+            "native_client/toolchain/linux_x86/pnacl_newlib/bin/pnacl-clang",
+            "native_client/toolchain/linux_x86/pnacl_newlib/bin/pnacl-clang++",
+            "native_client/toolchain/linux_x86/pnacl_newlib/bin/x86_64-nacl-clang",
+            "native_client/toolchain/linux_x86/pnacl_newlib/bin/x86_64-nacl-clang++",
+            "native_client/toolchain/linux_x86/pnacl_newlib:header-files",
+        ],
+        "native_client/toolchain/linux_x86/saigo_newlib:headers": [
+            "native_client/toolchain/linux_x86/saigo_newlib/bin/x86_64-nacl-clang",
+            "native_client/toolchain/linux_x86/saigo_newlib/bin/x86_64-nacl-clang++",
+            "native_client/toolchain/linux_x86/saigo_newlib:header-files",
+        ],
         "native_client/toolchain/linux_x86/pnacl_newlib/bin/pnacl-clang": [
             "native_client/toolchain/linux_x86/pnacl_newlib/bin/clang",
             "native_client/toolchain/linux_x86/pnacl_newlib/bin/driver.conf",

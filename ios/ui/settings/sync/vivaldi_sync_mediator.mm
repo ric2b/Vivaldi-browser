@@ -7,16 +7,18 @@
 #import "base/files/file_util.h"
 #import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
+#import "base/task/thread_pool.h"
+#import "base/threading/scoped_blocking_call.h"
 #import "base/values.h"
 #import "components/language/core/browser/pref_names.h"
 #import "components/os_crypt/sync/os_crypt.h"
 #import "components/prefs/pref_service.h"
 #import "components/sync/base/command_line_switches.h"
 #import "components/sync/base/user_selectable_type.h"
-#import "components/sync/driver/sync_service_observer.h"
-#import "components/sync/driver/sync_service.h"
-#import "components/sync/driver/sync_user_settings.h"
-#import "ios/chrome/browser/application_context/application_context.h"
+#import "components/sync/service/sync_service_observer.h"
+#import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_user_settings.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_button_item.h"
@@ -179,7 +181,6 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   EngineData engineData;
   VivaldiSyncUIHelper::CycleData cycleData;
   bool loggingOut;
-  base::flat_map<int, int> background_color_map;
 }
 
 @end
@@ -207,12 +208,6 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
     self.formatter = [[NSDateFormatter alloc] init];
     [self.formatter setDateFormat:@"dd/MM/yyyy HH:mm:ss"];
 
-    background_color_map = {
-        {kSyncStatusGreenColor, kSyncStatusGreenBackgroundColor},
-        {kSyncStatusBlueColor, kSyncStatusBlueBackgroundColor},
-        {kSyncStatusRedColor, kSyncStatusRedBackgroundColor},
-        {kSyncStatusYellowColor, kSyncStatusYellowBackgroundColor}};
-
     // The order must match the SyncType enum
     self.segmentedControlLabels = [NSArray arrayWithObjects:
         l10n_util::GetNSString(IDS_VIVALDI_SYNC_AUTOMATIC_TITLE),
@@ -231,8 +226,8 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 
 - (void)startMediating {
   DCHECK(self.commandHandler);
-  // TODO(tomas@vivaldi.com): Implement missing account states
   switch ([self getSimplifiedAccountState]) {
+    case LOGGING_IN:
     case LOGGED_IN: {
       [self onSyncStateChanged];
       break;
@@ -296,8 +291,6 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
       [self.commandHandler loginFailed:errorMessage];
       break;
     }
-    case LOGGING_IN:
-      break;
     default:
       NOTREACHED();
       break;
@@ -428,7 +421,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
     case EngineState::STARTING:
     case EngineState::STARTING_SERVER_ERROR:
     case EngineState::CLEARING_DATA:
-      [self reloadSyncStatusItem:engineData];
+      [self reloadSyncStatusItem];
       break;
     case EngineState::CONFIGURATION_PENDING:
     case EngineState::STARTED:
@@ -441,7 +434,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
         [self.commandHandler showSyncCreateEncryptionPasswordView];
       } else {
         [self.commandHandler showSyncSettingsView];
-        [self reloadSyncStatusItem:engineData];
+        [self reloadSyncStatusItem];
       }
       break;
     default:
@@ -480,20 +473,28 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 
 #pragma mark - VivaldiSyncSettingsViewControllerServiceDelegate
 
-- (void)backupEncryptionKeyButtonPressed {
-  // TODO(tomas@vivaldi.com): Implement this differently. Let the user
-  // pick where to save the file and show a warning, similar to
-  // export passwords.
+- (void)removeTempBackupEncryptionKeyFile:(NSString*)filePath {
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::BindOnce(^{
+        NSFileManager* fileManager = [NSFileManager defaultManager];
+        base::ScopedBlockingCall scoped_blocking_call(
+            FROM_HERE, base::BlockingType::WILL_BLOCK);
+        [fileManager removeItemAtPath:filePath error:nil];
+      }));
+}
 
-  NSString* file_path = [GetBackupEncryptionKeyPath()
+- (NSString*)createTempBackupEncryptionKeyFile {
+  NSString* filePath = [NSTemporaryDirectory()
       stringByAppendingPathComponent:@"BackupEncryptionKey.txt"];
 
   NSString* key = SysUTF8ToNSString(
     _syncService->ui_helper()->GetBackupEncryptionToken());
-  [key writeToFile:file_path
+  [key writeToFile:filePath
         atomically:YES
           encoding:NSUTF8StringEncoding
              error:nil];
+  return filePath;
 }
 
 - (void)clearSyncDataWithNoWarning {
@@ -509,6 +510,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   loggingOut = true;
   _vivaldiAccountManager->Logout();
   [self clearPendingRegistration];
+  [self.commandHandler resetViewControllers];
   [self.commandHandler showSyncLoginView];
 }
 
@@ -543,6 +545,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
     [self.settingsConsumer.tableView performBatchUpdates:^{
       [self removeItemsFromUI:self.syncAllItems];
       self.segmentedControlItem.selectedItem = SyncSelected;
+      [self refreshSyncSelectedItems];
       [self addItemsToUI:self.syncSelectedItems
           toSection:SectionIdentifierSyncItems];
       [self updateStartSyncingSection];
@@ -590,18 +593,14 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 
 #pragma mark - Private Methods
 
-NSString* FormattedString(int message_id) {
-  return [@"  " stringByAppendingString:l10n_util::GetNSString(message_id)];
-}
-
 - (void)updateSyncStatusItem {
   NSString* statusText;
   int color = 0;
   NSDate* lastSyncDate = nil;
 
   if (engineData.engine_state == EngineState::FAILED) {
-    statusText = FormattedString(IDS_VIVALDI_SYNC_FAILED);
-    color = kSyncStatusRedColor;
+    statusText = l10n_util::GetNSString(IDS_VIVALDI_SYNC_FAILED);
+    color = kSyncStatusRedBackgroundColor;
     // TODO(tomas@vivaldi.com): Some of these strings are not used on the
     // android side, only on desktop. Should they be used on iOS?
     if (engineData.disable_reasons.Has(
@@ -609,16 +608,17 @@ NSString* FormattedString(int message_id) {
       // We might enter this state for a brief moment after login while
       // the credentials are being passed to sync itself.
       statusText = @"Waiting for account details";
-      color = kSyncStatusYellowColor;
+      color = kSyncStatusYellowBackgroundColor;
     } else if (!syncer::IsSyncAllowedByFlag()) {
       // Disabled by command line flag
       statusText = @"Sync was disabled from the command line";
-      color = kSyncStatusYellowColor;
+      color = kSyncStatusYellowBackgroundColor;
     } else if (engineData.disable_reasons.Has(
         SyncService::DISABLE_REASON_UNRECOVERABLE_ERROR)) {
       switch (engineData.protocol_error_client_action) {
         case ClientAction::UPGRADE_CLIENT:
-          statusText = FormattedString(IDS_VIVALDI_SYNC_CLIENT_NEEDS_UPDATE);
+          statusText =
+              l10n_util::GetNSString(IDS_VIVALDI_SYNC_CLIENT_NEEDS_UPDATE);
           break;
         default:
           statusText = @"Sync must be restarted: ";
@@ -627,33 +627,33 @@ NSString* FormattedString(int message_id) {
       }
     }
   } else if (engineData.engine_state == EngineState::CLEARING_DATA) {
-    statusText = FormattedString(IDS_VIVALDI_SYNC_CLEARING_SERVER_DATA);
-    color = kSyncStatusBlueColor;
+    statusText = l10n_util::GetNSString(IDS_VIVALDI_SYNC_CLEARING_SERVER_DATA);
+    color = kSyncStatusBlueBackgroundColor;
   } else if (engineData.engine_state == EngineState::CONFIGURATION_PENDING) {
-    statusText = FormattedString(IDS_SYNC_ALL_SET_TEXT);
-    color = kSyncStatusBlueColor;
+    statusText = l10n_util::GetNSString(IDS_SYNC_ALL_SET_TEXT);;
+    color = kSyncStatusBlueBackgroundColor;
   } else if (engineData.engine_state == EngineState::STARTED) {
     if (cycleData.download_updates_status ==
             VivaldiSyncUIHelper::CycleStatus::SUCCESS &&
         cycleData.commit_status == VivaldiSyncUIHelper::CycleStatus::SUCCESS) {
-      statusText = FormattedString([self getCycleStatusMessageId:
+      statusText = l10n_util::GetNSString([self getCycleStatusMessageId:
           cycleData.commit_status]);
       color = [self getCycleStatusColor:cycleData.commit_status];
       lastSyncDate = cycleData.cycle_start_time.ToNSDate();
     } else {
-      statusText = FormattedString([self getCycleStatusMessageId:
+      statusText = l10n_util::GetNSString([self getCycleStatusMessageId:
           cycleData.download_updates_status]);
       color = [self getCycleStatusColor:cycleData.download_updates_status];
     }
   } else if (engineData.engine_state == EngineState::STARTING_SERVER_ERROR) {
-    statusText = FormattedString(IDS_VIVALDI_SYNC_WAITING_SERVER_ERROR);
-    color = kSyncStatusYellowColor;
+    statusText = l10n_util::GetNSString(IDS_VIVALDI_SYNC_WAITING_SERVER_ERROR);
+    color = kSyncStatusYellowBackgroundColor;
   } else if (engineData.engine_state == EngineState::STARTING) {
-    statusText = FormattedString(IDS_VIVALDI_SYNC_INITIALIZING);
-    color = kSyncStatusBlueColor;
+    statusText = l10n_util::GetNSString(IDS_VIVALDI_SYNC_INITIALIZING);
+    color = kSyncStatusBlueBackgroundColor;
   } else if (engineData.engine_state == EngineState::STOPPED) {
     statusText = @" ";
-    color = kSyncStatusYellowColor;
+    color = kSyncStatusYellowBackgroundColor;
     if (engineData.protocol_error_client_action ==
         ClientAction::DISABLE_SYNC_ON_CLIENT) {
       // TODO(tomas@vivaldi.com): These strings are not used on the
@@ -685,11 +685,8 @@ NSString* FormattedString(int message_id) {
   }
   self.syncStatusItem.statusText = statusText;
   if (color > 0) {
-    self.syncStatusItem.statusIndicatorColor = UIColorFromRGB(color);
-    self.syncStatusItem.statusBackgroundColor =
-        UIColorFromRGB(background_color_map[color]);
+    self.syncStatusItem.statusBackgroundColor = UIColorFromRGB(color);
   } else {
-    self.syncStatusItem.statusIndicatorColor = [UIColor clearColor];
     self.syncStatusItem.statusBackgroundColor = [UIColor clearColor];
   }
 }
@@ -700,8 +697,6 @@ NSString* FormattedString(int message_id) {
       return IDS_VIVALDI_SYNC_NOT_SYNCED_CYCLE;
     case VivaldiSyncUIHelper::CycleStatus::SUCCESS:
       return IDS_VIVALDI_SYNC_SUCCESS;
-    case VivaldiSyncUIHelper::CycleStatus::IN_PROGRESS:
-      return IDS_VIVALDI_SYNC_APPLYING_CHANGES;
     case VivaldiSyncUIHelper::CycleStatus::AUTH_ERROR:
       return IDS_VIVALDI_SYNC_AUTH_ERROR;
     case VivaldiSyncUIHelper::CycleStatus::SERVER_ERROR:
@@ -720,22 +715,20 @@ NSString* FormattedString(int message_id) {
 - (int)getCycleStatusColor:(int)status {
   switch (status) {
     case VivaldiSyncUIHelper::CycleStatus::SUCCESS:
-      return kSyncStatusGreenColor;
-    case VivaldiSyncUIHelper::CycleStatus::IN_PROGRESS:
-      return kSyncStatusBlueColor;
+      return kSyncStatusGreenBackgroundColor;
     case VivaldiSyncUIHelper::CycleStatus::NOT_SYNCED:
     case VivaldiSyncUIHelper::CycleStatus::NETWORK_ERROR:
     case VivaldiSyncUIHelper::CycleStatus::THROTTLED:
-      return kSyncStatusYellowColor;
+      return kSyncStatusYellowBackgroundColor;
     case VivaldiSyncUIHelper::CycleStatus::AUTH_ERROR:
     case VivaldiSyncUIHelper::CycleStatus::SERVER_ERROR:
     case VivaldiSyncUIHelper::CycleStatus::CONFLICT:
     default:
-      return kSyncStatusRedColor;
+      return kSyncStatusRedBackgroundColor;
   }
 }
 
-- (void) reloadSyncStatusItem:(EngineData)engineData {
+- (void) reloadSyncStatusItem {
   if (!self.settingsConsumer) {
     return;
   }
@@ -744,7 +737,8 @@ NSString* FormattedString(int message_id) {
   [self.settingsConsumer reloadItem:self.syncStatusItem];
 
   if ([self.settingsConsumer.tableViewModel
-      hasSectionForSectionIdentifier:SectionIdentifierSyncStartSyncing]) {
+      hasSectionForSectionIdentifier:SectionIdentifierSyncStartSyncing] &&
+      self.startSyncingButton.enabled != [self getStartSyncingButtonEnabled]) {
     self.startSyncingButton.enabled = [self getStartSyncingButtonEnabled];
     [self.settingsConsumer reloadSection:SectionIdentifierSyncStartSyncing];
   }
@@ -763,6 +757,9 @@ NSString* FormattedString(int message_id) {
       _vivaldiAccountManager->account_info();
   self.userInfoItem = [[VivaldiTableViewSyncUserInfoItem alloc]
       initWithType:ItemTypeSyncUserInfo];
+  // Add a default avatar image
+  self.userInfoItem.userAvatar =
+      [UIImage systemImageNamed:@"person.circle.fill"];
   self.userInfoItem.userName = SysUTF8ToNSString(account_info.username);
   [self.settingsConsumer.tableViewModel setHeader:self.userInfoItem
       forSectionWithIdentifier:SectionIdentifierSyncUserInfo];
@@ -772,6 +769,10 @@ NSString* FormattedString(int message_id) {
       [NSURL URLWithString:SysUTF8ToNSString(account_info.picture_url)];
   [self fetchProfilePicture:profileImageURL
     completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
+    if (error) {
+      return;
+    }
+
     dispatch_async(dispatch_get_main_queue(), ^{
       weakSelf.userInfoItem.userAvatar = [UIImage imageWithData:data];
       [weakSelf.settingsConsumer reloadSection:SectionIdentifierSyncUserInfo];
@@ -814,10 +815,18 @@ NSString* FormattedString(int message_id) {
 
   bool syncAllData = _syncService->GetUserSettings()->IsSyncEverythingEnabled();
   self.segmentedControlItem.labels = self.segmentedControlLabels;
+  self.segmentedControlItem.selectedItem = syncAllData ? SyncAll : SyncSelected;
   [model addItem:self.segmentedControlItem
       toSectionWithIdentifier:SectionIdentifierSyncItems];
   [self initSyncItemArrays];
-  [self syncAllOptionChanged:syncAllData];
+
+  if (syncAllData) {
+    [self addItemsToUI:self.syncAllItems
+        toSection:SectionIdentifierSyncItems];
+  } else {
+    [self addItemsToUI:self.syncSelectedItems
+        toSection:SectionIdentifierSyncItems];
+  }
 }
 
 - (void) addStartSyncingSection {
@@ -922,7 +931,7 @@ NSString* FormattedString(int message_id) {
     return;
   }
   ChromeTableViewController* tableViewController =
-    base::mac::ObjCCast<ChromeTableViewController>(self.settingsConsumer);
+      base::mac::ObjCCast<ChromeTableViewController>(self.settingsConsumer);
   [tableViewController removeFromModelItemAtIndexPaths:indexPaths];
   [self.settingsConsumer.tableView deleteRowsAtIndexPaths:indexPaths
                       withRowAnimation:UITableViewRowAnimationAutomatic];
@@ -1014,6 +1023,30 @@ NSString* FormattedString(int message_id) {
   ];
 }
 
+- (void)refreshSyncSelectedItems {
+  for (TableViewSwitchItem* item in _syncSelectedItems) {
+    switch (item.type) {
+      case ItemTypeSyncBookmarksSwitch:
+        item.on = engineData.data_types.Has(UserSelectableType::kBookmarks);
+        break;
+      case ItemTypeSyncSettingsSwitch:
+        item.on = engineData.data_types.Has(UserSelectableType::kPreferences);
+        break;
+      case ItemTypeSyncPasswordsSwitch:
+        item.on = engineData.data_types.Has(UserSelectableType::kPasswords);
+        break;
+      case ItemTypeSyncAutofillSwitch:
+        item.on = engineData.data_types.Has(UserSelectableType::kAutofill);
+        break;
+      case ItemTypeSyncHistorySwitch:
+        item.on = engineData.data_types.Has(UserSelectableType::kHistory);
+        break;
+      default:
+        break;
+    }
+  }
+}
+
 -(NSInteger)getSimplifiedAccountState {
   if (_vivaldiAccountManager->has_refresh_token()) {
     return LOGGED_IN;
@@ -1038,7 +1071,7 @@ NSString* FormattedString(int message_id) {
   }
 
   _syncService->GetUserSettings()->SetSelectedTypes(syncAll, types);
-  _syncService->GetUserSettings()->SetFirstSetupComplete(
+  _syncService->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
         syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
 
   _syncSetupInProgressHandle.reset();
@@ -1117,10 +1150,10 @@ NSString* FormattedString(int message_id) {
   base::Base64Encode(encrypted_password, &encoded_password);
   base::Value pending_registration(base::Value::Type::DICT);
 
-  pending_registration.SetStringKey(kRecoveryEmailKey,
+  pending_registration.GetDict().Set(kRecoveryEmailKey,
       pendingRegistration.recoveryEmailAddress);
-  pending_registration.SetStringKey(kUsernameKey, pendingRegistration.username);
-  pending_registration.SetStringKey(kPasswordKey, encoded_password);
+  pending_registration.GetDict().Set(kUsernameKey, pendingRegistration.username);
+  pending_registration.GetDict().Set(kPasswordKey, encoded_password);
 
   _prefService->Set(vivaldiprefs::kVivaldiAccountPendingRegistration,
               pending_registration);
@@ -1131,11 +1164,11 @@ NSString* FormattedString(int message_id) {
       vivaldiprefs::kVivaldiAccountPendingRegistration);
 
   const std::string* username =
-      pref_value.FindStringKey(kUsernameKey);
+      pref_value.GetDict().FindString(kUsernameKey);
   const std::string* encoded_password =
-      pref_value.FindStringKey(kPasswordKey);
+      pref_value.GetDict().FindString(kPasswordKey);
   const std::string* recovery_email =
-      pref_value.FindStringKey(kRecoveryEmailKey);
+      pref_value.GetDict().FindString(kRecoveryEmailKey);
 
   if (!username || !encoded_password || !recovery_email)
     return nullptr;

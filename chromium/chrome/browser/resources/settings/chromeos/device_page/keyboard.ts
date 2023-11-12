@@ -9,9 +9,9 @@
 
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
-import '../../controls/settings_slider.js';
-import '../../controls/settings_toggle_button.js';
-import '../../settings_shared.css.js';
+import '/shared/settings/controls/settings_slider.js';
+import '/shared/settings/controls/settings_toggle_button.js';
+import '../settings_shared.css.js';
 import '/shared/settings/controls/settings_dropdown_menu.js';
 
 import {DropdownMenuOptionList} from '/shared/settings/controls/settings_dropdown_menu.js';
@@ -24,9 +24,8 @@ import {castExists} from '../assert_extras.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {FocusConfig} from '../focus_config.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route, Router} from '../router.js';
+import {Route, Router, routes} from '../router.js';
 
 import {DevicePageBrowserProxy, DevicePageBrowserProxyImpl} from './device_page_browser_proxy.js';
 import {getTemplate} from './keyboard.html.js';
@@ -138,6 +137,17 @@ class SettingsKeyboardElement extends SettingsKeyboardElementBase {
           Setting.kShowDiacritic,
         ]),
       },
+
+      /**
+       * Whether settings should be split per device.
+       */
+      isDeviceSettingsSplitEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('enableInputDeviceSettingsSplit');
+        },
+        readOnly: true,
+      },
     };
   }
 
@@ -151,6 +161,7 @@ class SettingsKeyboardElement extends SettingsKeyboardElementBase {
   private showExternalMetaKey_: boolean;
   private shouldShowDiacriticSetting_ =
       loadTimeData.getBoolean('allowDiacriticsOnPhysicalKeyboardLongpress');
+  private isDeviceSettingsSplitEnabled_: boolean;
 
   constructor() {
     super();
@@ -172,7 +183,16 @@ class SettingsKeyboardElement extends SettingsKeyboardElementBase {
     if (route !== routes.KEYBOARD) {
       return;
     }
-
+    if (Router.getInstance().currentRoute === routes.KEYBOARD &&
+        this.isDeviceSettingsSplitEnabled_) {
+      // Call setCurrentRoute function to go to the per device keyboard subpage
+      // when the feature flag is turned on. We don't use navigateTo function
+      // since we don't want to navigate back to the previous keyboard subpage.
+      setTimeout(() => {
+        Router.getInstance().setCurrentRoute(
+            routes.PER_DEVICE_KEYBOARD, new URLSearchParams(), false);
+      });
+    }
     this.attemptDeepLink();
   }
 

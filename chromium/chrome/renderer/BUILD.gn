@@ -8,6 +8,7 @@ import("//build/config/features.gni")
 import("//chrome/common/features.gni")
 import("//components/nacl/features.gni")
 import("//components/offline_pages/buildflags/features.gni")
+import("//components/signin/features.gni")
 import("//components/spellcheck/spellcheck_build_features.gni")
 import("//extensions/buildflags/buildflags.gni")
 import("//media/media_options.gni")
@@ -93,8 +94,8 @@ static_library("renderer") {
     "plugins/pdf_plugin_placeholder.h",
     "plugins/plugin_uma.cc",
     "plugins/plugin_uma.h",
-    "sync_encryption_keys_extension.cc",
-    "sync_encryption_keys_extension.h",
+    "trusted_vault_encryption_keys_extension.cc",
+    "trusted_vault_encryption_keys_extension.h",
     "url_loader_throttle_provider_impl.cc",
     "url_loader_throttle_provider_impl.h",
     "v8_unwinder.cc",
@@ -115,6 +116,15 @@ static_library("renderer") {
     ]
   }
 
+  if (enable_bound_session_credentials) {
+    sources += [
+      "bound_session_credentials/bound_session_request_throttled_in_renderer_manager.cc",
+      "bound_session_credentials/bound_session_request_throttled_in_renderer_manager.h",
+      "bound_session_credentials/bound_session_request_throttled_listener_renderer_impl.cc",
+      "bound_session_credentials/bound_session_request_throttled_listener_renderer_impl.h",
+    ]
+  }
+
   defines = []
 
   public_deps = [
@@ -132,6 +142,7 @@ static_library("renderer") {
     "//chrome/common/cart:mojo_bindings",
     "//chrome/common/net",
     "//chrome/common/search:mojo_bindings",
+    "//chrome/renderer/companion/visual_search",
     "//chrome/services/speech/buildflags",
     "//components/autofill/content/renderer",
     "//components/autofill/core/common:features",
@@ -151,6 +162,7 @@ static_library("renderer") {
     "//components/feed/content/renderer:feed_renderer",
     "//components/heap_profiling/in_process",
     "//components/history_clusters/core",
+    "//components/language/core/common",
     "//components/lens",
     "//components/lens:lens_mojo",
     "//components/metrics:child_call_stack_profile_builder",
@@ -159,6 +171,7 @@ static_library("renderer") {
     "//components/no_state_prefetch/renderer",
     "//components/omnibox/common",
     "//components/optimization_guide/content/renderer",
+    "//components/optimization_guide/core:features",
     "//components/page_image_annotation/content/renderer",
     "//components/page_load_metrics/renderer",
     "//components/paint_preview/buildflags",
@@ -180,7 +193,7 @@ static_library("renderer") {
     "//components/subresource_filter/content/renderer",
     "//components/subresource_filter/core/common",
     "//components/supervised_user/core/common:buildflags",
-    "//components/sync/driver",
+    "//components/sync/service",
     "//components/translate/content/renderer",
     "//components/translate/core/common",
     "//components/translate/core/language_detection",
@@ -215,6 +228,7 @@ static_library("renderer") {
     "//third_party/libwebp",
     "//third_party/re2",
     "//third_party/widevine/cdm:buildflags",
+    "//ui/gfx/geometry:geometry",
     "//ui/surface",
     "//v8",
   ]
@@ -420,6 +434,7 @@ static_library("renderer") {
       "//components/crx_file",
       "//components/services/screen_ai/buildflags",
       "//components/services/screen_ai/public/mojom",
+      "//third_party/re2:re2",
     ]
   }
 

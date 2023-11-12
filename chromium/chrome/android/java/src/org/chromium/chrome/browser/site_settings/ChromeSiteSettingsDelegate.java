@@ -40,6 +40,7 @@ import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.content_public.common.ContentFeatures;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.url.GURL;
@@ -118,15 +119,15 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
                 return ChromeFeatureList.isEnabled(
                         ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING);
             case SiteSettingsCategory.Type.BLUETOOTH:
-                return ContentFeatureList.isEnabled(
+                return ContentFeatureMap.isEnabled(
                         ContentFeatureList.WEB_BLUETOOTH_NEW_PERMISSIONS_BACKEND);
             case SiteSettingsCategory.Type.BLUETOOTH_SCANNING:
                 return CommandLine.getInstance().hasSwitch(
                         ContentSwitches.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES);
             case SiteSettingsCategory.Type.FEDERATED_IDENTITY_API:
-                return ContentFeatureList.isEnabled(ContentFeatures.FED_CM);
+                return ContentFeatureMap.isEnabled(ContentFeatures.FED_CM);
             case SiteSettingsCategory.Type.NFC:
-                return ContentFeatureList.isEnabled(ContentFeatureList.WEB_NFC);
+                return ContentFeatureMap.isEnabled(ContentFeatureList.WEB_NFC);
             default:
                 return true;
         }
@@ -163,8 +164,8 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     }
 
     @Override
-    @Nullable
-    public String getDelegateAppNameForOrigin(Origin origin, @ContentSettingsType int type) {
+    public @Nullable String getDelegateAppNameForOrigin(
+            Origin origin, @ContentSettingsType int type) {
         if (type == ContentSettingsType.NOTIFICATIONS) {
             return InstalledWebappPermissionManager.get().getDelegateAppName(origin);
         }
@@ -173,8 +174,8 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     }
 
     @Override
-    @Nullable
-    public String getDelegatePackageNameForOrigin(Origin origin, @ContentSettingsType int type) {
+    public @Nullable String getDelegatePackageNameForOrigin(
+            Origin origin, @ContentSettingsType int type) {
         if (type == ContentSettingsType.NOTIFICATIONS) {
             return InstalledWebappPermissionManager.get().getDelegatePackageName(origin);
         }
@@ -189,16 +190,14 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
 
     @Override
     public void launchSettingsHelpAndFeedbackActivity(Activity currentActivity) {
-        HelpAndFeedbackLauncherImpl.getForProfile(Profile.getLastUsedRegularProfile())
-                .show(currentActivity, currentActivity.getString(R.string.help_context_settings),
-                        null);
+        HelpAndFeedbackLauncherImpl.getForProfile(mProfile).show(
+                currentActivity, currentActivity.getString(R.string.help_context_settings), null);
     }
 
     @Override
     public void launchProtectedContentHelpAndFeedbackActivity(Activity currentActivity) {
-        HelpAndFeedbackLauncherImpl.getForProfile(Profile.getLastUsedRegularProfile())
-                .show(currentActivity,
-                        currentActivity.getString(R.string.help_context_protected_content), null);
+        HelpAndFeedbackLauncherImpl.getForProfile(mProfile).show(currentActivity,
+                currentActivity.getString(R.string.help_context_protected_content), null);
     }
 
     @Override
@@ -229,7 +228,7 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     }
 
     private boolean isAnyPrivacySandboxApiEnabledV4() {
-        PrefService prefs = UserPrefs.get(Profile.getLastUsedRegularProfile());
+        PrefService prefs = UserPrefs.get(mProfile);
         return prefs.getBoolean(Pref.PRIVACY_SANDBOX_M1_TOPICS_ENABLED)
                 || prefs.getBoolean(Pref.PRIVACY_SANDBOX_M1_AD_MEASUREMENT_ENABLED)
                 || prefs.getBoolean(Pref.PRIVACY_SANDBOX_M1_FLEDGE_ENABLED);

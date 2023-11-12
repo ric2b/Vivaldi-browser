@@ -157,10 +157,6 @@ const std::vector<SearchConcept>& GetEmojiSuggestionSearchConcepts() {
   return *tags;
 }
 
-bool IsPredictiveWritingAllowed() {
-  return features::IsAssistiveMultiWordEnabled();
-}
-
 // TODO(crbug/1113611): As Smart Inputs page is renamed to Suggestions.
 // All related strings, function names and filenames should be renamed as well.
 void AddSmartInputsStrings(content::WebUIDataSource* html_source,
@@ -176,7 +172,10 @@ void AddSmartInputsStrings(content::WebUIDataSource* html_source,
   html_source->AddBoolean("allowEmojiSuggestion", is_emoji_suggestion_allowed);
 }
 
-void AddInputMethodOptionsStrings(content::WebUIDataSource* html_source) {
+void AddInputMethodOptionsStrings(
+    content::WebUIDataSource* html_source,
+    bool is_physical_keyboard_autocorrect_allowed,
+    bool is_physical_keyboard_predictive_writing_allowed) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"inputMethodOptionsBasicSectionTitle",
        IDS_SETTINGS_INPUT_METHOD_OPTIONS_BASIC},
@@ -342,8 +341,12 @@ void AddInputMethodOptionsStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_INPUT_METHOD_OPTIONS_KEYBOARD_COLEMAK},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
-  html_source->AddBoolean("allowPredictiveWriting",
-                          IsPredictiveWritingAllowed());
+  html_source->AddBoolean("isPhysicalKeyboardAutocorrectAllowed",
+                          is_physical_keyboard_autocorrect_allowed);
+  html_source->AddBoolean(
+      "isPhysicalKeyboardPredictiveWritingAllowed",
+      base::FeatureList::IsEnabled(features::kAssistMultiWord) &&
+          is_physical_keyboard_predictive_writing_allowed);
   html_source->AddBoolean(
       "allowDiacriticsOnPhysicalKeyboardLongpress",
       base::FeatureList::IsEnabled(
@@ -547,7 +550,10 @@ void LanguagesSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
           IDS_SETTINGS_LANGUAGES_LANGUAGE_PACKS_NOTICE,
           base::ASCIIToUTF16(chrome::kLanguagePacksLearnMoreURL)));
   AddSmartInputsStrings(html_source, IsEmojiSuggestionAllowed());
-  AddInputMethodOptionsStrings(html_source);
+  AddInputMethodOptionsStrings(
+      html_source,
+      input_method::IsPhysicalKeyboardAutocorrectAllowed(*pref_service_),
+      input_method::IsPhysicalKeyboardPredictiveWritingAllowed(*pref_service_));
   AddLanguagesPageStringsV2(html_source);
   AddInputPageStringsV2(html_source);
 

@@ -4,6 +4,12 @@
     flex-direction: column;
     outline: none;
     position: relative;
+
+    /* The margin and padding here are doing two things: make the total
+    * separation 24px; and make scrollIntoView align the section header
+    * with the top item in the side nav menu. Both things are desired
+    * by Alan (bettes@). */
+    margin-bottom: 3px;
   }
 
   #header .title {
@@ -18,7 +24,7 @@
     padding-top: 8px;
   }
 
-  :host(:not(.expanded)) #card {
+  #card {
     background-color: var(--cr-card-background-color);
     border-radius: var(--cr-card-border-radius);
     box-shadow: var(--cr-card-shadow);
@@ -26,21 +32,8 @@
     overflow: hidden;
   }
 
-  :host-context(body.jelly-enabled):host(:not(.expanded)) #card {
+  :host-context(body.jelly-enabled) #card {
     background-color: var(--cros-sys-app_base);
-  }
-
-  @media (forced-colors: active) {
-    /* Use border instead of box-shadow (which does not work) in Windows
-       HCM. */
-    :host(:not(.expanded)) #card {
-      border: var(--cr-border-hcm);
-    }
-  }
-
-  :host(.expanded) #header,
-  :host([hidden-by-search]) {
-    display: none;
   }
 </style>
 <div id="header">

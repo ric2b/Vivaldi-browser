@@ -40,8 +40,6 @@ BASE_FEATURE(kInterestFeedV2Scrolling,
 
 const base::FeatureParam<std::string> kDisableTriggerTypes{
     &kInterestFeedContentSuggestions, "disable_trigger_types", ""};
-const base::FeatureParam<int> kSuppressRefreshDurationMinutes{
-    &kInterestFeedContentSuggestions, "suppress_refresh_duration_minutes", 30};
 const base::FeatureParam<int> kTimeoutDurationSeconds{
     &kInterestFeedContentSuggestions, "timeout_duration_seconds", 30};
 const base::FeatureParam<bool> kThrottleBackgroundFetches{
@@ -150,9 +148,6 @@ const base::FeatureParam<bool> kFeedCloseRefreshRequireInteraction{
 BASE_FEATURE(kFeedNoViewCache,
              "FeedNoViewCache",
              base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kFeedVideoInlinePlayback,
-             "FeedVideoInlinePlayback",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kFeedExperimentIDTagging,
              "FeedExperimentIDTagging",
@@ -175,4 +170,17 @@ BASE_FEATURE(kCormorant, "Cormorant", base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kFeedUserInteractionReliabilityReport,
              "FeedUserInteractionReliabilityReport",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kFeedSignedOutViewDemotion,
+             "FeedSignedOutViewDemotion",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kFeedDynamicColors,
+             "FeedDynamicColors",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kFeedFollowUiUpdate,
+             "FeedFollowUiUpdate",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 }  // namespace feed

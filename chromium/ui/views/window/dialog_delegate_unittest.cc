@@ -153,7 +153,7 @@ class DialogTest : public ViewsTestBase {
 
  private:
   std::unique_ptr<views::Widget> parent_widget_;
-  raw_ptr<TestDialog> dialog_ = nullptr;
+  raw_ptr<TestDialog, DanglingUntriaged> dialog_ = nullptr;
 };
 
 }  // namespace
@@ -330,8 +330,7 @@ TEST_F(DialogTest, HitTest_CloseButton) {
   BubbleFrameView* frame = static_cast<BubbleFrameView*>(view->frame_view());
   frame->ResetWindowControls();
 
-  const gfx::Rect close_button_bounds =
-      frame->GetCloseButtonForTesting()->bounds();
+  const gfx::Rect close_button_bounds = frame->close_button()->bounds();
 #if BUILDFLAG(IS_WIN)
   // On Win, when HTCLOSE is returned, the tooltip is automatically generated.
   // Do not return |HTCLOSE| to use views tooltip.
@@ -453,7 +452,7 @@ TEST_F(DialogTest, UnfocusableInitialFocus) {
   // This achieves the same effect as disabling full keyboard access.
   dialog->GetOkButton()->SetFocusBehavior(View::FocusBehavior::NEVER);
   dialog->GetCancelButton()->SetFocusBehavior(View::FocusBehavior::NEVER);
-  dialog->GetBubbleFrameView()->GetCloseButtonForTesting()->SetFocusBehavior(
+  dialog->GetBubbleFrameView()->close_button()->SetFocusBehavior(
       View::FocusBehavior::NEVER);
 #endif
 

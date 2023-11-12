@@ -58,6 +58,8 @@ class ShellSurfaceBase : public SurfaceTreeHost,
                          public wm::ActivationChangeObserver,
                          public wm::TooltipObserver {
  public:
+  using ShapeRects = std::vector<gfx::Rect>;
+
   // The |origin| is the initial position in screen coordinates. The position
   // specified as part of the geometry is relative to the shell surface.
   ShellSurfaceBase(Surface* surface,
@@ -147,6 +149,10 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   // Set the flag if the surface can maximize or not.
   void SetCanMinimize(bool can_minimize);
 
+  // Set whether the window is persistable.  This should be called before the
+  // widget is created.
+  void SetPersistable(bool persistable);
+
   // Set normal shadow bounds, |shadow_bounds_|, to |bounds| to be used and
   // applied via `UpdateShadow()`. Set and update resize shadow bounds with
   // |widget_|'s origin and |bounds| via `UpdateResizeShadowBoundsOfWindow()`.
@@ -221,6 +227,10 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   // initialized, it saves `z_order` for when it is initialized.
   void SetZOrder(ui::ZOrderLevel z_order);
 
+  // Sets the shape of the toplevel window, applied on commit. If shape is null
+  // this will unset the window shape.
+  void SetShape(absl::optional<cc::Region> shape);
+
   // SurfaceDelegate:
   void OnSurfaceCommit() override;
   bool IsInputEnabled(Surface* surface) const override;
@@ -249,6 +259,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   void Pin(bool trusted) override;
   void Unpin() override;
   void SetSystemModal(bool system_modal) override;
+  void SetTopInset(int height) override;
 
   // SurfaceObserver:
   void OnSurfaceDestroying(Surface* surface) override;
@@ -381,6 +392,9 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   // Applies |system_modal_| to |widget_|.
   void UpdateSystemModal();
 
+  // Applies `shape_rects_dp_` to the host window's layer.
+  void UpdateShape();
+
   // Returns the "visible bounds" for the surface from the user's perspective.
   gfx::Rect GetVisibleBounds() const;
 
@@ -430,6 +444,8 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   gfx::Rect geometry_;
   gfx::Rect pending_geometry_;
   absl::optional<gfx::Rect> initial_bounds_;
+  absl::optional<ShapeRects> shape_rects_dp_;
+  absl::optional<ShapeRects> pending_shape_rects_dp_;
 
   int64_t display_id_ = display::kInvalidDisplayId;
   int64_t pending_display_id_ = display::kInvalidDisplayId;
@@ -444,6 +460,11 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   bool client_supports_window_bounds_ = false;
   gfx::Size minimum_size_;
   gfx::Size maximum_size_;
+
+  // Effective and pending top inset (header) heights, that are reserved or
+  // occupied by the top window frame.
+  int top_inset_height_ = 0;
+  int pending_top_inset_height_ = 0;
 
   // The orientation to be applied when widget is being created. Only set when
   // widget is not created yet orientation lock is being set. This is currently
@@ -475,6 +496,8 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   bool IsFrameDecorationSupported(SurfaceFrameType frame_type);
 
   void UpdatePinned();
+
+  void UpdateTopInset();
 
   // Returns the resizability of the window. Useful to get the resizability
   // without actually updating it.
@@ -509,6 +532,9 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   absl::optional<int32_t> restore_session_id_;
   absl::optional<int32_t> restore_window_id_;
   absl::optional<std::string> restore_window_id_source_;
+
+  // Member determines if the owning process is persistable.
+  bool persistable_ = true;
 
   // Overlay members.
   std::unique_ptr<views::Widget> overlay_widget_;

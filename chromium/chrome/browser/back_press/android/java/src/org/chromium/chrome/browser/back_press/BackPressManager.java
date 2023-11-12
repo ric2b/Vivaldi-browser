@@ -13,6 +13,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.Callback;
 import org.chromium.base.lifetime.Destroyable;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler.BackPressResult;
@@ -33,6 +34,9 @@ import java.util.List;
  * {@link BackPressHandler} with the new defined {@link Type}.
  */
 public class BackPressManager implements Destroyable {
+    public static final BooleanCachedFieldTrialParameter TAB_HISTORY_RECOVER =
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.BACK_GESTURE_REFACTOR, "tab_history_recover", false);
     private static final SparseIntArray sMetricsMap;
     private static final int sMetricsMaxValue;
     static {
@@ -74,6 +78,7 @@ public class BackPressManager implements Destroyable {
 
     private final BackPressHandler[] mHandlers = new BackPressHandler[Type.NUM_TYPES];
     private final boolean mUseSystemBack;
+    private boolean mHasSystemBackArm;
 
     private final Callback<Boolean>[] mObserverCallbacks = new Callback[Type.NUM_TYPES];
     private Runnable mFallbackOnBackPressed;
@@ -97,7 +102,14 @@ public class BackPressManager implements Destroyable {
      * @return True if ActivityTabProvider should replace ChromeTabActivity#getActivityTab
      */
     public static boolean shouldUseActivityTabProvider() {
-        return ChromeFeatureList.sBackGestureActivityTabProvider.isEnabled();
+        return isEnabled() || ChromeFeatureList.sBackGestureActivityTabProvider.isEnabled();
+    }
+
+    /**
+     * @return True if the tab navigation should be corrected on fallback callback.
+     */
+    public static boolean correctTabNavigationOnFallback() {
+        return isEnabled() && TAB_HISTORY_RECOVER.getValue();
     }
 
     /**
@@ -181,8 +193,27 @@ public class BackPressManager implements Destroyable {
         mFallbackOnBackPressed = runnable;
     }
 
+    /**
+     * Turn on more checks if a system back arm is available, such as when running on tabbed
+     * activity.
+     * @param hasSystemBackArm True if system back arm is feasible.
+     */
+    public void setHasSystemBackArm(boolean hasSystemBackArm) {
+        mHasSystemBackArm = hasSystemBackArm;
+    }
+
     private void backPressStateChanged() {
-        mCallback.setEnabled(shouldInterceptBackPress());
+        boolean intercept = shouldInterceptBackPress();
+        if (mHasSystemBackArm) {
+            // If not using system back and MINIMIZE_APP_AND_CLOSE_TAB has registered, this must be
+            // true, since MINIMIZE_APP_AND_CLOSE_TAB unconditionally consumes last back press.
+            if (has(Type.MINIMIZE_APP_AND_CLOSE_TAB) && !mUseSystemBack) {
+                assert intercept : "Should always intercept back press on non-systemback group";
+            }
+            mCallback.setEnabled(intercept || !mUseSystemBack);
+        } else {
+            mCallback.setEnabled(intercept);
+        }
     }
 
     private void handleBackPress() {
@@ -206,7 +237,7 @@ public class BackPressManager implements Destroyable {
         }
         if (mFallbackOnBackPressed != null) mFallbackOnBackPressed.run();
         assertListOfFailedHandlers(failed, -1);
-        assert false : "Callback is enabled but no handler consumed back gesture.";
+        assert !failed.isEmpty() : "Callback is enabled but no handler consumed back gesture.";
     }
 
     @Override

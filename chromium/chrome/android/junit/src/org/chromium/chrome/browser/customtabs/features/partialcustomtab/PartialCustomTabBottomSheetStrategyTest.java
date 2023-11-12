@@ -60,7 +60,6 @@ import org.chromium.base.BaseSwitches;
 import org.chromium.base.SysUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.customtabs.features.partialcustomtab.PartialCustomTabBaseStrategy.ResizeType;
@@ -324,6 +323,26 @@ public class PartialCustomTabBottomSheetStrategyTest {
         doReturn(STATUS_BAR_HEIGHT)
                 .when(mPCCTTestRule.mResources)
                 .getDimensionPixelSize(eq(statusBarId));
+    }
+
+    @Test
+    public void setTitleWhenLaunched() {
+        final String title = "BottomSheet";
+        var coordinator = mPCCTTestRule.mCoordinatorLayout;
+        doReturn(false).when(coordinator).isAttachedToWindow();
+        doReturn(title).when(mPCCTTestRule.mResources).getString(anyInt());
+        PartialCustomTabBottomSheetStrategy strategy = createPcctAtHeight(500);
+        var listener = mPCCTTestRule.mAttachStateChangeListener;
+        verify(coordinator).addOnAttachStateChangeListener(listener.capture());
+        listener.getValue().onViewAttachedToWindow(null);
+        verify(mPCCTTestRule.mWindow).setTitle(eq(title));
+        verify(coordinator).removeOnAttachStateChangeListener(listener.getValue());
+        clearInvocations(coordinator);
+
+        // Once attached, the title is not set again.
+        doReturn(true).when(coordinator).isAttachedToWindow();
+        strategy.onPostInflationStartup();
+        verify(coordinator, never()).addOnAttachStateChangeListener(any());
     }
 
     @Test
@@ -670,7 +689,7 @@ public class PartialCustomTabBottomSheetStrategyTest {
     }
 
     @Test
-    @DisableIf.Build(sdk_is_greater_than = Build.VERSION_CODES.Q)
+    @Config(sdk = Build.VERSION_CODES.P)
     public void fixedHeightReactsToSoftKeyboardBelowR() {
         PartialCustomTabBottomSheetStrategy strategy = createPcctAtHeight(500, true);
         assertTabIsAtInitialPos(getWindowAttributes());
@@ -925,6 +944,7 @@ public class PartialCustomTabBottomSheetStrategyTest {
     @Features.EnableFeatures({ChromeFeatureList.CCT_RESIZABLE_SIDE_SHEET})
     public void enterAndExitHtmlFullscreen() {
         PartialCustomTabBottomSheetStrategy strategy = createPcctAtHeight(500);
+        strategy.createHandleStrategyForTesting();
         verify(mPCCTTestRule.mOnActivityLayoutCallback)
                 .onActivityLayout(anyInt(), anyInt(), anyInt(), anyInt(),
                         eq(ACTIVITY_LAYOUT_STATE_BOTTOM_SHEET));
@@ -987,6 +1007,7 @@ public class PartialCustomTabBottomSheetStrategyTest {
     @Test
     public void rotateAcrossFullscreenMode() {
         PartialCustomTabBottomSheetStrategy strategy = createPcctAtHeight(500);
+        strategy.createHandleStrategyForTesting();
         int height = getWindowAttributes().height;
 
         mPCCTTestRule.mConfiguration.orientation = Configuration.ORIENTATION_LANDSCAPE;

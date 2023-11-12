@@ -1846,26 +1846,8 @@ TEST_F(ComputedStyleTest, ScrollTimelineAxisNoDiff) {
   ComputedStyleBuilder builder1(*InitialComputedStyle());
   ComputedStyleBuilder builder2(*InitialComputedStyle());
 
-  builder1.SetScrollTimelineAxis(
-      Vector<TimelineAxis>(1u, TimelineAxis::kVertical));
-  builder2.SetScrollTimelineAxis(
-      Vector<TimelineAxis>(1u, TimelineAxis::kVertical));
-
-  scoped_refptr<const ComputedStyle> style1 = builder1.TakeStyle();
-  scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle();
-
-  EXPECT_EQ(ComputedStyle::Difference::kEqual,
-            ComputedStyle::ComputeDifference(style1.get(), style2.get()));
-}
-
-TEST_F(ComputedStyleTest, ScrollTimelineAttachmentNoDiff) {
-  ComputedStyleBuilder builder1(*InitialComputedStyle());
-  ComputedStyleBuilder builder2(*InitialComputedStyle());
-
-  builder1.SetScrollTimelineAttachment(
-      Vector<TimelineAttachment>(1u, TimelineAttachment::kDefer));
-  builder2.SetScrollTimelineAttachment(
-      Vector<TimelineAttachment>(1u, TimelineAttachment::kDefer));
+  builder1.SetScrollTimelineAxis(Vector<TimelineAxis>(1u, TimelineAxis::kY));
+  builder2.SetScrollTimelineAxis(Vector<TimelineAxis>(1u, TimelineAxis::kY));
 
   scoped_refptr<const ComputedStyle> style1 = builder1.TakeStyle();
   scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle();
@@ -1898,26 +1880,8 @@ TEST_F(ComputedStyleTest, ViewTimelineAxisNoDiff) {
   ComputedStyleBuilder builder1(*InitialComputedStyle());
   ComputedStyleBuilder builder2(*InitialComputedStyle());
 
-  builder1.SetViewTimelineAxis(
-      Vector<TimelineAxis>(1u, TimelineAxis::kVertical));
-  builder2.SetViewTimelineAxis(
-      Vector<TimelineAxis>(1u, TimelineAxis::kVertical));
-
-  scoped_refptr<const ComputedStyle> style1 = builder1.TakeStyle();
-  scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle();
-
-  EXPECT_EQ(ComputedStyle::Difference::kEqual,
-            ComputedStyle::ComputeDifference(style1.get(), style2.get()));
-}
-
-TEST_F(ComputedStyleTest, ViewTimelineAttachmentNoDiff) {
-  ComputedStyleBuilder builder1(*InitialComputedStyle());
-  ComputedStyleBuilder builder2(*InitialComputedStyle());
-
-  builder1.SetViewTimelineAttachment(
-      Vector<TimelineAttachment>(1u, TimelineAttachment::kDefer));
-  builder2.SetViewTimelineAttachment(
-      Vector<TimelineAttachment>(1u, TimelineAttachment::kDefer));
+  builder1.SetViewTimelineAxis(Vector<TimelineAxis>(1u, TimelineAxis::kY));
+  builder2.SetViewTimelineAxis(Vector<TimelineAxis>(1u, TimelineAxis::kY));
 
   scoped_refptr<const ComputedStyle> style1 = builder1.TakeStyle();
   scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle();

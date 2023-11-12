@@ -45,10 +45,6 @@ bool WebClient::IsAppSpecificURL(const GURL& url) const {
   return false;
 }
 
-std::u16string WebClient::GetPluginNotSupportedText() const {
-  return std::u16string();
-}
-
 std::string WebClient::GetUserAgent(UserAgentType type) const {
   return std::string();
 }
@@ -102,12 +98,12 @@ bool WebClient::EnableLongPressUIContextMenu() const {
   return false;
 }
 
-bool WebClient::EnableWebInspector() const {
+bool WebClient::EnableWebInspector(BrowserState* browser_state) const {
   return false;
 }
 
-bool WebClient::RestoreSessionFromCache(web::WebState* web_state) const {
-  return false;
+NSData* WebClient::FetchSessionFromCache(web::WebState* web_state) const {
+  return nil;
 }
 
 void WebClient::CleanupNativeRestoreURLs(web::WebState* web_state) const {}
@@ -153,5 +149,8 @@ bool WebClient::IsMixedContentAutoupgradeEnabled(
 bool WebClient::IsBrowserLockdownModeEnabled(web::BrowserState* browser_state) {
   return false;
 }
+
+void WebClient::SetOSLockdownModeEnabled(web::BrowserState* browser_state,
+                                         bool enabled) {}
 
 }  // namespace web

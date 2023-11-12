@@ -80,6 +80,15 @@ int WriteSessionFile(content::BrowserContext* browser_context,
 // Removes session file.
 int DeleteSessionFile(content::BrowserContext* browser_context,
                       Index_Node* node);
+int MoveAutoSaveNodesToTrash(content::BrowserContext* browser_context);
+// Returns nodes that are too old to be kept in the auto save list. The
+// cut off time depends on 'on_add'. If set the modified_time of the autosave
+// session folder node is used, otherwise base::Time::Now(). "days before" will
+// in either cases be subtraced from the computed time.
+int GetExpiredAutoSaveNodes(content::BrowserContext* browser_context,
+                            int days_before,
+                            bool on_add,
+                            std::vector<Index_Node*>& nodes);
 // Saves current set of tabs to a fixed auto save node.
 void AutoSave(content::BrowserContext* browser_context);
 // Moves timed backup into auto saved sessions.
@@ -133,5 +142,8 @@ std::unique_ptr<base::Value::Dict> GetTabStackTitles(
 void GetContent(base::FilePath name, SessionContent& content);
 // Dump cpntent of a tab
 void DumpContent(base::FilePath name);
+
+// Add index to list of tabs opened on the command-line, before tab to window
+bool AddCommandLineTab(Browser* browser);
 
 }  // namespace sessions

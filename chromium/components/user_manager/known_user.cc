@@ -109,6 +109,12 @@ const char kOnboardingCompletedVersion[] = "onboarding_completed_version";
 // Last screen shown in the onboarding flow.
 const char kPendingOnboardingScreen[] = "onboarding_screen_pending";
 
+// Key of the obsolete token handle rotation flag.
+const char kTokenHandleRotatedObsolete[] = "TokenHandleRotated";
+
+// Cache of the auth factors configured for the user.
+const char kAuthFactorPresenceCache[] = "AuthFactorsPresenceCache";
+
 // List containing all the known user preferences keys.
 const char* kReservedKeys[] = {kCanonicalEmail,
                                kGAIAIdKey,
@@ -131,7 +137,8 @@ const char* kReservedKeys[] = {kCanonicalEmail,
                                kPinAutosubmitBackfillNeeded,
                                kPasswordSyncToken,
                                kOnboardingCompletedVersion,
-                               kPendingOnboardingScreen};
+                               kPendingOnboardingScreen,
+                               kAuthFactorPresenceCache};
 
 // List containing all known user preference keys that used to be reserved and
 // are now obsolete.
@@ -139,6 +146,7 @@ const char* kObsoleteKeys[] = {
     kMinimalMigrationAttemptedObsolete,
     kGaiaIdMigrationObsolete,
     kOfflineSigninLimitObsolete,
+    kTokenHandleRotatedObsolete,
 };
 
 // Checks if values in |dict| correspond with |account_id| identity.
@@ -712,6 +720,19 @@ void KnownUser::PinAutosubmitSetBackfillNotNeeded(const AccountId& account_id) {
 void KnownUser::PinAutosubmitSetBackfillNeededForTests(
     const AccountId& account_id) {
   SetBooleanPref(account_id, kPinAutosubmitBackfillNeeded, true);
+}
+
+void KnownUser::SetAuthFactorCache(const AccountId& account_id,
+                                   base::Value::Dict cache) {
+  SetPath(account_id, kAuthFactorPresenceCache, base::Value(std::move(cache)));
+}
+
+base::Value::Dict KnownUser::GetAuthFactorCache(const AccountId& account_id) {
+  const auto* value = FindPath(account_id, kAuthFactorPresenceCache);
+  if (!value || !value->is_dict()) {
+    return base::Value::Dict();
+  }
+  return value->GetDict().Clone();
 }
 
 void KnownUser::SetPasswordSyncToken(const AccountId& account_id,

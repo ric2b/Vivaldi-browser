@@ -54,8 +54,8 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/base/passphrase_enums.h"
 #include "components/sync/base/user_selectable_type.h"
-#include "components/sync/driver/sync_service_utils.h"
-#include "components/sync/driver/sync_user_settings.h"
+#include "components/sync/service/sync_service_utils.h"
+#include "components/sync/service/sync_user_settings.h"
 #include "components/unified_consent/unified_consent_metrics.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
@@ -433,10 +433,6 @@ void PeopleHandler::HandleSetDatatypes(const base::Value::List& args) {
 
   // Choosing data types to sync never fails.
   ResolveJavascriptCallback(*callback_id, base::Value(kConfigurePageStatus));
-
-  ProfileMetrics::LogProfileSyncInfo(ProfileMetrics::SYNC_CUSTOMIZE);
-  if (!configuration.sync_everything)
-    ProfileMetrics::LogProfileSyncInfo(ProfileMetrics::SYNC_CHOOSE);
 }
 
 void PeopleHandler::HandleGetStoredAccounts(const base::Value::List& args) {
@@ -546,8 +542,6 @@ void PeopleHandler::HandleSetEncryptionPassphrase(
   } else {
     sync_user_settings->SetEncryptionPassphrase(passphrase);
     successfully_set = true;
-    ProfileMetrics::LogProfileSyncInfo(
-        ProfileMetrics::SYNC_CREATED_NEW_PASSPHRASE);
   }
   ResolveJavascriptCallback(callback_id, base::Value(successfully_set));
 }
@@ -573,10 +567,6 @@ void PeopleHandler::HandleSetDecryptionPassphrase(
   bool successfully_set = false;
   if (!passphrase.empty() && sync_user_settings->IsPassphraseRequired()) {
     successfully_set = sync_user_settings->SetDecryptionPassphrase(passphrase);
-    if (successfully_set) {
-      ProfileMetrics::LogProfileSyncInfo(
-          ProfileMetrics::SYNC_ENTERED_EXISTING_PASSPHRASE);
-    }
   }
   ResolveJavascriptCallback(callback_id, base::Value(successfully_set));
 }
@@ -782,15 +772,16 @@ void PeopleHandler::CloseSyncSetup() {
   // (i.e. if the user is running in guest mode in cros and brings up settings).
   LoginUIService* service = GetLoginUIService();
   if (service) {
+    auto self_weak_ptr = weak_factory_.GetWeakPtr();
     syncer::SyncService* sync_service = GetSyncService();
 
     // Don't log a cancel event if the sync setup dialog is being
     // automatically closed due to an auth error.
     if ((service->current_login_ui() == this) &&
-        (!sync_service ||
-         (!sync_service->GetUserSettings()->IsFirstSetupComplete() &&
-          sync_service->GetAuthError().state() ==
-              GoogleServiceAuthError::NONE))) {
+        (!sync_service || (!sync_service->GetUserSettings()
+                                ->IsInitialSyncFeatureSetupComplete() &&
+                           sync_service->GetAuthError().state() ==
+                               GoogleServiceAuthError::NONE))) {
       if (configuring_sync_) {
         // If the user clicked "Cancel" while setting up sync, disable sync
         // because we don't want the sync engine to remain in the
@@ -805,7 +796,8 @@ void PeopleHandler::CloseSyncSetup() {
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
           // Revoke sync consent on desktop Chrome if they click cancel during
           // initial setup or close sync setup without confirming sync.
-          if (!sync_service->GetUserSettings()->IsFirstSetupComplete()) {
+          if (!sync_service->GetUserSettings()
+                   ->IsInitialSyncFeatureSetupComplete()) {
             IdentityManagerFactory::GetForProfile(profile_)
                 ->GetPrimaryAccountMutator()
                 ->RevokeSyncConsent(
@@ -818,6 +810,14 @@ void PeopleHandler::CloseSyncSetup() {
     }
 
     service->LoginUIClosed(this);
+
+    // The call to RevokeSyncConsent() above may delete the current browser that
+    // owns `this` if force signin is enabled. Accessing instance members caused
+    // crashes (see https://crbug.com/1441820) which we guard against by
+    // checking a weak pointer to the current instance.
+    if (!self_weak_ptr) {
+      return;
+    }
   }
 
   // Alert the sync service anytime the sync setup dialog is closed. This can
@@ -894,7 +894,7 @@ void PeopleHandler::BeforeUnloadDialogCancelled() {
       signin::ConsentLevel::kSync));
   syncer::SyncService* service = GetSyncService();
   DCHECK(service && service->IsSetupInProgress() &&
-         !service->GetUserSettings()->IsFirstSetupComplete());
+         !service->GetUserSettings()->IsInitialSyncFeatureSetupComplete());
 
   base::RecordAction(
       base::UserMetricsAction("Signin_Signin_CancelAbortAdvancedSyncSettings"));
@@ -909,15 +909,10 @@ base::Value::Dict PeopleHandler::GetSyncStatusDictionary() const {
   }
 
   sync_status.Set("supervisedUser", profile_->IsChild());
-  sync_status.Set("childUser", profile_->IsChild());
 
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile_);
   DCHECK(identity_manager);
 
-  // TODO(crbug.com/1369982): |domain| is used to show the profile deletion
-  // dialog on turn off sync. This is no longer needed since users are allowed
-  // to turn off sync. Enterprise team to decide whether to show the delete
-  // profile dialog on signout.
   if (identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
     CoreAccountInfo primary_account_info =
         identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
@@ -942,7 +937,7 @@ base::Value::Dict PeopleHandler::GetSyncStatusDictionary() const {
   sync_status.Set(
       "firstSetupInProgress",
       service && !disallowed_by_policy && service->IsSetupInProgress() &&
-          !service->GetUserSettings()->IsFirstSetupComplete() &&
+          !service->GetUserSettings()->IsInitialSyncFeatureSetupComplete() &&
           identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync));
 
   const SyncStatusLabels status_labels = GetSyncStatusLabels(profile_);
@@ -1081,15 +1076,16 @@ void PeopleHandler::MarkFirstSetupComplete() {
   service->SetSyncFeatureRequested();
 
   // If the first-time setup is already complete, there's nothing else to do.
-  if (service->GetUserSettings()->IsFirstSetupComplete())
+  if (service->GetUserSettings()->IsInitialSyncFeatureSetupComplete()) {
     return;
+  }
 
   unified_consent::metrics::RecordSyncSetupDataTypesHistrogam(
       service->GetUserSettings(), profile_->GetPrefs());
 
   // We're done configuring, so notify SyncService that it is OK to start
   // syncing.
-  service->GetUserSettings()->SetFirstSetupComplete(
+  service->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
       syncer::SyncFirstSetupCompleteSource::ADVANCED_FLOW_CONFIRM);
   FireWebUIListener("sync-settings-saved");
 }

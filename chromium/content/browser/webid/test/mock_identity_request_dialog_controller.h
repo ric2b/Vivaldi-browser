@@ -33,13 +33,15 @@ class MockIdentityRequestDialogController
                     AccountSelectionCallback,
                     DismissCallback));
   MOCK_METHOD0(DestructorCalled, void());
-  MOCK_METHOD6(ShowFailureDialog,
+  MOCK_METHOD7(ShowFailureDialog,
                void(WebContents*,
                     const std::string&,
                     const absl::optional<std::string>&,
                     const std::string&,
                     const content::IdentityProviderMetadata&,
-                    DismissCallback));
+                    DismissCallback,
+                    SigninToIdPCallback));
+  MOCK_METHOD2(ShowModalDialog, WebContents*(const GURL&, DismissCallback));
 };
 
 }  // namespace content

@@ -34,6 +34,7 @@
 #include "components/gcm_driver/fake_gcm_profile_service.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/permission_uma_util.h"
+#include "components/site_engagement/content/site_engagement_service.h"
 #include "content/public/browser/push_messaging_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/service_worker_context.h"
@@ -43,6 +44,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
@@ -51,6 +53,9 @@
 namespace web_app {
 
 namespace {
+
+using ::testing::Eq;
+using ::testing::StartsWith;
 
 const char kNonAppHost[] = "nonapp.com";
 
@@ -330,6 +335,24 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, WasmLoadableFromBytes) {
   EXPECT_EQ("loaded", result);
 }
 
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, BlobUrl) {
+  web_app::IsolatedWebAppUrlInfo url_info = InstallDevModeProxyIsolatedWebApp(
+      isolated_web_app_dev_server().GetOrigin());
+  content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
+
+  content::TestNavigationObserver navigation_observer(
+      content::WebContents::FromRenderFrameHost(app_frame));
+  EXPECT_TRUE(ExecJs(app_frame,
+                     "const blob = new Blob(['test'], {type : 'text/plain'});"
+                     "location.href = window.URL.createObjectURL(blob)"));
+  navigation_observer.Wait();
+
+  EXPECT_TRUE(navigation_observer.last_navigation_succeeded());
+  EXPECT_THAT(navigation_observer.last_net_error_code(), Eq(net::OK));
+  EXPECT_THAT(navigation_observer.last_navigation_url().spec(),
+              StartsWith("blob:" + url_info.origin().GetURL().spec()));
+}
+
 class IsolatedWebAppBrowserCookieTest : public IsolatedWebAppBrowserTest {
  public:
   using CookieHeaders = std::vector<std::string>;
@@ -439,7 +462,7 @@ class IsolatedWebAppBrowserServiceWorkerTest
   int64_t InstallIsolatedWebAppAndWaitForServiceWorker() {
     web_app::IsolatedWebAppUrlInfo url_info = InstallDevModeProxyIsolatedWebApp(
         isolated_web_app_dev_server().GetOrigin());
-    url_info_ = url_info;
+    app_url_ = url_info.origin().GetURL();
 
     content::RenderFrameHost* original_frame = OpenApp(url_info.app_id());
     CHECK_NE(default_storage_partition(),
@@ -450,7 +473,7 @@ class IsolatedWebAppBrowserServiceWorkerTest
     app_window_ = GetBrowserFromFrame(original_frame);
 
     GURL register_service_worker_page =
-        url_info.origin().GetURL().Resolve("register_service_worker.html");
+        app_url_.Resolve("register_service_worker.html");
 
     app_frame_ =
         ui_test_utils::NavigateToURL(app_window_, register_service_worker_page);
@@ -458,21 +481,18 @@ class IsolatedWebAppBrowserServiceWorkerTest
     CHECK_NE(default_storage_partition(), storage_partition_);
 
     ServiceWorkerVersionActivatedWaiter version_activated_waiter(
-        storage_partition_, url_info.origin().GetURL());
+        storage_partition_, app_url_);
 
     return version_activated_waiter.AwaitVersionActivated();
   }
 
-  const web_app::IsolatedWebAppUrlInfo& url_info() const {
-    CHECK(url_info_.has_value());
-    return *url_info_;
-  }
+  const GURL& app_url() const { return app_url_; }
 
   raw_ptr<Browser, DanglingUntriaged> app_window_;
   raw_ptr<content::WebContents, DanglingUntriaged> app_web_contents_;
   raw_ptr<content::RenderFrameHost, DanglingUntriaged> app_frame_;
   raw_ptr<content::StoragePartition, DanglingUntriaged> storage_partition_;
-  absl::optional<web_app::IsolatedWebAppUrlInfo> url_info_;
+  GURL app_url_;
 
   std::unique_ptr<net::EmbeddedTestServer> isolated_web_app_dev_server_;
 };
@@ -481,7 +501,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserServiceWorkerTest,
                        ServiceWorkerPartitioned) {
   InstallIsolatedWebAppAndWaitForServiceWorker();
   test::CheckServiceWorkerStatus(
-      url_info().origin().GetURL(), storage_partition_,
+      app_url(), storage_partition_,
       content::ServiceWorkerCapability::SERVICE_WORKER_WITH_FETCH_HANDLER);
 }
 
@@ -507,15 +527,22 @@ class IsolatedWebAppBrowserServiceWorkerPushTest
     PushMessagingServiceImpl* push_service =
         PushMessagingServiceFactory::GetForProfile(context);
 
-    CHECK_EQ(push_service->GetPermissionStatus(url_info_->origin().GetURL(),
+    CHECK_EQ(push_service->GetPermissionStatus(app_url(),
                                                /*user_visible=*/true),
              blink::mojom::PermissionStatus::GRANTED);
 
-    // A second auto-generated notifications will be shown.
-    // See PushMessagingNotificationManager::EnforceUserVisibleOnlyRequirements.
+    // If there is not enough budget, a generic notification will be displayed
+    // saying: "This site has been updated in the background.". In order to
+    // avoid flakiness, we give the URL the maximum value of EngagementPoints so
+    // it will not display the generic notification.
+    site_engagement::SiteEngagementService* service =
+        site_engagement::SiteEngagementService::Get(profile());
+    service->ResetBaseScoreForURL(app_url(), service->GetMaxPoints());
+    CHECK(service->GetMaxPoints() == service->GetScore(app_url()));
+
     base::RunLoop run_loop;
     base::RepeatingClosure quit_barrier =
-        base::BarrierClosure(/*num_closures=*/3, run_loop.QuitClosure());
+        base::BarrierClosure(/*num_closures=*/2, run_loop.QuitClosure());
     push_service->SetMessageCallbackForTesting(quit_barrier);
     notification_tester_->SetNotificationAddedClosure(quit_barrier);
     push_service->OnMessage(app_identifier.app_id(), message);
@@ -526,8 +553,7 @@ class IsolatedWebAppBrowserServiceWorkerPushTest
       int64_t service_worker_registration_id) {
     PushMessagingAppIdentifier app_identifier =
         PushMessagingAppIdentifier::FindByServiceWorker(
-            browser()->profile(), url_info().origin().GetURL(),
-            service_worker_registration_id);
+            browser()->profile(), app_url(), service_worker_registration_id);
     return app_identifier;
   }
 
@@ -613,7 +639,7 @@ var kApplicationServerKey = new Uint8Array([
   // a push notification, then click on it.
   auto notifications = notification_tester_->GetDisplayedNotificationsForType(
       NotificationHandler::Type::WEB_PERSISTENT);
-  EXPECT_EQ(notifications.size(), 2UL);
+  EXPECT_EQ(notifications.size(), 1UL);
 
   BrowserWaiter browser_waiter(nullptr);
   notification_tester_->SimulateClick(NotificationHandler::Type::WEB_PERSISTENT,

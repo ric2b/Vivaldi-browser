@@ -64,6 +64,7 @@
 #include "third_party/blink/public/mojom/frame/media_player_action.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/reporting_observer.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-shared.h"
+#include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom-blink.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -158,6 +159,7 @@
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/text_autosizer.h"
+#include "third_party/blink/renderer/core/lcp_critical_path_predictor/lcp_critical_path_predictor.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/idleness_detector.h"
@@ -308,6 +310,32 @@ mojom::blink::BlockingDetailsPtr CreateBlockingDetailsMojom(
   return feature_location_to_report;
 }
 
+bool IsNavigationBlockedByCoopRestrictProperties(
+    const LocalFrame& accessing_frame,
+    const Frame& target_frame) {
+  // If the two windows are not in the same CoopRelatedGroup, we should not
+  // block one window from navigating the other. This prevents restricting
+  // things that were not meant to. These are the cross browsing context group
+  // accesses that already existed before COOP: restrict-properties.
+  // TODO(https://crbug.com/1221127): Is there actually any scenario where cross
+  // browsing context group was allowed before COOP: restrict-properties? Verify
+  // that we need to have this check.
+  if (accessing_frame.GetPage()->CoopRelatedGroupToken() !=
+      target_frame.GetPage()->CoopRelatedGroupToken()) {
+    return false;
+  }
+
+  // If we're dealing with an actual COOP: restrict-properties case, then
+  // compare the browsing context group tokens. If they are different, the
+  // navigation should not be permitted.
+  if (accessing_frame.GetPage()->BrowsingContextGroupToken() !=
+      target_frame.GetPage()->BrowsingContextGroupToken()) {
+    return true;
+  }
+
+  return false;
+}
+
 }  // namespace
 
 template class CORE_TEMPLATE_EXPORT Supplement<LocalFrame>;
@@ -429,12 +457,12 @@ void LocalFrame::Trace(Visitor* visitor) const {
   visitor->Trace(mojo_handler_);
   visitor->Trace(text_fragment_handler_);
   visitor->Trace(scroll_snapshot_clients_);
-  visitor->Trace(unvalidated_scroll_snapshot_clients_);
   visitor->Trace(saved_scroll_offsets_);
   visitor->Trace(background_color_paint_image_generator_);
   visitor->Trace(box_shadow_paint_image_generator_);
   visitor->Trace(clip_path_paint_image_generator_);
   visitor->Trace(resource_cache_);
+  visitor->Trace(lcpp_);
 #if !BUILDFLAG(IS_ANDROID)
   visitor->Trace(window_controls_overlay_changed_delegate_);
 #endif
@@ -527,30 +555,42 @@ bool LocalFrame::NavigationShouldReplaceCurrentHistoryEntry(
   // { history: "push" } specified, this should override all implicit
   // conversions to a replacing navigation.
   if (request.ForceHistoryPush() == mojom::blink::ForceHistoryPush::kYes) {
-    DCHECK(!ShouldMaintainTrivialSessionHistory());
+    CHECK(!ShouldMaintainTrivialSessionHistory());
     return false;
   }
 
-  // Non-user navigation before the page has finished firing onload should not
-  // create a new back/forward item. The spec only explicitly mentions this in
-  // the context of navigating an iframe.
-  if (request.ClientRedirectReason() != ClientNavigationReason::kNone &&
-      !GetDocument()->LoadEventFinished() &&
-      !HasTransientUserActivation(this) &&
-      request.ClientRedirectReason() != ClientNavigationReason::kAnchorClick)
+  if (ShouldMaintainTrivialSessionHistory()) {
+    // TODO(http://crbug.com/1197384): We may want to assert that
+    // WebFrameLoadType is never kStandard in prerendered pages/portals before
+    // commit. DCHECK can be in FrameLoader::CommitNavigation or somewhere
+    // similar.
     return true;
+  }
 
   // In most cases, we will treat a navigation to the current URL as replacing.
   if (ShouldReplaceForSameUrlNavigation(request)) {
     return true;
   }
 
-  return ShouldMaintainTrivialSessionHistory();
+  // Form submissions targeting another window should not replace.
+  if (request.Form() && request.GetOriginWindow() != DomWindow()) {
+    return false;
+  }
 
-  // TODO(http://crbug.com/1197384): We may want to assert that
-  // WebFrameLoadType is never kStandard in prerendered pages/portals before
-  // commit. DCHECK can be in FrameLoader::CommitNavigation or somewhere
-  // similar.
+  // If the load event has finished or the user initiated the navigation,
+  // don't replace.
+  if (GetDocument()->LoadEventFinished() || HasTransientUserActivation(this)) {
+    return false;
+  }
+
+  // Most non-user-initiated navigations before the load event replace. The
+  // exceptions are "internal" navigations (e.g., drag-and-drop triggered
+  // navigations), and anchor clicks.
+  if (request.ClientRedirectReason() == ClientNavigationReason::kNone ||
+      request.ClientRedirectReason() == ClientNavigationReason::kAnchorClick) {
+    return false;
+  }
+  return true;
 }
 
 bool LocalFrame::ShouldMaintainTrivialSessionHistory() const {
@@ -744,6 +784,22 @@ ClipPathPaintImageGenerator* LocalFrame::GetClipPathPaintImageGenerator() {
   return local_root.clip_path_paint_image_generator_.Get();
 }
 
+LCPCriticalPathPredictor* LocalFrame::GetLCPP() {
+  if (!base::FeatureList::IsEnabled(features::kLCPCriticalPathPredictor)) {
+    return nullptr;
+  }
+
+  // For now, we only attach LCPP to the main frames.
+  if (!IsMainFrame()) {
+    return nullptr;
+  }
+
+  if (!lcpp_) {
+    lcpp_ = MakeGarbageCollected<LCPCriticalPathPredictor>(*this);
+  }
+  return lcpp_.Get();
+}
+
 const SecurityContext* LocalFrame::GetSecurityContext() const {
   return DomWindow() ? &DomWindow()->GetSecurityContext() : nullptr;
 }
@@ -800,6 +856,8 @@ void LocalFrame::DidAttachDocument() {
   GetEventHandler().Clear();
   Selection().DidAttachDocument(document);
   notified_color_scheme_ = false;
+
+  smooth_scroll_sequencer_.Clear();
 
 #if !BUILDFLAG(IS_ANDROID)
   // For PWAs with display_override "window-controls-overlay", titlebar area
@@ -1192,10 +1250,10 @@ scoped_refptr<InspectorTaskRunner> LocalFrame::GetInspectorTaskRunner() {
 }
 
 void LocalFrame::StartPrinting(const gfx::SizeF& page_size,
-                               const gfx::SizeF& original_page_size,
+                               const gfx::SizeF& aspect_ratio,
                                float maximum_shrink_ratio) {
   DCHECK(!saved_scroll_offsets_);
-  SetPrinting(true, page_size, original_page_size, maximum_shrink_ratio);
+  SetPrinting(true, page_size, aspect_ratio, maximum_shrink_ratio);
 }
 
 void LocalFrame::EndPrinting() {
@@ -1205,7 +1263,7 @@ void LocalFrame::EndPrinting() {
 
 void LocalFrame::SetPrinting(bool printing,
                              const gfx::SizeF& page_size,
-                             const gfx::SizeF& original_page_size,
+                             const gfx::SizeF& aspect_ratio,
                              float maximum_shrink_ratio) {
   // In setting printing, we should not validate resources already cached for
   // the document.  See https://bugs.webkit.org/show_bug.cgi?id=43704
@@ -1220,7 +1278,7 @@ void LocalFrame::SetPrinting(bool printing,
     text_autosizer->UpdatePageInfo();
 
   if (ShouldUsePrintingLayout()) {
-    View()->ForceLayoutForPagination(page_size, original_page_size,
+    View()->ForceLayoutForPagination(page_size, aspect_ratio,
                                      maximum_shrink_ratio);
   } else {
     if (LayoutView* layout_view = View()->GetLayoutView()) {
@@ -1341,26 +1399,27 @@ void LocalFrame::RestoreScrollOffsets() {
 }
 
 gfx::SizeF LocalFrame::ResizePageRectsKeepingRatio(
-    const gfx::SizeF& original_size,
+    const gfx::SizeF& aspect_ratio,
     const gfx::SizeF& expected_size) const {
   auto* layout_object = ContentLayoutObject();
   if (!layout_object)
     return gfx::SizeF();
 
   bool is_horizontal = layout_object->StyleRef().IsHorizontalWritingMode();
-  float width = original_size.width();
-  float height = original_size.height();
-  if (!is_horizontal)
-    std::swap(width, height);
-  DCHECK_GT(fabs(width), std::numeric_limits<float>::epsilon());
-  float ratio = height / width;
+  float numerator =
+      is_horizontal ? aspect_ratio.height() : aspect_ratio.width();
+  float denominator =
+      is_horizontal ? aspect_ratio.width() : aspect_ratio.height();
+  DCHECK_GT(fabs(denominator), std::numeric_limits<float>::epsilon());
+  float ratio = numerator / denominator;
 
-  float result_width =
+  float inline_size =
       floorf(is_horizontal ? expected_size.width() : expected_size.height());
-  float result_height = floorf(result_width * ratio);
-  if (!is_horizontal)
-    std::swap(result_width, result_height);
-  return gfx::SizeF(result_width, result_height);
+  float block_size = floorf(inline_size * ratio);
+  if (!is_horizontal) {
+    return gfx::SizeF(block_size, inline_size);
+  }
+  return gfx::SizeF(inline_size, block_size);
 }
 
 void LocalFrame::SetPageZoomFactor(float factor) {
@@ -1741,6 +1800,12 @@ bool LocalFrame::CanNavigate(const Frame& target_frame,
                       WebFeature::kOpenerNavigationWithoutGesture);
   }
 
+  // Frames from different browsing context groups in the same CoopRelatedGroup
+  // should not be able navigate one another.
+  if (IsNavigationBlockedByCoopRestrictProperties(*this, target_frame)) {
+    return false;
+  }
+
   if (destination_url.ProtocolIsJavaScript() &&
       (!GetSecurityContext()->GetSecurityOrigin()->CanAccess(
           target_frame.GetSecurityContext()->GetSecurityOrigin()))) {
@@ -1932,13 +1997,12 @@ bool LocalFrame::CanNavigate(const Frame& target_frame,
   return false;
 }
 
-void LocalFrame::WillPotentiallyStartOutermostMainFrameNavigation(
-    const KURL& url) const {
-  TRACE_EVENT1("navigation",
-               "LocalFrame::WillPotentiallyStartOutermostMainFrameNavigation",
-               "url", url);
+void LocalFrame::MaybeStartOutermostMainFrameNavigation(
+    const Vector<KURL>& urls) const {
+  TRACE_EVENT0("navigation",
+               "LocalFrame::MaybeStartOutermostMainFrameNavigation");
   mojo_handler_->NonAssociatedLocalFrameHostRemote()
-      .WillPotentiallyStartOutermostMainFrameNavigation(url);
+      .MaybeStartOutermostMainFrameNavigation(urls);
 }
 
 ContentCaptureManager* LocalFrame::GetOrResetContentCaptureManager() {
@@ -2017,8 +2081,7 @@ FrameNavigationDisabler::~FrameNavigationDisabler() {
 
 LocalFrame::LazyLoadImageSetting LocalFrame::GetLazyLoadImageSetting() const {
   DCHECK(GetSettings());
-  if (!RuntimeEnabledFeatures::LazyImageLoadingEnabled() ||
-      !GetSettings()->GetLazyLoadEnabled()) {
+  if (!GetSettings()->GetLazyLoadEnabled()) {
     return LocalFrame::LazyLoadImageSetting::kDisabled;
   }
 
@@ -2107,28 +2170,19 @@ void LocalFrame::WasShown() {
   }
 }
 
-bool LocalFrame::ClipsContent(ScrollbarDisableReason* out_reason) const {
+bool LocalFrame::ClipsContent() const {
   // A paint preview shouldn't clip to the viewport. Each frame paints to a
   // separate canvas in full to allow scrolling.
   if (GetDocument()->GetPaintPreviewState() != Document::kNotPaintingPreview) {
-    if (out_reason) {
-      *out_reason = ScrollbarDisableReason::kPaintPreview;
-    }
     return false;
   }
 
   if (ShouldUsePrintingLayout()) {
-    if (out_reason) {
-      *out_reason = ScrollbarDisableReason::kPrinting;
-    }
     return false;
   }
 
-  if (IsOutermostMainFrame() && !GetSettings()->GetMainFrameClipsContent()) {
-    if (out_reason) {
-      *out_reason = ScrollbarDisableReason::kMainFrameClipsContentFalse;
-    }
-    return false;
+  if (IsOutermostMainFrame()) {
+    return GetSettings()->GetMainFrameClipsContent();
   }
   // By default clip to viewport.
   return true;
@@ -2358,12 +2412,39 @@ void LocalFrame::AnimateSnapFling(base::TimeTicks monotonic_time) {
   GetEventHandler().AnimateSnapFling(monotonic_time);
 }
 
-SmoothScrollSequencer& LocalFrame::GetSmoothScrollSequencer() {
+SmoothScrollSequencer* LocalFrame::CreateNewSmoothScrollSequence() {
+  if (!IsLocalRoot()) {
+    return LocalFrameRoot().CreateNewSmoothScrollSequence();
+  }
+
+  SmoothScrollSequencer* old_sequencer = smooth_scroll_sequencer_;
+  smooth_scroll_sequencer_ = MakeGarbageCollected<SmoothScrollSequencer>(*this);
+  return old_sequencer;
+}
+
+void LocalFrame::ReinstateSmoothScrollSequence(
+    SmoothScrollSequencer* sequencer) {
+  if (!IsLocalRoot()) {
+    LocalFrameRoot().ReinstateSmoothScrollSequence(sequencer);
+    return;
+  }
+
+  smooth_scroll_sequencer_ = sequencer;
+}
+
+void LocalFrame::FinishedScrollSequence() {
+  if (!IsLocalRoot()) {
+    LocalFrameRoot().FinishedScrollSequence();
+    return;
+  }
+
+  smooth_scroll_sequencer_.Clear();
+}
+
+SmoothScrollSequencer* LocalFrame::GetSmoothScrollSequencer() const {
   if (!IsLocalRoot())
     return LocalFrameRoot().GetSmoothScrollSequencer();
-  if (!smooth_scroll_sequencer_)
-    smooth_scroll_sequencer_ = MakeGarbageCollected<SmoothScrollSequencer>();
-  return *smooth_scroll_sequencer_;
+  return smooth_scroll_sequencer_;
 }
 
 ukm::UkmRecorder* LocalFrame::GetUkmRecorder() {
@@ -2398,11 +2479,11 @@ BlockingDetailsList LocalFrame::ConvertFeatureAndLocationToMojomStruct(
     const BFCacheBlockingFeatureAndLocations& non_sticky,
     const BFCacheBlockingFeatureAndLocations& sticky) {
   BlockingDetailsList blocking_details_list;
-  for (auto feature : non_sticky) {
+  for (auto feature : non_sticky.details_list) {
     auto blocking_details = CreateBlockingDetailsMojom(feature);
     blocking_details_list.push_back(std::move(blocking_details));
   }
-  for (auto feature : sticky) {
+  for (auto feature : sticky.details_list) {
     auto blocking_details = CreateBlockingDetailsMojom(feature);
     blocking_details_list.push_back(std::move(blocking_details));
   }
@@ -3148,6 +3229,16 @@ void LocalFrame::MediaPlayerActionAtViewportPoint(
     case mojom::blink::MediaPlayerActionType::kControls:
       media_element->SetUserWantsControlsVisible(enable);
       break;
+    case mojom::blink::MediaPlayerActionType::kCopyVideoFrame:
+      DCHECK(IsA<HTMLVideoElement>(media_element));
+      {
+        auto* video_element = To<HTMLVideoElement>(media_element);
+        auto image = video_element->CreateStaticBitmapImage();
+        if (image) {
+          GetEditor().CopyImage(result, image);
+        }
+      }
+      break;
     case mojom::blink::MediaPlayerActionType::kPictureInPicture:
       DCHECK(IsA<HTMLVideoElement>(media_element));
       if (enable) {
@@ -3263,8 +3354,8 @@ void LocalFrame::PostMessageEvent(
   }
 
   message_event->initMessageEvent(
-      "message", false, false, std::move(message.message), source_origin,
-      "" /*lastEventId*/, window, ports, user_activation,
+      event_type_names::kMessage, false, false, std::move(message.message),
+      source_origin, "" /*lastEventId*/, window, ports, user_activation,
       message.delegated_capability);
 
   // If the agent cluster id had a value it means this was locked when it
@@ -3462,9 +3553,13 @@ LocalFrame::GetNotRestoredReasons() {
   return not_restored_reasons_;
 }
 
+void LocalFrame::SetLCPPHint(
+    mojom::blink::LCPCriticalPathPredictorNavigationTimeHintPtr hint) {
+  // TODO(crbug.com/1419756): Pass the hint to `lcpp_`
+}
+
 void LocalFrame::AddScrollSnapshotClient(ScrollSnapshotClient& client) {
   scroll_snapshot_clients_.insert(&client);
-  unvalidated_scroll_snapshot_clients_.insert(&client);
 }
 
 void LocalFrame::UpdateScrollSnapshots() {
@@ -3476,10 +3571,14 @@ void LocalFrame::UpdateScrollSnapshots() {
 
 bool LocalFrame::ValidateScrollSnapshotClients() {
   bool valid = true;
-  for (auto& client : unvalidated_scroll_snapshot_clients_)
+  for (auto& client : scroll_snapshot_clients_) {
     valid &= client->ValidateSnapshot();
-  unvalidated_scroll_snapshot_clients_.clear();
+  }
   return valid;
+}
+
+void LocalFrame::ClearScrollSnapshotClients() {
+  scroll_snapshot_clients_.clear();
 }
 
 void LocalFrame::ScheduleNextServiceForScrollSnapshotClients() {

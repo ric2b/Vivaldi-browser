@@ -516,7 +516,7 @@ const char kDefined_Help[] =
 
   You can also check a named scope using a subscript string expression:
     defined(foo[bar + "_name"])
-  Which will return true or false depending on whether the subscript
+  which will return true or false depending on whether the subscript
   expression expands to the name of a member of the scope foo. It will
   throw an error if foo is not defined or is not a scope, or if the
   expression does not expand to a string, or if it is an empty string.

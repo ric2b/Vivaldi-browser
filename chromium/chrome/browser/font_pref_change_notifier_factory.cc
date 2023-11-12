@@ -10,7 +10,12 @@
 FontPrefChangeNotifierFactory::FontPrefChangeNotifierFactory()
     : ProfileKeyedServiceFactory(
           "FontPrefChangeNotifier",
-          ProfileSelections::BuildRedirectedInIncognito()) {}
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {}
 
 FontPrefChangeNotifierFactory::~FontPrefChangeNotifierFactory() = default;
 
@@ -23,7 +28,8 @@ FontPrefChangeNotifier* FontPrefChangeNotifierFactory::GetForProfile(
 
 // static
 FontPrefChangeNotifierFactory* FontPrefChangeNotifierFactory::GetInstance() {
-  return base::Singleton<FontPrefChangeNotifierFactory>::get();
+  static base::NoDestructor<FontPrefChangeNotifierFactory> instance;
+  return instance.get();
 }
 
 KeyedService* FontPrefChangeNotifierFactory::BuildServiceInstanceFor(

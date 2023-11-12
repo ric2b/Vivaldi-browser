@@ -10,6 +10,7 @@ GEN('#include "chrome/browser/ash/web_applications/personalization_app/personali
 
 GEN('#include "ash/constants/ash_features.h"');
 GEN('#include "ash/public/cpp/ambient/ambient_client.h"');
+GEN('#include "chromeos/constants/chromeos_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
 
 const ROOT_PAGE = 'chrome://personalization/';
@@ -61,6 +62,14 @@ async function waitUntil(func, message, intervalMs = 50, timeoutMs = 1001) {
 
 function getRouter() {
   return document.querySelector('personalization-router');
+}
+
+/** Returns an array of three numbers, representing the RGB values. */
+function getBodyColorChannels() {
+  return getComputedStyle(document.body)
+      .backgroundColor.match(/rgb\((\d+), (\d+), (\d+)\)/)
+      .slice(1, 4)
+      .map(x => parseInt(x, 10));
 }
 
 class PersonalizationAppBrowserTest extends testing.Test {
@@ -127,13 +136,45 @@ TEST_F(PersonalizationAppBrowserTest.name, 'All', async () => {
       const theme = getRouter()
                         .shadowRoot.querySelector('personalization-main')
                         .shadowRoot.querySelector('personalization-theme');
+
       const lightButton = await waitUntil(
           () => theme.shadowRoot.getElementById('lightMode'),
           'failed to find light button');
-      assertEquals('true', lightButton.getAttribute('aria-pressed'));
+      assertEquals('false', lightButton.getAttribute('aria-checked'));
       const darkButton = theme.shadowRoot.getElementById('darkMode');
       assertTrue(!!darkButton);
-      assertEquals(darkButton.getAttribute('aria-pressed'), 'false');
+      assertEquals('false', darkButton.getAttribute('aria-checked'));
+      const autoButton = theme.shadowRoot.getElementById('autoMode');
+      assertTrue(!!autoButton);
+      assertEquals('true', autoButton.getAttribute('aria-checked'));
+    });
+
+    test('selects dark mode', async () => {
+      const theme = getRouter()
+                        .shadowRoot.querySelector('personalization-main')
+                        .shadowRoot.querySelector('personalization-theme');
+      const darkButton = theme.shadowRoot.getElementById('darkMode');
+
+      darkButton.click();
+
+      assertEquals('true', darkButton.getAttribute('aria-checked'));
+      await waitUntil(
+          () => getBodyColorChannels().every(channel => channel < 50),
+          'failed to switch to dark mode');
+    });
+
+    test('selects light mode', async () => {
+      const theme = getRouter()
+                        .shadowRoot.querySelector('personalization-main')
+                        .shadowRoot.querySelector('personalization-theme');
+      const lightButton = theme.shadowRoot.getElementById('lightMode');
+
+      lightButton.click();
+
+      assertEquals('true', lightButton.getAttribute('aria-checked'));
+      await waitUntil(
+          () => getBodyColorChannels().every(channel => channel > 200),
+          'failed to switch to light mode');
     });
 
     test('shows user info', async () => {
@@ -184,7 +225,7 @@ TEST_F(
               getRouter()
                   .shadowRoot.querySelector('personalization-main')
                   .shadowRoot.querySelector('ambient-preview-large')
-                  .shadowRoot.querySelector('#ambientSubpageLink');
+                  .shadowRoot.querySelector('cr-icon-button');
           assertTrue(!!ambientSubpageLink);
         });
       });
@@ -211,9 +252,10 @@ TEST_F(
 
       suite('ambient mode disallowed', () => {
         test('does not show ambient preview', () => {
-          const preview = getRouter()
-                              .shadowRoot.querySelector('personalization-main')
-                              .shadowRoot.querySelector('ambient-preview');
+          const preview =
+              getRouter()
+                  .shadowRoot.querySelector('personalization-main')
+                  .shadowRoot.querySelector('ambient-preview-large');
           assertFalse(!!preview);
         });
 
@@ -221,13 +263,75 @@ TEST_F(
           const ambientSubpageLink =
               getRouter()
                   .shadowRoot.querySelector('personalization-main')
-                  .shadowRoot.getElementById('ambientSubpageLink');
+                  .shadowRoot.querySelector('cr-icon-button');
           assertFalse(!!ambientSubpageLink);
         });
       });
 
       mocha.run();
     });
+
+class PersonalizationAppAmbientModeDisallowedJellyBrowserTest extends
+    PersonalizationAppBrowserTest {
+  /** @override */
+  get testGenPreamble() {
+    return () => {
+      GEN('ash::AmbientClient::Get()->SetAmbientModeAllowedForTesting(false);');
+    };
+  }
+
+  /** @override */
+  get featureList() {
+    return {
+      enabled: ['chromeos::features::kJelly'],
+    };
+  }
+}
+
+this[PersonalizationAppAmbientModeDisallowedJellyBrowserTest.name] =
+    PersonalizationAppAmbientModeDisallowedJellyBrowserTest;
+
+TEST_F(
+    PersonalizationAppAmbientModeDisallowedJellyBrowserTest.name, 'All',
+    async () => {
+      await import('chrome://webui-test/mojo_webui_test_support.js');
+
+      suite('ambient mode disallowed', () => {
+        test('shows ambient preview', () => {
+          const preview =
+              getRouter()
+                  .shadowRoot.querySelector('personalization-main')
+                  .shadowRoot.querySelector('ambient-preview-large');
+
+          assertTrue(!!preview);
+        });
+
+        test('shows disabled ambient subpage link', () => {
+          const ambientSubpageLink =
+              getRouter()
+                  .shadowRoot.querySelector('personalization-main')
+                  .shadowRoot.querySelector('ambient-preview-large')
+                  .shadowRoot.querySelector('cr-icon-button');
+
+          assertTrue(!!ambientSubpageLink);
+          assertTrue(ambientSubpageLink.disabled);
+        });
+
+        test('shows help link', () => {
+          const helpLink =
+              getRouter()
+                  .shadowRoot.querySelector('personalization-main')
+                  .shadowRoot.querySelector('ambient-preview-large')
+                  .shadowRoot.querySelector('cr-button')
+                  .firstElementChild.href;
+          assertTrue(!!helpLink);
+          assertTrue(helpLink.includes('support.google.com'));
+        });
+      });
+
+      mocha.run();
+    });
+
 
 class PersonalizationAppWallpaperSubpageBrowserTest extends
     PersonalizationAppBrowserTest {}
@@ -245,7 +349,7 @@ TEST_F(PersonalizationAppWallpaperSubpageBrowserTest.name, 'All', async () => {
     getRouter()
         .shadowRoot.querySelector('personalization-main')
         .shadowRoot.querySelector('wallpaper-preview')
-        .shadowRoot.getElementById('wallpaperButton')
+        .shadowRoot.querySelector('cr-icon-button')
         .click();
     assertEquals(
         ROOT_PAGE + 'wallpaper', window.location.href,
@@ -452,7 +556,10 @@ TEST_F(PersonalizationAppWallpaperSubpageBrowserTest.name, 'All', async () => {
           DEFAULT_WALLPAPER_NAME, imageTitle.textContent.trim(),
           'default wallpaper is shown at first');
 
-      wallpaperSelected.shadowRoot.getElementById('dailyRefresh').click();
+      const dailyRefreshButton = await waitUntil(
+          () => wallpaperSelected.shadowRoot.getElementById('dailyRefresh'),
+          'failed to find daily refresh button');
+      dailyRefreshButton.click();
 
       const sharedAlbumDialog = await waitUntil(
           () => getSharedAlbumDialog(),
@@ -478,3 +585,188 @@ TEST_F(PersonalizationAppWallpaperSubpageBrowserTest.name, 'All', async () => {
 
   mocha.run();
 });
+
+class PersonalizationAppDynamicColorEnabledBrowserTest extends
+    PersonalizationAppBrowserTest {
+  /** @override */
+  get featureList() {
+    return {
+      enabled: ['chromeos::features::kJelly'],
+    };
+  }
+}
+
+this[PersonalizationAppDynamicColorEnabledBrowserTest.name] =
+    PersonalizationAppDynamicColorEnabledBrowserTest;
+
+TEST_F(
+    PersonalizationAppDynamicColorEnabledBrowserTest.name, 'All', async () => {
+      await import('chrome://webui-test/mojo_webui_test_support.js');
+
+      function getDynamicColorElement() {
+        const dynamicColor =
+            getRouter()
+                .shadowRoot.querySelector('personalization-main')
+                .shadowRoot.querySelector('personalization-theme')
+                .shadowRoot.querySelector('dynamic-color');
+        assertTrue(!!dynamicColor);
+        return dynamicColor;
+      }
+
+      function getDynamicColorToggle() {
+        const toggle = getDynamicColorElement().shadowRoot.getElementById(
+            'dynamicColorToggle');
+        assertTrue(!!toggle);
+        return toggle;
+      }
+
+      function getColorSchemeSelector() {
+        const colorScheme = getDynamicColorElement().shadowRoot.getElementById(
+            'colorSchemeSelector');
+        assertTrue(!!colorScheme);
+        return colorScheme;
+      }
+
+      function getStaticColorSelector() {
+        const staticColor = getDynamicColorElement().shadowRoot.getElementById(
+            'staticColorSelector');
+        assertTrue(!!staticColor);
+        return staticColor;
+      }
+
+      async function setDynamicColorToggle(checkedState) {
+        const toggle = getDynamicColorToggle();
+        if (checkedState !== toggle.checked) {
+          const toggleDescription =
+              getDynamicColorElement().shadowRoot.getElementById(
+                  'dynamicColorToggleDescription');
+          const originalColor = getComputedStyle(toggleDescription).color;
+          toggle.click();
+          await waitUntil(
+              () => originalColor !== getComputedStyle(toggleDescription).color,
+              'toggle failed to update colors');
+        }
+      }
+
+      setup(async () => {
+        // Reset to default state before each test to reduce dependencies.
+        await setDynamicColorToggle(/* checkedState= */ true);
+        const colorSchemeButtons =
+            Array.from(getColorSchemeSelector().querySelectorAll('cr-button'));
+        colorSchemeButtons[0].click();
+      });
+
+      suite('dynamic color', () => {
+        test('shows dynamic color options', () => {
+          assertTrue(!!getDynamicColorToggle());
+          assertTrue(!!getColorSchemeSelector());
+          assertTrue(!!getStaticColorSelector());
+        });
+
+        test('clicks toggle', async () => {
+          const toggleDescription =
+              getDynamicColorElement().shadowRoot.getElementById(
+                  'dynamicColorToggleDescription');
+          const toggle = getDynamicColorToggle();
+          const checkedState = toggle.checked;
+          const originalColor = getComputedStyle(toggleDescription).color;
+
+          await setDynamicColorToggle(!checkedState);
+
+          await waitUntil(
+              () => originalColor !== getComputedStyle(toggleDescription).color,
+              'failed to update colors');
+        });
+
+        test('shows color scheme options', async () => {
+          await setDynamicColorToggle(true);
+
+          assertTrue(getDynamicColorToggle().checked);
+          assertTrue(getStaticColorSelector().hidden);
+          assertFalse(getColorSchemeSelector().hidden);
+        });
+
+        test('selects color scheme options', async () => {
+          const toggleDescription =
+              getDynamicColorElement().shadowRoot.getElementById(
+                  'dynamicColorToggleDescription');
+          await setDynamicColorToggle(true);
+
+          // Click all of the color scheme buttons and save the text color of
+          // the toggle description to a set.
+          const crosSysSecondarySet = new Set();
+          const colorSchemeButtons = Array.from(
+              getColorSchemeSelector().querySelectorAll('cr-button'));
+          for (const button of colorSchemeButtons) {
+            if (button.ariaChecked === 'false') {
+              const originalColor = getComputedStyle(toggleDescription).color;
+              button.click();
+              await waitUntil(
+                  () => originalColor !==
+                      getComputedStyle(toggleDescription).color,
+                  'failed to update colors', /* intervalMs= */ 200,
+                  /* timeoutMs= */ 3000);
+            }
+
+            const newColor = getComputedStyle(toggleDescription).color;
+            crosSysSecondarySet.add(newColor);
+          }
+
+          assertEquals(
+              colorSchemeButtons.length, crosSysSecondarySet.size,
+              'Each color should be unique');
+        });
+
+        test('shows static color options', async () => {
+          const toggleButton = getDynamicColorToggle();
+
+          await setDynamicColorToggle(false);
+
+          assertFalse(toggleButton.checked);
+          assertFalse(getStaticColorSelector().hidden);
+          assertTrue(getColorSchemeSelector().hidden);
+        });
+
+        test('selects static color options', async () => {
+          const theme = getRouter()
+                            .shadowRoot.querySelector('personalization-main')
+                            .shadowRoot.querySelector('personalization-theme');
+          const lightButton = theme.shadowRoot.getElementById('lightMode');
+          lightButton.click();
+          await waitUntil(
+              () => getBodyColorChannels().every(channel => channel > 200),
+              'failed to switch to light mode', /* intervalMs= */ 200,
+              /* timeoutMs= */ 3000);
+          assertEquals('true', lightButton.getAttribute('aria-checked'));
+          await setDynamicColorToggle(false);
+
+          // Click all of the static color buttons and save the background color
+          // of the light mode button to a set.
+          const crosButtonBackgroundColorPrimarySet = new Set();
+          const staticColorButtons = Array.from(
+              getStaticColorSelector().querySelectorAll('cr-button'));
+          for (const button of staticColorButtons) {
+            if (button.ariaChecked === 'false') {
+              const originalColor =
+                  getComputedStyle(lightButton).backgroundColor;
+              button.click();
+              await waitUntil(
+                  () => originalColor !==
+                      getComputedStyle(lightButton).backgroundColor,
+                  'failed to update colors', /* intervalMs= */ 200,
+                  /* timeoutMs= */ 3000);
+            }
+
+            const newColor = getComputedStyle(lightButton).backgroundColor;
+            crosButtonBackgroundColorPrimarySet.add(newColor);
+          }
+
+          assertEquals(
+              staticColorButtons.length,
+              crosButtonBackgroundColorPrimarySet.size,
+              'Each color should be unique');
+        });
+      });
+
+      mocha.run();
+    });

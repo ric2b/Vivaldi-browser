@@ -6,7 +6,7 @@
 
 #import "base/ios/ios_util.h"
 #import "base/metrics/field_trial_params.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -41,11 +41,11 @@ BASE_FEATURE(kEnableNTPViewHierarchyRepair,
 
 BASE_FEATURE(kEnableCheckVisibilityOnAttentionLogStart,
              "EnableCheckVisibilityOnAttentionLogStart",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableRefineDataSourceReloadReporting,
              "EnableRefineDataSourceReloadReporting",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kFeedHeaderSettings,
              "FeedHeaderSettings",
@@ -53,10 +53,6 @@ BASE_FEATURE(kFeedHeaderSettings,
 
 BASE_FEATURE(kOverrideFeedSettings,
              "OverrideFeedSettings",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kEnableFeedImageCaching,
-             "EnableFeedImageCaching",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableFeedSyntheticCapabilities,
@@ -70,6 +66,10 @@ BASE_FEATURE(kWebFeedFeedbackReroute,
 BASE_FEATURE(kEnableFollowManagementInstantReload,
              "EnableFollowManagementInstantReload",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableSignedOutViewDemotion,
+             "EnableSignedOutViewDemotion",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #pragma mark - Feature parameters
 
@@ -170,7 +170,7 @@ bool IsRefineDataSourceReloadReportingEnabled() {
 
 bool IsStickyHeaderDisabledForFollowingFeed() {
   return base::GetFieldTrialParamByFeatureAsBool(
-      kFeedHeaderSettings, kDisableStickyHeaderForFollowingFeed, false);
+      kFeedHeaderSettings, kDisableStickyHeaderForFollowingFeed, true);
 }
 
 bool IsDotEnabledForNewFollowedContent() {
@@ -178,16 +178,12 @@ bool IsDotEnabledForNewFollowedContent() {
       kFeedHeaderSettings, kEnableDotForNewFollowedContent, false);
 }
 
-bool IsFeedImageCachingEnabled() {
-  return base::FeatureList::IsEnabled(kEnableFeedImageCaching);
-}
-
 bool IsFeedSyntheticCapabilitiesEnabled() {
   return base::FeatureList::IsEnabled(kEnableFeedSyntheticCapabilities);
 }
 
 int FollowingFeedHeaderHeight() {
-  int defaultWebChannelsHeaderHeight = 52;
+  int defaultWebChannelsHeaderHeight = 30;
   return base::GetFieldTrialParamByFeatureAsInt(kFeedHeaderSettings,
                                                 kOverrideFeedHeaderHeight,
                                                 defaultWebChannelsHeaderHeight);
@@ -199,4 +195,8 @@ bool IsWebFeedFeedbackRerouteEnabled() {
 
 bool IsFollowManagementInstantReloadEnabled() {
   return base::FeatureList::IsEnabled(kEnableFollowManagementInstantReload);
+}
+
+bool IsSignedOutViewDemotionEnabled() {
+  return base::FeatureList::IsEnabled(kEnableSignedOutViewDemotion);
 }

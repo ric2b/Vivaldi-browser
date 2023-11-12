@@ -10,6 +10,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/device_notifications/device_status_icon_renderer.h"
 #include "chrome/browser/hid/hid_connection_tracker.h"
 #include "chrome/browser/hid/hid_connection_tracker_factory.h"
 #include "chrome/browser/hid/hid_system_tray_icon.h"
@@ -25,11 +26,11 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "base/command_line.h"
+#include "base/values.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/value_builder.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 namespace {
@@ -45,9 +46,10 @@ constexpr char kTestProfileName[] = "user@gmail.com";
 
 class MockHidSystemTrayIcon : public HidSystemTrayIcon {
  public:
+  MockHidSystemTrayIcon() : HidSystemTrayIcon(nullptr) {}
+
   MOCK_METHOD(void, StageProfile, (Profile*), (override));
   MOCK_METHOD(void, UnstageProfile, (Profile*, bool), (override));
-  MOCK_METHOD(bool, ContainProfile, (Profile*), (override));
   MOCK_METHOD(void, ProfileAdded, (Profile*), (override));
   MOCK_METHOD(void, ProfileRemoved, (Profile*), (override));
   MOCK_METHOD(void, NotifyConnectionCountUpdated, (Profile*), (override));
@@ -87,16 +89,16 @@ class HidConnectionTrackerTest : public BrowserWithTestWindowTest {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   scoped_refptr<const extensions::Extension> CreateExtensionWithName(
       const std::string& extension_name) {
-    extensions::DictionaryBuilder manifest;
-    manifest.Set("name", extension_name)
-        .Set("description", "For testing.")
-        .Set("version", "0.1")
-        .Set("manifest_version", 2)
-        .Set("web_accessible_resources",
-             extensions::ListBuilder().Append("index.html").Build());
+    auto manifest = base::Value::Dict()
+                        .Set("name", extension_name)
+                        .Set("description", "For testing.")
+                        .Set("version", "0.1")
+                        .Set("manifest_version", 2)
+                        .Set("web_accessible_resources",
+                             base::Value::List().Append("index.html"));
     scoped_refptr<const extensions::Extension> extension =
         extensions::ExtensionBuilder(/*name=*/extension_name)
-            .MergeManifest(manifest.Build())
+            .MergeManifest(std::move(manifest))
             .Build();
     CHECK(extension);
     return extension;
@@ -298,8 +300,8 @@ class HidConnectionTrackerTest : public BrowserWithTestWindowTest {
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
  private:
-  raw_ptr<HidConnectionTracker> hid_connection_tracker_;
-  raw_ptr<MockHidSystemTrayIcon> hid_system_tray_icon_;
+  raw_ptr<HidConnectionTracker, DanglingUntriaged> hid_connection_tracker_;
+  raw_ptr<MockHidSystemTrayIcon, DanglingUntriaged> hid_system_tray_icon_;
 };
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)

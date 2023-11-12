@@ -108,11 +108,11 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHSharedHighlightingBuilder,
     &kIPHSharedHighlightingReceiverFeature,
     &kIPHSharingHubWebnotesStylizeFeature,
+    &kIPHRestoreTabsOnFREFeature,
 #endif  // BUILDFLAG(IS_ANDROID)
 #if BUILDFLAG(IS_IOS)
     &kIPHBottomToolbarTipFeature,
     &kIPHLongPressToolbarTipFeature,
-    &kIPHNewTabTipFeature,
     &kIPHNewIncognitoTabTipFeature,
     &kIPHBadgedReadingListFeature,
     &kIPHWhatsNewFeature,
@@ -121,7 +121,6 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHDiscoverFeedHeaderFeature,
     &kIPHDefaultSiteViewFeature,
     &kIPHFollowWhileBrowsingFeature,
-    &kIPHOverflowMenuTipFeature,
     &kIPHPriceNotificationsWhileBrowsingFeature,
     &kIPHiOSDefaultBrowserBadgeEligibilityFeature,
     &kIPHiOSDefaultBrowserOverflowMenuBadgeFeature,
@@ -132,11 +131,19 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHiOSPromoPostRestoreFeature,
     &kIPHiOSPromoCredentialProviderExtensionFeature,
     &kIPHiOSPromoDefaultBrowserFeature,
+    &kIPHiOSNewTabToolbarItemFeature,
+    &kIPHiOSTabGridToolbarItemFeature,
+    &kIPHiOSHistoryOnOverflowMenuFeature,
+    &kIPHiOSShareToolbarItemFeature,
+    &kIPHiOSDefaultBrowserVideoPromoTriggerFeature,
+    &kIPHiOSPromoPostRestoreDefaultBrowserFeature,
 #endif  // BUILDFLAG(IS_IOS)
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
     &kIPHAutofillFeedbackNewBadgeFeature,
     &kIPHBatterySaverModeFeature,
+    &kIPHCompanionSidePanelFeature,
+    &kIPHCompanionSidePanelRegionSearchFeature,
     &kIPHDesktopTabGroupsNewGroupFeature,
     &kIPHDesktopCustomizeChromeFeature,
     &kIPHDownloadToolbarButtonFeature,
@@ -150,14 +157,16 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHPasswordsManagementBubbleAfterSaveFeature,
     &kIPHPasswordsManagementBubbleDuringSigninFeature,
     &kIPHPasswordsWebAppProfileSwitchFeature,
+    &kIPHPasswordManagerShortcutFeature,
     &kIPHPerformanceNewBadgeFeature,
     &kIPHPowerBookmarksSidePanelFeature,
+    &kIPHPriceInsightsPageActionIconLabelFeature,
     &kIPHPriceTrackingChipFeature,
     &kIPHPriceTrackingPageActionIconLabelFeature,
     &kIPHReadingListDiscoveryFeature,
     &kIPHReadingListEntryPointFeature,
     &kIPHReadingListInSidePanelFeature,
-    &kIPHReopenTabFeature,
+    &kIPHReadingModeSidePanelFeature,
     &kIPHSideSearchAutoTriggeringFeature,
     &kIPHSideSearchFeature,
     &kIPHSideSearchPageActionLabelFeature,
@@ -184,6 +193,11 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHGoogleOneOfferNotificationFeature,
     &kIPHLauncherSearchHelpUiFeature,
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+    &kIPHiOSPasswordPromoDesktopFeature,
+#endif  // !BUILDFLAG(IS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+
 };
 }  // namespace
 

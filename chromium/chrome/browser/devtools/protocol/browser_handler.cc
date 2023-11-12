@@ -12,11 +12,14 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/devtools/chrome_devtools_manager_delegate.h"
 #include "chrome/browser/devtools/devtools_dock_tile.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/privacy_sandbox/privacy_sandbox_attestations/privacy_sandbox_attestations.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -205,5 +208,23 @@ protocol::Response BrowserHandler::ExecuteBrowserCommand(
     return Response::InvalidRequest(
         "Browser command not supported. BrowserCommandId: " + command_id);
   }
+  return Response::Success();
+}
+
+protocol::Response BrowserHandler::AddPrivacySandboxEnrollmentOverride(
+    const std::string& in_url) {
+  auto host = content::DevToolsAgentHost::GetForId(target_id_);
+  if (!host) {
+    return Response::ServerError("No host found");
+  }
+
+  GURL url_to_add = GURL(in_url);
+
+  if (!url_to_add.is_valid()) {
+    return Response::InvalidParams("Invalid URL");
+  }
+
+  privacy_sandbox::PrivacySandboxAttestations::GetInstance()->AddOverride(
+      net::SchemefulSite(url_to_add));
   return Response::Success();
 }

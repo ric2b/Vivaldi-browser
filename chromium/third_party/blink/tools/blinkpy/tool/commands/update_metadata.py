@@ -828,6 +828,8 @@ class MetadataUpdater:
         """
         if self._overwrite_conditions == 'fill':
             self._fill_missing(test_file)
+        # Set `requires_update` to check for orphaned test sections.
+        test_file.set_requires_update()
         expected = test_file.update(
             self._default_expected,
             (self._primary_properties, self._dependent_properties),
@@ -840,6 +842,7 @@ class MetadataUpdater:
             remove_intermittent=(not self._keep_statuses))
         if expected:
             self._disable_slow_timeouts(test_file, expected)
+            self._remove_orphaned_tests(expected)
 
         modified = expected and expected.modified
         if modified:
@@ -867,7 +870,10 @@ class MetadataUpdater:
             statuses_by_config = collections.defaultdict(set)
             for prop, config, value in results:
                 if prop == 'status':
-                    statuses_by_config[config].add(value)
+                    status, known_intermittent = metadata.unpack_result(value)
+                    statuses_by_config[config].add(status)
+                    if known_intermittent:
+                        statuses_by_config[config].update(known_intermittent)
             # Writing a conditional `disabled` value is complicated, so just
             # disable the test unconditionally if any configuration times out
             # consistently.
@@ -875,6 +881,14 @@ class MetadataUpdater:
                    for statuses in statuses_by_config.values()):
                 test.set('disabled', message)
                 test.modified = True
+
+    def _remove_orphaned_tests(self,
+                               expected: manifestupdate.ExpectedManifest):
+        # Iterate over a copy, since `test.remove()` mutates `expected`.
+        for test in list(expected.iterchildren()):
+            if test.id not in self._updater.id_test_map:
+                test.remove()
+                expected.modified = True
 
     def _add_bug_url(self, expected: manifestupdate.ExpectedManifest):
         for test in expected.iterchildren():

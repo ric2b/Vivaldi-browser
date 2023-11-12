@@ -99,7 +99,7 @@ class MockContentBrowserClient : public TestContentBrowserClient {
 
  private:
   raw_ptr<ContentBrowserClient> old_browser_client_;
-  raw_ptr<MockSpeculationHostDelegate> delegate_;
+  raw_ptr<MockSpeculationHostDelegate, DanglingUntriaged> delegate_;
 };
 
 class PrefetcherTest : public RenderViewHostTestHarness {
@@ -166,8 +166,7 @@ TEST_F(PrefetcherTest, ProcessCandidatesForPrefetch) {
   candidate1->referrer = blink::mojom::Referrer::New();
   candidates.push_back(std::move(candidate1));
 
-  prefetcher.ProcessCandidatesForPrefetch(base::UnguessableToken::Create(),
-                                          candidates);
+  prefetcher.ProcessCandidatesForPrefetch(candidates);
   EXPECT_TRUE(delegate->Candidates().empty());
   EXPECT_EQ(1u, GetPrefetchService()->prefetches_.size());
 
@@ -235,8 +234,7 @@ TEST_F(PrefetcherTest, MockPrefetcher) {
   candidate1->referrer = blink::mojom::Referrer::New();
   candidates.push_back(std::move(candidate1));
 
-  prefetcher.ProcessCandidatesForPrefetch(base::UnguessableToken::Create(),
-                                          candidates);
+  prefetcher.ProcessCandidatesForPrefetch(candidates);
   EXPECT_TRUE(delegate->Candidates().empty());
   EXPECT_EQ(1u, GetPrefetchService()->prefetches_.size());
 

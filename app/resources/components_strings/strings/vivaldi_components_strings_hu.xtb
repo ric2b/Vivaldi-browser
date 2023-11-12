@@ -58,6 +58,7 @@
 <translation id="3226128629678568754">Nyomd meg a frissítés gombot, az oldal betöltéséhez szükséges adatok újraküldéséhez.</translation>
 <translation id="3234666976984236645">Mindig észlelje a fontos tartalmat ezen a webhelyen</translation>
 <translation id="3308738399950580893">Hirdetések</translation>
+<translation id="3384522979010096022">Szervezeted nem engedélyezi a webhely megtekintését</translation>
 <translation id="3422472998109090673">A(z) <ph name="HOST_NAME" /> jelenleg nem érhető el.</translation>
 <translation id="3427092606871434483">Engedélyezés (alapértelmezett)</translation>
 <translation id="3447661539832366887">Az eszköz tulajdonosa kikapcsolta a dinoszauruszos játékot.</translation>
@@ -191,7 +192,6 @@
 <translation id="8150722005171944719">A fájl (<ph name="URL" />) nem olvasható. Lehet, hogy eltávolították, áthelyezték, vagy a fájlengedélyek megakadályozzák a hozzáférést.</translation>
 <translation id="8184538546369750125">Globális alapértelmezés használata (Engedélyezés)</translation>
 <translation id="8211406090763984747">A kapcsolat biztonságos</translation>
-<translation id="8225771182978767009">A számítógépet beállító személy a webhely letiltása mellett döntött.</translation>
 <translation id="8241707690549784388">A keresett oldal a megadott információt használta. Ha visszatérsz arra az oldalra, akkor lehet, hogy az egyszer már megtett mozdulatok ismétlésre kerülnek. Mégis továbblépsz?</translation>
 <translation id="8241712895048303527">Letiltás ezen a webhelyen</translation>
 <translation id="8286036467436129157">Bejelentkezés</translation>
@@ -212,7 +212,6 @@
 <translation id="9062620674789239642">Előfordulhat, hogy át lett helyezve, szerkesztve vagy törlésre került.</translation>
 <translation id="9069693763241529744">Bővítmény által letiltva</translation>
 <translation id="9073799351042754113">Kikapcsoltad a biztonsági figyelmeztetéseket ezen a webhelyen.</translation>
-<translation id="910924428752220542">Vivaldi jelszavak</translation>
 <translation id="9169664750068251925">Mindig tiltsa ezen az oldalon</translation>
 <translation id="9180553614777056266">Reklámblokkoló</translation>
 <translation id="9183425211371246419">A(z) <ph name="HOST_NAME" /> egy nem támogatott protokollt használ.</translation>

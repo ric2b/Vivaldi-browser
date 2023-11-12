@@ -105,17 +105,11 @@ void PersonalDataManagerCleaner::SyncStarted(syncer::ModelType model_type) {
 }
 
 void PersonalDataManagerCleaner::ApplyAddressFixesAndCleanups() {
-  // One-time fix, otherwise NOP.
-  RemoveOrphanAutofillTableRows();
-
   // Once per major version, otherwise NOP.
   ApplyDedupingRoutine();
 
   // Once per major version, otherwise NOP.
   DeleteDisusedAddresses();
-
-  // Ran everytime it is called.
-  ClearProfileNonSettingsOrigins();
 
   // Once per user profile startup.
   RemoveInaccessibleProfileValues();
@@ -127,22 +121,6 @@ void PersonalDataManagerCleaner::ApplyCardFixesAndCleanups() {
 
   // Ran everytime it is called.
   ClearCreditCardNonSettingsOrigins();
-}
-
-void PersonalDataManagerCleaner::RemoveOrphanAutofillTableRows() {
-  // Don't run if the fix has already been applied.
-  if (pref_service_->GetBoolean(prefs::kAutofillOrphanRowsRemoved))
-    return;
-
-  scoped_refptr<AutofillWebDataService> local_db =
-      personal_data_manager_->GetLocalDatabase();
-  if (!local_db)
-    return;
-
-  local_db->RemoveOrphanAutofillTableRows();
-
-  // Set the pref so that this fix is never run again.
-  pref_service_->SetBoolean(prefs::kAutofillOrphanRowsRemoved, true);
 }
 
 void PersonalDataManagerCleaner::RemoveInaccessibleProfileValues() {
@@ -168,11 +146,6 @@ void PersonalDataManagerCleaner::RemoveInaccessibleProfileValues() {
 }
 
 bool PersonalDataManagerCleaner::ApplyDedupingRoutine() {
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillEnableProfileDeduplication)) {
-    return false;
-  }
-
   // Check if de-duplication has already been performed on this major version.
   if (!is_autofill_profile_cleanup_pending_) {
     DVLOG(1)
@@ -239,13 +212,9 @@ void PersonalDataManagerCleaner::DedupeProfiles(
   AutofillMetrics::LogNumberOfProfilesConsideredForDedupe(
       existing_profiles->size());
 
-  // Sort the profiles by ranking score with all the verified profiles at the
-  // end. That way the most relevant profiles will get merged into the less
-  // relevant profiles, which keeps the syntax of the most relevant profiles
-  // data. Verified profiles are put at the end because they do not merge into
-  // other profiles, so the loop can be stopped when we reach those. However
-  // they need to be in the vector because an unverified profile trying to merge
-  // into a similar verified profile will be discarded.
+  // Sort the profiles by ranking score. That way the most relevant profiles
+  // will get merged into the less relevant profiles, which keeps the syntax of
+  // the most relevant profiles data.
   // Since profiles earlier in the list are merged into profiles later in the
   // list, `kLocalOrSyncable` profiles are placed before `kAccount` profiles.
   // This is because local profiles can be merged into account profiles, but not
@@ -260,13 +229,10 @@ void PersonalDataManagerCleaner::DedupeProfiles(
         }
         return a->HasGreaterRankingThan(b.get(), comparison_time);
       });
-  auto first_verified_profile = base::ranges::stable_partition(
-      *existing_profiles, [](const std::unique_ptr<AutofillProfile>& profile) {
-        return !profile->IsVerified();
-      });
 
   AutofillProfileComparator comparator(personal_data_manager_->app_locale());
-  for (auto i = existing_profiles->begin(); i != first_verified_profile; i++) {
+  for (auto i = existing_profiles->begin(); i != existing_profiles->end();
+       i++) {
     AutofillProfile* profile_to_merge = i->get();
 
     // If the profile was set to be deleted, skip it. This can happen because
@@ -326,13 +292,10 @@ void PersonalDataManagerCleaner::DedupeProfiles(
         // Now try to merge the new resulting profile with the rest of the
         // existing profiles.
         profile_to_merge = &existing_profile;
-        // Verified profiles do not get merged. Save some time by not
-        // trying. Note that the `existing_profile` (now `profile_to_merge`)
-        // might be verified.
-        // Similarly, account profiles cannot be merged into other profiles,
-        // since that would delete them.
-        if (profile_to_merge->IsVerified() ||
-            profile_to_merge->source() == AutofillProfile::Source::kAccount) {
+        // Account profiles cannot be merged into other profiles, since that
+        // would delete them. Note that the `existing_profile` (now
+        // `profile_to_merge`) might be verified.
+        if (profile_to_merge->source() == AutofillProfile::Source::kAccount) {
           break;
         }
       }
@@ -438,17 +401,6 @@ bool PersonalDataManagerCleaner::DeleteDisusedAddresses() {
   AutofillMetrics::LogNumberOfAddressesDeletedForDisuse(num_deleted_addresses);
 
   return true;
-}
-
-void PersonalDataManagerCleaner::ClearProfileNonSettingsOrigins() {
-  // `kAccount` profiles don't store an origin.
-  for (AutofillProfile* profile : personal_data_manager_->GetProfilesFromSource(
-           AutofillProfile::Source::kLocalOrSyncable)) {
-    if (profile->origin() != kSettingsOrigin && !profile->origin().empty()) {
-      profile->set_origin(std::string());
-      personal_data_manager_->UpdateProfileInDB(*profile, /*enforced=*/true);
-    }
-  }
 }
 
 void PersonalDataManagerCleaner::ClearCreditCardNonSettingsOrigins() {

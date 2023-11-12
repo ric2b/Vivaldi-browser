@@ -164,6 +164,10 @@ def main(argv):
                     help='Enable the use of LTO')
   args_list.add('--use-icf', action='store_true',
                     help='Enable the use of Identical Code Folding')
+  args_list.add('--use-asan', action='store_true',
+                    help='Enable the use of AddressSanitizer')
+  args_list.add('--use-ubsan', action='store_true',
+                    help='Enable the use of UndefinedBehaviorSanitizer')
   args_list.add('--no-last-commit-position', action='store_true',
                     help='Do not generate last_commit_position.h.')
   args_list.add('--out-path',
@@ -434,6 +438,14 @@ def WriteGNNinja(path, platform, host, options, args_list):
         cflags.extend(['-flto', '-fwhole-program-vtables'])
         ldflags.extend(['-flto', '-fwhole-program-vtables'])
 
+    if options.use_asan:
+      cflags.append('-fsanitize=address')
+      ldflags.append('-fsanitize=address')
+
+    if options.use_ubsan:
+      cflags.append('-fsanitize=undefined')
+      ldflags.append('-fsanitize=undefined')
+
     if not options.allow_warnings:
       cflags.append('-Werror')
 
@@ -653,7 +665,6 @@ def WriteGNNinja(path, platform, host, options, args_list):
         'src/gn/group_target_generator.cc',
         'src/gn/header_checker.cc',
         'src/gn/import_manager.cc',
-        'src/gn/inherited_libraries.cc',
         'src/gn/input_conversion.cc',
         'src/gn/input_file.cc',
         'src/gn/input_file_manager.cc',
@@ -692,6 +703,7 @@ def WriteGNNinja(path, platform, host, options, args_list):
         'src/gn/pattern.cc',
         'src/gn/pool.cc',
         'src/gn/qt_creator_writer.cc',
+        'src/gn/resolved_target_data.cc',
         'src/gn/runtime_deps.cc',
         'src/gn/rust_substitution_type.cc',
         'src/gn/rust_tool.cc',
@@ -781,7 +793,6 @@ def WriteGNNinja(path, platform, host, options, args_list):
         'src/gn/functions_unittest.cc',
         'src/gn/hash_table_base_unittest.cc',
         'src/gn/header_checker_unittest.cc',
-        'src/gn/inherited_libraries_unittest.cc',
         'src/gn/input_conversion_unittest.cc',
         'src/gn/json_project_writer_unittest.cc',
         'src/gn/rust_project_writer_unittest.cc',
@@ -811,6 +822,7 @@ def WriteGNNinja(path, platform, host, options, args_list):
         'src/gn/path_output_unittest.cc',
         'src/gn/pattern_unittest.cc',
         'src/gn/pointer_set_unittest.cc',
+        'src/gn/resolved_target_data_unittest.cc',
         'src/gn/resolved_target_deps_unittest.cc',
         'src/gn/runtime_deps_unittest.cc',
         'src/gn/scope_per_file_provider_unittest.cc',

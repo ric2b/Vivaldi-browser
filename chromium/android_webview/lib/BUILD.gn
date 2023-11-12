@@ -29,7 +29,6 @@ source_set("lib") {
     "//components/gwp_asan/common:crash_keys",
     "//components/memory_system",
     "//components/metrics",
-    "//components/power_scheduler",
     "//components/safe_browsing/android:safe_browsing_api_handler",
     "//components/services/heap_profiling/public/cpp",
     "//components/spellcheck:buildflags",
@@ -66,11 +65,6 @@ source_set("webview_entry_point") {
   ]
   sources = [ "webview_entry_point.cc" ]
   defines = []
-
-  if (allow_jni_multiplexing) {
-    defines += [ "JNI_REGISTRATION_REQUIRED" ]
-    deps += [ "//android_webview:webview_jni_registration($default_toolchain)" ]
-  }
 
   if (webview_includes_weblayer) {
     defines += [ "WEBVIEW_INCLUDES_WEBLAYER" ]

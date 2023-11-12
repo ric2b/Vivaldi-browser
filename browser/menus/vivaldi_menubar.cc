@@ -140,9 +140,6 @@ views::MenuItemView* Menubar::AddMenuItem(views::MenuItemView* parent,
           model, model_index, parent, menu_index, command_id);
 
   if (menu_item) {
-    // Flush all buttons to the right side of the menu for the new menu type.
-    menu_item->set_use_right_margin(false);
-
     if (model->GetTypeAt(model_index) == ui::MenuModel::TYPE_COMMAND) {
       std::string url;
       if (params_->delegate->GetUrl(command_id, &url)) {

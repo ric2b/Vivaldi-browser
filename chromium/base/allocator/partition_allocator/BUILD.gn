@@ -4,6 +4,7 @@
 
 import("//base/allocator/partition_allocator/partition_alloc.gni")
 import("//build/buildflag_header.gni")
+import("//build/config/android/config.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/dcheck_always_on.gni")
@@ -99,6 +100,7 @@ component("partition_alloc") {
     "partition_alloc_base/immediate_crash.h",
     "partition_alloc_base/logging.cc",
     "partition_alloc_base/logging.h",
+    "partition_alloc_base/memory/page_size.h",
     "partition_alloc_base/memory/ref_counted.cc",
     "partition_alloc_base/memory/ref_counted.h",
     "partition_alloc_base/memory/scoped_policy.h",
@@ -148,6 +150,8 @@ component("partition_alloc") {
     "partition_bucket.h",
     "partition_bucket_lookup.h",
     "partition_cookie.h",
+    "partition_dcheck_helper.cc",
+    "partition_dcheck_helper.h",
     "partition_direct_map_extent.h",
     "partition_freelist_entry.h",
     "partition_lock.h",
@@ -155,14 +159,14 @@ component("partition_alloc") {
     "partition_oom.h",
     "partition_page.cc",
     "partition_page.h",
+    "partition_page_constants.h",
     "partition_ref_count.h",
     "partition_root.cc",
     "partition_root.h",
     "partition_stats.cc",
     "partition_stats.h",
+    "partition_superpage_extent_entry.h",
     "partition_tls.h",
-    "pkey.cc",
-    "pkey.h",
     "random.cc",
     "random.h",
     "reservation_offset_table.cc",
@@ -174,6 +178,11 @@ component("partition_alloc") {
     "tagging.h",
     "thread_cache.cc",
     "thread_cache.h",
+    "thread_isolation/alignment.h",
+    "thread_isolation/pkey.cc",
+    "thread_isolation/pkey.h",
+    "thread_isolation/thread_isolation.cc",
+    "thread_isolation/thread_isolation.h",
     "yield_processor.h",
   ]
 
@@ -208,6 +217,7 @@ component("partition_alloc") {
   if (is_win) {
     sources += [
       "page_allocator_internals_win.h",
+      "partition_alloc_base/memory/page_size_win.cc",
       "partition_alloc_base/rand_util_win.cc",
       "partition_alloc_base/scoped_clear_last_error_win.cc",
       "partition_alloc_base/threading/platform_thread_win.cc",
@@ -220,6 +230,7 @@ component("partition_alloc") {
       "page_allocator_internals_posix.h",
       "partition_alloc_base/files/file_util.h",
       "partition_alloc_base/files/file_util_posix.cc",
+      "partition_alloc_base/memory/page_size_posix.cc",
       "partition_alloc_base/posix/safe_strerror.cc",
       "partition_alloc_base/posix/safe_strerror.h",
       "partition_alloc_base/rand_util_posix.cc",
@@ -241,6 +252,7 @@ component("partition_alloc") {
       "page_allocator_internals_fuchsia.h",
       "partition_alloc_base/fuchsia/fuchsia_logging.cc",
       "partition_alloc_base/fuchsia/fuchsia_logging.h",
+      "partition_alloc_base/memory/page_size_posix.cc",
       "partition_alloc_base/posix/safe_strerror.cc",
       "partition_alloc_base/posix/safe_strerror.h",
       "partition_alloc_base/rand_util_fuchsia.cc",
@@ -260,12 +272,19 @@ component("partition_alloc") {
       "partition_alloc_base/native_library.h",
       "partition_alloc_base/native_library_posix.cc",
     ]
+
+    # The Android NDK supports PR_MTE_* macros as of NDK r23.
+    if (android_ndk_major_version >= 23) {
+      defines += [ "HAS_PR_MTE_MACROS" ]
+    }
   }
   if (is_apple) {
     # Apple-specific utilities
     sources += [
       "partition_alloc_base/mac/foundation_util.h",
       "partition_alloc_base/mac/foundation_util.mm",
+      "partition_alloc_base/mac/mach_logging.cc",
+      "partition_alloc_base/mac/mach_logging.h",
       "partition_alloc_base/mac/scoped_cftyperef.h",
       "partition_alloc_base/mac/scoped_typeref.h",
     ]
@@ -283,6 +302,7 @@ component("partition_alloc") {
         "partition_alloc_base/system/sys_info_mac.mm",
       ]
     }
+    configs += [ "//build/config/compiler:enable_arc" ]
   }
   if (use_starscan) {
     if (current_cpu == "x64") {
@@ -306,7 +326,6 @@ component("partition_alloc") {
     ":chromecast_buildflags",
     ":chromeos_buildflags",
     ":debugging_buildflags",
-    ":logging_buildflags",
     ":partition_alloc_buildflags",
   ]
 
@@ -318,9 +337,13 @@ component("partition_alloc") {
   public_configs = []
   if (is_android) {
     # tagging.cc requires __arm_mte_set_* functions.
-    deps += [ "//third_party/android_ndk:cpu_features" ]
+    deps += [ "//third_party/cpu_features:ndk_compat" ]
   }
   if (is_fuchsia) {
+    deps += [
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.kernel:fuchsia.kernel_cpp",
+      "//third_party/fuchsia-sdk/sdk/pkg/component_incoming_cpp",
+    ]
     public_deps += [
       "//third_party/fuchsia-sdk/sdk/pkg/fit",
       "//third_party/fuchsia-sdk/sdk/pkg/sync",
@@ -368,6 +391,7 @@ source_set("raw_ptr") {
   check_includes = use_partition_alloc
   public = [
     "pointers/raw_ptr.h",
+    "pointers/raw_ptr_cast.h",
     "pointers/raw_ptr_exclusion.h",
     "pointers/raw_ref.h",
   ]
@@ -412,6 +436,21 @@ buildflag_header("partition_alloc_buildflags") {
   # enablement is already gated on BRP enablement.
   _enable_gwp_asan_support = put_ref_count_in_previous_slot
 
+  # Pools are a logical concept when address space is 32-bit.
+  _glue_core_pools = glue_core_pools && has_64_bit_pointers
+
+  # Pointer compression requires 64-bit pointers.
+  _enable_pointer_compression =
+      enable_pointer_compression_support && has_64_bit_pointers
+
+  # Force-enable live BRP in all processes, ignoring the canonical
+  # experiment state of `PartitionAllocBackupRefPtr`.
+  #
+  # This is not exposed as a GN arg as it is not meant to be used by
+  # developers - it is simply a compile-time hinge that should be
+  # set in the experimental build and then reverted immediately.
+  _force_all_process_brp = false
+
   # TODO(crbug.com/1151236): Need to refactor the following buildflags.
   # The buildflags (except RECORD_ALLOC_INFO) are used by both chrome and
   # partition alloc. For partition alloc,
@@ -427,7 +466,6 @@ buildflag_header("partition_alloc_buildflags") {
     "ENABLE_BACKUP_REF_PTR_SUPPORT=$enable_backup_ref_ptr_support",
     "ENABLE_BACKUP_REF_PTR_SLOW_CHECKS=$enable_backup_ref_ptr_slow_checks",
     "ENABLE_BACKUP_REF_PTR_FEATURE_FLAG=$enable_backup_ref_ptr_feature_flag",
-    "ENABLE_RAW_PTR_EXPERIMENTAL=$enable_raw_ptr_experimental",
     "ENABLE_DANGLING_RAW_PTR_CHECKS=$enable_dangling_raw_ptr_checks",
     "ENABLE_DANGLING_RAW_PTR_FEATURE_FLAG=$enable_dangling_raw_ptr_feature_flag",
     "ENABLE_DANGLING_RAW_PTR_PERF_EXPERIMENT=$enable_dangling_raw_ptr_perf_experiment",
@@ -438,19 +476,21 @@ buildflag_header("partition_alloc_buildflags") {
     "USE_ASAN_UNOWNED_PTR=$use_asan_unowned_ptr",
     "USE_HOOKABLE_RAW_PTR=$use_hookable_raw_ptr",
     "ENABLE_GWP_ASAN_SUPPORT=$_enable_gwp_asan_support",
+    "FORCIBLY_ENABLE_BACKUP_REF_PTR_IN_ALL_PROCESSES=$_force_all_process_brp",
 
     "FORCE_ENABLE_RAW_PTR_EXCLUSION=$force_enable_raw_ptr_exclusion",
 
     "RECORD_ALLOC_INFO=$_record_alloc_info",
     "USE_FREESLOT_BITMAP=$use_freeslot_bitmap",
-    "GLUE_CORE_POOLS=$glue_core_pools",
-    "ENABLE_POINTER_COMPRESSION=$enable_pointer_compression_support",
+    "GLUE_CORE_POOLS=$_glue_core_pools",
+    "ENABLE_POINTER_COMPRESSION=$_enable_pointer_compression",
     "ENABLE_SHADOW_METADATA_FOR_64_BITS_POINTERS=$enable_shadow_metadata",
 
     "USE_STARSCAN=$use_starscan",
     "PCSCAN_STACK_SUPPORTED=$pcscan_stack_supported",
 
     "ENABLE_PKEYS=$enable_pkeys",
+    "ENABLE_THREAD_ISOLATION=$enable_pkeys",
   ]
 
   if (is_apple) {
@@ -476,12 +516,6 @@ buildflag_header("chromeos_buildflags") {
   flags = [ "PA_IS_CHROMEOS_ASH=$is_chromeos_ash" ]
 }
 
-buildflag_header("logging_buildflags") {
-  header = "logging_buildflags.h"
-
-  flags = [ "PA_ENABLE_LOG_ERROR_NOT_REACHED=$enable_log_error_not_reached" ]
-}
-
 buildflag_header("debugging_buildflags") {
   header = "debugging_buildflags.h"
   header_dir = rebase_path(".", "//") + "/partition_alloc_base/debug"
@@ -502,7 +536,6 @@ group("buildflags") {
     ":chromecast_buildflags",
     ":chromeos_buildflags",
     ":debugging_buildflags",
-    ":logging_buildflags",
     ":partition_alloc_buildflags",
   ]
 }

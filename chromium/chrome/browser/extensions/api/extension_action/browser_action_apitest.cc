@@ -59,8 +59,8 @@
 #include "extensions/test/result_catcher.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/resource/resource_scale_factor.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/skia_conversions.h"
@@ -324,8 +324,12 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiCanvasTest, DynamicBrowserAction) {
   // these may be generated from the provided scales.
   float kSmallIconScale = 21.f / ExtensionAction::ActionIconSize();
   float kLargeIconScale = 42.f / ExtensionAction::ActionIconSize();
-  ASSERT_FALSE(ui::IsSupportedScale(kSmallIconScale));
-  ASSERT_FALSE(ui::IsSupportedScale(kLargeIconScale));
+  ASSERT_NE(ui::GetScaleForResourceScaleFactor(
+                ui::GetSupportedResourceScaleFactor(kSmallIconScale)),
+            kSmallIconScale);
+  ASSERT_NE(ui::GetScaleForResourceScaleFactor(
+                ui::GetSupportedResourceScaleFactor(kLargeIconScale)),
+            kLargeIconScale);
 
   // Tell the extension to update the icon using ImageData object.
   ResultCatcher catcher;

@@ -7,10 +7,10 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/md_select.css.js';
-import '../controls/controlled_radio_button.js';
+import '/shared/settings/controls/controlled_radio_button.js';
 import '/shared/settings/controls/extension_controlled_indicator.js';
-import '../controls/settings_radio_group.js';
-import '../controls/settings_toggle_button.js';
+import '/shared/settings/controls/settings_radio_group.js';
+import '/shared/settings/controls/settings_toggle_button.js';
 import '../settings_page/settings_animated_pages.js';
 import '../settings_page/settings_subpage.js';
 import '../settings_shared.css.js';
@@ -19,6 +19,7 @@ import './home_url_input.js';
 import '/shared/settings/controls/settings_dropdown_menu.js';
 
 import {DropdownMenuOptionList, SettingsDropdownMenuElement} from '/shared/settings/controls/settings_dropdown_menu.js';
+import {SettingsToggleButtonElement} from '/shared/settings/controls/settings_toggle_button.js';
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
@@ -174,6 +175,13 @@ export class SettingsAppearancePageElement extends
         },
       },
 
+      showHoverCardImagesOption_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('showHoverCardImagesOption');
+        },
+      },
+
       showManagedThemeDialog_: Boolean,
     };
   }
@@ -202,6 +210,7 @@ export class SettingsAppearancePageElement extends
   private focusConfig_: Map<string, string>;
   private showReaderModeOption_: boolean;
   private isForcedTheme_: boolean;
+  private showHoverCardImagesOption_: boolean;
 
   // <if expr="is_linux">
   private showCustomChromeFrame_: boolean;
@@ -389,6 +398,11 @@ export class SettingsAppearancePageElement extends
 
   private showHr_(previousIsVisible: boolean, nextIsVisible: boolean): boolean {
     return previousIsVisible && nextIsVisible;
+  }
+
+  private onHoverCardImagesEnabledChange_(event: Event) {
+    const enabled = (event.target as SettingsToggleButtonElement).checked;
+    this.appearanceBrowserProxy_.recordHoverCardImagesEnabledChanged(enabled);
   }
 
   private onManagedDialogClosed_() {

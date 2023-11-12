@@ -47,7 +47,7 @@
 #include "installer/util/vivaldi_install_util.h"
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#include "google_update/google_update_idl.h"
+#include "chrome/updater/app/server/win/updater_legacy_idl.h"
 #endif
 
 namespace {

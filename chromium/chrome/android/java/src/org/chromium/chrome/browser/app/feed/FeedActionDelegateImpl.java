@@ -13,6 +13,7 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.app.creator.CreatorActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
+import org.chromium.chrome.browser.device_lock.DeviceLockActivityLauncherImpl;
 import org.chromium.chrome.browser.feed.FeedActionDelegate;
 import org.chromium.chrome.browser.feed.SingleWebFeedEntryPoint;
 import org.chromium.chrome.browser.feed.signinbottomsheet.SigninBottomSheetCoordinator;
@@ -28,6 +29,7 @@ import org.chromium.chrome.browser.signin.services.SigninMetricsUtils;
 import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.util.BrowserUiUtils;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -46,18 +48,20 @@ public class FeedActionDelegateImpl implements FeedActionDelegate {
     private final BookmarkModel mBookmarkModel;
     private final Context mActivityContext;
     private final SnackbarManager mSnackbarManager;
+    private final TabModelSelector mTabModelSelector;
 
     @BrowserUiUtils.HostSurface
     private int mHostSurface;
 
     public FeedActionDelegateImpl(Context activityContext, SnackbarManager snackbarManager,
             NativePageNavigationDelegate navigationDelegate, BookmarkModel bookmarkModel,
-            @BrowserUiUtils.HostSurface int hostSurface) {
+            @BrowserUiUtils.HostSurface int hostSurface, TabModelSelector tabModelSelector) {
         mActivityContext = activityContext;
         mNavigationDelegate = navigationDelegate;
         mBookmarkModel = bookmarkModel;
         mSnackbarManager = snackbarManager;
         mHostSurface = hostSurface;
+        mTabModelSelector = tabModelSelector;
     }
     @Override
     public void downloadPage(String url) {
@@ -131,6 +135,7 @@ public class FeedActionDelegateImpl implements FeedActionDelegate {
         Intent intent = new Intent(mActivityContext, creatorActivityClass);
         intent.putExtra(CreatorIntentConstants.CREATOR_WEB_FEED_ID, webFeedName.getBytes());
         intent.putExtra(CreatorIntentConstants.CREATOR_ENTRY_POINT, entryPoint);
+        intent.putExtra(CreatorIntentConstants.CREATOR_TAB_ID, mTabModelSelector.getCurrentTabId());
         mActivityContext.startActivity(intent);
     }
 
@@ -148,9 +153,9 @@ public class FeedActionDelegateImpl implements FeedActionDelegate {
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_BOC_SIGN_IN_INTERSTITIAL)) {
             SigninMetricsUtils.logSigninStartAccessPoint(signinAccessPoint);
             SigninMetricsUtils.logSigninUserActionForAccessPoint(signinAccessPoint);
-            SigninBottomSheetCoordinator signinCoordinator =
-                    new SigninBottomSheetCoordinator(windowAndroid, bottomSheetController,
-                            Profile.getLastUsedRegularProfile(), null, signinAccessPoint);
+            SigninBottomSheetCoordinator signinCoordinator = new SigninBottomSheetCoordinator(
+                    windowAndroid, DeviceLockActivityLauncherImpl.get(), bottomSheetController,
+                    Profile.getLastUsedRegularProfile(), null, null, signinAccessPoint);
             signinCoordinator.show();
         }
     }

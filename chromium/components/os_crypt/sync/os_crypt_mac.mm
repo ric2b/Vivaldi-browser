@@ -23,7 +23,9 @@
 #include "crypto/mock_apple_keychain.h"
 #include "crypto/symmetric_key.h"
 
-using crypto::AppleKeychain;
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace os_crypt {
 class EncryptionKeyCreationUtil;
@@ -107,7 +109,7 @@ crypto::SymmetricKey* OSCryptImpl::GetEncryptionKey() {
     crypto::MockAppleKeychain keychain;
     password = keychain.GetEncryptionPassword();
   } else {
-    AppleKeychain keychain;
+    crypto::AppleKeychain keychain;
     KeychainPassword encryptor_password(keychain);
     password = encryptor_password.GetPassword();
   }
@@ -257,7 +259,7 @@ crypto::SymmetricKey* GetEncryptionKey(const std::string& service_name,
     return import_cached_encryption_key;
 
   std::string password;
-  AppleKeychain keychain;
+  crypto::AppleKeychain keychain;
   KeychainPassword encryptor_password(keychain);
   password =encryptor_password.GetPassword(service_name, account_name);
 

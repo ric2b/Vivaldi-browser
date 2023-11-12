@@ -24,13 +24,19 @@ PlatformNotificationServiceFactory::GetForProfile(Profile* profile) {
 // static
 PlatformNotificationServiceFactory*
 PlatformNotificationServiceFactory::GetInstance() {
-  return base::Singleton<PlatformNotificationServiceFactory>::get();
+  static base::NoDestructor<PlatformNotificationServiceFactory> instance;
+  return instance.get();
 }
 
 PlatformNotificationServiceFactory::PlatformNotificationServiceFactory()
     : ProfileKeyedServiceFactory(
           "PlatformNotificationService",
-          ProfileSelections::BuildForRegularAndIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {
   DependsOn(HostContentSettingsMapFactory::GetInstance());
   DependsOn(NotificationDisplayServiceFactory::GetInstance());
   DependsOn(NotificationMetricsLoggerFactory::GetInstance());

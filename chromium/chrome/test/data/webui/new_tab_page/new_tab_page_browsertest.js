@@ -37,6 +37,10 @@ TEST_F('NewTabPageAppTest', 'OgbThemingRemoveScrimTrue', function() {
   runMochaSuite('NewTabPageAppTest ogb theming removeScrim is true');
 });
 
+TEST_F('NewTabPageAppTest', 'OgbScrim', function() {
+  runMochaSuite('NewTabPageAppTest ogb scrim');
+});
+
 TEST_F('NewTabPageAppTest', 'Theming', function() {
   runMochaSuite('NewTabPageAppTest theming');
 });
@@ -51,6 +55,10 @@ TEST_F('NewTabPageAppTest', 'Clicks', function() {
 
 TEST_F('NewTabPageAppTest', 'Modules', function() {
   runMochaSuite('NewTabPageAppTest modules');
+});
+
+TEST_F('NewTabPageAppTest', 'V2Modules', function() {
+  runMochaSuite('NewTabPageAppTest v2 modules');
 });
 
 TEST_F('NewTabPageAppTest', 'CounterfactualModules', function() {
@@ -296,7 +304,7 @@ GEN('#if !defined(OFFICIAL_BUILD)');
 var NewTabPageModulesDummyModuleTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/dummy_v2/module_test.js';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/v2/dummy/module_test.js';
   }
 };
 
@@ -331,7 +339,7 @@ TEST_F('NewTabPageModulesDriveModuleTest', 'All', function() {
 var NewTabPageModulesDriveV2ModuleTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/drive_v2/module_test.js';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/v2/drive/module_test.js';
   }
 };
 
@@ -350,17 +358,6 @@ TEST_F('NewTabPageModulesRecipesTest', 'All', function() {
   mocha.run();
 });
 
-var NewTabPageModulesRecipesV2ModuleTest = class extends NewTabPageBrowserTest {
-  /** @override */
-  get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/recipes_v2/module_test.js';
-  }
-};
-
-TEST_F('NewTabPageModulesRecipesV2ModuleTest', 'All', function() {
-  mocha.run();
-});
-
 var NewTabPageModulesChromeCartModuleTest =
     class extends NewTabPageBrowserTest {
   /** @override */
@@ -372,14 +369,6 @@ var NewTabPageModulesChromeCartModuleTest =
 TEST_F('NewTabPageModulesChromeCartModuleTest', 'All', function() {
   mocha.run();
 });
-
-var NewTabPageModulesChromeCartV2ModuleTest =
-    class extends NewTabPageBrowserTest {
-  /** @override */
-  get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/cart_v2/module_test.js';
-  }
-};
 
 var NewTabPageModulesFeedModuleTest = class extends NewTabPageBrowserTest {
   /** @override */
@@ -493,17 +482,27 @@ TEST_F('NewTabPageModulesHistoryClustersModuleCartTileTest', 'All', function() {
   mocha.run();
 });
 
-// https://crbug.com/1227564: Flaky on Chrome OS.
-GEN('#if BUILDFLAG(IS_CHROMEOS)');
-GEN('#define MAYBE_All DISABLED_All');
-GEN('#else');
-GEN('#define MAYBE_All All');
-GEN('#endif');
+var NewTabPageModulesHistoryClustersV2ModuleTest =
+    class extends NewTabPageBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/v2/history_clusters/module_test.js';
+  }
 
-TEST_F('NewTabPageModulesChromeCartV2ModuleTest', 'MAYBE_All', function() {
-  mocha.run();
+  /** @override */
+  get featureList() {
+    return {
+      enabled: [
+        'ntp_features::kNtpHistoryClustersModule',
+        'ntp_features::kNtpModulesRedesigned',
+      ],
+    };
+  }
+};
+
+TEST_F('NewTabPageModulesHistoryClustersV2ModuleTest', 'Core', function() {
+  runMochaSuite('NewTabPageModulesHistoryClustersV2ModuleTest core');
 });
-GEN('#undef MAYBE_All');
 
 GEN('#if !defined(OFFICIAL_BUILD)');
 

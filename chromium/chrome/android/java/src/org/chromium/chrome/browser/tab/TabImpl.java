@@ -65,6 +65,7 @@ import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.components.version_info.VersionInfo;
 import org.chromium.content_public.browser.ChildProcessImportance;
 import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsAccessibility;
@@ -95,8 +96,6 @@ public class TabImpl implements Tab {
     private static final String TAG = "Tab";
 
     private static final String PRODUCT_VERSION = VersionInfo.getProductVersion();
-
-    private static final String REQUEST_DESKTOP_ENABLED_PARAM = "enabled";
 
     private long mNativeTabAndroid;
 
@@ -1167,6 +1166,9 @@ public class TabImpl implements Tab {
         if (!maybeShowNativePage(url.getSpec(), isReload)) {
             showRenderedPage();
         }
+
+        CriticalPersistedTabData.from(this).setLastNavigationCommittedTimestampMillis(
+                System.currentTimeMillis());
     }
 
     /**
@@ -1404,6 +1406,11 @@ public class TabImpl implements Tab {
         assert nativePtr != 0;
         assert mNativeTabAndroid == 0;
         mNativeTabAndroid = nativePtr;
+    }
+
+    @CalledByNative
+    private long getLastShownTimestamp() {
+        return CriticalPersistedTabData.from(this).getTimestampMillis();
     }
 
     @CalledByNative
@@ -1765,8 +1772,7 @@ public class TabImpl implements Tab {
                 TabUtils.readRequestDesktopSiteContentSettings(profile, url)
                 || alwaysRequestDesktopSite;
         if (!shouldRequestDesktopSite
-                && ContentFeatureList.isEnabled(
-                        ContentFeatureList.REQUEST_DESKTOP_SITE_ADDITIONS)) {
+                && ContentFeatureMap.isEnabled(ContentFeatureList.REQUEST_DESKTOP_SITE_ADDITIONS)) {
             // TODO(shuyng): Make additional setting compatible with site level setting.
             PrefService prefService = UserPrefs.get(profile);
             boolean peripheralPref =

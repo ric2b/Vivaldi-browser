@@ -146,8 +146,6 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGBlock {
     return "LayoutNGTable";
   }
 
-  void UpdateBlockLayout(bool relayout_children) override;
-
   void AddChild(LayoutObject* child,
                 LayoutObject* before_child = nullptr) override;
 
@@ -223,6 +221,12 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGBlock {
     NOT_DESTROYED();
     return type == kLayoutObjectTable ||
            LayoutNGMixin<LayoutBlock>::IsOfType(type);
+  }
+
+  // Table paints background specially.
+  bool ComputeCanCompositeBackgroundAttachmentFixed() const override {
+    NOT_DESTROYED();
+    return false;
   }
 
  private:

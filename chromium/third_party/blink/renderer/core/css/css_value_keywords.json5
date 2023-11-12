@@ -154,6 +154,15 @@
     // math
 
     //
+    // font-size-adjust
+    //
+    //none
+    "ex-height",
+    "cap-height",
+    "ch-width",
+    "ic-width",
+
+    //
     // font-family (<generic-family> in CSS 2.1)
     //
     // If you modify this list, please make sure you update css_parsing_utils's
@@ -182,6 +191,11 @@
     "font-format",
 
     //
+    // font-palette animation
+    //
+    "palette-mix",
+
+    //
     // *-color
     //
     "aqua",
@@ -204,6 +218,8 @@
     "transparent",
     "-webkit-link",
     "-webkit-activelink",
+    "accentcolor",
+    "accentcolortext",
     "activeborder",
     "activecaption",
     "activetext",
@@ -574,6 +590,7 @@
     //
     "preserve",
     "preserve-breaks",
+    "pretty",
     //
     // Unordered rest
     //
@@ -771,6 +788,11 @@
     // right
 
     //
+    // word-boundary-detection
+    //
+    "ja",
+
+    //
     // word-break
     //
     "break-all",
@@ -803,18 +825,14 @@
     // The order here must match the order in the ControlPart enum in
     // theme_types.h.
     // All appearance values that should be accepted by the parser should be
-    // listed between 'checkbox' and 'textarea'.
+    // listed between 'checkbox' and 'textarea'. This is checked in
+    // CSSParserFastPaths::IsValidKeywordPropertyAndValue.
     "checkbox",
     "radio",
     "push-button",
     "square-button",
     "button",
-    "inner-spin-button",
     "listbox",
-    "media-slider",
-    "media-sliderthumb",
-    "media-volume-slider",
-    "media-volume-sliderthumb",
     "-internal-media-control",
     "menulist",
     "menulist-button",
@@ -822,13 +840,18 @@
     "progress-bar",
     "slider-horizontal",
     "slider-vertical",
-    "sliderthumb-horizontal",
-    "sliderthumb-vertical",
     "searchfield",
-    "searchfield-cancel-button",
     "textfield",
     "textarea",
-
+    // All appearance values that should not be accepted by the parser.
+    "inner-spin-button",
+    "media-slider",
+    "media-sliderthumb",
+    "media-volume-slider",
+    "media-volume-sliderthumb",
+    "sliderthumb-horizontal",
+    "sliderthumb-vertical",
+    "searchfield-cancel-button",
     //
     // border-image
     //
@@ -1255,6 +1278,7 @@
     "-webkit-repeating-radial-gradient",
     "-webkit-image-set",
     "image-set",
+    "type",
 
     // deprecated gradients
     "from",
@@ -1375,6 +1399,9 @@
     "ray",
     "sides",
 
+    // coord-box
+    "stroke-box",
+
     // math functions
     // https://drafts.csswg.org/css-values-4/#math
     "calc",
@@ -1438,11 +1465,6 @@
     // normal
     // always
 
-    // scroll-timeline-attachment
-    // view-timeline-attachment
-    "defer",
-    "ancestor",
-
     // containment
     // paint
     "style",
@@ -1452,8 +1474,17 @@
     "inline-size",
 
     // @container
-    "name",
-    "type",
+    // size
+    // style
+    "state",
+    // top
+    // left
+    // right
+    // bottom
+    "inset-block-start",
+    "inset-block-end",
+    "inset-inline-start",
+    "inset-inline-end",
 
     // grid auto-repeat
     "auto-fill",
@@ -1616,6 +1647,8 @@
 
     // anchor positioning
     "anchor",
+    // auto,
+    "auto-same",
     // top,
     // left,
     // right,

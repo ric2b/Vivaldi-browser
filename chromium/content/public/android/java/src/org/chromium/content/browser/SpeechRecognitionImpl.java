@@ -32,6 +32,9 @@ import org.chromium.ui.widget.Toast;
 import java.util.ArrayList;
 import java.util.List;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Implementation of {@link SpeechRecognition}.
  */
@@ -295,6 +298,17 @@ public class SpeechRecognitionImpl {
 
     @CalledByNative
     private void startRecognition(String language, boolean continuous, boolean interimResults) {
+        // Vivaldi
+        if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
+            Context context = ContextUtils.getApplicationContext();
+            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                String msg = context.getResources()
+                        .getString(R.string.speech_recognition_service_not_found);
+                Log.w(TAG, "[Vivaldi] No speech service found when trying to start recognition from native side");
+                Toast.makeText(context, msg, Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
         if (mRecognizer == null) return;
 
         mContinuous = continuous;

@@ -43,7 +43,7 @@
 
     // EditContext
     // https://w3c.github.io/edit-context/
-    [RuntimeEnabled=EditContext] attribute EditContext? editContext;
+    [RuntimeEnabled=EditContext, RaisesException=Setter] attribute EditContext? editContext;
 
     // HTMLElement includes ElementContentEditable
     // https://html.spec.whatwg.org/C/#contenteditable
@@ -66,18 +66,20 @@
     [ImplementedAs=offsetHeightForBinding] readonly attribute long offsetHeight;
 
     // The Popover API
-    [MeasureAs=ElementTogglePopover,RuntimeEnabled=HTMLPopoverAttribute,RaisesException] void togglePopover(optional boolean force);
+    [MeasureAs=ElementTogglePopover,RuntimeEnabled=HTMLPopoverAttribute,RaisesException] boolean togglePopover(optional boolean force);
     [MeasureAs=ElementShowPopover,RuntimeEnabled=HTMLPopoverAttribute,RaisesException] void showPopover();
     [MeasureAs=ElementHidePopover,RuntimeEnabled=HTMLPopoverAttribute,RaisesException] void hidePopover();
-//    [CEReactions,RuntimeEnabled=HTMLPopoverAttribute,Reflect,ReflectOnly=("auto","hint","manual"),ReflectEmpty="auto",ReflectInvalid="manual"] attribute DOMString? popover;
+    // See crbug.com/1418144. We need to change ReflectOnly based on a runtime flag, which isn't possible.
+    // See also crbug.com/1307772. When HTMLPopoverAttribute is removed as a flag, we should be able to go back to using [Reflect].
+    // [CEReactions,RuntimeEnabled=HTMLPopoverAttribute,Reflect,ReflectOnly=("auto","hint","manual"),ReflectEmpty="auto",ReflectInvalid="manual"] attribute DOMString? popover;
     [CEReactions,RuntimeEnabled=HTMLPopoverAttribute] attribute DOMString? popover;
 
     // Used by both Anchor Positioning and Popover
     [CEReactions,RuntimeEnabled=CSSAnchorPositioning] attribute Element? anchorElement;
 
     // Non-standard APIs
-    [CEReactions, RaisesException=Setter, MeasureAs=HTMLElementInnerText, ImplementedAs=innerTextForBinding] attribute ([TreatNullAs=EmptyString] DOMString or TrustedScript) innerText;
-    [CEReactions, RaisesException=Setter, MeasureAs=HTMLElementOuterText] attribute [TreatNullAs=EmptyString] DOMString outerText;
+    [CEReactions, RaisesException=Setter, MeasureAs=HTMLElementInnerText, ImplementedAs=innerTextForBinding] attribute ([LegacyNullToEmptyString] DOMString or TrustedScript) innerText;
+    [CEReactions, RaisesException=Setter, MeasureAs=HTMLElementOuterText] attribute [LegacyNullToEmptyString] DOMString outerText;
 };
 
 HTMLElement includes GlobalEventHandlers;

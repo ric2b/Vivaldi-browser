@@ -38,6 +38,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/http/http_response_headers.h"
+#include "net/third_party/quiche/src/quiche/oblivious_http/oblivious_http_client.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/simple_url_loader.h"
@@ -84,6 +85,15 @@ bool IsAdRequestValid(const blink::mojom::AdRequestConfig& config) {
 }
 
 }  // namespace
+
+AdAuctionServiceImpl::BiddingAndAuctionDataConstructionState::
+    BiddingAndAuctionDataConstructionState()
+    : request_id(base::Uuid::GenerateRandomV4()) {}
+AdAuctionServiceImpl::BiddingAndAuctionDataConstructionState::
+    BiddingAndAuctionDataConstructionState(
+        BiddingAndAuctionDataConstructionState&& other) = default;
+AdAuctionServiceImpl::BiddingAndAuctionDataConstructionState::
+    ~BiddingAndAuctionDataConstructionState() = default;
 
 // static
 void AdAuctionServiceImpl::CreateMojoService(
@@ -244,9 +254,7 @@ void AdAuctionServiceImpl::RunAdAuction(
 
   std::unique_ptr<AuctionRunner> auction = AuctionRunner::CreateAndStart(
       &auction_worklet_manager_, &GetInterestGroupManager(),
-      AttributionManager::FromBrowserContext(
-          render_frame_host().GetBrowserContext()),
-      private_aggregation_manager_,
+      render_frame_host().GetBrowserContext(), private_aggregation_manager_,
       // Unlike other callbacks, this needs to be safe to call after destruction
       // of the AdAuctionServiceImpl, so that the reporter can outlive it.
       base::BindRepeating(
@@ -358,6 +366,26 @@ void AdAuctionServiceImpl::DeprecatedReplaceInURN(
   std::move(callback).Run();
 }
 
+void AdAuctionServiceImpl::GetInterestGroupAdAuctionData(
+    const url::Origin& seller,
+    GetInterestGroupAdAuctionDataCallback callback) {
+  // If the interest group API is not allowed for this origin do nothing.
+  if (!IsInterestGroupAPIAllowed(
+          ContentBrowserClient::InterestGroupApiOperation::kSell, origin())) {
+    std::move(callback).Run({}, "");
+    return;
+  }
+
+  BiddingAndAuctionDataConstructionState state;
+  state.callback = std::move(callback);
+
+  GetInterestGroupManager().GetInterestGroupAdAuctionData(
+      GetTopWindowOrigin(),
+      /* generation_id=*/base::Uuid::GenerateRandomV4(),
+      base::BindOnce(&AdAuctionServiceImpl::OnGotAuctionData,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(state)));
+}
+
 void AdAuctionServiceImpl::CreateAdRequest(
     blink::mojom::AdRequestConfigPtr config,
     CreateAdRequestCallback callback) {
@@ -414,7 +442,8 @@ AdAuctionServiceImpl::GetTrustedURLLoaderFactory() {
         ukm::SourceIdObj::FromInt64(render_frame_host().GetPageUkmSourceId()),
         &factory_receiver, /*header_client=*/nullptr,
         /*bypass_redirect_checks=*/nullptr, /*disable_secure_dns=*/nullptr,
-        /*factory_override=*/nullptr);
+        /*factory_override=*/nullptr,
+        /*navigation_response_task_runner=*/nullptr);
 
     render_frame_host()
         .GetStoragePartition()
@@ -587,8 +616,19 @@ void AdAuctionServiceImpl::OnAuctionComplete(
                                          winning_group_key->name};
   FencedFrameURLMapping& current_fenced_frame_urls_map =
       GetFrame()->GetPage().fenced_frame_urls_map();
-  // The auction must operate on the same fenced frame mapping.
-  CHECK_EQ(fenced_frame_urls_map_id, current_fenced_frame_urls_map.unique_id());
+  // TODO(crbug.com/1422301): The auction must operate on the same fenced frame
+  // mapping that was used at the beginning of the auction. If not, we fail the
+  // auction and dump without crashing the browser. Once the root cause is known
+  // and the issue fixed, convert it back to a CHECK.
+  if (fenced_frame_urls_map_id != current_fenced_frame_urls_map.unique_id()) {
+    base::debug::DumpWithoutCrashing();
+    if (auction_result_metrics) {
+      auction_result_metrics->ReportAuctionResult(
+          AdAuctionResultMetrics::AuctionResult::kFailed);
+    }
+    std::move(callback).Run(manually_aborted, /*config=*/absl::nullopt);
+    return;
+  }
 
   // Set up reporting for any fenced frame that's navigated to the winning bid's
   // URL. Use a URLLoaderFactory that will automatically reconnect on network
@@ -665,6 +705,52 @@ void AdAuctionServiceImpl::MaybeLogPrivateAggregationFeatures(
         &render_frame_host(),
         blink::mojom::WebFeature::kPrivateAggregationApiFledge);
   }
+}
+
+void AdAuctionServiceImpl::OnGotAuctionData(
+    BiddingAndAuctionDataConstructionState state,
+    BiddingAndAuctionData data) {
+  if (data.request.empty()) {
+    std::move(state.callback).Run({}, "");
+    return;
+  }
+
+  state.data = std::move(data);
+  GetInterestGroupManager().GetBiddingAndAuctionServerKey(
+      GetRefCountedTrustedURLLoaderFactory().get(),
+      base::BindOnce(&AdAuctionServiceImpl::OnGotBiddingAndAuctionServerKey,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(state)));
+}
+
+void AdAuctionServiceImpl::OnGotBiddingAndAuctionServerKey(
+    BiddingAndAuctionDataConstructionState state,
+    absl::optional<BiddingAndAuctionServerKey> maybe_key) {
+  if (!maybe_key) {
+    std::move(state.callback).Run({}, "");
+    return;
+  }
+
+  auto maybe_key_config = quiche::ObliviousHttpHeaderKeyConfig::Create(
+      maybe_key->id, EVP_HPKE_DHKEM_X25519_HKDF_SHA256, EVP_HPKE_HKDF_SHA256,
+      EVP_HPKE_AES_256_GCM);
+  CHECK(maybe_key_config.ok()) << maybe_key_config.status();
+
+  auto maybe_request =
+      quiche::ObliviousHttpRequest::CreateClientObliviousRequest(
+          std::string(state.data.request.begin(), state.data.request.end()),
+          maybe_key->key, maybe_key_config.value());
+  if (!maybe_request.ok()) {
+    std::move(state.callback).Run({}, "");
+    return;
+  }
+
+  std::string data = maybe_request->EncapsulateAndSerialize();
+  const auto* bytes = reinterpret_cast<const uint8_t*>(data.data());
+  std::move(state.callback)
+      .Run(mojo_base::BigBuffer(
+               base::make_span(bytes, data.size() * sizeof(char))),
+           state.request_id.AsLowercaseString());
+  // TODO(behamilton): Save request context for decryption.
 }
 
 InterestGroupManagerImpl& AdAuctionServiceImpl::GetInterestGroupManager()

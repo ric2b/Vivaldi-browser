@@ -11,11 +11,15 @@
 #import "base/test/ios/wait_util.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/strings/grit/components_strings.h"
+#import "components/sync/base/features.h"
+#import "components/sync/base/sync_prefs.h"
+#import "components/sync/base/user_selectable_type.h"
 #import "ios/chrome/browser/passwords/password_manager_app_interface.h"
 #import "ios/chrome/browser/signin/fake_system_identity.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_constants.h"
+#import "ios/chrome/browser/ui/passwords/bottom_sheet/password_suggestion_bottom_sheet_app_interface.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -88,6 +92,14 @@ BOOL WaitForKeyboardToAppear() {
   // Prefs aren't reset between tests, crbug.com/1069086. Most tests don't care
   // about the account storage notice, so suppress it by marking it as shown.
   [PasswordManagerAppInterface setAccountStorageNoticeShown:YES];
+  // Also reset the dismiss count pref to 0 to make sure the bottom sheet is
+  // enabled by default.
+  [PasswordSuggestionBottomSheetAppInterface setDismissCount:0];
+  // Manually clear sync passwords pref before testShowAccountStorageNotice*.
+  [ChromeEarlGreyAppInterface
+      clearUserPrefWithName:base::SysUTF8ToNSString(
+                                syncer::SyncPrefs::GetPrefNameForTypeForTesting(
+                                    syncer::UserSelectableType::kPasswords))];
 }
 
 - (void)tearDown {
@@ -98,23 +110,31 @@ BOOL WaitForKeyboardToAppear() {
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
   if ([self
-          isRunningTest:@selector(testShowAccountStorageNoticeBeforeSaving)] ||
-      [self
-          isRunningTest:@selector(testShowAccountStorageNoticeBeforeFilling)] ||
-      [self isRunningTest:@selector
-            (testShowAccountStorageNoticeBeforeFillingBottomSheet)]) {
+          isRunningTest:@selector(testShowAccountStorageNoticeBeforeSaving)]) {
     config.features_enabled.push_back(
         password_manager::features::kEnablePasswordsAccountStorage);
-    config.features_enabled.push_back(
-        password_manager::features::kIOSShowPasswordStorageInSaveInfobar);
+    config.features_disabled.push_back(
+        syncer::kReplaceSyncPromosWithSignInPromos);
   }
   if ([self
           isRunningTest:@selector(testShowAccountStorageNoticeBeforeFilling)]) {
+    config.features_enabled.push_back(
+        password_manager::features::kEnablePasswordsAccountStorage);
+    config.features_disabled.push_back(
+        syncer::kReplaceSyncPromosWithSignInPromos);
     config.features_disabled.push_back(
         password_manager::features::kIOSPasswordBottomSheet);
   }
   if ([self isRunningTest:@selector
             (testShowAccountStorageNoticeBeforeFillingBottomSheet)]) {
+    config.features_enabled.push_back(
+        password_manager::features::kEnablePasswordsAccountStorage);
+    config.features_enabled.push_back(
+        password_manager::features::kIOSPasswordBottomSheet);
+    config.features_disabled.push_back(
+        syncer::kReplaceSyncPromosWithSignInPromos);
+  }
+  if ([self isRunningTest:@selector(testUpdatePromptAppearsOnFormSubmission)]) {
     config.features_enabled.push_back(
         password_manager::features::kIOSPasswordBottomSheet);
   }
@@ -216,6 +236,10 @@ BOOL WaitForKeyboardToAppear() {
 }
 
 - (void)testShowAccountStorageNoticeBeforeFillingBottomSheet {
+  [PasswordSuggestionBottomSheetAppInterface setUpMockReauthenticationModule];
+  [PasswordSuggestionBottomSheetAppInterface
+      mockReauthenticationModuleExpectedResult:ReauthenticationResult::
+                                                   kSuccess];
   [PasswordManagerAppInterface
       storeCredentialWithUsername:@"user"
                          password:@"password"
@@ -238,8 +262,8 @@ BOOL WaitForKeyboardToAppear() {
                      IDS_IOS_PASSWORDS_ACCOUNT_STORAGE_NOTICE_BUTTON_TEXT))]
       performAction:grey_tap()];
 
-  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:grey_accessibilityID(
-                                                          @"user ••••••••")];
+  [ChromeEarlGrey
+      waitForUIElementToAppearWithMatcher:grey_accessibilityID(@"user")];
 
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
@@ -259,6 +283,16 @@ BOOL WaitForKeyboardToAppear() {
 
   // Load the page again and have a new password value to save.
   [self loadLoginPage];
+  // Open and dismiss the bottom sheet
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
+      performAction:chrome_test_util::TapWebElementWithId(kFormPassword)];
+  [ChromeEarlGrey
+      waitForUIElementToAppearWithMatcher:grey_accessibilityID(@"Eguser")];
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
+                                   IDS_IOS_PASSWORD_BOTTOM_SHEET_NO_THANKS))]
+      performAction:grey_tap()];
+  [ChromeEarlGreyUI waitForAppToIdle];
   // Simulate user interacting with fields.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
       performAction:chrome_test_util::TapWebElementWithId(kFormUsername)];

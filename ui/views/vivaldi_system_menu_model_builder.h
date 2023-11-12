@@ -51,7 +51,7 @@ class VivaldiSystemMenuModelBuilder {
 
   SystemMenuModelDelegate menu_delegate_;
   std::unique_ptr<ui::MenuModel> menu_model_;
-  std::unique_ptr<ZoomMenuModel> zoom_menu_contents_;
+  std::unique_ptr<ui::SimpleMenuModel> zoom_menu_contents_;
 };
 
 #endif  // UI_VIEWS_VIVALDI_SYSTEM_MENU_MODEL_BUILDER_H_

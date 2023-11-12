@@ -18,16 +18,21 @@
 #include "ash/display/screen_orientation_controller_test_api.h"
 #include "ash/display/unified_mouse_warp_controller.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/drag_drop/drag_drop_controller.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/ash_prefs.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf.h"
+#include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/test/ash_test_helper.h"
+#include "ash/test/pixel/ash_pixel_diff_util.h"
 #include "ash/test/pixel/ash_pixel_differ.h"
 #include "ash/test/pixel/ash_pixel_test_init_params.h"
 #include "ash/test/test_widget_builder.h"
@@ -39,9 +44,9 @@
 #include "ash/wm/work_area_insets.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "base/strings/strcat.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/test/bind.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user_names.h"
@@ -135,6 +140,7 @@ void AshTestBase::SetUp(std::unique_ptr<TestShellDelegate> delegate) {
   AshTestHelper::InitParams params;
   params.start_session = start_session_;
   params.create_global_cras_audio_handler = create_global_cras_audio_handler_;
+  params.create_quick_pair_mediator = create_quick_pair_mediator_;
   params.delegate = std::move(delegate);
   params.local_state = local_state();
 
@@ -561,6 +567,53 @@ bool AshTestBase::ExitOverview(OverviewEnterExitType type) {
       OverviewEndAction::kTests, type);
 }
 
+void AshTestBase::SetShelfAnimationDuration(base::TimeDelta duration) {
+  for (auto* root_window_controller : Shell::GetAllRootWindowControllers()) {
+    ShelfViewTestAPI(root_window_controller->shelf()->GetShelfViewForTesting())
+        .SetAnimationDuration(duration);
+  }
+}
+
+void AshTestBase::WaitForShelfAnimation() {
+  for (auto* root_window_controller : Shell::GetAllRootWindowControllers()) {
+    ShelfViewTestAPI(root_window_controller->shelf()->GetShelfViewForTesting())
+        .RunMessageLoopUntilAnimationsDone();
+  }
+}
+
+void AshTestBase::MaybeRunDragAndDropSequenceForAppList(
+    std::list<base::OnceClosure>* tasks,
+    bool is_touch) {
+  if (!app_list_features::IsDragAndDropRefactorEnabled()) {
+    while (!tasks->empty()) {
+      std::move(tasks->front()).Run();
+      tasks->pop_front();
+    }
+    return;
+  }
+
+  ShellTestApi().drag_drop_controller()->SetLoopClosureForTesting(
+      base::BindLambdaForTesting([&]() {
+        std::move(tasks->front()).Run();
+        tasks->pop_front();
+      }),
+      base::DoNothing());
+  tasks->push_front(base::BindLambdaForTesting([&]() {
+    // Generate OnDragEnter() event for the host view.
+    if (is_touch) {
+      GetEventGenerator()->MoveTouchBy(10, 10);
+      return;
+    }
+    GetEventGenerator()->MoveMouseBy(10, 10);
+  }));
+  // Start Drag and Drop Sequence by moving the pointer.
+  if (is_touch) {
+    GetEventGenerator()->MoveTouchBy(10, 10);
+    return;
+  }
+  GetEventGenerator()->MoveMouseBy(10, 10);
+}
+
 void AshTestBase::SwapPrimaryDisplay() {
   if (display::Screen::GetScreen()->GetNumDisplays() <= 1)
     return;
@@ -591,11 +644,9 @@ void AshTestBase::PrepareForPixelDiffTest() {
       switches::kStabilizeTimeDependentViewForTests);
 
   DCHECK(!pixel_differ_);
-  const testing::TestInfo* info =
-      ::testing::UnitTest::GetInstance()->current_test_info();
-  pixel_differ_ = std::make_unique<AshPixelDiffer>(
-      base::StrCat({info->test_suite_name(), std::string("."), info->name()}),
-      /*corpus=*/std::string());
+  pixel_differ_ =
+      std::make_unique<AshPixelDiffer>(GetScreenshotPrefixForCurrentTestInfo(),
+                                       /*corpus=*/std::string());
 }
 
 // ============================================================================

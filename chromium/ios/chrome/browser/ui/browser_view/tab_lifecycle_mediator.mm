@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/browser_view/tab_lifecycle_mediator.h"
 
 #import "ios/chrome/browser/autofill/autofill_tab_helper.h"
-#import "ios/chrome/browser/autofill/bottom_sheet/bottom_sheet_tab_helper.h"
+#import "ios/chrome/browser/autofill/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
 #import "ios/chrome/browser/commerce/price_notifications/price_notifications_iph_presenter.h"
 #import "ios/chrome/browser/commerce/price_notifications/price_notifications_tab_helper.h"
 #import "ios/chrome/browser/download/download_manager_tab_helper.h"
@@ -17,15 +17,16 @@
 #import "ios/chrome/browser/overscroll_actions/overscroll_actions_tab_helper.h"
 #import "ios/chrome/browser/passwords/password_tab_helper.h"
 #import "ios/chrome/browser/prerender/prerender_service.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/public/commands/autofill_bottom_sheet_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
-#import "ios/chrome/browser/shared/public/commands/password_bottom_sheet_commands.h"
 #import "ios/chrome/browser/shared/public/commands/web_content_commands.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/ssl/captive_portal_tab_helper.h"
 #import "ios/chrome/browser/ui/download/download_manager_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_coordinator.h"
 #import "ios/chrome/browser/ui/print/print_controller.h"
-#import "ios/chrome/browser/ui/side_swipe/side_swipe_controller.h"
+#import "ios/chrome/browser/ui/side_swipe/side_swipe_mediator.h"
 #import "ios/chrome/browser/web/annotations/annotations_tab_helper.h"
 #import "ios/chrome/browser/web/print/print_tab_helper.h"
 #import "ios/chrome/browser/web/repost_form_tab_helper.h"
@@ -33,7 +34,6 @@
 #import "ios/chrome/browser/web_state_list/tab_insertion_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/web_state_dependency_installation_observer.h"
 #import "ios/chrome/browser/web_state_list/web_state_dependency_installer_bridge.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/webui/net_export_tab_helper.h"
 #import "ios/chrome/browser/webui/net_export_tab_helper_delegate.h"
 #import "ui/base/device_form_factor.h"
@@ -87,13 +87,14 @@
   passwordTabHelper->SetPasswordControllerDelegate(_delegate);
   passwordTabHelper->SetDispatcher(_commandDispatcher);
 
-  BottomSheetTabHelper* bottomSheetTabHelper =
-      BottomSheetTabHelper::FromWebState(webState);
-  bottomSheetTabHelper->SetPasswordBottomSheetHandler(
-      HandlerForProtocol(_commandDispatcher, PasswordBottomSheetCommands));
+  AutofillBottomSheetTabHelper* bottomSheetTabHelper =
+      AutofillBottomSheetTabHelper::FromWebState(webState);
+  bottomSheetTabHelper->SetAutofillBottomSheetHandler(
+      HandlerForProtocol(_commandDispatcher, AutofillBottomSheetCommands));
 
-  DCHECK(_delegate);
-  OverscrollActionsTabHelper::FromWebState(webState)->SetDelegate(_delegate);
+  DCHECK(_overscrollActionsDelegate);
+  OverscrollActionsTabHelper::FromWebState(webState)->SetDelegate(
+      _overscrollActionsDelegate);
 
   // DownloadManagerTabHelper cannot function without its delegate.
   DCHECK(_downloadManagerCoordinator);
@@ -162,9 +163,9 @@
   passwordTabHelper->SetPasswordControllerDelegate(nil);
   passwordTabHelper->SetDispatcher(nil);
 
-  BottomSheetTabHelper* bottomSheetTabHelper =
-      BottomSheetTabHelper::FromWebState(webState);
-  bottomSheetTabHelper->SetPasswordBottomSheetHandler(nil);
+  AutofillBottomSheetTabHelper* bottomSheetTabHelper =
+      AutofillBottomSheetTabHelper::FromWebState(webState);
+  bottomSheetTabHelper->SetAutofillBottomSheetHandler(nil);
 
   OverscrollActionsTabHelper::FromWebState(webState)->SetDelegate(nil);
 

@@ -60,6 +60,7 @@ Ako mislite da ne treba da koristite proksi server:
 <translation id="3226128629678568754">Pritisnite dugme za ponovno učitavanje da biste ponovo poslali podatke potrebne za učitavanje stranice.</translation>
 <translation id="3234666976984236645">Uvek otkrij važan sadržaj na ovom sajtu</translation>
 <translation id="3308738399950580893">reklame</translation>
+<translation id="3384522979010096022">Vaša organizacija vam ne dozvoljava da pregledate ovaj sajt</translation>
 <translation id="3422472998109090673">Host <ph name="HOST_NAME" /> trenutno nije dostupan.</translation>
 <translation id="3427092606871434483">Dozvoli (podrazumevano)</translation>
 <translation id="3447661539832366887">Vlasnik ovog uređaja je isključio ovu zastarelu igru.</translation>
@@ -193,7 +194,6 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="8150722005171944719">Datoteka na adresi <ph name="URL" /> ne može da se čita. Možda je uklonjena ili premeštena ili dozvole za datoteke sprečavaju pristup.</translation>
 <translation id="8184538546369750125">Koristi globalnu podrazumevanu vrednost (Dozvoli)</translation>
 <translation id="8211406090763984747">Veza je bezbedna</translation>
-<translation id="8225771182978767009">Osoba koja je podesila ovaj računar je odlučila da blokira ovaj sajt.</translation>
 <translation id="8241707690549784388">Stranica koju tražite je koristila informacije koje ste uneli. Povratak na tu stranicu može prouzrokovati potrebu ponavljanja radnji koje ste izvršili. Želite li da nastavite?</translation>
 <translation id="8241712895048303527">Blokiraj na ovom sajtu</translation>
 <translation id="8286036467436129157">Prijavi se</translation>
@@ -214,7 +214,6 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="9062620674789239642">Možda je premeštena, izmenjena ili izbrisana.</translation>
 <translation id="9069693763241529744">Blokirano proširenjem</translation>
 <translation id="9073799351042754113">Odabrali ste da isključite bezbednosna upozorenja za ovaj sajt.</translation>
-<translation id="910924428752220542">Vivaldi lozinke</translation>
 <translation id="9169664750068251925">Uvek blokiraj na ovom sajtu</translation>
 <translation id="9180553614777056266">Blokator reklama</translation>
 <translation id="9183425211371246419">Host <ph name="HOST_NAME" /> koristi nepodržani protokol.</translation>

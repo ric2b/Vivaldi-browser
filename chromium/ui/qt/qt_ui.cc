@@ -14,9 +14,13 @@
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/environment.h"
 #include "base/memory/raw_ptr.h"
+#include "base/nix/xdg_util.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
+#include "base/scoped_environment_variable_override.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "cc/paint/paint_canvas.h"
 #include "chrome/browser/themes/theme_properties.h"  // nogncheck
@@ -24,6 +28,7 @@
 #include "ui/base/ime/linux/linux_input_method_context.h"
 #include "ui/color/color_mixer.h"
 #include "ui/color/color_provider.h"
+#include "ui/color/color_provider_manager.h"
 #include "ui/color/color_recipe.h"
 #include "ui/color/color_transform.h"
 #include "ui/gfx/color_palette.h"
@@ -34,6 +39,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/image/image_skia_source.h"
+#include "ui/linux/device_scale_factor_observer.h"
 #include "ui/linux/linux_ui.h"
 #include "ui/linux/nav_button_provider.h"
 #include "ui/native_theme/native_theme_aura.h"
@@ -46,6 +52,45 @@
 namespace qt {
 
 namespace {
+
+const char kQtVersionFlag[] = "qt-version";
+
+void* LoadLibrary(const base::FilePath& path) {
+  return dlopen(path.value().c_str(), RTLD_NOW | RTLD_GLOBAL);
+}
+
+void* LoadLibraryOrFallback(const base::FilePath& path,
+                            const char* preferred,
+                            const char* fallback) {
+  if (void* library = LoadLibrary(path.Append(preferred))) {
+    return library;
+  }
+  return LoadLibrary(path.Append(fallback));
+}
+
+bool PreferQt6() {
+  auto* cmd = base::CommandLine::ForCurrentProcess();
+  if (cmd->HasSwitch(kQtVersionFlag)) {
+    std::string qt_version_string = cmd->GetSwitchValueASCII(kQtVersionFlag);
+    unsigned int qt_version = 0;
+    if (base::StringToUint(qt_version_string, &qt_version)) {
+      switch (qt_version) {
+        case 5:
+          return false;
+        case 6:
+          return true;
+        default:
+          LOG(ERROR) << "Unsupported QT version " << qt_version;
+      }
+    } else {
+      LOG(ERROR) << "Unable to parse QT version " << qt_version_string;
+    }
+  }
+
+  auto env = base::Environment::Create();
+  auto desktop = base::nix::GetDesktopEnvironment(env.get());
+  return desktop == base::nix::DESKTOP_ENVIRONMENT_KDE6;
+}
 
 int QtWeightToCssWeight(int weight) {
   struct {
@@ -153,16 +198,21 @@ void QtUi::GetDefaultFontDescription(std::string* family_out,
                                      int* style_out,
                                      int* weight_out,
                                      gfx::FontRenderParams* params_out) const {
-  if (family_out)
+  if (family_out) {
     *family_out = font_family_;
-  if (size_pixels_out)
+  }
+  if (size_pixels_out) {
     *size_pixels_out = font_size_pixels_;
-  if (style_out)
+  }
+  if (style_out) {
     *style_out = font_style_;
-  if (weight_out)
+  }
+  if (weight_out) {
     *weight_out = font_weight_;
-  if (params_out)
+  }
+  if (params_out) {
     *params_out = font_params_;
+  }
 }
 
 ui::SelectFileDialog* QtUi::CreateSelectFileDialog(
@@ -177,14 +227,26 @@ DISABLE_CFI_DLSYM
 DISABLE_CFI_VCALL
 bool QtUi::Initialize() {
   base::FilePath path;
-  if (!base::PathService::Get(base::DIR_MODULE, &path))
+  if (!base::PathService::Get(base::DIR_MODULE, &path)) {
     return false;
-  path = path.Append("libqt5_shim.so");
-  void* libqt_shim = dlopen(path.value().c_str(), RTLD_NOW | RTLD_GLOBAL);
-  if (!libqt_shim)
+  }
+  void* libqt_shim =
+      PreferQt6()
+          ? LoadLibraryOrFallback(path, "libqt6_shim.so", "libqt5_shim.so")
+          : LoadLibraryOrFallback(path, "libqt5_shim.so", "libqt6_shim.so");
+  if (!libqt_shim) {
     return false;
+  }
   void* create_qt_interface = dlsym(libqt_shim, "CreateQtInterface");
   DCHECK(create_qt_interface);
+
+  // Under certain conditions, a hang may occur in libICE when reading from the
+  // ICE connection.  Chrome doesn't use QT's session save/restore capabilities
+  // and instead manages it's own sessions, so this is not needed anyway.  Unset
+  // SESSION_MANAGER to prevent creating an ICE connection.  See [1] and [2].
+  // [1] https://crbug.com/1450759
+  // [2] https://bugreports.qt.io/browse/QTBUG-38599
+  base::ScopedEnvironmentVariableOverride env_override("SESSION_MANAGER");
 
   cmd_line_ = CopyCmdLine(*base::CommandLine::ForCurrentProcess());
   shim_.reset((reinterpret_cast<decltype(&CreateQtInterface)>(
@@ -193,6 +255,7 @@ bool QtUi::Initialize() {
   ui::ColorProviderManager::Get().AppendColorProviderInitializer(
       base::BindRepeating(&QtUi::AddNativeColorMixer, base::Unretained(this)));
   FontChanged();
+  scale_factor_ = shim_->GetScaleFactor();
 
   return true;
 }
@@ -203,8 +266,9 @@ ui::NativeTheme* QtUi::GetNativeTheme() const {
 
 bool QtUi::GetColor(int id, SkColor* color, bool use_custom_frame) const {
   auto value = GetColor(id, use_custom_frame);
-  if (value)
+  if (value) {
     *color = *value;
+  }
   return value.has_value();
 }
 
@@ -254,8 +318,9 @@ gfx::Image QtUi::GetIconForContentType(const std::string& content_type,
                                        float scale) const {
   Image image =
       shim_->GetIconForContentType(String(content_type.c_str()), size * scale);
-  if (!image.data_argb.size())
+  if (!image.data_argb.size()) {
     return {};
+  }
 
   SkImageInfo image_info = SkImageInfo::Make(
       image.width, image.height, kBGRA_8888_SkColorType, kPremul_SkAlphaType);
@@ -302,14 +367,16 @@ bool QtUi::AnimationsEnabled() const {
 
 void QtUi::AddWindowButtonOrderObserver(
     ui::WindowButtonOrderObserver* observer) {
-  if (fallback_linux_ui_)
+  if (fallback_linux_ui_) {
     fallback_linux_ui_->AddWindowButtonOrderObserver(observer);
+  }
 }
 
 void QtUi::RemoveWindowButtonOrderObserver(
     ui::WindowButtonOrderObserver* observer) {
-  if (fallback_linux_ui_)
+  if (fallback_linux_ui_) {
     fallback_linux_ui_->RemoveWindowButtonOrderObserver(observer);
+  }
 }
 
 std::unique_ptr<ui::NavButtonProvider> QtUi::CreateNavButtonProvider() {
@@ -365,12 +432,14 @@ void QtUi::FontChanged() {
   auto desc = shim_->GetFontDescription();
 
   font_family_ = desc.family.c_str();
+  // Points are defined at 72 DPI and pixels are 96 DPI by default.
+  constexpr double kPointToPixelRatio = 96.0 / 72.0;
   if (desc.size_pixels > 0) {
     font_size_pixels_ = desc.size_pixels;
-    font_size_points_ = font_size_pixels_ / GetDeviceScaleFactor();
+    font_size_points_ = std::round(font_size_pixels_ / kPointToPixelRatio);
   } else {
     font_size_points_ = desc.size_points;
-    font_size_pixels_ = font_size_points_ * GetDeviceScaleFactor();
+    font_size_pixels_ = std::round(font_size_points_ * kPointToPixelRatio);
   }
   font_style_ = desc.is_italic ? gfx::Font::ITALIC : gfx::Font::NORMAL;
   font_weight_ = QtWeightToCssWeight(desc.weight);
@@ -398,11 +467,24 @@ void QtUi::ThemeChanged() {
   native_theme_->ThemeChanged(PreferDarkTheme());
 }
 
+void QtUi::ScaleFactorMaybeChanged() {
+  // This gets called whenever the monitor configuration changes.  Handle the
+  // scale change asynchronously to allow the change to propagate to QT's scale
+  // factor. This also coalesces scale change events together.
+  if (!scale_factor_task_active_) {
+    scale_factor_task_active_ = true;
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&QtUi::ScaleFactorMaybeChangedImpl,
+                                  weak_factory_.GetWeakPtr()));
+  }
+}
+
 DISABLE_CFI_VCALL
 void QtUi::AddNativeColorMixer(ui::ColorProvider* provider,
                                const ui::ColorProviderManager::Key& key) {
-  if (key.system_theme != ui::SystemTheme::kQt)
+  if (key.system_theme != ui::SystemTheme::kQt) {
     return;
+  }
 
   ui::ColorMixer& mixer = provider->AddMixer();
   // These color constants are required by native_chrome_color_mixer_linux.cc
@@ -451,8 +533,9 @@ void QtUi::AddNativeColorMixer(ui::ColorProvider* provider,
        ColorState::kInactive},
       {ui::kColorNativeToolbarBackground, ColorType::kButtonBg},
   };
-  for (const auto& map : kMaps)
+  for (const auto& map : kMaps) {
     mixer[map.id] = {shim_->GetColor(map.role, map.state)};
+  }
 
   const bool use_custom_frame =
       key.frame_type == ui::ColorProviderManager::FrameType::kChromium;
@@ -532,6 +615,20 @@ absl::optional<SkColor> QtUi::GetColor(int id, bool use_custom_frame) const {
           .color;
     default:
       return absl::nullopt;
+  }
+}
+
+DISABLE_CFI_VCALL
+void QtUi::ScaleFactorMaybeChangedImpl() {
+  scale_factor_task_active_ = false;
+  double scale = shim_->GetScaleFactor();
+  if (scale == scale_factor_) {
+    return;
+  }
+  scale_factor_ = scale;
+  for (ui::DeviceScaleFactorObserver& observer :
+       device_scale_factor_observer_list()) {
+    observer.OnDeviceScaleFactorChanged();
   }
 }
 

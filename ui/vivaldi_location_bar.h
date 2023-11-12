@@ -17,21 +17,15 @@ for the most part it's empty.
 */
 class VivaldiLocationBar : public LocationBar {
  public:
-  VivaldiLocationBar(const VivaldiBrowserWindow& window);
+  VivaldiLocationBar(VivaldiBrowserWindow& window);
   ~VivaldiLocationBar() override;
   VivaldiLocationBar(const VivaldiLocationBar&) = delete;
   VivaldiLocationBar& operator=(const VivaldiLocationBar&) = delete;
 
   // The details necessary to open the user's desired omnibox match.
-  GURL GetDestinationURL() const override;
-  WindowOpenDisposition GetWindowOpenDisposition() const override;
-  ui::PageTransition GetPageTransition() const override;
   void FocusLocation(bool select_all) override {}
   void FocusSearch() override {}
   void UpdateContentSettingsIcons() override;
-
-  base::TimeTicks GetMatchSelectionTimestamp() const override;
-  bool IsInputTypedUrlWithoutScheme() const override;
 
   // TODO?
   void SaveStateToContents(content::WebContents* contents) override {}
@@ -39,6 +33,16 @@ class VivaldiLocationBar : public LocationBar {
 
   const OmniboxView* GetOmniboxView() const override;
   OmniboxView* GetOmniboxView() override;
+
+  content::WebContents* GetWebContents() override;
+
+  LocationBarModel* GetLocationBarModel() override;
+
+  void OnChanged() override {}
+
+  void OnPopupVisibilityChanged() override {}
+
+  void UpdateWithoutTabRestore() override {}
 
   // Returns a pointer to the testing interface.
   LocationBarTesting* GetLocationBarForTesting() override;

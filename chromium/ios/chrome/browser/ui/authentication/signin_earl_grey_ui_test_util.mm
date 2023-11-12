@@ -6,6 +6,7 @@
 
 #import "base/mac/foundation_util.h"
 #import "base/test/ios/wait_util.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller_constants.h"
 #import "ios/chrome/browser/signin/fake_system_identity.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
@@ -73,7 +74,7 @@ void CloseSigninManagedAccountDialogIfAny(FakeSystemIdentity* fakeIdentity) {
     [ChromeEarlGrey signInWithoutSyncWithIdentity:fakeIdentity];
     ConditionBlock condition = ^bool {
       return [[SigninEarlGreyAppInterface primaryAccountGaiaID]
-          isEqual:fakeIdentity.gaiaID];
+          isEqualToString:fakeIdentity.gaiaID];
     };
     BOOL isSigned = base::test::ios::WaitUntilConditionOrTimeout(
         base::test::ios::kWaitForActionTimeout, condition);
@@ -82,11 +83,7 @@ void CloseSigninManagedAccountDialogIfAny(FakeSystemIdentity* fakeIdentity) {
         fakeIdentity.gaiaID, [SigninEarlGreyAppInterface primaryAccountGaiaID]);
     return;
   }
-  [ChromeEarlGreyUI openSettingsMenu];
-  [[[EarlGrey selectElementWithMatcher:chrome_test_util::PrimarySignInButton()]
-         usingSearchAction:grey_scrollInDirection(kGREYDirectionUp, 150)
-      onElementWithMatcher:chrome_test_util::SettingsCollectionView()]
-      performAction:grey_tap()];
+  [SigninEarlGreyUI tapPrimarySignInButtonInRecentTabs];
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           kIdentityButtonControlIdentifier)]
       performAction:grey_tap()];
@@ -96,7 +93,8 @@ void CloseSigninManagedAccountDialogIfAny(FakeSystemIdentity* fakeIdentity) {
   [self tapSigninConfirmationDialog];
   CloseSigninManagedAccountDialogIfAny(fakeIdentity);
 
-  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kTableViewNavigationDismissButtonId)]
       performAction:grey_tap()];
 
   // Sync utilities require sync to be initialized in order to perform
@@ -320,10 +318,9 @@ void CloseSigninManagedAccountDialogIfAny(FakeSystemIdentity* fakeIdentity) {
                  grey_accessibilityID(
                      kSyncEncryptionPassphraseTextFieldAccessibilityIdentifier)]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:
-                 grey_accessibilityID(
-                     kSyncEncryptionPassphraseTextFieldAccessibilityIdentifier)]
-      performAction:grey_typeText(passphrase)];
+  // TODO(crbug.com/1454849): replaceText causes the view to dismiss. Needs
+  // investigation.
+  [ChromeEarlGrey simulatePhysicalKeyboardEvent:passphrase flags:0];
 
   [[EarlGrey
       selectElementWithMatcher:grey_allOf(

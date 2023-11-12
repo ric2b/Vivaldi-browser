@@ -37,7 +37,6 @@
 <translation id="215753907730220065">Izlaz iz cijelog zaslona</translation>
 <translation id="2177950615300672361">Anonimna kartica: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modul Native Client: <ph name="NEXE_NAME" /></translation>
-<translation id="225240747099314620">Dozvoli generiranje identifikatora trenutnog uređaja za pristup zaštićenom sadržaju (možda je potrebno ponovno pokretanje računala)</translation>
 <translation id="2282146716419988068">GPU proces</translation>
 <translation id="2301382460326681002">Korijenski direktorij proširenja nije važeći.</translation>
 <translation id="2322193970951063277">Zaglavlja i podnožja</translation>
@@ -45,7 +44,6 @@
 <translation id="2327492829706409234">Omogući aplikaciju</translation>
 <translation id="2348176352564285430">Aplikacija: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Odaberi direktorij proširenja.</translation>
-<translation id="2381756643783702095">Pitanje prije slanja (preporučeno)</translation>
 <translation id="241082044617551207">Nepoznati dodatak</translation>
 <translation id="2439110203301358333">Drugi program na vašem računalu dodao je proširenje koje može promijeniti način na koji radi Vivaldi.</translation>
 <translation id="2445081178310039857">Obavezan je korijenski direktorij proširenja.</translation>
@@ -60,7 +58,6 @@
 <translation id="2850541429955027218">Dodaj temu</translation>
 <translation id="2861941300086904918">Sigurnosni upravitelj izvornog klijenta</translation>
 <translation id="2902127500170292085">Proširenje <ph name="EXTENSION_NAME" /> nije uspostavilo komunikaciju s tim pisačem. Provjerite je li pisač priključen i pokušajte ponovo.</translation>
-<translation id="2913331724188855103">Dopuštanje web-lokacijama da spremaju i čitaju podatke kolačića (preporučeno)</translation>
 <translation id="2931157624143513983">Prilagodi području ispisa</translation>
 <translation id="2932883381142163287">Prijavi zloupotrebu</translation>
 <translation id="2941112035454246133">Nizak</translation>
@@ -80,15 +77,12 @@
 <translation id="3341703758641437857">Omogući pristup URL datotekama</translation>
 <translation id="3347086966102161372">K&amp;opiraj adresu slike</translation>
 <translation id="3378572629723696641">Ovo proširenje možda je oštećeno.</translation>
-<translation id="3494769164076977169">Pitaj me kad web-lokacija pokuša automatski preuzeti datoteke nakon prve datoteke (preporučeno)</translation>
-<translation id="3505030558724226696">Opoziv pristupa uređaju</translation>
 <translation id="3511307672085573050">Kopiraj adresu &amp;veze</translation>
 <translation id="3560034655160545939">&amp;Provjera pravopisa</translation>
 <translation id="3587482841069643663">Sve</translation>
 <translation id="3678156199662914018">Proširenje: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Zahtjev aplikacije <ph name="APP_NAME" /> za dijeljenje zaslona</translation>
 <translation id="3797900183766075808">&amp;Traži pojam "<ph name="SEARCH_TERMS" />" pomoću tražilice <ph name="SEARCH_ENGINE" /></translation>
-<translation id="3800806661949714323">Prikaži sve (preporučeno)</translation>
 <translation id="3838085852053358637">Učitavanje proširenja nije uspjelo</translation>
 <translation id="385051799172605136">Natrag</translation>
 <translation id="3905761538810670789">Popravi aplikaciju</translation>
@@ -98,7 +92,6 @@
 <translation id="3936390757709632190">&amp;Otvori audio na novoj kartici</translation>
 <translation id="3943582379552582368">&amp;Natrag</translation>
 <translation id="3948116654032448504">&amp;Traži sliku uz <ph name="SEARCH_ENGINE" /></translation>
-<translation id="3955193568934677022">Web-lokacije mogu reproducirati zaštićeni sadržaj (preporučeno)</translation>
 <translation id="3979395879372752341">Dodan je novi nastavak (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Dodaj u rječnik</translation>
@@ -124,7 +117,6 @@
 <translation id="4677772697204437347">Memorija grafičkog procesora</translation>
 <translation id="488785315393301722">Pokaži pojedinosti</translation>
 <translation id="4912643508233590958">Buđenja iz stanja mirovanja</translation>
-<translation id="5000922062037820727">Blokirano (preporučeno)</translation>
 <translation id="5027562294707732951">Dodaj proširenje</translation>
 <translation id="5039804452771397117">Dopusti</translation>
 <translation id="5143374789336132547">Proširenje "<ph name="EXTENSION_NAME" />" promijenilo je stranicu koja se prikazuje kada se klikne gumb Početna.</translation>
@@ -139,7 +131,6 @@
 <translation id="5370819323174483825">&amp;Ponovo učitaj</translation>
 <translation id="5425042808445046667">Nastavi preuzimanje</translation>
 <translation id="5431318178759467895">Boja</translation>
-<translation id="5483785310822538350">Opozovi pristup datotekama i uređaju</translation>
 <translation id="5485102783864353244">Dodaj aplikaciju</translation>
 <translation id="5487521232677179737">Izbriši podatke</translation>
 <translation id="5521078259930077036">Je li to početna stranica koju ste očekivali?</translation>
@@ -147,7 +138,6 @@
 <translation id="5556459405103347317">Ponovno učitaj</translation>
 <translation id="5575473780076478375">Anonimno proširenje: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">Upravlja i time koja se stranica prikazuje kada se klikne gumb Početna.</translation>
-<translation id="563535393368633106">Pitaj prije omogućivanja pristupa (preporučeno)</translation>
 <translation id="5677928146339483299">Blokirano</translation>
 <translation id="5707185214361380026">Učitavanje proširenja nije uspjelo:</translation>
 <translation id="5715711091495208045">Broker dodatka: <ph name="PLUGIN_NAME" /></translation>
@@ -168,7 +158,6 @@
 <translation id="6268252012308737255">Otvori aplikacijom <ph name="APP" /></translation>
 <translation id="6295158916970320988">Sve web-lokacije</translation>
 <translation id="6315493146179903667">Postavi sve u prednji plan</translation>
-<translation id="6385543213911723544">Web-lokacije mogu spremiti i čitati podatke kolačića</translation>
 <translation id="6398765197997659313">Izađi iz cijelog zaslona</translation>
 <translation id="6445450263907939268">Ako ne želite te promjene, možete vratiti svoje prethodne postavke.</translation>
 <translation id="6447842834002726250">Kolačići</translation>
@@ -178,11 +167,9 @@
 <translation id="6518014396551869914">Kop&amp;iraj sliku</translation>
 <translation id="6691936601825168937">&amp;Proslijedi</translation>
 <translation id="6798954102094737107">Dodatak: <ph name="PLUGIN_NAME" /></translation>
-<translation id="6817174620439930047">Pitaj kada web-lokacija želi upotrijebiti posebne sistemske poruke za pristup MIDI uređajima (preporučeno)</translation>
 <translation id="6824564591481349393">Kopiraj &amp;adresu e-pošte</translation>
 <translation id="6840155290835956714">Pitaj prije slanja</translation>
 <translation id="6900284862687837908">Aplikacija u pozadini: <ph name="BACKGROUND_APP_URL" /></translation>
-<translation id="6904344821472985372">Opozovi pristup datoteci</translation>
 <translation id="7006634003215061422">Donja margina</translation>
 <translation id="7053983685419859001">Blokiraj</translation>
 <translation id="708060913198414444">K&amp;opiraj adresu audiozapisa</translation>
@@ -191,7 +178,6 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7412226954991670867">Memorija grafičkog procesora</translation>
 <translation id="7421925624202799674">&amp;Prikaži izvor stranice</translation>
-<translation id="7423098979219808738">Prvo pitaj</translation>
 <translation id="7427348830195639090">Pozadinska stranica: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Odabirom tog pisača sljedećem proširenju dajete dopuštenje za pristup svojem pisaču:</translation>
 <translation id="7564847347806291057">Završi proces</translation>
@@ -228,10 +214,8 @@ Ključnu datoteku čuvajte na sigurnom mjestu. Trebat će vam za stvaranje novih
 <translation id="8261378640211443080">To proširenje nije navedeno u trgovini <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> i možda je dodano bez vašeg znanja.</translation>
 <translation id="8351419472474436977">To proširenje preuzelo je kontrolu nad vašim postavkama proxyja, a to znači da može promijeniti, prekinuti ili prisluškivati sve što radite na mreži. Ako niste sigurni kako je došlo do te promjene, vjerojatno je ne želite.</translation>
 <translation id="8382913212082956454">Kopiraj &amp;adresu e-pošte</translation>
-<translation id="8413385045638830869">Prvo pitaj (preporučeno)</translation>
 <translation id="8512476990829870887">Završi proces</translation>
 <translation id="8546306075665861288">Predmemorija slike</translation>
-<translation id="857943718398505171">Dopušteno (preporučeno)</translation>
 <translation id="8584280235376696778">&amp;Otvori video na novoj kartici</translation>
 <translation id="8615618338313291042">Anonimna aplikacija: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSS predmemorija</translation>

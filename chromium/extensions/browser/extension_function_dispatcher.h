@@ -20,6 +20,7 @@
 namespace content {
 class BrowserContext;
 class RenderFrameHost;
+class RenderProcessHost;
 class WebContents;
 }
 
@@ -86,9 +87,8 @@ class ExtensionFunctionDispatcher {
 
   // Called when an ExtensionFunction is done executing, after it has sent
   // a response (if any) to the extension.
-  void OnExtensionFunctionCompleted(const Extension* extension,
-                                    bool is_from_service_worker,
-                                    const char* name);
+  void OnExtensionFunctionCompleted(
+      const ExtensionFunction& extension_function);
 
   // See the Delegate class for documentation on these methods.
   // TODO(devlin): None of these belong here. We should kill
@@ -147,7 +147,7 @@ class ExtensionFunctionDispatcher {
   void DispatchWithCallbackInternal(
       const mojom::RequestParams& params,
       content::RenderFrameHost* render_frame_host,
-      int render_process_id,
+      content::RenderProcessHost& render_process_host,
       ExtensionFunction::ResponseCallback callback);
 
   void RemoveWorkerCallbacksForProcess(int render_process_id);

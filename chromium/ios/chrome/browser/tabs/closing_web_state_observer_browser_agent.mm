@@ -9,9 +9,9 @@
 #import "components/sessions/ios/ios_restore_live_tab.h"
 #import "components/sessions/ios/ios_webstate_live_tab.h"
 #import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/web_state.h"
@@ -83,12 +83,31 @@ void ClosingWebStateObserverBrowserAgent::BrowserDestroyed(Browser* browser) {
 
 #pragma mark - WebStateListObserving
 
-void ClosingWebStateObserverBrowserAgent::WebStateReplacedAt(
+void ClosingWebStateObserverBrowserAgent::WebStateListChanged(
     WebStateList* web_state_list,
-    web::WebState* old_web_state,
-    web::WebState* new_web_state,
-    int index) {
-  SnapshotTabHelper::FromWebState(old_web_state)->RemoveSnapshot();
+    const WebStateListChange& change,
+    const WebStateSelection& selection) {
+  switch (change.type()) {
+    case WebStateListChange::Type::kSelectionOnly:
+      // Do nothing when a WebState is selected and its status is updated.
+      break;
+    case WebStateListChange::Type::kDetach:
+      // Do nothing when a WebState is detached.
+      break;
+    case WebStateListChange::Type::kMove:
+      // Do nothing when a WebState is moved.
+      break;
+    case WebStateListChange::Type::kReplace: {
+      const WebStateListChangeReplace& replace_change =
+          change.As<WebStateListChangeReplace>();
+      SnapshotTabHelper::FromWebState(replace_change.replaced_web_state())
+          ->RemoveSnapshot();
+      break;
+    }
+    case WebStateListChange::Type::kInsert:
+      // Do nothing when a new WebState is inserted.
+      break;
+  }
 }
 
 void ClosingWebStateObserverBrowserAgent::WillCloseWebStateAt(

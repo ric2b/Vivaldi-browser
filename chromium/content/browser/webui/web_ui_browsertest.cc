@@ -211,7 +211,7 @@ IN_PROC_BROWSER_TEST_F(WebUIImplBrowserTest, ForceSwapOnDifferenteWebUITypes) {
   // has changed and the new process also has WebUI bindings.
   const GURL web_ui_url2(GetWebUIURL(kChromeUIGpuHost));
   EXPECT_TRUE(WebUIConfigMap::GetInstance().GetConfig(
-      web_contents->GetBrowserContext(), url::Origin::Create(web_ui_url2)));
+      web_contents->GetBrowserContext(), web_ui_url2));
   ASSERT_TRUE(NavigateToURL(web_contents, web_ui_url2));
   auto* new_site_instance = web_contents->GetSiteInstance();
   EXPECT_NE(orig_site_instance, new_site_instance);
@@ -314,8 +314,9 @@ IN_PROC_BROWSER_TEST_F(WebUIImplBrowserTest, SameDocumentNavigationsAndReload) {
   test_handler->AllowJavascriptForTesting();
 
   // Push onto window.history. Back should now be an in-page navigation.
-  ASSERT_TRUE(ExecuteScript(web_contents,
-                            "window.history.pushState({}, '', 'foo.html')"));
+  ASSERT_TRUE(
+      ExecJs(web_contents,
+             "window.history.pushState({}, '', location.href + '#foo')"));
   shell()->GoBackOrForward(-1);
   EXPECT_TRUE(WaitForLoadStop(web_contents));
 

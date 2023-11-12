@@ -94,11 +94,12 @@
       {
         "name": "get",
         "type": "function",
-        "description": "Retrieves a named menu.",
+        "description": "Retrieves content of a menu.",
         "parameters": [
           {
-            "name": "namedMenu",
-            "type": "string"
+            "name": "menu",
+            "type": "string",
+            "description": "Menu resource name."
           },
           {
             "type": "function",
@@ -107,7 +108,7 @@
               {
                 "name": "id",
                 "type": "string",
-                "description": "Root id of the named menu."
+                "description": "Root id of the menu."
               },
               {
                 "name": "role",
@@ -126,11 +127,12 @@
       {
         "name": "move",
         "type": "function",
-        "description": "Moves one or more items within a named menu.",
+        "description": "Moves one or more items within a menu.",
         "parameters": [
           {
-            "name": "namedMenu",
-            "type": "string"
+            "name": "menu",
+            "type": "string",
+            "description": "Menu resource name."
           },
           {
             "name": "ids",
@@ -159,11 +161,12 @@
       {
         "name": "create",
         "type": "function",
-        "description": "Add one or more items within a named menu.",
+        "description": "Add one or more items within a menu.",
         "parameters": [
           {
-            "name": "namedMenu",
-            "type": "string"
+            "name": "menu",
+            "type": "string",
+            "description": "Menu resource name."
           },
           {
             "name": "parentId",
@@ -199,11 +202,12 @@
       {
         "name": "remove",
         "type": "function",
-        "description": "Deletes one or more items within a named menu.",
+        "description": "Deletes one or more items within a menu.",
         "parameters": [
           {
-            "name": "namedMenu",
-            "type": "string"
+            "name": "menu",
+            "type": "string",
+            "description": "Menu resource name."
           },
           {
             "name": "ids",
@@ -248,8 +252,9 @@
         "description": "Updates the properties of a node.",
         "parameters": [
           {
-            "name": "namedMenu",
-            "type": "string"
+            "name": "menu",
+            "type": "string",
+            "description": "Menu resource name."
           },
           {
             "name": "id",
@@ -295,11 +300,16 @@
       {
         "name": "reset",
         "type": "function",
-        "description": "Restores default content within a named menu or in a submenu of that named menu.",
+        "description": "Restores default content within a menu or in a submenu of that menu.",
         "parameters": [
           {
-            "name": "namedMenu",
-            "type": "string"
+            "name": "menu",
+            "type": "string",
+            "description": "Menu resource name."
+          },
+          {
+            "name": "isContext",
+            "type": "boolean"
           },
           {
             "name": "ids",
@@ -323,16 +333,22 @@
       {
         "name": "onChanged",
         "type": "function",
-        "description": "Fires when the content of a named menu has changed.",
+        "description": "Fires when the content of a menu has changed.",
         "parameters": [
           {
-            "name": "namedMenu",
-            "type": "string"
+            "name": "menu",
+            "type": "string",
+            "description": "Menu resource name."
           },
           {
             "name": "id",
             "type": "string",
-            "description": "Unique identifier for the named menu."
+            "description": "Unique identifier for menu."
+          },
+          {
+              "name": "role",
+              "$ref": "Role",
+              "description": "Describes the role of menu."
           },
           {
             "name": "selectId",

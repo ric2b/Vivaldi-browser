@@ -134,8 +134,7 @@ public class LocaleManager implements DefaultSearchEngineDialogHelper.Delegate {
     }
 
     /** Returns whether and which search engine promo should be shown. */
-    @SearchEnginePromoType
-    public int getSearchEnginePromoShowType() {
+    public @SearchEnginePromoType int getSearchEnginePromoShowType() {
         if (BuildConfig.IS_VIVALDI) return SearchEnginePromoType.DONT_SHOW;
         return mDelegate.getSearchEnginePromoShowType();
     }

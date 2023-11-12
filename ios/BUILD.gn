@@ -1,6 +1,7 @@
 # Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
 
 import("//build/util/branding.gni")
+import("//build/config/ios/ios_sdk.gni")
 
 action("ios_dsym_archive") {
   script = "//chrome/tools/build/mac/archive_symbols.py"
@@ -11,23 +12,14 @@ action("ios_dsym_archive") {
   # generate both the dSYM and binary image are listed in deps.
   _dsyms = [
     "$root_out_dir/$chrome_product_full_name.dSYM",
-    "$root_out_dir/share_extension.dSYM",
-    "$root_out_dir/credential_provider_extension.dSYM",
-    "$root_out_dir/widget_kit_extension.dSYM",
   ]
 
   deps = [
     "//ios/chrome/app:chrome",
-    "//ios/chrome/share_extension:share_extension",
-    "//ios/chrome/credential_provider_extension:credential_provider_extension",
-    "//ios/chrome/widget_kit_extension:widget_kit_extension",
   ]
 
   sources = [
     "$root_out_dir/$chrome_product_full_name.app/$chrome_product_full_name",
-    "$root_out_dir/share_extension.appex/share_extension",
-    "$root_out_dir/credential_provider_extension.appex/credential_provider_extension",
-    "$root_out_dir/widget_kit_extension.appex/widget_kit_extension",
   ]
 
   _output = "$root_out_dir/$chrome_product_full_name.dSYM.tar.bz2"
@@ -36,4 +28,39 @@ action("ios_dsym_archive") {
 
   args = [ rebase_path(_output, root_out_dir) ] +
           rebase_path(_dsyms, root_out_dir)
+}
+
+if (ios_is_app_extension) {
+  action("ios_extension_dsym_archive") {
+    script = "//chrome/tools/build/mac/archive_symbols.py"
+
+    # These are the dSYMs that will be archived. The sources list must be
+    # the target outputs that correspond to the dSYMs (since a dSYM is a
+    # directory it cannot be listed as a source file). The targets that
+    # generate both the dSYM and binary image are listed in deps.
+    _dsyms = [
+      "$root_out_dir/share_extension.dSYM",
+      "$root_out_dir/credential_provider_extension.dSYM",
+      "$root_out_dir/widget_kit_extension.dSYM",
+    ]
+
+    deps = [
+      "//ios/chrome/share_extension:share_extension",
+      "//ios/chrome/credential_provider_extension:credential_provider_extension",
+      "//ios/chrome/widget_kit_extension:widget_kit_extension",
+    ]
+
+    sources = [
+      "$root_out_dir/share_extension.appex/share_extension",
+      "$root_out_dir/credential_provider_extension.appex/credential_provider_extension",
+      "$root_out_dir/widget_kit_extension.appex/widget_kit_extension",
+    ]
+
+    _output = "$root_out_dir/$chrome_product_full_name-extensions.dSYM.tar.bz2"
+
+    outputs = [ _output ]
+
+    args = [ rebase_path(_output, root_out_dir) ] +
+            rebase_path(_dsyms, root_out_dir)
+  }
 }

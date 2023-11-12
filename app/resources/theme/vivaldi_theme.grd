@@ -15,8 +15,8 @@
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi_sopranos/product_logo_32.png" />
       </if>
       <if expr="not is_android">
-        <structure type="chrome_scaled_image" name="IDR_SAVE_PASSWORD" file="common/save_password.png" />
-        <structure type="chrome_scaled_image" name="IDR_SAVE_PASSWORD_DARK" file="common/save_password_dark.png" />
+        <structure type="chrome_scaled_image" name="IDR_SAVE_PASSWORD" file="viv_common/save_password.png" />
+        <structure type="chrome_scaled_image" name="IDR_SAVE_PASSWORD_DARK" file="viv_common/save_password_dark.png" />
       </if>
       <!-- The Avatar images needs to be here, unless we want to patch chromium/chrome/browser/resources_util.cc -->
       <structure type="chrome_scaled_image" name="IDR_ERROR_NETWORK_OFFLINE" file="vivaldi/error_network_offline.png" />

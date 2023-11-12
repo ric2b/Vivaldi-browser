@@ -8,6 +8,7 @@
 #include <queue>
 
 #include "base/auto_reset.h"
+#include "base/gtest_prod_util.h"
 #include "base/time/time.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/performance/largest_contentful_paint_type.h"
@@ -142,6 +143,8 @@ class CORE_EXPORT PaintTimingDetector
     base::TimeTicks largest_contentful_paint_time_;
     absl::optional<WebURLRequest::Priority>
         largest_contentful_paint_image_request_priority_;
+    bool is_loaded_from_memory_cache_ = false;
+    bool is_preloaded_with_early_hints_ = false;
   };
 
   // Returns true if the image might ultimately be a candidate for largest
@@ -205,42 +208,9 @@ class CORE_EXPORT PaintTimingDetector
 
   LargestContentfulPaintCalculator* GetLargestContentfulPaintCalculator();
 
-  base::TimeTicks LargestImagePaintForMetrics() const {
-    return lcp_details_for_ukm_.largest_image_paint_time_;
-  }
-  uint64_t LargestImagePaintSizeForMetrics() const {
-    return lcp_details_for_ukm_.largest_image_paint_size_;
-  }
-  blink::LargestContentfulPaintType LargestContentfulPaintTypeForMetrics()
-      const {
-    return lcp_details_for_ukm_.largest_contentful_paint_type_;
-  }
-  double LargestContentfulPaintImageBPPForMetrics() const {
-    return lcp_details_for_ukm_.largest_contentful_paint_image_bpp_;
-  }
-  base::TimeTicks LargestTextPaintForMetrics() const {
-    return lcp_details_for_ukm_.largest_text_paint_time_;
-  }
-  uint64_t LargestTextPaintSizeForMetrics() const {
-    return lcp_details_for_ukm_.largest_text_paint_size_;
-  }
-
-  absl::optional<WebURLRequest::Priority>
-  LargestContentfulPaintImageRequestPriorityForMetrics() const {
-    return lcp_details_for_ukm_
-        .largest_contentful_paint_image_request_priority_;
-  }
-
-  base::TimeTicks LargestImageLoadStartForMetrics() const {
-    return lcp_details_for_ukm_.largest_image_load_start_;
-  }
-
-  base::TimeTicks LargestImageLoadEndForMetrics() const {
-    return lcp_details_for_ukm_.largest_image_load_end_;
-  }
-
-  base::TimeTicks LargestContentfulPaintForMetrics() const {
-    return lcp_details_for_ukm_.largest_contentful_paint_time_;
+  const PaintTimingDetector::LargestContentfulPaintDetails&
+  LargestContentfulPaintDetailsForMetrics() const {
+    return lcp_details_for_ukm_;
   }
 
   base::TimeTicks FirstInputOrScrollNotifiedTimestamp() const {
@@ -266,7 +236,8 @@ class CORE_EXPORT PaintTimingDetector
   bool HasLargestTextPaintChanged(base::TimeTicks, uint64_t size) const;
   void UpdateLargestContentfulPaintTime();
   Member<LocalFrameView> frame_view_;
-  // This member lives forever because it is also used for Text Element Timing.
+  // This member lives forever because it is also used for Text Element
+  // Timing.
   Member<TextPaintTimingDetector> text_paint_timing_detector_;
   // This member lives forever, to detect LCP entries for soft navigations.
   Member<ImagePaintTimingDetector> image_paint_timing_detector_;
@@ -275,9 +246,10 @@ class CORE_EXPORT PaintTimingDetector
   // computed. However, it is initialized lazily, so it may be nullptr because
   // it has not yet been initialized or because we have stopped computing LCP.
   Member<LargestContentfulPaintCalculator> largest_contentful_paint_calculator_;
-  // Time at which the first input or scroll is notified to PaintTimingDetector,
-  // hence causing LCP to stop being recorded. This is the same time at which
-  // |largest_contentful_paint_calculator_| is set to nullptr.
+  // Time at which the first input or scroll is notified to
+  // PaintTimingDetector, hence causing LCP to stop being recorded. This is
+  // the same time at which |largest_contentful_paint_calculator_| is set to
+  // nullptr.
   base::TimeTicks first_input_or_scroll_notified_timestamp_;
 
   Member<PaintTimingCallbackManagerImpl> callback_manager_;

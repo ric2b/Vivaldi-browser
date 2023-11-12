@@ -16,27 +16,12 @@ namespace supervised_user {
 // Enables refreshed version of the website filter interstitial that is shown to
 // Family Link users when they navigate to the blocked website.
 // This feature is a prerequisite for `kLocalWebApproval` feature.
-#if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kWebFilterInterstitialRefresh,
-             "WebFilterInterstitialRefresh",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#elif BUILDFLAG(IS_IOS)
-BASE_FEATURE(kWebFilterInterstitialRefresh,
-             "WebFilterInterstitialRefresh",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
+//
+// TODO(b/276428131): clean up this feature once local approvals on Android is
+// fully launched.
 BASE_FEATURE(kWebFilterInterstitialRefresh,
              "WebFilterInterstitialRefresh",
              base::FEATURE_ENABLED_BY_DEFAULT);
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-BASE_FEATURE(kWebFilterInterstitialRefresh,
-             "WebFilterInterstitialRefresh",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#else  // Desktop
-BASE_FEATURE(kWebFilterInterstitialRefresh,
-             "WebFilterInterstitialRefresh",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
 
 // Enables local parent approvals for the blocked website on the Family Link
 // user's device.
@@ -45,24 +30,12 @@ BASE_FEATURE(kWebFilterInterstitialRefresh,
 //
 // The feature includes one experiment parameter: "preferred_button", which
 // determines which button is displayed as the preferred option in the
-// interstitial UI (i.e. dark blue button).#if BUILDFLAG(IS_ANDROID)
-#if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kLocalWebApprovals,
-             "LocalWebApprovals",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#elif BUILDFLAG(IS_IOS)
-BASE_FEATURE(kLocalWebApprovals,
-             "LocalWebApprovals",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
+// interstitial UI (i.e. dark blue button).
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
 BASE_FEATURE(kLocalWebApprovals,
              "LocalWebApprovals",
              base::FEATURE_ENABLED_BY_DEFAULT);
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-BASE_FEATURE(kLocalWebApprovals,
-             "LocalWebApprovals",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#else  // Desktop
+#else
 BASE_FEATURE(kLocalWebApprovals,
              "LocalWebApprovals",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -73,24 +46,6 @@ const char kLocalWebApprovalsPreferredButtonRemote[] = "remote";
 constexpr base::FeatureParam<std::string> kLocalWebApprovalsPreferredButton{
     &kLocalWebApprovals, "preferred_button",
     kLocalWebApprovalsPreferredButtonLocal};
-
-// Enables child accounts (i.e. Unicorn accounts) to clear their browsing
-// history data from Settings.
-#if BUILDFLAG(IS_CHROMEOS)
-// TODO(b/251192695): launch on Chrome OS
-BASE_FEATURE(kAllowHistoryDeletionForChildAccounts,
-             "AllowHistoryDeletionForChildAccounts",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#else
-BASE_FEATURE(kAllowHistoryDeletionForChildAccounts,
-             "AllowHistoryDeletionForChildAccounts",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
-
-// Enables the new Kids Management Api.
-BASE_FEATURE(kEnableKidsManagementService,
-             "EnableKidsManagementService",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the proto api for ClassifyURL calls.
 BASE_FEATURE(kEnableProtoApiForClassifyUrl,
@@ -108,10 +63,15 @@ BASE_FEATURE(kRetireStaticDenyList,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the new local extension approvals experience, which requests approval
-// through a platform-specific Parent Access Widget.
+// through a platform-specific Parent Access Widget. Available on ChromeOS.
 BASE_FEATURE(kLocalExtensionApprovalsV2,
              "LocalExtensionApprovalsV2",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Stops creating Supervised User Service for Incognito profile.
+BASE_FEATURE(kUpdateSupervisedUserFactoryCreation,
+             "UpdateSupervisedUserFactoryCreation",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsWebFilterInterstitialRefreshEnabled() {
   CHECK(base::FeatureList::IsEnabled(kWebFilterInterstitialRefresh) ||
@@ -149,10 +109,6 @@ bool IsLocalWebApprovalThePreferredButton() {
   return (preferred_button == kLocalWebApprovalsPreferredButtonLocal);
 }
 
-bool IsKidsManagementServiceEnabled() {
-  return base::FeatureList::IsEnabled(kEnableKidsManagementService);
-}
-
 bool IsProtoApiForClassifyUrlEnabled() {
   return base::FeatureList::IsEnabled(kEnableProtoApiForClassifyUrl);
 }
@@ -178,6 +134,41 @@ BASE_FEATURE(kFilterWebsitesForSupervisedUsersOnDesktopAndIOS,
 BASE_FEATURE(kEnableExtensionsPermissionsForSupervisedUsersOnDesktop,
              "EnableExtensionsPermissionsForSupervisedUsersOnDesktop",
              base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kSupervisedPrefsControlledBySupervisedStore,
+             "SupervisedPrefsControlledBySupervisedStore",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableCreatePermissionRequestFetcher,
+             "EnableCreatePermissionRequestFetcher",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Whether to display a "Managed by your parent" or similar text for supervised
+// users in various UI surfaces.
+BASE_FEATURE(kEnableManagedByParentUi,
+             "EnableManagedByParentUi",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool CanDisplayFirstTimeInterstitialBanner() {
+  return base::FeatureList::IsEnabled(kEnableSupervisionOnDesktopAndIOS) &&
+         base::FeatureList::IsEnabled(
+             kFilterWebsitesForSupervisedUsersOnDesktopAndIOS);
+}
+
+// When enabled non-syncing signed in supervised users will not be signed out of
+// their google account when cookies are cleared
+BASE_FEATURE(kClearingCookiesKeepsSupervisedUsersSignedIn,
+             "ClearingCookiesKeepsSupervisedUsersSignedIn",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// The URL which the "Managed by your parent" UI links to. This is defined as a
+// FeatureParam (but with the currently correct default) because:
+// * We expect to change this URL in the near-term, this allows us to gradually
+//   roll out that change
+// * If the exact URL needs changing this can be done without requiring a binary
+//   rollout
+constexpr base::FeatureParam<std::string> kManagedByParentUiMoreInfoUrl{
+    &kEnableManagedByParentUi, "more_info_url",
+    "https://familylink.google.com/setting/resource/94"};
 
 bool IsSynchronousSignInCheckingEnabled() {
   return base::FeatureList::IsEnabled(kSynchronousSignInChecking);

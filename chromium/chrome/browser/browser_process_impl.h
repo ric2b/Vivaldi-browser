@@ -28,6 +28,7 @@
 #include "components/nacl/common/buildflags.h"
 #include "components/prefs/persistent_pref_store.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/services/screen_ai/buildflags/buildflags.h"
 #include "extensions/buildflags/buildflags.h"
 #include "media/media_buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
@@ -57,6 +58,10 @@ namespace breadcrumbs {
 class ApplicationBreadcrumbsLogger;
 }  // namespace breadcrumbs
 
+namespace embedder_support {
+class OriginTrialsSettingsStorage;
+}  // namespace embedder_support
+
 namespace extensions {
 class ChromeExtensionsBrowserClient;
 }
@@ -78,6 +83,10 @@ namespace speech {
 class SodaInstallerImpl;
 class SodaInstallerImplChromeOS;
 }  // namespace speech
+
+namespace screen_ai {
+class ScreenAIDownloader;
+}  // namespace screen_ai
 
 // Real implementation of BrowserProcess that creates and returns the services.
 class BrowserProcessImpl : public BrowserProcess,
@@ -139,18 +148,17 @@ class BrowserProcessImpl : public BrowserProcess,
   // BrowserProcess implementation.
   void EndSession() override;
   void FlushLocalStateAndReply(base::OnceClosure reply) override;
-  device::GeolocationManager* geolocation_manager() override;
   metrics_services_manager::MetricsServicesManager* GetMetricsServicesManager()
       override;
   metrics::MetricsService* metrics_service() override;
-  void SetGeolocationManager(
-      std::unique_ptr<device::GeolocationManager> geolocation_manager) override;
   // TODO(qinmin): Remove this method as callers can retrieve the global
   // instance from SystemNetworkContextManager directly.
   SystemNetworkContextManager* system_network_context_manager() override;
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory()
       override;
   network::NetworkQualityTracker* network_quality_tracker() override;
+  embedder_support::OriginTrialsSettingsStorage*
+  GetOriginTrialsSettingsStorage() override;
   ProfileManager* profile_manager() override;
   PrefService* local_state() override;
   variations::VariationsService* variations_service() override;
@@ -207,7 +215,6 @@ class BrowserProcessImpl : public BrowserProcess,
 
 #if !BUILDFLAG(IS_ANDROID)
   SerialPolicyAllowedPorts* serial_policy_allowed_ports() override;
-  HidPolicyAllowedDevices* hid_policy_allowed_devices() override;
   HidSystemTrayIcon* hid_system_tray_icon() override;
 #endif
 
@@ -258,8 +265,6 @@ class BrowserProcessImpl : public BrowserProcess,
   bool created_profile_manager_ = false;
   std::unique_ptr<ProfileManager> profile_manager_;
 
-  std::unique_ptr<device::GeolocationManager> geolocation_manager_;
-
   const std::unique_ptr<PrefService> local_state_;
 
   // |metrics_services_manager_| owns this.
@@ -277,6 +282,9 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<
       network::NetworkQualityTracker::RTTAndThroughputEstimatesObserver>
       network_quality_observer_;
+
+  std::unique_ptr<embedder_support::OriginTrialsSettingsStorage>
+      origin_trials_settings_storage_;
 
   bool created_icon_manager_ = false;
   std::unique_ptr<IconManager> icon_manager_;
@@ -396,6 +404,12 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<speech::SodaInstallerImplChromeOS> soda_installer_impl_;
 #endif
 
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  // Used to download Screen AI on demand and keep track of the library
+  // availability.
+  std::unique_ptr<screen_ai::ScreenAIDownloader> screen_ai_download_;
+#endif
+
   std::unique_ptr<BrowserProcessPlatformPart> platform_part_;
 
   // Lazily initialized.
@@ -422,7 +436,6 @@ class BrowserProcessImpl : public BrowserProcess,
   base::OnceClosure quit_closure_;
 
   std::unique_ptr<SerialPolicyAllowedPorts> serial_policy_allowed_ports_;
-  std::unique_ptr<HidPolicyAllowedDevices> hid_policy_allowed_devices_;
   std::unique_ptr<HidSystemTrayIcon> hid_system_tray_icon_;
 
   BuildState build_state_;

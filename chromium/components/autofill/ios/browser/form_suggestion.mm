@@ -12,8 +12,9 @@
 
 - (instancetype)initWithValue:(NSString*)value
             displayDescription:(NSString*)displayDescription
-                          icon:(NSString*)icon
-                    identifier:(NSInteger)identifier
+                          icon:(UIImage*)icon
+                   popupItemId:(autofill::PopupItemId)popupItemId
+             backendIdentifier:(NSString*)backendIdentifier
                 requiresReauth:(BOOL)requiresReauth
     acceptanceA11yAnnouncement:(NSString*)acceptanceA11yAnnouncement {
   self = [super init];
@@ -21,7 +22,8 @@
     _value = [value copy];
     _displayDescription = [displayDescription copy];
     _icon = [icon copy];
-    _identifier = identifier;
+    _popupItemId = popupItemId;
+    _backendIdentifier = backendIdentifier;
     _requiresReauth = requiresReauth;
     _acceptanceA11yAnnouncement = [acceptanceA11yAnnouncement copy];
   }
@@ -30,27 +32,31 @@
 
 + (FormSuggestion*)suggestionWithValue:(NSString*)value
                     displayDescription:(NSString*)displayDescription
-                                  icon:(NSString*)icon
-                            identifier:(NSInteger)identifier
+                                  icon:(UIImage*)icon
+                           popupItemId:(autofill::PopupItemId)popupItemId
+                     backendIdentifier:(NSString*)backendIdentifier
                         requiresReauth:(BOOL)requiresReauth
             acceptanceA11yAnnouncement:(NSString*)acceptanceA11yAnnouncement {
   return [[FormSuggestion alloc] initWithValue:value
                             displayDescription:displayDescription
                                           icon:icon
-                                    identifier:identifier
+                                   popupItemId:popupItemId
+                             backendIdentifier:backendIdentifier
                                 requiresReauth:requiresReauth
                     acceptanceA11yAnnouncement:acceptanceA11yAnnouncement];
 }
 
 + (FormSuggestion*)suggestionWithValue:(NSString*)value
                     displayDescription:(NSString*)displayDescription
-                                  icon:(NSString*)icon
-                            identifier:(NSInteger)identifier
+                                  icon:(UIImage*)icon
+                           popupItemId:(autofill::PopupItemId)popupItemId
+                     backendIdentifier:(NSString*)backendIdentifier
                         requiresReauth:(BOOL)requiresReauth {
   return [[FormSuggestion alloc] initWithValue:value
                             displayDescription:displayDescription
                                           icon:icon
-                                    identifier:identifier
+                                   popupItemId:popupItemId
+                             backendIdentifier:backendIdentifier
                                 requiresReauth:requiresReauth
                     acceptanceA11yAnnouncement:nil];
 }

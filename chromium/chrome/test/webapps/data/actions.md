@@ -20,7 +20,7 @@ The tables in this file are parsed as action templates for critical user journey
 
 TODO(dmurph): Possibly this table up into markdown-header section.
 
-| # Action base name | Argument Types | Output Actions | Unique Identifier (next: 166) | Status (WIP, Implemented, Not Implemented, Parameterized) | Description | Metadata, implementation bug, etc |
+| # Action base name | Argument Types | Output Actions | Unique Identifier (next: 168) | Status (WIP, Implemented, Not Implemented, Parameterized) | Description | Metadata, implementation bug, etc |
 | --- | --- | --- | --- | --- | --- | --- |
 | # Badging |
 | check_app_badge_empty | Site |  | 2 | Not Implemented | Check that the 'badge' on the app icon is empty |  |
@@ -53,7 +53,7 @@ TODO(dmurph): Possibly this table up into markdown-header section.
 | |
 | # Install |
 | install_omnibox_icon | InstallableSite |  | 31 | Implemented |  |  |
-| install_policy_app | Site, ShortcutOptions, WindowOptions, InstallMode |  | 32 | Implemented | Add a force-installed enterprise policy site to the user profile (must be managed profile). |  |
+| install_policy_app | Site, ShortcutOptions, WindowOptions, InstallMode |  | 32 | Implemented | Add a force-installed enterprise policy site to the user profile (must be managed profile). This installation action also opens the target site in a tab to match the expectation of installs opening the app first for some CUJs.|  |
 | install_menu_option | InstallableSite |  | 47 | Implemented |  |  |
 | install_no_shortcut | Site | install_policy_app($1, NoShortcut, WindowOptions::All, WebApp) | 56 | Parameterized |  |  |
 | install_tabbed_no_shortcut | Site | install_policy_app($1, NoShortcut, Browser, WebApp) | 129 | Parameterized | All installation methods that result in a tabbed webapp without shortcut. |  |
@@ -165,9 +165,9 @@ TODO(dmurph): Possibly this table up into markdown-header section.
 | #Subapps |
 | install_sub_app | Site, Site, SubAppInstallDialogOptions |  | 138 | WIP | Navigate to the first site, call subApps.add() to install the second site. |  |
 | remove_sub_app | Site, Site |  | 139 | Implemented | Navigate to the first site, call subApps.remove() to uninstall the second site. |  |
-| check_has_sub_app | Site |  | 140 | Implemented | Assuming we have the active browser window on the (potential) parent site, call subApps.list() and check if the given site is listed. |  |
-| check_not_has_sub_app | Site |  | 141 | Implemented | Assuming we have the active browser window on the (potential) parent site, call subApps.list() and check if the given site is not listed. |  |
-| check_no_sub_apps |  |  | 142 | Implemented | Assuming we navigated to the (potential) parent site, call subApps.list() and check if the list is empty. |  |
+| check_has_sub_app | Site, Site |  | 140 | Implemented | Assuming we have some tab or browser window on the (potential) parent site, call subApps.list() and check if the given site is listed. |  |
+| check_not_has_sub_app | Site, Site |  | 141 | Implemented | Assuming we have some tab or browser window on the (potential) parent site, call subApps.list() and check if the given site is not listed. |  |
+| check_no_sub_apps | Site |  | 142 | Implemented | Assuming we have some tab or browser window on the (potential) parent site, call subApps.list() and check if the list is empty. |  |
 
 ### App Home
 Actions that the user can take by going to chrome://apps and either left clicking an app or right clicking an app and then taking actions from the context menu that opens.
@@ -191,3 +191,5 @@ Actions that the user can take by going to chrome://apps and either left clickin
 | create_shortcuts_from_list | Site |  | 72 | Implemented | "create shortcuts" in chrome://apps. Win/Mac/Linux only. | P2 |
 | open_app_settings_from_chrome_apps | Site |  | 96 | Implemented |  | phillis@ |
 | launch_from_chrome_apps | Site |  | 34 | Implemented | Launch the web app by navigating to chrome://apps, and then clicking on the app icon. |  |
+| navigate_app_home |  |  | 166 | Implemented | Navigate to chrome://apps in the current browser. |  |
+| check_browser_not_at_app_home |  |  | 167 | Implemented | Check the current browser is not at chrome://apps. |  |

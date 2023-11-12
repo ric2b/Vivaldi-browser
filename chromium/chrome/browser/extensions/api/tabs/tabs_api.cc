@@ -407,7 +407,7 @@ void SetLockedFullscreenState(Browser* browser, bool pinned) {
 
   const chromeos::WindowPinType previous_type =
       window->GetProperty(lacros::kWindowPinTypeKey);
-  DCHECK_NE(previous_type, chromeos::WindowPinType::kTrustedPinned)
+  CHECK_NE(previous_type, chromeos::WindowPinType::kPinned)
       << "Extensions only set Trusted Pinned";
 
   bool previous_pinned =
@@ -560,29 +560,31 @@ ExtensionFunction::ResponseAction WindowsGetLastFocusedFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   ApiParameterExtractor<windows::GetLastFocused::Params> extractor(params);
-  // The WindowControllerList should contain a list of application,
-  // browser and devtools windows.
-  Browser* browser = nullptr;
-  for (auto* controller : WindowControllerList::GetInstance()->windows()) {
-    if (controller->GetBrowser() &&
-        windows_util::CanOperateOnWindow(this, controller,
+
+  Browser* last_focused_browser = nullptr;
+  BrowserList* const browser_list = BrowserList::GetInstance();
+  for (auto browser_iterator =
+           browser_list->begin_browsers_ordered_by_activation();
+       browser_iterator != browser_list->end_browsers_ordered_by_activation();
+       ++browser_iterator) {
+    Browser* browser = *browser_iterator;
+    if (windows_util::CanOperateOnWindow(this,
+                                         browser->extension_window_controller(),
                                          extractor.type_filters())) {
-      // TODO(devlin): Doesn't this mean that we'll use the last window in the
-      // list if there is no active window? That seems wrong.
-      // See https://crbug.com/809822.
-      browser = controller->GetBrowser();
-      if (controller->window()->IsActive())
-        break;  // Use focused window.
+      last_focused_browser = browser;
+      break;
     }
   }
-  if (!browser)
+  if (!last_focused_browser) {
     return RespondNow(Error(tabs_constants::kNoLastFocusedWindowError));
+  }
 
   ExtensionTabUtil::PopulateTabBehavior populate_tab_behavior =
       extractor.populate_tabs() ? ExtensionTabUtil::kPopulateTabs
                                 : ExtensionTabUtil::kDontPopulateTabs;
   base::Value::Dict windows = ExtensionTabUtil::CreateWindowValueForExtension(
-      *browser, extension(), populate_tab_behavior, source_context_type());
+      *last_focused_browser, extension(), populate_tab_behavior,
+      source_context_type());
   return RespondNow(WithArguments(std::move(windows)));
 }
 
@@ -1367,42 +1369,44 @@ ExtensionFunction::ResponseAction TabsCreateFunction::Run() {
   absl::optional<tabs::Create::Params> params =
       tabs::Create::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
-  if (!ExtensionTabUtil::IsTabStripEditable())
-    return RespondNow(Error(tabs_constants::kTabStripNotEditableError));
-
-  ExtensionTabUtil::OpenTabParams options;
-  options.window_id = params->create_properties.window_id;
-  options.opener_tab_id = params->create_properties.opener_tab_id;
-  options.active = params->create_properties.selected;
-  // The 'active' property has replaced the 'selected' property.
-  options.active = params->create_properties.active;
-  options.pinned = params->create_properties.pinned;
-  options.index = params->create_properties.index;
-  options.url = params->create_properties.url;
-
-  if (extension() && ::vivaldi::IsVivaldiApp(extension()->id())) {
-    // Vivaldi-specific properties, no extension are allowed to
-    // set them.
-    options.viv_ext_data = params->create_properties.viv_ext_data;
-    ui::PageTransition transition = HistoryExtensionTransitionToUiTransition(
-        params->create_properties.transition);
-    if (params->create_properties.from_url_field &&
-        *params->create_properties.from_url_field) {
-      transition = ui::PageTransitionFromInt(
-          transition | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+  return RespondNow([&] {
+    if (!ExtensionTabUtil::IsTabStripEditable()) {
+      return Error(tabs_constants::kTabStripNotEditableError);
     }
 
-    options.transition = transition;
-  }
+    ExtensionTabUtil::OpenTabParams options;
+    options.window_id = params->create_properties.window_id;
+    options.opener_tab_id = params->create_properties.opener_tab_id;
+    options.active = params->create_properties.selected;
+    // The 'active' property has replaced the 'selected' property.
+    options.active = params->create_properties.active;
+    options.pinned = params->create_properties.pinned;
+    options.index = params->create_properties.index;
+    options.url = params->create_properties.url;
 
-  std::string error;
-  auto result = ExtensionTabUtil::OpenTab(this, options, user_gesture());
-  if (!result.has_value())
-    return RespondNow(Error(result.error()));
+    if (extension() && ::vivaldi::IsVivaldiApp(extension()->id())) {
+      // Vivaldi-specific properties, no extension are allowed to
+      // set them.
+      options.viv_ext_data = params->create_properties.viv_ext_data;
+      ui::PageTransition transition = HistoryExtensionTransitionToUiTransition(
+          params->create_properties.transition);
+      if (params->create_properties.from_url_field &&
+          *params->create_properties.from_url_field) {
+        transition = ui::PageTransitionFromInt(
+            transition | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+      }
 
-  // Return data about the newly created tab.
-  return RespondNow(has_callback() ? WithArguments(std::move(*result))
-                                   : NoArguments());
+      options.transition = transition;
+    }
+
+    auto result = ExtensionTabUtil::OpenTab(this, options, user_gesture());
+    if (!result.has_value()) {
+      return Error(result.error());
+    }
+
+    // Return data about the newly created tab.
+    return has_callback() ? WithArguments(std::move(*result)) : NoArguments();
+  }());
 }
 
 ExtensionFunction::ResponseAction TabsDuplicateFunction::Run() {

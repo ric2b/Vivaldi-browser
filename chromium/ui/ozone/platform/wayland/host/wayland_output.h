@@ -6,6 +6,7 @@
 #define UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_OUTPUT_H_
 
 #include <cstdint>
+#include <ostream>
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
@@ -58,11 +59,15 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
             gfx::Size logical_size,
             gfx::Size physical_size,
             gfx::Insets insets,
+            gfx::Insets physical_overscan_insets,
             float scale_factor,
             int32_t panel_transform,
             int32_t logical_transform,
             const std::string& description);
     Metrics(const Metrics&);
+    Metrics& operator=(const Metrics&);
+    Metrics(Metrics&&);
+    Metrics& operator=(Metrics&&);
     ~Metrics();
 
     Id output_id = 0;
@@ -70,12 +75,17 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
     gfx::Point origin;
     gfx::Size logical_size;
     gfx::Size physical_size;
+    // Work area insets in DIP.
     gfx::Insets insets;
+    // Overscan insets in physical pixels.
+    gfx::Insets physical_overscan_insets;
     float scale_factor = 0.0;
     int32_t panel_transform = 0;
     int32_t logical_transform = 0;
     std::string name;
     std::string description;
+
+    void DumpState(std::ostream& out) const;
   };
 
   class Delegate {
@@ -121,6 +131,8 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
   void SetScaleFactorForTesting(float scale_factor);
 
   void TriggerDelegateNotifications();
+
+  void DumpState(std::ostream& out) const;
 
   void set_delegate_for_testing(Delegate* delegate) { delegate_ = delegate; }
   XDGOutput* xdg_output_for_testing() { return xdg_output_.get(); }

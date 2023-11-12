@@ -28,4 +28,10 @@ Visit::~Visit() {}
 
 Visit::Visit(const Visit& other) = default;
 
+DetailedHistory::DetailedHistory() = default;
+
+DetailedHistory::DetailedHistory(const DetailedHistory&) = default;
+
+DetailedHistory::~DetailedHistory() = default;
+
 }  //  namespace history

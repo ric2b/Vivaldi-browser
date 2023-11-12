@@ -10,6 +10,7 @@ interface AbortController
     method constructor
 interface AbortSignal : EventTarget
     static method abort
+    static method any
     static method timeout
     attribute @@toStringTag
     getter aborted
@@ -63,6 +64,8 @@ interface Animation : EventTarget
     getter pending
     getter playState
     getter playbackRate
+    getter rangeEnd
+    getter rangeStart
     getter ready
     getter replaceState
     getter startTime
@@ -83,6 +86,8 @@ interface Animation : EventTarget
     setter onfinish
     setter onremove
     setter playbackRate
+    setter rangeEnd
+    setter rangeStart
     setter startTime
     setter timeline
 interface AnimationEffect
@@ -105,6 +110,7 @@ interface AnimationPlaybackEvent : Event
 interface AnimationTimeline
     attribute @@toStringTag
     getter currentTime
+    getter duration
     method constructor
 interface Attr : Node
     attribute @@toStringTag
@@ -1788,6 +1794,17 @@ interface DocumentFragment : Node
     method querySelector
     method querySelectorAll
     method replaceChildren
+interface DocumentPictureInPicture : EventTarget
+    attribute @@toStringTag
+    getter onenter
+    getter window
+    method constructor
+    method requestWindow
+    setter onenter
+interface DocumentPictureInPictureEvent : Event
+    attribute @@toStringTag
+    getter window
+    method constructor
 interface DocumentTimeline : AnimationTimeline
     attribute @@toStringTag
     method constructor
@@ -2357,6 +2374,7 @@ interface FragmentDirective
     method constructor
 interface GPU
     attribute @@toStringTag
+    getter wgslLanguageFeatures
     method constructor
     method getPreferredCanvasFormat
     method requestAdapter
@@ -4612,6 +4630,10 @@ interface IdentityCredential : Credential
     attribute @@toStringTag
     getter token
     method constructor
+interface IdentityProvider
+    static method getUserInfo
+    attribute @@toStringTag
+    method constructor
 interface IdleDeadline
     attribute @@toStringTag
     getter didTimeout
@@ -6133,6 +6155,7 @@ interface PerformanceNavigation
 interface PerformanceNavigationTiming : PerformanceResourceTiming
     attribute @@toStringTag
     getter activationStart
+    getter criticalCHRestart
     getter domComplete
     getter domContentLoadedEventEnd
     getter domContentLoadedEventStart
@@ -6170,6 +6193,7 @@ interface PerformanceResourceTiming : PerformanceEntry
     getter domainLookupStart
     getter encodedBodySize
     getter fetchStart
+    getter firstInterimResponseStart
     getter initiatorType
     getter nextHopProtocol
     getter redirectEnd
@@ -8051,6 +8075,11 @@ interface ScriptProcessorNode : AudioNode
     getter onaudioprocess
     method constructor
     setter onaudioprocess
+interface ScrollTimeline : AnimationTimeline
+    attribute @@toStringTag
+    getter axis
+    getter source
+    method constructor
 interface SecurityPolicyViolationEvent : Event
     attribute @@toStringTag
     getter blockedURI
@@ -8885,6 +8914,12 @@ interface VideoPlaybackQuality
     getter droppedVideoFrames
     getter totalVideoFrames
     method constructor
+interface ViewTimeline : ScrollTimeline
+    attribute @@toStringTag
+    getter endOffset
+    getter startOffset
+    getter subject
+    method constructor
 interface ViewTransition
     attribute @@toStringTag
     getter finished
@@ -8905,6 +8940,9 @@ interface VirtualKeyboard : EventTarget
 interface VirtualKeyboardGeometryChangeEvent : Event
     attribute @@toStringTag
     method constructor
+interface VisibilityStateEntry : PerformanceEntry
+    attribute @@toStringTag
+    method constructor
 interface VisualViewport : EventTarget
     attribute @@toStringTag
     getter height
@@ -8919,6 +8957,16 @@ interface VisualViewport : EventTarget
     method constructor
     setter onresize
     setter onscroll
+interface WGSLLanguageFeatures
+    attribute @@toStringTag
+    getter size
+    method @@iterator
+    method constructor
+    method entries
+    method forEach
+    method has
+    method keys
+    method values
 interface WakeLock
     attribute @@toStringTag
     method constructor
@@ -11076,6 +11124,7 @@ namespace console
     getter customElements
     getter devicePixelRatio
     getter document
+    getter documentPictureInPicture
     getter event
     getter external
     getter frameElement

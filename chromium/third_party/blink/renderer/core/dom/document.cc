@@ -132,6 +132,7 @@
 #include "third_party/blink/renderer/core/dom/document_fragment.h"
 #include "third_party/blink/renderer/core/dom/document_init.h"
 #include "third_party/blink/renderer/core/dom/document_parser_timing.h"
+#include "third_party/blink/renderer/core/dom/document_part_root.h"
 #include "third_party/blink/renderer/core/dom/document_type.h"
 #include "third_party/blink/renderer/core/dom/dom_implementation.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -175,6 +176,7 @@
 #include "third_party/blink/renderer/core/editing/serializers/serialization.h"
 #include "third_party/blink/renderer/core/events/before_unload_event.h"
 #include "third_party/blink/renderer/core/events/event_factory.h"
+#include "third_party/blink/renderer/core/events/event_util.h"
 #include "third_party/blink/renderer/core/events/hash_change_event.h"
 #include "third_party/blink/renderer/core/events/overscroll_event.h"
 #include "third_party/blink/renderer/core/events/page_transition_event.h"
@@ -184,7 +186,6 @@
 #include "third_party/blink/renderer/core/fragment_directive/fragment_directive.h"
 #include "third_party/blink/renderer/core/fragment_directive/text_fragment_handler.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
-#include "third_party/blink/renderer/core/frame/dom_timer.h"
 #include "third_party/blink/renderer/core/frame/dom_visual_viewport.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/font_matching_metrics.h"
@@ -201,6 +202,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/viewport_data.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/html/anchor_element_observer_for_service_worker.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_font_cache.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
@@ -270,6 +272,7 @@
 #include "third_party/blink/renderer/core/loader/pending_link_preload.h"
 #include "third_party/blink/renderer/core/loader/progress_tracker.h"
 #include "third_party/blink/renderer/core/loader/render_blocking_resource_manager.h"
+#include "third_party/blink/renderer/core/loader/resource/link_dictionary_resource.h"
 #include "third_party/blink/renderer/core/mathml/mathml_element.h"
 #include "third_party/blink/renderer/core/mathml/mathml_row_element.h"
 #include "third_party/blink/renderer/core/mathml_element_factory.h"
@@ -284,6 +287,7 @@
 #include "third_party/blink/renderer/core/page/page_animator.h"
 #include "third_party/blink/renderer/core/page/plugin_script_forbidden_scope.h"
 #include "third_party/blink/renderer/core/page/pointer_lock_controller.h"
+#include "third_party/blink/renderer/core/page/scrolling/fragment_anchor.h"
 #include "third_party/blink/renderer/core/page/scrolling/overscroll_controller.h"
 #include "third_party/blink/renderer/core/page/scrolling/root_scroller_controller.h"
 #include "third_party/blink/renderer/core/page/scrolling/scroll_state_callback.h"
@@ -341,6 +345,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/language.h"
 #include "third_party/blink/renderer/platform/loader/fetch/null_resource_fetcher_properties.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/network/content_security_policy_parsers.h"
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
@@ -815,10 +820,6 @@ Document::Document(const DocumentInit& initializer,
       worklet_animation_controller_(
           MakeGarbageCollected<WorkletAnimationController>(this)),
       template_document_host_(nullptr),
-      did_add_or_remove_form_related_elements_timer_(
-          GetTaskRunner(TaskType::kInternalLoading),
-          this,
-          &Document::DidAddOrRemoveFormRelatedElementsTimerFired),
       parser_sync_policy_(kAllowDeferredParsing),
       // Use the source id from the document initializer if it is available.
       // Otherwise, generate a new source id to cover any cases that don't
@@ -1122,8 +1123,7 @@ Element* Document::CreateElementForBinding(const AtomicString& name,
                          html_names::xhtmlNamespaceURI);
     return MakeGarbageCollected<HTMLUnknownElement>(q_name, *this);
   }
-  return MakeGarbageCollected<Element>(
-      QualifiedName(g_null_atom, name, g_null_atom), this);
+  return MakeGarbageCollected<Element>(QualifiedName(name), this);
 }
 
 AtomicString GetTypeExtension(
@@ -2183,6 +2183,9 @@ void Document::UpdateStyleAndLayoutTreeForThisDocument() {
     if (!needs_layout_tree_update) {
       // Early out for no-op calls before the UMA/UKM measurement is set up to
       // avoid a large number of close-to-zero samples.
+      if (AXObjectCache* cache = ExistingAXObjectCache()) {
+        cache->ProcessSubtreeRemovals();
+      }
       advance_to_style_clean();
       return;
     }
@@ -2200,6 +2203,10 @@ void Document::UpdateStyleAndLayoutTreeForThisDocument() {
     GetSlotAssignmentEngine().RecalcSlotAssignments();
     DCHECK(!needs_layout_tree_update) << "Should be postponed above";
     needs_layout_tree_update = NeedsLayoutTreeUpdateForThisDocument();
+  }
+
+  if (AXObjectCache* cache = ExistingAXObjectCache()) {
+    cache->ProcessSubtreeRemovals();
   }
 
   if (!needs_layout_tree_update) {
@@ -2256,11 +2263,7 @@ void Document::UpdateStyleAndLayoutTreeForThisDocument() {
   InvalidateStyleAndLayoutForFontUpdates();
   UpdateStyleInvalidationIfNeeded();
   UpdateStyle();
-  StyleResolver& style_resolver = GetStyleResolver();
-  if (style_resolver.WasViewportResized()) {
-    style_resolver.ClearResizedForViewportUnits();
-    View()->MarkOrthogonalWritingModeRootsForLayout();
-  }
+  GetStyleResolver().ClearResizedForViewportUnits();
 
   GetLayoutView()->ClearHitTestCache();
 
@@ -2388,7 +2391,8 @@ bool Document::NeedsLayoutTreeUpdateForNodeIncludingDisplayLocked(
   }
 }
 
-void Document::UpdateStyleAndLayoutTreeForNode(const Node* node) {
+void Document::UpdateStyleAndLayoutTreeForNode(const Node* node,
+                                               DocumentUpdateReason) {
   DCHECK(node);
   if (!node->InActiveDocument()) {
     // If |node| is not in the active document, we can't update its style or
@@ -2407,7 +2411,8 @@ void Document::UpdateStyleAndLayoutTreeForNode(const Node* node) {
   UpdateStyleAndLayoutTree(upgrade);
 }
 
-void Document::UpdateStyleAndLayoutTreeForSubtree(const Node* node) {
+void Document::UpdateStyleAndLayoutTreeForSubtree(const Node* node,
+                                                  DocumentUpdateReason) {
   DCHECK(node);
   if (!node->InActiveDocument()) {
     DCHECK_EQ(node->ownerDocument(), this);
@@ -2478,6 +2483,14 @@ CSSToggleInference& Document::EnsureCSSToggleInference() {
   return *css_toggle_inference_;
 }
 
+DocumentPartRoot& Document::getPartRoot() {
+  CHECK(RuntimeEnabledFeatures::DOMPartsAPIEnabled());
+  if (!document_part_root_) {
+    document_part_root_ = MakeGarbageCollected<DocumentPartRoot>(*this);
+  }
+  return *document_part_root_;
+}
+
 void Document::ApplyScrollRestorationLogic() {
   DCHECK(View());
   // This function is not re-entrant. However, the places that invoke this are
@@ -2490,6 +2503,14 @@ void Document::ApplyScrollRestorationLogic() {
     return;
   base::AutoReset<bool> applying_scroll_restoration_logic_scope(
       &applying_scroll_restoration_logic_, true);
+
+  if (AnnotationAgentContainerImpl* container =
+          AnnotationAgentContainerImpl::FromIfExists(*this)) {
+    // Check for cleanliness since that'll also account for parsing state.
+    if (container->IsLifecycleCleanForAttachment()) {
+      container->PerformInitialAttachments();
+    }
+  }
 
   // If we're restoring a scroll position from history, that takes precedence
   // over scrolling to the anchor in the URL.
@@ -2692,6 +2713,7 @@ scoped_refptr<const ComputedStyle> Document::StyleForPage(uint32_t page_index) {
   AtomicString page_name;
   if (const LayoutView* layout_view = GetLayoutView())
     page_name = layout_view->NamedPageAtIndex(page_index);
+  GetStyleEngine().UpdateViewportSize();
   GetStyleEngine().UpdateActiveStyle();
   return GetStyleEngine().GetStyleResolver().StyleForPage(page_index,
                                                           page_name);
@@ -2784,12 +2806,6 @@ void Document::SetIsXrOverlay(bool val, Element* overlay_element) {
   // On navigation, the layout view may be invalid, skip style changes.
   if (!GetLayoutView())
     return;
-
-  if (val) {
-    // The UA style sheet for the :xr-overlay pseudoclass uses lazy loading.
-    // If we get here, we need to ensure that it's present.
-    GetStyleEngine().EnsureUAStyleForXrOverlay();
-  }
 
   if (overlay_element) {
     // Now that the custom style sheet is loaded, update the pseudostyle for
@@ -3302,6 +3318,13 @@ void Document::open(LocalDOMWindow* entered_window,
   if (ignore_opens_and_writes_for_abort_)
     return;
 
+  if (cookie_jar_) {
+    // open() can affect security context which can change cookie values. Make
+    // sure cached values are thrown out. see
+    // third_party/blink/web_tests/http/tests/security/aboutBlank/.
+    cookie_jar_->InvalidateCache();
+  }
+
   // If this document is fully active, then update the URL
   // for this document with the entered window's url.
   if (dom_window_ && entered_window) {
@@ -3362,11 +3385,24 @@ void Document::open(LocalDOMWindow* entered_window,
         // not considered to produce new documents. No IPCs are sent, it is as
         // if it was a no-op.
         //
-        // TODO(https://crbug.com/1360795) Remove this
+        // TODO(https://crbug.com/1360795) Remove this. Only Chrome implements
+        // it. Safari/Firefox do not.
         dom_window_->GetSecurityContext().SetSandboxFlags(
             dom_window_->GetSecurityContext().GetSandboxFlags() |
             entered_window->GetSandboxFlags());
+      }
 
+      // We would like to remove this block. See:
+      // https://docs.google.com/document/d/1_89X4cNUab-PZE0iBDTKIftaQZsFbk7SbFmHbqY54os
+      //
+      // This is not specified. Only Webkit/Blink implement it. Gecko doesn't.
+      //
+      // 2023-06-02: Removal would impact 0.02% page load.
+      // https://chromestatus.com/metrics/feature/timeline/popularity/4535
+      // We hope the document.domain deprecation is going to drive this number
+      // down quickly:
+      // https://developer.chrome.com/blog/document-domain-setter-deprecation/
+      if (!RuntimeEnabledFeatures::DocumentOpenOriginAliasRemovalEnabled()) {
         dom_window_->GetSecurityContext().SetSecurityOrigin(
             entered_window->GetMutableSecurityOrigin());
 
@@ -3787,6 +3823,14 @@ void Document::ImplicitClose() {
   if (lazy_load_image_observer_) {
     lazy_load_image_observer_->DocumentOnLoadFinished(this);
   }
+
+  if (base::FeatureList::IsEnabled(
+          blink::features::kSpeculativeServiceWorkerWarmUp)) {
+    if (auto* observer =
+            AnchorElementObserverForServiceWorker::From(TopDocument())) {
+      observer->MaybeSendPendingWarmUpRequests();
+    }
+  }
 }
 
 static bool AllDescendantsAreComplete(Document* document) {
@@ -3828,6 +3872,16 @@ void Document::CheckCompleted() {
     GetFrame()->Loader().DidFinishNavigation(
         FrameLoader::NavigationFinishState::kSuccess);
   }
+}
+
+void Document::FetchDictionaryFromLinkHeader() {
+  if (!CompressionDictionaryTransportFullyEnabled(GetExecutionContext()) ||
+      !Loader()) {
+    return;
+  }
+  Loader()->DispatchLinkHeaderPreloads(
+      nullptr /* viewport */,
+      PreloadHelper::LoadLinksFromHeaderMode::kDocumentAfterLoadCompleted);
 }
 
 bool Document::CheckCompletedInternal() {
@@ -3881,9 +3935,12 @@ bool Document::CheckCompletedInternal() {
     GetFrame()->GetFrameScheduler()->RegisterStickyFeature(
         SchedulingPolicy::Feature::kDocumentLoaded,
         {SchedulingPolicy::DisableBackForwardCache()});
-    GetFrame()->GetFrameScheduler()->OnLoad();
 
     DetectJavascriptFrameworksOnLoad(*this);
+    // Only load the dictionary after the full document load completes.
+    // The compression dictionary is of low priority and shall be only loaded
+    // when the browser is idle.
+    FetchDictionaryFromLinkHeader();
   } else if (loading_for_print_) {
     loading_for_print_ = false;
     GetFrame()->Client()->DispatchDidFinishLoadForPrinting();
@@ -3910,7 +3967,8 @@ enum class BeforeUnloadUse {
   kNoDialogMultipleConfirmationForNavigation,
   kShowDialog,
   kNoDialogAutoCancelTrue,
-  kMaxValue = kNoDialogAutoCancelTrue,
+  kNotSupportedInDocumentPictureInPicture,
+  kMaxValue = kNotSupportedInDocumentPictureInPicture,
 };
 
 void RecordBeforeUnloadUse(BeforeUnloadUse metric) {
@@ -3930,6 +3988,12 @@ bool Document::DispatchBeforeUnloadEvent(ChromeClient* chrome_client,
 
   if (ProcessingBeforeUnload())
     return false;
+
+  if (dom_window_->IsPictureInPictureWindow()) {
+    RecordBeforeUnloadUse(
+        BeforeUnloadUse::kNotSupportedInDocumentPictureInPicture);
+    return true;
+  }
 
   // Since we do not allow registering the beforeunload event handlers in
   // fenced frames, it should not be fired by fencedframes.
@@ -3957,14 +4021,15 @@ bool Document::DispatchBeforeUnloadEvent(ChromeClient* chrome_client,
   if (!before_unload_event.defaultPrevented())
     DefaultEventHandler(before_unload_event);
 
-  if (before_unload_event.returnValue().IsNull()) {
+  bool cancelled_by_script =
+      RuntimeEnabledFeatures::BeforeunloadEventCancelByPreventDefaultEnabled()
+          ? !before_unload_event.returnValue().empty() ||
+                before_unload_event.defaultPrevented()
+          : !before_unload_event.returnValue().IsNull();
+
+  if (cancelled_by_script) {
     RecordBeforeUnloadUse(BeforeUnloadUse::kNoDialogNoText);
   }
-  bool cancelled_by_script =
-      !before_unload_event.returnValue().IsNull() ||
-      (RuntimeEnabledFeatures::
-           BeforeunloadEventCancelByPreventDefaultEnabled() &&
-       before_unload_event.defaultPrevented());
 
   if (!GetFrame() || !cancelled_by_script) {
     return true;
@@ -4893,12 +4958,6 @@ void Document::CloneDataFromDocument(const Document& other) {
   SetMimeType(other.contentType());
 }
 
-StyleSheetList& Document::StyleSheets() {
-  if (!style_sheet_list_)
-    style_sheet_list_ = MakeGarbageCollected<StyleSheetList>(this);
-  return *style_sheet_list_;
-}
-
 void Document::EvaluateMediaQueryListIfNeeded() {
   if (!evaluate_media_queries_on_style_recalc_)
     return;
@@ -4949,6 +5008,7 @@ void Document::DynamicViewportUnitsChanged() {
 }
 
 void Document::SetHoverElement(Element* new_hover_element) {
+  HTMLElement::HoveredElementChanged(hover_element_, new_hover_element);
   hover_element_ = new_hover_element;
 }
 
@@ -5109,8 +5169,11 @@ bool Document::SetFocusedElement(Element* new_focused_element,
   if (new_focused_element && new_focused_element->GetDocument() != this)
     return true;
 
-  if (new_focused_element)
-    UpdateStyleAndLayoutTreeForNode(new_focused_element);
+  if (new_focused_element) {
+    UpdateStyleAndLayoutTreeForNode(new_focused_element,
+                                    DocumentUpdateReason::kFocus);
+  }
+
   if (new_focused_element && new_focused_element->IsFocusable()) {
     if (IsRootEditableElement(*new_focused_element) &&
         !AcceptsEditingFocus(*new_focused_element)) {
@@ -5524,6 +5587,12 @@ void Document::NotifyUpdateCharacterData(CharacterData* character_data,
 void Document::NotifyChangeChildren(
     const ContainerNode& container,
     const ContainerNode::ChildrenChange& change) {
+  if (LocalFrameView* frame_view = View()) {
+    if (FragmentAnchor* anchor = frame_view->GetFragmentAnchor()) {
+      anchor->NewContentMayBeAvailable();
+    }
+  }
+
   synchronous_mutation_observer_set_.ForEachObserver(
       [&](SynchronousMutationObserver* observer) {
         observer->DidChangeChildren(container, change);
@@ -5534,6 +5603,18 @@ void Document::NotifyAttributeChanged(const Element& element,
                                       const QualifiedName& name,
                                       const AtomicString& old_value,
                                       const AtomicString& new_value) {
+  if (LocalFrameView* frame_view = View()) {
+    if (FragmentAnchor* anchor = frame_view->GetFragmentAnchor()) {
+      // There are other attributes (not to mention style changes) that could
+      // potentially make more content available to to the fragment anchor but
+      // this is a best effort heuristic, based on commonly seen patterns in the
+      // wild, so isn't meant to be comprehensive.
+      if (name == html_names::kHiddenAttr) {
+        anchor->NewContentMayBeAvailable();
+      }
+    }
+  }
+
   synchronous_mutation_observer_set_.ForEachObserver(
       [&](SynchronousMutationObserver* observer) {
         observer->AttributeChanged(element, name, old_value, new_value);
@@ -5718,30 +5799,22 @@ Event* Document::createEvent(ScriptState* script_state,
 
 void Document::AddMutationEventListenerTypeIfEnabled(
     ListenerType listener_type) {
-  if (ContextFeatures::MutationEventsEnabled(this))
-    AddListenerType(listener_type);
+  // Mutation events can be disabled by the embedder via a ContextFeatures
+  // switch, or via the runtime enabled feature.
+  if (!ContextFeatures::MutationEventsEnabled(this) ||
+      !RuntimeEnabledFeatures::MutationEventsEnabled()) {
+    return;
+  }
+  AddListenerType(listener_type);
 }
 
 void Document::AddListenerTypeIfNeeded(const AtomicString& event_type,
                                        EventTarget& event_target) {
-  if (event_type == event_type_names::kDOMSubtreeModified) {
-    UseCounter::Count(*this, WebFeature::kDOMSubtreeModifiedEvent);
-    AddMutationEventListenerTypeIfEnabled(kDOMSubtreeModifiedListener);
-  } else if (event_type == event_type_names::kDOMNodeInserted) {
-    UseCounter::Count(*this, WebFeature::kDOMNodeInsertedEvent);
-    AddMutationEventListenerTypeIfEnabled(kDOMNodeInsertedListener);
-  } else if (event_type == event_type_names::kDOMNodeRemoved) {
-    UseCounter::Count(*this, WebFeature::kDOMNodeRemovedEvent);
-    AddMutationEventListenerTypeIfEnabled(kDOMNodeRemovedListener);
-  } else if (event_type == event_type_names::kDOMNodeRemovedFromDocument) {
-    UseCounter::Count(*this, WebFeature::kDOMNodeRemovedFromDocumentEvent);
-    AddMutationEventListenerTypeIfEnabled(kDOMNodeRemovedFromDocumentListener);
-  } else if (event_type == event_type_names::kDOMNodeInsertedIntoDocument) {
-    UseCounter::Count(*this, WebFeature::kDOMNodeInsertedIntoDocumentEvent);
-    AddMutationEventListenerTypeIfEnabled(kDOMNodeInsertedIntoDocumentListener);
-  } else if (event_type == event_type_names::kDOMCharacterDataModified) {
-    UseCounter::Count(*this, WebFeature::kDOMCharacterDataModifiedEvent);
-    AddMutationEventListenerTypeIfEnabled(kDOMCharacterDataModifiedListener);
+  WebFeature mutation_event_feature;
+  ListenerType listener_type;
+  if (event_util::IsDOMMutationEventType(event_type, mutation_event_feature,
+                                         listener_type)) {
+    AddMutationEventListenerTypeIfEnabled(listener_type);
   } else if (event_type == event_type_names::kWebkitAnimationStart ||
              event_type == event_type_names::kAnimationstart) {
     AddListenerType(kAnimationStartListener);
@@ -5837,10 +5910,6 @@ String Document::cookie(ExceptionState& exception_state) const {
           "Cookies are disabled inside 'data:' URLs.");
     } else {
       exception_state.ThrowSecurityError("Access is denied for this document.");
-      // Count cookie accesses in opaque-origin documents from WebBundles.
-      if (Url().ProtocolIs("uuid-in-package")) {
-        CountUse(WebFeature::kUrnDocumentAccessedCookies);
-      }
     }
     return String();
   } else if (dom_window_->GetSecurityOrigin()->IsLocal()) {
@@ -5866,10 +5935,6 @@ void Document::setCookie(const String& value, ExceptionState& exception_state) {
           "Cookies are disabled inside 'data:' URLs.");
     } else {
       exception_state.ThrowSecurityError("Access is denied for this document.");
-      // Count cookie accesses in opaque-origin documents from WebBundles.
-      if (Url().ProtocolIs("uuid-in-package")) {
-        CountUse(WebFeature::kUrnDocumentAccessedCookies);
-      }
     }
     return;
   } else if (dom_window_->GetSecurityOrigin()->IsLocal()) {
@@ -6207,8 +6272,9 @@ ScriptPromise Document::hasStorageAccess(ScriptState* script_state) {
       return true;
     }
 
-    // #9: return global's `has storage access`.
-    return dom_window_->HasStorageAccess();
+    // #9 & #10: checks unpartitioned cookie availability with global's `has
+    // storage access`.
+    return CookiesEnabled();
   }());
   return promise;
 }
@@ -6334,6 +6400,13 @@ ScriptPromise Document::requestStorageAccess(ScriptState* script_state) {
                           "document is fully active."));
   }
 
+  if (cookie_jar_) {
+    // Storage access might be about to change in which case the ability for
+    // |cookie_jar_| to retrieve values might also. Invalidate its cache in case
+    // that happens so it can't return data that shouldn't be accessible.
+    cookie_jar_->InvalidateCache();
+  }
+
   ScriptPromiseResolver* resolver =
       MakeGarbageCollected<ScriptPromiseResolver>(script_state);
 
@@ -6446,14 +6519,11 @@ void Document::OnGotExistingStorageAccessPermissionState(
   DCHECK(script_state);
   ScriptState::Scope scope(script_state);
 
-  if (previous_status != mojom::blink::PermissionStatus::ASK) {
-    // Permission state already exists, resolve with the existing value.
-    ProcessStorageAccessPermissionState(resolver, /*use_existing_status=*/true,
-                                        previous_status);
-    return;
-  }
-  // Proceed to request permission.
-  if (!has_user_gesture) {
+  // TODO(crbug.com/1433644): We can avoid querying the current permission state
+  // by handling the user gesture requirement in
+  // StorageAccessGrantPermissionContext::DecidePermission
+  if (previous_status == mojom::blink::PermissionStatus::ASK &&
+      !has_user_gesture) {
     AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::blink::ConsoleMessageSource::kSecurity,
         mojom::blink::ConsoleMessageLevel::kError,
@@ -7233,8 +7303,7 @@ Attr* Document::createAttribute(const AtomicString& name,
     return nullptr;
   }
   return MakeGarbageCollected<Attr>(
-      *this, QualifiedName(g_null_atom, ConvertLocalName(name), g_null_atom),
-      g_empty_atom);
+      *this, QualifiedName(ConvertLocalName(name)), g_empty_atom);
 }
 
 Attr* Document::createAttributeNS(const AtomicString& namespace_uri,
@@ -7435,11 +7504,6 @@ void Document::FinishedParsing() {
   if (document_timing_.DomContentLoadedEventEnd().is_null())
     document_timing_.MarkDomContentLoadedEventEnd();
   SetParsingState(kFinishedParsing);
-
-  if (AnnotationAgentContainerImpl* container =
-          Supplement<Document>::From<AnnotationAgentContainerImpl>(*this)) {
-    container->FinishedParsing();
-  }
 
   // Ensure Custom Element callbacks are drained before DOMContentLoaded.
   // FIXME: Remove this ad-hoc checkpoint when DOMContentLoaded is dispatched in
@@ -7666,8 +7730,9 @@ void Document::SupportsReducedMotionMetaChanged() {
                                "supports-reduced-motion")) {
       SpaceSplitString split_content(
           AtomicString(meta_element.Content().GetString().LowerASCII()));
-      if (split_content.Contains("reduce"))
+      if (split_content.Contains(AtomicString("reduce"))) {
         supports_reduced_motion = true;
+      }
       break;
     }
   }
@@ -7903,7 +7968,7 @@ void Document::AddConsoleMessage(ConsoleMessage* message,
 void Document::AddToTopLayer(Element* element, const Element* before) {
   if (element->IsInTopLayer()) {
     if (RuntimeEnabledFeatures::CSSTopLayerForTransitionsEnabled() &&
-        top_layer_elements_pending_removal_.Contains(element)) {
+        IsScheduledForTopLayerRemoval(element)) {
       // Since the html spec currently says close() should remove the dialog
       // element from the top layer immediately, we need to remove any
       // transitioning elements out of the top layer in order to keep the
@@ -7919,7 +7984,7 @@ void Document::AddToTopLayer(Element* element, const Element* before) {
     }
   }
 
-  DCHECK(!top_layer_elements_pending_removal_.Contains(element));
+  DCHECK(!IsScheduledForTopLayerRemoval(element));
   DCHECK(!before || top_layer_elements_.Contains(before));
 
   if (before) {
@@ -7938,7 +8003,8 @@ void Document::AddToTopLayer(Element* element, const Element* before) {
   probe::TopLayerElementsChanged(this);
 }
 
-void Document::ScheduleForTopLayerRemoval(Element* element) {
+void Document::ScheduleForTopLayerRemoval(Element* element,
+                                          TopLayerReason reason) {
   if (!RuntimeEnabledFeatures::CSSTopLayerForTransitionsEnabled()) {
     RemoveFromTopLayerImmediately(element);
     return;
@@ -7946,7 +8012,8 @@ void Document::ScheduleForTopLayerRemoval(Element* element) {
   if (!element->IsInTopLayer()) {
     return;
   }
-  top_layer_elements_pending_removal_.insert(element);
+  top_layer_elements_pending_removal_.push_back(
+      MakeGarbageCollected<TopLayerPendingRemoval>(element, reason));
   ScheduleLayoutTreeUpdateIfNeeded();
 }
 
@@ -7956,7 +8023,8 @@ void Document::RemoveFinishedTopLayerElements() {
   }
   DCHECK(RuntimeEnabledFeatures::CSSTopLayerForTransitionsEnabled());
   HeapVector<Member<Element>> to_remove;
-  for (Element* element : top_layer_elements_pending_removal_) {
+  for (const auto& pending_removal : top_layer_elements_pending_removal_) {
+    Element* element = pending_removal->element;
     const ComputedStyle* style = element->GetComputedStyle();
     if (!style || style->Overlay() == EOverlay::kNone) {
       to_remove.push_back(element);
@@ -7975,12 +8043,27 @@ void Document::RemoveFromTopLayerImmediately(Element* element) {
   DCHECK_NE(position, kNotFound);
   top_layer_elements_.EraseAt(position);
   if (RuntimeEnabledFeatures::CSSTopLayerForTransitionsEnabled()) {
-    top_layer_elements_pending_removal_.erase(element);
+    for (unsigned i = 0; i < top_layer_elements_pending_removal_.size(); i++) {
+      if (top_layer_elements_pending_removal_[i]->element == element) {
+        top_layer_elements_pending_removal_.EraseAt(i);
+        break;
+      }
+    }
   }
   element->SetIsInTopLayer(false);
   display_lock_document_state_->ElementRemovedFromTopLayer(element);
 
   probe::TopLayerElementsChanged(this);
+}
+
+absl::optional<Document::TopLayerReason>
+Document::IsScheduledForTopLayerRemoval(Element* element) const {
+  for (const auto& entry : top_layer_elements_pending_removal_) {
+    if (entry->element == element) {
+      return entry->reason;
+    }
+  }
+  return absl::nullopt;
 }
 
 HTMLDialogElement* Document::ActiveModalDialog() const {
@@ -7989,7 +8072,7 @@ HTMLDialogElement* Document::ActiveModalDialog() const {
       if (dialog->IsModal()) {
         // Modal dialogs transitioning out after being closed are not considered
         // to be active.
-        if (!top_layer_elements_pending_removal_.Contains(dialog)) {
+        if (!IsScheduledForTopLayerRemoval(dialog)) {
           return dialog;
         }
       }
@@ -8374,18 +8457,6 @@ void Document::DidAddOrRemoveFormRelatedElement(Element* element) {
   if (!GetFrame() || !GetFrame()->GetPage() || !HasFinishedParsing())
     return;
 
-  // We add a slight delay because this could be called rapidly.
-  if (!did_add_or_remove_form_related_elements_timer_.IsActive()) {
-    did_add_or_remove_form_related_elements_timer_.StartOneShot(
-        base::Milliseconds(300), FROM_HERE);
-  }
-}
-
-void Document::DidAddOrRemoveFormRelatedElementsTimerFired(TimerBase* timer) {
-  DCHECK_EQ(timer, &did_add_or_remove_form_related_elements_timer_);
-  if (!GetFrame() || !GetFrame()->GetPage())
-    return;
-
   GetFrame()
       ->GetPage()
       ->GetChromeClient()
@@ -8577,9 +8648,7 @@ Element* Document::GetAutofocusDelegate() const {
 }
 
 Element* Document::ActiveElement() const {
-  if (Element* element = AdjustedFocusedElement())
-    return element;
-  return body();
+  return activeElement();
 }
 
 bool Document::hasFocus() const {
@@ -8648,6 +8717,10 @@ const AtomicString& Document::vlinkColor() const {
 void Document::setVlinkColor(const AtomicString& value) {
   if (!IsFrameSet())
     SetBodyAttribute(html_names::kVlinkAttr, value);
+}
+
+FontFaceSet* Document::fonts() {
+  return FontFaceSetDocument::From(*this);
 }
 
 template <unsigned type>
@@ -8772,9 +8845,11 @@ void Document::Trace(Visitor* visitor) const {
   visitor->Trace(popover_hint_showing_);
   visitor->Trace(popover_pointerdown_target_);
   visitor->Trace(popovers_waiting_to_hide_);
+  visitor->Trace(all_open_popovers_);
   visitor->Trace(elements_with_css_toggles_);
   visitor->Trace(elements_needing_style_recalc_for_toggle_);
   visitor->Trace(css_toggle_inference_);
+  visitor->Trace(document_part_root_);
   visitor->Trace(load_event_delay_timer_);
   visitor->Trace(plugin_loading_timer_);
   visitor->Trace(elem_sheet_);
@@ -8791,7 +8866,6 @@ void Document::Trace(Visitor* visitor) const {
   visitor->Trace(parser_);
   visitor->Trace(context_features_);
   visitor->Trace(http_refresh_scheduler_);
-  visitor->Trace(style_sheet_list_);
   visitor->Trace(document_timing_);
   visitor->Trace(media_query_matcher_);
   visitor->Trace(scripted_animation_controller_);
@@ -8802,7 +8876,6 @@ void Document::Trace(Visitor* visitor) const {
   visitor->Trace(use_elements_needing_update_);
   visitor->Trace(template_document_);
   visitor->Trace(template_document_host_);
-  visitor->Trace(did_add_or_remove_form_related_elements_timer_);
   visitor->Trace(user_action_elements_);
   visitor->Trace(svg_extensions_);
   visitor->Trace(layout_view_);
@@ -9087,6 +9160,8 @@ const Node* Document::GetFindInPageActiveMatchNode() const {
 
 void Document::ActivateForPrerendering(
     const mojom::blink::PrerenderPageActivationParams& params) {
+  TRACE_EVENT0("navigation", "Document::ActivateForPrerendering");
+
   // TODO(bokan): Portals will change this assumption since they mean an active
   // document can be "adopted" into a portal.
   DCHECK(is_prerendering_);
@@ -9123,6 +9198,10 @@ void Document::AddPostPrerenderingActivationStep(base::OnceClosure callback) {
 }
 
 void Document::RunPostPrerenderingActivationSteps() {
+  TRACE_EVENT1("navigation", "Document::RunPostPrerenderingActivationSteps",
+               "deferred_callback",
+               post_prerendering_activation_callbacks_.size());
+
   DCHECK(!is_prerendering_);
   for (auto& callback : post_prerendering_activation_callbacks_)
     std::move(callback).Run();
@@ -9205,6 +9284,16 @@ Document::PendingJavascriptUrl::~PendingJavascriptUrl() = default;
 
 void Document::ResetAgent(Agent& agent) {
   agent_ = agent;
+}
+
+Resource* Document::GetPendingLinkPreloadForTesting(const KURL& url) {
+  for (auto pending_preload : pending_link_header_preloads_) {
+    Resource* resource = pending_preload->GetResourceForTesting();
+    if (resource && resource->Url() == url) {
+      return resource;
+    }
+  }
+  return nullptr;
 }
 
 template class CORE_TEMPLATE_EXPORT Supplement<Document>;

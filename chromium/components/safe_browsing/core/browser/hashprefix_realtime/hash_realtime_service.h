@@ -6,6 +6,7 @@
 #define COMPONENTS_SAFE_BROWSING_CORE_BROWSER_HASHPREFIX_REALTIME_HASH_REALTIME_SERVICE_H_
 
 #include "base/containers/unique_ptr_adapters.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
@@ -71,10 +72,22 @@ class HashRealTimeService : public KeyedService {
   // it).
   bool IsEnhancedProtectionEnabled();
 
+  // Returns whether the |url| is eligible for hash-prefix real-time checks.
+  // It's never eligible if the |request_destination| is not mainframe.
+  static bool CanCheckUrl(
+      const GURL& url,
+      network::mojom::RequestDestination request_destination);
+
   // Start the lookup for |url|, and call |response_callback| on
   // |callback_task_runner| when response is received.
+  // |is_source_lookup_mechanism_experiment| specifies whether the source was
+  // the SafeBrowsingLookupMechanismExperiment (versus it being a navigation).
+  // TODO(crbug.com/1410253): [Also TODO(thefrog)] Delete usages of
+  // |is_source_lookup_mechanism_experiment| in file when deprecating the
+  // experiment.
   virtual void StartLookup(
       const GURL& url,
+      bool is_source_lookup_mechanism_experiment,
       HPRTLookupResponseCallback response_callback,
       scoped_refptr<base::SequencedTaskRunner> callback_task_runner);
 
@@ -145,8 +158,13 @@ class HashRealTimeService : public KeyedService {
   };
 
   // Returns the traffic annotation tag that is attached in the simple URL
-  // loader.
-  net::NetworkTrafficAnnotationTag GetTrafficAnnotationTag() const;
+  // loader when a direct fetch request is sent.
+  net::NetworkTrafficAnnotationTag GetTrafficAnnotationTagForDirectFetch()
+      const;
+
+  // Returns the traffic annotation tag that is attached in the Oblivious HTTP
+  // request when an OHTTP request is sent.
+  net::NetworkTrafficAnnotationTag GetTrafficAnnotationTagForOhttp() const;
 
   // Get a resource request with URL, load_flags, credentials mode, and method
   // set.
@@ -163,6 +181,7 @@ class HashRealTimeService : public KeyedService {
   void OnGetOhttpKey(
       std::unique_ptr<V5::SearchHashesRequest> request,
       const GURL& url,
+      bool is_source_lookup_mechanism_experiment,
       const std::vector<std::string>& hash_prefixes_in_request,
       std::vector<V5::FullHash> result_full_hashes,
       base::TimeTicks request_start_time,
@@ -337,7 +356,7 @@ class HashRealTimeService : public KeyedService {
       get_network_context_;
 
   // Unowned object used for getting and storing cache entries.
-  raw_ptr<VerdictCacheManager> cache_manager_;
+  raw_ptr<VerdictCacheManager, DanglingUntriaged> cache_manager_;
 
   // Unowned object used for getting OHTTP key.
   raw_ptr<OhttpKeyService> ohttp_key_service_;

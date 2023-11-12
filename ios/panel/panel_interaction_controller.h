@@ -4,7 +4,6 @@
 #define IOS_PANEL_PANEL_INTERACTION_CONTROLLER_H_
 
 #import <UIKit/UIKit.h>
-#import "ios/notes/note_navigation_controller.h"
 
 class Browser;
 

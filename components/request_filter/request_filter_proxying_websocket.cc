@@ -345,6 +345,11 @@ void RequestFilterProxyingWebSocket::StartProxying(
   raw_proxy->Start();
 }
 
+// static
+void RequestFilterProxyingWebSocket::EnsureAssociatedFactoryBuilt() {
+  ShutdownNotifierFactory::GetInstance();
+}
+
 void RequestFilterProxyingWebSocket::OnBeforeRequestComplete(int error_code) {
   DCHECK(receiver_as_header_client_.is_bound() ||
          !receiver_as_handshake_client_.is_bound());
@@ -541,5 +546,4 @@ void RequestFilterProxyingWebSocket::OnMojoConnectionError() {
   OnError(net::ERR_FAILED);
   // Deletes |this|.
 }
-
 }  // namespace vivaldi

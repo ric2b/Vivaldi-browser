@@ -17,6 +17,7 @@
 
 namespace base {
 class TimeDelta;
+class Version;
 }  // namespace base
 
 namespace updater {
@@ -109,6 +110,20 @@ struct EventHolder {
 // Creates a waitable event with default attributes for the current process,
 // test, and test scope.
 EventHolder CreateWaitableEventForTest();
+
+// Returns the absolute path to a test file used by update client unit tests.
+// These test files exist in the source tree and are available to tests in
+// `//chrome/updater/test/data.` `file_name` is the relative name of the
+// file in that directory.
+[[nodiscard]] base::FilePath GetTestFilePath(const char* file_name);
+
+// Sets up the official updater directory with global prefs, the versioned
+// install folder (with a version of `base_version + major_version_offset`), and
+// optionally, an empty updater executable in the versioned folder.
+void SetupFakeUpdaterVersion(UpdaterScope scope,
+                             const base::Version& base_version,
+                             int major_version_offset,
+                             bool should_create_updater_executable);
 
 }  // namespace updater::test
 

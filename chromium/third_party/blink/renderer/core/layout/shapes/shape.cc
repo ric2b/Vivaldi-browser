@@ -35,7 +35,6 @@
 
 #include "cc/paint/paint_flags.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/renderer/core/css/basic_shape_functions.h"
 #include "third_party/blink/renderer/core/layout/shapes/box_shape.h"
 #include "third_party/blink/renderer/core/layout/shapes/ellipse_shape.h"
 #include "third_party/blink/renderer/core/layout/shapes/polygon_shape.h"
@@ -113,8 +112,8 @@ std::unique_ptr<Shape> Shape::CreateShape(const BasicShape* basic_shape,
       gfx::PointF center =
           PointForCenterCoordinate(circle->CenterX(), circle->CenterY(),
                                    gfx::SizeF(box_width, box_height));
-      float radius =
-          circle->FloatValueForRadiusInBox(gfx::SizeF(box_width, box_height));
+      float radius = circle->FloatValueForRadiusInBox(
+          center, gfx::SizeF(box_width, box_height));
       gfx::PointF logical_center = PhysicalPointToLogical(
           center, logical_box_size.Height().ToFloat(), writing_mode);
 
@@ -238,7 +237,7 @@ static bool ExtractImageData(Image* image,
 
   // Set |surface| to draw directly to |contents|.
   const SkSurfaceProps disable_lcd_props(0, kUnknown_SkPixelGeometry);
-  sk_sp<SkSurface> surface = SkSurface::MakeRasterDirect(
+  sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
       dst_info, contents.Data(), dst_info.minRowBytes(), &disable_lcd_props);
   if (!surface)
     return false;

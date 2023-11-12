@@ -79,8 +79,10 @@ class CORE_EXPORT CSSParserImpl {
     kKeyframeRules,
     kFontFeatureRules,
     kTryRules,
-    kNoRules,                // For parsing at-rules inside declaration lists
-    kConditionalGroupRules,  // @media etc., see [css-conditional-3]
+    // For parsing at-rules inside declaration lists.
+    kNoRules,
+    // https://drafts.csswg.org/css-nesting/#nested-group-rules
+    kNestedGroupRules,
   };
 
   // Represents the start and end offsets of a CSSParserTokenRange.
@@ -99,13 +101,13 @@ class CORE_EXPORT CSSParserImpl {
   static MutableCSSPropertyValueSet::SetResult ParseValue(
       MutableCSSPropertyValueSet*,
       CSSPropertyID,
-      const String&,
+      StringView,
       bool important,
       const CSSParserContext*);
   static MutableCSSPropertyValueSet::SetResult ParseVariableValue(
       MutableCSSPropertyValueSet*,
       const AtomicString& property_name,
-      const String&,
+      StringView,
       bool important,
       const CSSParserContext*,
       bool is_animation_tainted);
@@ -141,6 +143,7 @@ class CORE_EXPORT CSSParserImpl {
       const String&);
 
   bool ConsumeSupportsDeclaration(CSSParserTokenStream&);
+  void ConsumeErroneousAtRule(CSSParserTokenStream& stream, CSSAtRuleID id);
   const CSSParserContext* GetContext() const { return context_; }
 
   static void ParseDeclarationListForInspector(const String&,
@@ -206,9 +209,10 @@ class CORE_EXPORT CSSParserImpl {
   StyleRuleSupports* ConsumeSupportsRule(CSSParserTokenStream& stream,
                                          CSSNestingType,
                                          StyleRule* parent_rule_for_nesting);
-  StyleRuleInitial* ConsumeInitialRule(CSSParserTokenStream& stream,
-                                       CSSNestingType,
-                                       StyleRule* parent_rule_for_nesting);
+  StyleRuleStartingStyle* ConsumeStartingStyleRule(
+      CSSParserTokenStream& stream,
+      CSSNestingType,
+      StyleRule* parent_rule_for_nesting);
   StyleRuleFontFace* ConsumeFontFaceRule(CSSParserTokenStream&);
   StyleRuleFontPaletteValues* ConsumeFontPaletteValuesRule(
       CSSParserTokenStream&);
@@ -225,7 +229,9 @@ class CORE_EXPORT CSSParserImpl {
   StyleRuleContainer* ConsumeContainerRule(CSSParserTokenStream& stream,
                                            CSSNestingType,
                                            StyleRule* parent_rule_for_nesting);
-  StyleRuleBase* ConsumeLayerRule(CSSParserTokenStream&);
+  StyleRuleBase* ConsumeLayerRule(CSSParserTokenStream&,
+                                  CSSNestingType,
+                                  StyleRule* parent_rule_for_nesting);
   StyleRulePositionFallback* ConsumePositionFallbackRule(CSSParserTokenStream&);
   StyleRuleTry* ConsumeTryRule(CSSParserTokenStream&);
 

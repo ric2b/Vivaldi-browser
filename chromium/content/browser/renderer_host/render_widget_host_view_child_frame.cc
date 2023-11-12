@@ -336,11 +336,11 @@ void RenderWidgetHostViewChildFrame::SetInsets(const gfx::Insets& insets) {
 
 gfx::NativeView RenderWidgetHostViewChildFrame::GetNativeView() {
   if (!frame_connector_)
-    return nullptr;
+    return gfx::NativeView();
 
   RenderWidgetHostView* parent_view =
       frame_connector_->GetParentRenderWidgetHostView();
-  return parent_view ? parent_view->GetNativeView() : nullptr;
+  return parent_view ? parent_view->GetNativeView() : gfx::NativeView();
 }
 
 gfx::NativeViewAccessible
@@ -599,6 +599,8 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
   // Stop flinging if a GSU event with momentum phase is sent to the renderer
   // but not consumed.
   StopFlingingIfNecessary(event, ack_result);
+
+  HandleSwipeToMoveCursorGestureAck(event);
 
   if (!frame_connector_)
     return;
@@ -1114,6 +1116,22 @@ ui::TextInputType RenderWidgetHostViewChildFrame::GetTextInputType() const {
   return ui::TEXT_INPUT_TYPE_NONE;
 }
 
+bool RenderWidgetHostViewChildFrame::GetTextRange(gfx::Range* range) const {
+  if (!text_input_manager_ || !GetFocusedWidget()) {
+    return false;
+  }
+
+  const ui::mojom::TextInputState* state =
+      text_input_manager_->GetTextInputState();
+  if (!state) {
+    return false;
+  }
+
+  range->set_start(0);
+  range->set_end(state->value ? state->value->length() : 0);
+  return true;
+}
+
 RenderWidgetHostViewBase*
 RenderWidgetHostViewChildFrame::GetRootRenderWidgetHostView() const {
   return frame_connector_ ? frame_connector_->GetRootRenderWidgetHostView()
@@ -1152,6 +1170,34 @@ ui::Compositor* RenderWidgetHostViewChildFrame::GetCompositor() {
   if (!GetRootView())
     return nullptr;
   return GetRootView()->GetCompositor();
+}
+
+void RenderWidgetHostViewChildFrame::HandleSwipeToMoveCursorGestureAck(
+    const blink::WebGestureEvent& event) {
+  if (!selection_controller_client_) {
+    return;
+  }
+
+  switch (event.GetType()) {
+    case blink::WebInputEvent::Type::kGestureScrollBegin: {
+      if (!event.data.scroll_begin.cursor_control) {
+        break;
+      }
+      swipe_to_move_cursor_activated_ = true;
+      selection_controller_client_->OnSwipeToMoveCursorBegin();
+      break;
+    }
+    case blink::WebInputEvent::Type::kGestureScrollEnd: {
+      if (!swipe_to_move_cursor_activated_) {
+        break;
+      }
+      swipe_to_move_cursor_activated_ = false;
+      selection_controller_client_->OnSwipeToMoveCursorEnd();
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 }  // namespace content

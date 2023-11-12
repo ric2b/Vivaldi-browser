@@ -8,23 +8,21 @@
  * settings.
  */
 
-import '../../icons.html.js';
-import '../../settings_shared.css.js';
+import '../icons.html.js';
+import '../settings_shared.css.js';
 import 'chrome://resources/cr_components/localized_link/localized_link.js';
 import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-import '../../controls/settings_radio_group.js';
-import '../../controls/settings_slider.js';
-import '../../controls/settings_toggle_button.js';
-import '../../settings_shared.css.js';
+import '/shared/settings/controls/settings_radio_group.js';
+import '/shared/settings/controls/settings_slider.js';
+import '/shared/settings/controls/settings_toggle_button.js';
 import 'chrome://resources/cr_elements/cr_slider/cr_slider.js';
 
 import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route} from '../router.js';
+import {Route, routes} from '../router.js';
 
 import {Mouse, MousePolicies} from './input_device_settings_types.js';
 import {getTemplate} from './per_device_mouse.html.js';
@@ -61,6 +59,10 @@ export class SettingsPerDeviceMouseElement extends
     if (route !== routes.PER_DEVICE_MOUSE) {
       return;
     }
+  }
+
+  private computeIsLastDevice(index: number) {
+    return index === this.mice.length - 1;
   }
 }
 

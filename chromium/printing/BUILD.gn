@@ -12,11 +12,13 @@ import("//printing/buildflags/buildflags.gni")
 import("//testing/test.gni")
 if (is_android) {
   import("//build/config/android/rules.gni")
-} else if (is_ios && use_blink) {
-  import("//build/config/ios/bundle_data_from_filelist.gni")
 }
 
-assert(enable_printing)
+if (enable_printing_unittests) {
+  import("//build/config/ios/bundle_data_from_filelist.gni")
+} else {
+  assert(enable_printing)
+}
 
 if (is_win || enable_print_preview) {
   # Windows basic printing or print preview requires pdf enabled.
@@ -236,6 +238,10 @@ component("printing") {
     deps += [ "//ui/linux:linux_ui" ]
   }
 
+  if (is_apple) {
+    configs += [ "//build/config/compiler:enable_arc" ]
+  }
+
   if (is_mac) {
     sources += [
       "print_settings_initializer_mac.cc",
@@ -341,7 +347,7 @@ static_library("test_support") {
   }
 }
 
-if (is_ios && use_blink) {
+if (enable_printing_unittests) {
   bundle_data_from_filelist("pdf_metafile_cg_mac_unittest_bundle_data") {
     testonly = true
     filelist_name = "test/pdf_metafile_cg_mac_unittest_bundle_data.filelist"
@@ -404,8 +410,11 @@ test("printing_unittests") {
       "test/data/pdf_cg/",
       "../pdf/test/data/",
     ]
-  } else if (is_ios && use_blink) {
-    deps += [ ":pdf_metafile_cg_mac_unittest_bundle_data" ]
+  } else if (enable_printing_unittests) {
+    deps += [
+      ":pdf_metafile_cg_mac_unittest_bundle_data",
+      "//pdf:pdf_test_bundle_data",
+    ]
   }
 
   if (is_win) {
@@ -485,6 +494,7 @@ if (is_android) {
       "//third_party/androidx:androidx_annotation_annotation_java",
       "//ui/android:ui_java",
     ]
+    srcjar_deps = [ ":printing_jni_headers" ]
     sources = [
       "android/java/src/org/chromium/printing/PrintDocumentAdapterWrapper.java",
       "android/java/src/org/chromium/printing/PrintManagerDelegate.java",
@@ -494,6 +504,5 @@ if (is_android) {
       "android/java/src/org/chromium/printing/PrintingController.java",
       "android/java/src/org/chromium/printing/PrintingControllerImpl.java",
     ]
-    annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   }
 }

@@ -295,6 +295,11 @@ class ViewTransitionStyleTracker
   PhysicalRect ComputeVisualOverflowRect(
       LayoutBoxModelObject& box,
       LayoutBoxModelObject* ancestor = nullptr);
+  // Same as above, but uses paint layers, which is less correct but performs
+  // better. This version is deprecated.
+  PhysicalRect ComputeVisualOverflowRectWithPaintLayers(
+      LayoutBoxModelObject& box,
+      LayoutBoxModelObject* ancestor = nullptr);
 
   bool SnapshotRootDidChangeSize() const;
 
@@ -327,7 +332,7 @@ class ViewTransitionStyleTracker
 
   // The device scale factor used for layout of the Document. This is kept in
   // sync with the Document during RunPostPrePaintSteps().
-  float device_pixel_ratio_ = 1.f;
+  float device_pixel_ratio_ = 0.f;
 
   // The data for the |documentElement| generate if it has a valid
   // |view-transition-name| for the old and new DOM state.

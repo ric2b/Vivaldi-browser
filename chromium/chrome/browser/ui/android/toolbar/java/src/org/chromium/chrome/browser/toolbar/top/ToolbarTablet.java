@@ -36,7 +36,6 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
-import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
@@ -151,8 +150,7 @@ public class ToolbarTablet
     }
 
     public boolean isToolbarButtonReorderingEnabled() {
-        return ChromeFeatureList.sTabStripRedesign.isEnabled()
-            && !OmniboxFeatures.isTabStripToolbarReorderingDisabled();
+        return ChromeFeatureList.sTabletToolbarReordering.isEnabled();
     }
 
     @Override
@@ -325,8 +323,7 @@ public class ToolbarTablet
         mReloadButton.setOnKeyListener(new KeyboardNavigationListener() {
             @Override
             public View getNextFocusForward() {
-                if (isToolbarButtonReorderingEnabled()
-                        && mHomeButton.getVisibility() == VISIBLE) {
+                if (isToolbarButtonReorderingEnabled() && mHomeButton.getVisibility() == VISIBLE) {
                     return findViewById(R.id.home_button);
                 } else {
                     return findViewById(R.id.url_bar);
@@ -636,8 +633,7 @@ public class ToolbarTablet
     }
 
     @Override
-    void setTabSwitcherMode(boolean inTabSwitcherMode, boolean showToolbar, boolean delayAnimation,
-            MenuButtonCoordinator menuButtonCoordinator) {
+    void setTabSwitcherMode(boolean inTabSwitcherMode) {
         mIsInTabSwitcherMode = inTabSwitcherMode;
         mSwitcherButton.setClickable(!inTabSwitcherMode);
         int importantForAccessibility = inTabSwitcherMode

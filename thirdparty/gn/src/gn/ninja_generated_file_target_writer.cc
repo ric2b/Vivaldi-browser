@@ -31,23 +31,33 @@ void NinjaGeneratedFileTargetWriter::Run() {
   // done at gen time, and so ninja doesn't need to know about it.
   std::vector<OutputFile> output_files;
   std::vector<OutputFile> data_output_files;
-  for (const auto& pair : target_->GetDeps(Target::DEPS_LINKED)) {
-    if (pair.ptr->IsDataOnly()) {
-      data_output_files.push_back(pair.ptr->dependency_output_file());
+  const auto& target_deps = resolved().GetTargetDeps(target_);
+  for (const Target* dep : target_deps.linked_deps()) {
+    if (dep->IsDataOnly()) {
+      data_output_files.push_back(dep->dependency_output_file());
     } else {
-      output_files.push_back(pair.ptr->dependency_output_file());
+      output_files.push_back(dep->dependency_output_file());
     }
   }
 
-  const LabelTargetVector& data_deps = target_->data_deps();
-  for (const auto& pair : data_deps)
-    data_output_files.push_back(pair.ptr->dependency_output_file());
+  for (const Target* data_dep : target_deps.data_deps())
+    data_output_files.push_back(data_dep->dependency_output_file());
 
   WriteStampForTarget(output_files, data_output_files);
 }
 
 void NinjaGeneratedFileTargetWriter::GenerateFile() {
   Err err;
+
+  std::vector<SourceFile> outputs_as_sources;
+  target_->action_values().GetOutputsAsSourceFiles(target_,
+                                                   &outputs_as_sources);
+  CHECK(outputs_as_sources.size() == 1);
+
+  base::FilePath output =
+      settings_->build_settings()->GetFullPath(outputs_as_sources[0]);
+  ScopedTrace trace(TraceItem::TRACE_FILE_WRITE_GENERATED, outputs_as_sources[0].value());
+  trace.SetToolchain(target_->settings()->toolchain_label());
 
   // If this is a metadata target, populate the write value with the appropriate
   // data.
@@ -59,6 +69,8 @@ void NinjaGeneratedFileTargetWriter::GenerateFile() {
     contents = Value(target_->action_values().outputs().list()[0].origin(),
                      Value::LIST);
     TargetSet targets_walked;
+    ScopedTrace metadata_walk_trace(TraceItem::TRACE_WALK_METADATA, target_->label());
+    trace.SetToolchain(target_->settings()->toolchain_label());
     if (!target_->GetMetadata(target_->data_keys(), target_->walk_keys(),
                               target_->rebase(), /*deps_only = */ true,
                               &contents.list_value(), &targets_walked, &err)) {
@@ -68,15 +80,6 @@ void NinjaGeneratedFileTargetWriter::GenerateFile() {
   } else {
     contents = target_->contents();
   }
-
-  std::vector<SourceFile> outputs_as_sources;
-  target_->action_values().GetOutputsAsSourceFiles(target_,
-                                                   &outputs_as_sources);
-  CHECK(outputs_as_sources.size() == 1);
-
-  base::FilePath output =
-      settings_->build_settings()->GetFullPath(outputs_as_sources[0]);
-  ScopedTrace trace(TraceItem::TRACE_FILE_WRITE, outputs_as_sources[0].value());
 
   // Compute output.
   StringOutputBuffer storage;

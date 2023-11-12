@@ -32,7 +32,8 @@ class NotesModelObserverImpl;
 class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
                                public syncer::ModelTypeControllerDelegate {
  public:
-  NoteModelTypeProcessor(file_sync::SyncedFileStore* synced_file_store);
+  NoteModelTypeProcessor(file_sync::SyncedFileStore* synced_file_store,
+                         bool wipe_model_on_stopping_sync_with_clear_data);
 
   NoteModelTypeProcessor(const NoteModelTypeProcessor&) = delete;
   NoteModelTypeProcessor& operator=(const NoteModelTypeProcessor&) = delete;
@@ -71,15 +72,17 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   std::string EncodeSyncMetadata() const;
 
   // It mainly decodes a NoteModelMetadata proto serialized in
-  // |metadata_str|, and uses it to fill in the tracker and the model type state
-  // objects. |model| must not be null and must outlive this object. It is used
+  // `metadata_str`, and uses it to fill in the tracker and the model type state
+  // objects. `model` must not be null and must outlive this object. It is used
   // to the retrieve the local node ids, and is stored in the processor to be
-  // used for further model operations. |schedule_save_closure| is a repeating
+  // used for further model operations. `schedule_save_closure` is a repeating
   // closure used to schedule a save of the note model together with the
   // metadata.
   void ModelReadyToSync(const std::string& metadata_str,
                         const base::RepeatingClosure& schedule_save_closure,
                         vivaldi::NotesModel* model);
+
+  bool IsTrackingMetadata() const;
 
   // Returns the estimate of dynamically allocated memory in bytes.
   size_t EstimateMemoryUsage() const;
@@ -124,9 +127,9 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   void StopTrackingMetadataAndResetTracker();
 
   // Creates a DictionaryValue for local and remote debugging information about
-  // |node| and appends it to |all_nodes|. It does the same for child nodes
-  // recursively. |index| is the index of |node| within its parent. |index|
-  // could computed from |node|, however it's much cheaper to pass from outside
+  // `node` and appends it to `all_nodes`. It does the same for child nodes
+  // recursively. `index` is the index of `node` within its parent. `index`
+  // could computed from `node`, however it's much cheaper to pass from outside
   // since we iterate over child nodes already in the calling sites.
   void AppendNodeAndChildrenForDebugging(const vivaldi::NoteNode* node,
                                          int index,
@@ -142,6 +145,10 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   // remote changes to. It is set during ModelReadyToSync(), which is called
   // during startup, as part of the note-loading process.
   raw_ptr<vivaldi::NotesModel> notes_model_ = nullptr;
+
+  // Controls whether notes should be wiped when sync is stopped. Not used in
+  // vivaldi
+  const bool wipe_model_on_stopping_sync_with_clear_data_;
 
   // The callback used to schedule the persistence of note model as well as
   // the metadata to a file during which latest metadata should also be pulled
@@ -172,9 +179,9 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   // uninitialized).
   bool last_initial_merge_remote_updates_exceeded_limit_ = false;
 
-  // GUID string that identifies the sync client and is received from the sync
+  // UUID string that identifies the sync client and is received from the sync
   // engine.
-  std::string cache_guid_;
+  std::string cache_uuid_;
 
   syncer::ModelErrorHandler error_handler_;
 

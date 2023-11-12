@@ -4,14 +4,15 @@
 
 #import "ios/chrome/browser/infobars/overlays/browser_agent/interaction_handlers/test/mock_autofill_save_card_infobar_delegate_mobile.h"
 
+#import "base/functional/bind.h"
+#import "base/uuid.h"
+#import "components/autofill/core/browser/autofill_test_utils.h"
+#import "components/autofill/core/browser/payments/test_legal_message_line.h"
+#import "components/signin/public/identity_manager/account_info.h"
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-#import "base/functional/bind.h"
-#import "base/guid.h"
-#import "components/autofill/core/browser/autofill_test_utils.h"
-#import "components/signin/public/identity_manager/account_info.h"
 
 MockAutofillSaveCardInfoBarDelegateMobile::
     MockAutofillSaveCardInfoBarDelegateMobile(
@@ -35,7 +36,8 @@ MockAutofillSaveCardInfoBarDelegateMobile::
 
 MockAutofillSaveCardInfoBarDelegateMobileFactory::
     MockAutofillSaveCardInfoBarDelegateMobileFactory()
-    : credit_card_(base::GenerateGUID(), "https://www.example.com/") {}
+    : credit_card_(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                   "https://www.example.com/") {}
 
 MockAutofillSaveCardInfoBarDelegateMobileFactory::
     ~MockAutofillSaveCardInfoBarDelegateMobileFactory() {}
@@ -55,5 +57,7 @@ MockAutofillSaveCardInfoBarDelegateMobileFactory::
   return std::make_unique<MockAutofillSaveCardInfoBarDelegateMobile>(
       autofill::AutofillClient::SaveCreditCardOptions(), card,
       upload ? Variant(std::move(upload_cb)) : Variant(std::move(local_cb)),
-      autofill::LegalMessageLines(), AccountInfo());
+      autofill::LegalMessageLines(
+          {autofill::TestLegalMessageLine("Test message")}),
+      AccountInfo());
 }

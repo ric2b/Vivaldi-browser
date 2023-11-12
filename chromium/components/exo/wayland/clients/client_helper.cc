@@ -10,6 +10,7 @@
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
 #include <linux-explicit-synchronization-unstable-v1-client-protocol.h>
 #include <presentation-time-client-protocol.h>
+#include <single-pixel-buffer-v1-client-protocol.h>
 #include <wayland-client-core.h>
 #include <wayland-client-protocol.h>
 
@@ -57,6 +58,7 @@ DEFAULT_DELETER(struct wp_presentation_feedback,
 DEFAULT_DELETER(zaura_output_manager, zaura_output_manager_destroy)
 DEFAULT_DELETER(zaura_shell, zaura_shell_destroy)
 DEFAULT_DELETER(zaura_surface, zaura_surface_destroy)
+DEFAULT_DELETER(zaura_toplevel, zaura_toplevel_destroy)
 DEFAULT_DELETER(zaura_output, zaura_output_destroy)
 DEFAULT_DELETER(zcr_color_manager_v1, zcr_color_manager_v1_destroy)
 DEFAULT_DELETER(zcr_color_management_output_v1,
@@ -82,8 +84,9 @@ DEFAULT_DELETER(zcr_vsync_timing_v1, zcr_vsync_timing_v1_destroy)
 DEFAULT_DELETER(wl_data_device_manager, wl_data_device_manager_destroy)
 DEFAULT_DELETER(wp_content_type_manager_v1, wp_content_type_manager_v1_destroy)
 DEFAULT_DELETER(wp_content_type_v1, wp_content_type_v1_destroy)
+DEFAULT_DELETER(wp_single_pixel_buffer_manager_v1,
+                wp_single_pixel_buffer_manager_v1_destroy)
 DEFAULT_DELETER(wp_viewporter, wp_viewporter_destroy)
-DEFAULT_DELETER(zxdg_shell_v6, zxdg_shell_v6_destroy)
 DEFAULT_DELETER(xdg_wm_base, xdg_wm_base_destroy)
 DEFAULT_DELETER(zwp_text_input_manager_v1, zwp_text_input_manager_v1_destroy)
 DEFAULT_DELETER(zcr_secure_output_v1, zcr_secure_output_v1_destroy)
@@ -112,8 +115,6 @@ DEFAULT_DELETER(zxdg_decoration_manager_v1, zxdg_decoration_manager_v1_destroy)
 DEFAULT_DELETER(zcr_extended_drag_v1, zcr_extended_drag_v1_destroy)
 DEFAULT_DELETER(xdg_surface, xdg_surface_destroy)
 DEFAULT_DELETER(xdg_toplevel, xdg_toplevel_destroy)
-DEFAULT_DELETER(zxdg_surface_v6, zxdg_surface_v6_destroy)
-DEFAULT_DELETER(zxdg_toplevel_v6, zxdg_toplevel_v6_destroy)
 DEFAULT_DELETER(zxdg_output_manager_v1, zxdg_output_manager_v1_destroy)
 DEFAULT_DELETER(weston_test, weston_test_destroy)
 DEFAULT_DELETER(zwp_idle_inhibit_manager_v1,

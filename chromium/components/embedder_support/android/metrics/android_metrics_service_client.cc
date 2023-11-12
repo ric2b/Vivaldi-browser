@@ -329,8 +329,8 @@ void AndroidMetricsServiceClient::MaybeStartMetrics() {
 }
 
 void AndroidMetricsServiceClient::RegisterMetricsProvidersAndInitState() {
-  metrics_service_->RegisterMetricsProvider(
-      std::make_unique<metrics::SubprocessMetricsProvider>());
+  CHECK(metrics::SubprocessMetricsProvider::GetInstance());
+
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<NetworkMetricsProvider>(
           content::CreateNetworkConnectionTrackerAsyncGetter()));

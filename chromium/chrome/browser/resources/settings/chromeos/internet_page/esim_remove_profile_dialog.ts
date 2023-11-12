@@ -10,7 +10,7 @@ import 'chrome://resources/ash/common/cellular_setup/cellular_setup_icons.html.j
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_input/cr_input.js';
-import '../../settings_shared.css.js';
+import '../settings_shared.css.js';
 
 import {getESimProfile} from 'chrome://resources/ash/common/cellular_setup/esim_manager_utils.js';
 import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
@@ -21,8 +21,7 @@ import {ESimOperationResult, ESimProfileRemote} from 'chrome://resources/mojo/ch
 import {NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {routes} from '../os_settings_routes.js';
-import {Router} from '../router.js';
+import {Router, routes} from '../router.js';
 
 import {getTemplate} from './esim_remove_profile_dialog.html.js';
 

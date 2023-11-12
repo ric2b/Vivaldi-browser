@@ -10,13 +10,13 @@
 #include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/wm/overview/overview_constants.h"
+#include "ash/wm/window_mini_view_header_view.h"
 #include "ash/wm/window_preview_view.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/client/aura_constants.h"
-#include "ui/aura/window.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/compositor/layer.h"
@@ -28,39 +28,21 @@
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/layout/box_layout.h"
-#include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/layout_provider.h"
+#include "ui/views/view_utils.h"
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
 namespace {
-
-// The font delta of the window title.
-constexpr int kLabelFontDelta = 2;
 
 // Values of the backdrop.
 constexpr int kBackdropBorderRoundingDp = 4;
 
 constexpr int kFocusRingCornerRadius = 20;
 
-constexpr gfx::Insets kHeaderInsets = gfx::Insets::TLBR(0, 10, 0, 10);
-
-std::u16string GetWindowTitle(aura::Window* window) {
-  aura::Window* transient_root = wm::GetTransientRoot(window);
-  const std::u16string* overview_title =
-      transient_root->GetProperty(chromeos::kWindowOverviewTitleKey);
-  return (overview_title && !overview_title->empty())
-             ? *overview_title
-             : transient_root->GetTitle();
-}
-
 }  // namespace
 
 WindowMiniView::~WindowMiniView() = default;
-
-constexpr gfx::Size WindowMiniView::kIconSize;
-constexpr int WindowMiniView::kHeaderPaddingDp;
 
 void WindowMiniView::SetBackdropVisibility(bool visible) {
   if (!backdrop_view_ && !visible) {
@@ -109,9 +91,8 @@ void WindowMiniView::SetShowPreview(bool show) {
     return;
   }
 
-  preview_view_ = AddChildView(std::make_unique<WindowPreviewView>(
-      source_window_,
-      /*trilinear_filtering_on_init=*/false));
+  preview_view_ =
+      AddChildView(std::make_unique<WindowPreviewView>(source_window_));
   preview_view_->SetPaintToLayer();
   preview_view_->layer()->SetFillsBoundsOpaquely(false);
   Layout();
@@ -170,78 +151,32 @@ gfx::Size WindowMiniView::GetPreviewViewSize() const {
   return preview_view_->GetPreferredSize();
 }
 
-WindowMiniView::WindowMiniView(aura::Window* source_window, int border_inset)
+WindowMiniView::WindowMiniView(aura::Window* source_window)
     : source_window_(source_window) {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
-  // TODO(conniekxu|sammiequon): Remove the border once the calculation method
-  // for the bounds of the OverviewItemView is redone.
-  SetBorder(views::CreateEmptyBorder(gfx::Insets(border_inset)));
-
   window_observation_.Observe(source_window);
 
-  header_view_ = AddChildView(std::make_unique<views::View>());
+  header_view_ = AddChildView(std::make_unique<WindowMiniViewHeaderView>(this));
   header_view_->SetPaintToLayer();
   header_view_->layer()->SetFillsBoundsOpaquely(false);
-
-  gfx::Insets header_insets(0);
-  if (chromeos::features::IsJellyrollEnabled()) {
-    header_view_->SetBackground(views::CreateThemedRoundedRectBackground(
-        chromeos::features::IsJellyrollEnabled()
-            ? cros_tokens::kCrosSysHeader
-            : static_cast<ui::ColorId>(kColorAshShieldAndBase80),
-        /*top_radius=*/kWindowMiniViewCornerRadius,
-        /*bottom_radius=*/0, /*for_border_thickness=*/0));
-    header_insets = kHeaderInsets;
-  }
-
-  views::BoxLayout* layout =
-      header_view_->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kHorizontal, header_insets,
-          kHeaderPaddingDp));
-
-  title_label_ = header_view_->AddChildView(
-      std::make_unique<views::Label>(GetWindowTitle(source_window_)));
-  title_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  title_label_->SetAutoColorReadabilityEnabled(false);
-  title_label_->SetSubpixelRenderingEnabled(false);
-  title_label_->SetFontList(gfx::FontList().Derive(
-      kLabelFontDelta, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
-  layout->SetFlexForView(title_label_, 1);
 
   // In order to show the focus ring out of the content view, `border_inset`
   // needs to be counted when setting the insets for the focus ring.
   views::InstallRoundRectHighlightPathGenerator(
-      this, gfx::Insets(kFocusRingHaloInset + border_inset),
+      this, gfx::Insets(kFocusRingHaloInset),
       chromeos::features::IsJellyrollEnabled() ? kFocusRingCornerRadius
                                                : kBackdropBorderRoundingDp);
   views::FocusRing::Install(this);
   views::FocusRing* focus_ring = views::FocusRing::Get(this);
   focus_ring->SetColorId(ui::kColorAshFocusRing);
   focus_ring->SetHasFocusPredicate(
-      [&](views::View* view) { return is_focused_; });
-}
-
-void WindowMiniView::UpdateIconView() {
-  DCHECK(source_window_);
-  aura::Window* transient_root = wm::GetTransientRoot(source_window_);
-  // Prefer kAppIconKey over kWindowIconKey as the app icon is typically larger.
-  gfx::ImageSkia* icon = transient_root->GetProperty(aura::client::kAppIconKey);
-  if (!icon || icon->size().IsEmpty()) {
-    icon = transient_root->GetProperty(aura::client::kWindowIconKey);
-  }
-  if (!icon) {
-    return;
-  }
-
-  if (!icon_view_) {
-    icon_view_ =
-        header_view_->AddChildViewAt(std::make_unique<views::ImageView>(), 0);
-  }
-
-  icon_view_->SetImage(gfx::ImageSkiaOperations::CreateResizedImage(
-      *icon, skia::ImageOperations::RESIZE_BEST, kIconSize));
+      base::BindRepeating([](const views::View* view) {
+        const auto* v = views::AsViewClass<WindowMiniView>(view);
+        CHECK(v);
+        return v->is_focused_;
+      }));
 }
 
 gfx::Rect WindowMiniView::GetContentAreaBounds() const {
@@ -279,12 +214,6 @@ void WindowMiniView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->SetName(wm::GetTransientRoot(source_window_)->GetTitle());
 }
 
-void WindowMiniView::OnThemeChanged() {
-  views::View::OnThemeChanged();
-  title_label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorPrimary));
-}
-
 void WindowMiniView::OnWindowPropertyChanged(aura::Window* window,
                                              const void* key,
                                              intptr_t old) {
@@ -294,7 +223,7 @@ void WindowMiniView::OnWindowPropertyChanged(aura::Window* window,
     return;
   }
 
-  UpdateIconView();
+  header_view_->UpdateIconView(source_window_);
 }
 
 void WindowMiniView::OnWindowDestroying(aura::Window* window) {
@@ -308,7 +237,7 @@ void WindowMiniView::OnWindowDestroying(aura::Window* window) {
 }
 
 void WindowMiniView::OnWindowTitleChanged(aura::Window* window) {
-  title_label_->SetText(GetWindowTitle(window));
+  header_view_->UpdateTitleLabel(window);
 }
 
 BEGIN_METADATA(WindowMiniView, views::View)

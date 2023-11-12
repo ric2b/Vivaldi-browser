@@ -9,6 +9,7 @@
 #include "base/path_service.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -30,6 +31,7 @@
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -639,7 +641,10 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest,
 class ChromeRenderProcessHostBackgroundingTestWithAudio
     : public ChromeRenderProcessHostTest {
  public:
-  ChromeRenderProcessHostBackgroundingTestWithAudio() {}
+  ChromeRenderProcessHostBackgroundingTestWithAudio() {
+    // Tests require that each tab has a different process.
+    feature_list_.InitAndEnableFeature(features::kDisableProcessReuse);
+  }
 
   ChromeRenderProcessHostBackgroundingTestWithAudio(
       const ChromeRenderProcessHostBackgroundingTestWithAudio&) = delete;
@@ -648,7 +653,6 @@ class ChromeRenderProcessHostBackgroundingTestWithAudio
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ChromeRenderProcessHostTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kProcessPerTab);
 
     command_line->AppendSwitchASCII(
         switches::kAutoplayPolicy,
@@ -721,6 +725,8 @@ class ChromeRenderProcessHostBackgroundingTestWithAudio
 #endif
   }
 
+  base::test::ScopedFeatureList feature_list_;
+
 #if BUILDFLAG(IS_MAC)
   raw_ptr<base::PortProvider> port_provider_;
 #endif
@@ -740,9 +746,9 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostBackgroundingTestWithAudio,
   // backgrounded.
   WaitUntilBackgrounded(no_audio_process_, true, audio_process_, false);
   // Pause the audio and immediately switch to the no audio tab.
-  ASSERT_TRUE(content::ExecuteScript(
-      audio_tab_web_contents_.get(),
-      "document.getElementById('audioPlayer').pause();"));
+  ASSERT_TRUE(
+      content::ExecJs(audio_tab_web_contents_.get(),
+                      "document.getElementById('audioPlayer').pause();"));
   ShowSingletonTab(no_audio_url_);
 
   // Wait until the no audio page is not backgrounded and the audio page is
@@ -761,9 +767,9 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostBackgroundingTestWithAudio,
   // Wait until the two pages are not backgrounded.
   WaitUntilBackgrounded(audio_process_, false, no_audio_process_, false);
   // Stop the audio.
-  ASSERT_TRUE(content::ExecuteScript(
-      audio_tab_web_contents_.get(),
-      "document.getElementById('audioPlayer').pause();"));
+  ASSERT_TRUE(
+      content::ExecJs(audio_tab_web_contents_.get(),
+                      "document.getElementById('audioPlayer').pause();"));
 
   // Wait until the no audio page is not backgrounded and the audio page is
   // backgrounded.
@@ -780,16 +786,16 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostBackgroundingTestWithAudio,
     return;
 
   // Stop the audio.
-  ASSERT_TRUE(content::ExecuteScript(
-      audio_tab_web_contents_.get(),
-      "document.getElementById('audioPlayer').pause();"));
+  ASSERT_TRUE(
+      content::ExecJs(audio_tab_web_contents_.get(),
+                      "document.getElementById('audioPlayer').pause();"));
 
   WaitUntilBackgrounded(no_audio_process_, false, audio_process_, true);
 
   // Start the audio from the backgrounded tab.
   ASSERT_TRUE(
-      content::ExecuteScript(audio_tab_web_contents_.get(),
-                             "document.getElementById('audioPlayer').play();"));
+      content::ExecJs(audio_tab_web_contents_.get(),
+                      "document.getElementById('audioPlayer').play();"));
 
   // Wait until the two pages are not backgrounded.
   WaitUntilBackgrounded(no_audio_process_, false, audio_process_, false);

@@ -6,6 +6,7 @@
 #define CHROMEOS_ASH_COMPONENTS_NETWORK_METRICS_HOTSPOT_METRICS_HELPER_H_
 
 #include "base/component_export.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
@@ -167,8 +168,8 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotMetricsHelper
     kInvalidConfiguration = 4,
     kUpstreamNotAvailable = 5,
     kNetworkSetupFailure = 6,
-    kWifiDriverFailure = 7,
-    kCellularAttachFailure = 8,
+    kDownstreamWifiFailure = 7,
+    kUpstreamFailure = 8,
     kShillOperationFailure = 9,
     kUnknownFailure = 10,
     kAlreadyFulfilled = 11,

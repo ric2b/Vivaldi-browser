@@ -110,6 +110,18 @@ uint32_t TranslateConstraintAdjustment(
   return res;
 }
 
+zaura_popup_decoration_type TranslateDecorationType(
+    ui::PlatformWindowShadowType platformWindowShadowType) {
+  switch (platformWindowShadowType) {
+    case ui::PlatformWindowShadowType::kNone:
+      return ZAURA_POPUP_DECORATION_TYPE_NONE;
+    case ui::PlatformWindowShadowType::kDefault:
+      return ZAURA_POPUP_DECORATION_TYPE_NORMAL;
+    case ui::PlatformWindowShadowType::kDrop:
+      return ZAURA_POPUP_DECORATION_TYPE_SHADOW;
+  }
+}
+
 }  // namespace
 
 XDGPopupWrapperImpl::XDGPopupWrapperImpl(
@@ -249,9 +261,9 @@ bool XDGPopupWrapperImpl::SupportsDecoration() {
   return version >= ZAURA_POPUP_SET_DECORATION_SINCE_VERSION;
 }
 
-void XDGPopupWrapperImpl::Decorate() {
+void XDGPopupWrapperImpl::Decorate(ui::PlatformWindowShadowType shadow_type) {
   zaura_popup_set_decoration(aura_popup_.get(),
-                             ZAURA_POPUP_DECORATION_TYPE_SHADOW);
+                             TranslateDecorationType(shadow_type));
 }
 
 void XDGPopupWrapperImpl::SetScaleFactor(float scale_factor) {
@@ -279,9 +291,13 @@ wl::Object<xdg_positioner> XDGPopupWrapperImpl::CreatePositioner() {
   FillAnchorData(params_, &anchor_rect, &anchor_position, &anchor_gravity,
                  &constraint_adjustment);
 
+  CHECK(anchor_rect.width() > 0 && anchor_rect.height() > 0)
+      << anchor_rect.ToString();
   xdg_positioner_set_anchor_rect(positioner.get(), anchor_rect.x(),
                                  anchor_rect.y(), anchor_rect.width(),
                                  anchor_rect.height());
+  CHECK(params_.bounds.width() > 0 && params_.bounds.height() > 0)
+      << params_.bounds.ToString();
   xdg_positioner_set_size(positioner.get(), params_.bounds.width(),
                           params_.bounds.height());
   xdg_positioner_set_anchor(positioner.get(), TranslateAnchor(anchor_position));

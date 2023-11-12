@@ -50,6 +50,7 @@ extern NSString* const kCloudAndArrowUpSymbol;
 extern NSString* const kDinoSymbol;
 extern NSString* const kChromeProductSymbol;
 extern NSString* const kTunerSymbol;
+extern NSString* const kMoveFolderSymbol;
 
 // Custom symbol names which can be configured with a color palette. iOS 15+
 // only.
@@ -99,6 +100,7 @@ extern NSString* const kCreditCardSymbol;
 extern NSString* const kMicrophoneFillSymbol;
 extern NSString* const kMicrophoneSymbol;
 extern NSString* const kMagnifyingglassSymbol;
+extern NSString* const kMagnifyingglassCircleSymbol;
 extern NSString* const kEllipsisCircleFillSymbol;
 extern NSString* const kEllipsisRectangleSymbol;
 extern NSString* const kPinSymbol;
@@ -118,11 +120,13 @@ extern NSString* const kWarningFillSymbol;
 extern NSString* const kHelpSymbol;
 extern NSString* const kCheckmarkCircleSymbol;
 extern NSString* const kCheckmarkCircleFillSymbol;
+extern NSString* const kErrorCircleSymbol;
 extern NSString* const kErrorCircleFillSymbol;
 extern NSString* const kTrashSymbol;
 extern NSString* const kInfoCircleSymbol;
 extern NSString* const kHistorySymbol;
 extern NSString* const kCheckmarkSealSymbol;
+extern NSString* const kCheckmarkSealFillSymbol;
 extern NSString* const kWifiSymbol;
 extern NSString* const kBookmarksSymbol;
 extern NSString* const kSyncErrorSymbol;
@@ -154,6 +158,7 @@ extern NSString* const kHighlighterSymbol;
 extern NSString* const kSquareOnSquareDashedSymbol;
 extern NSString* const kDocPlaintext;
 extern NSString* const kFlagSymbol;
+extern NSString* const kKeyboardSymbol;
 
 // Names of the default symbol being non-monochrome by default. When using them,
 // you probably want to set their color to monochrome.

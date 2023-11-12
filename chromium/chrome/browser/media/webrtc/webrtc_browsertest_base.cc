@@ -98,24 +98,6 @@ bool JavascriptErrorDetectingLogHandler(int severity,
   return false;
 }
 
-std::vector<std::string> JsonArrayToVectorOfStrings(
-    const std::string& json_array) {
-  std::vector<std::string> result;
-  absl::optional<base::Value> value = base::JSONReader::Read(json_array);
-  if (!value || !value->is_list()) {
-    ADD_FAILURE();
-    return result;
-  }
-
-  base::Value::List& list = value->GetList();
-  result.reserve(list.size());
-  for (base::Value& item : list) {
-    EXPECT_TRUE(item.is_string());
-    result.push_back(std::move(item).TakeString());
-  }
-  return result;
-}
-
 }  // namespace
 
 WebRtcTestBase::WebRtcTestBase(): detect_errors_in_javascript_(false) {
@@ -519,30 +501,6 @@ void WebRtcTestBase::GenerateAndCloneCertificate(
   EXPECT_EQ("ok-generated-and-cloned", ExecuteJavascript(javascript, tab));
 }
 
-void WebRtcTestBase::VerifyStatsGeneratedCallback(
-    content::WebContents* tab) const {
-  EXPECT_EQ("ok-got-stats",
-            ExecuteJavascript("verifyLegacyStatsGenerated()", tab));
-}
-
-std::vector<std::string> WebRtcTestBase::VerifyStatsGeneratedPromise(
-    content::WebContents* tab) const {
-  std::string result = ExecuteJavascript("verifyStatsGeneratedPromise()", tab);
-  EXPECT_TRUE(base::StartsWith(result, "ok-", base::CompareCase::SENSITIVE));
-  return JsonArrayToVectorOfStrings(result.substr(3));
-}
-
-double WebRtcTestBase::MeasureGetStatsCallbackPerformance(
-    content::WebContents* tab) const {
-  std::string result = ExecuteJavascript(
-      "measureGetStatsCallbackPerformance()", tab);
-  EXPECT_TRUE(base::StartsWith(result, "ok-", base::CompareCase::SENSITIVE));
-  double ms;
-  if (!base::StringToDouble(result.substr(3), &ms))
-    return std::numeric_limits<double>::infinity();
-  return ms;
-}
-
 scoped_refptr<content::TestStatsReportDictionary>
 WebRtcTestBase::GetStatsReportDictionary(content::WebContents* tab) const {
   std::string result = ExecuteJavascript("getStatsReportDictionary()", tab);
@@ -564,12 +522,6 @@ double WebRtcTestBase::MeasureGetStatsPerformance(
   if (!base::StringToDouble(result.substr(3), &ms))
     return std::numeric_limits<double>::infinity();
   return ms;
-}
-
-std::vector<std::string> WebRtcTestBase::GetMandatoryStatsTypes(
-    content::WebContents* tab) const {
-  return JsonArrayToVectorOfStrings(
-      ExecuteJavascript("getMandatoryStatsTypes()", tab));
 }
 
 void WebRtcTestBase::SetDefaultAudioCodec(

@@ -320,6 +320,19 @@ void WebViewGuest::BeforeUnloadFired(content::WebContents* web_contents,
   }
 }
 
+void WebViewGuest::SetContentsBounds(content::WebContents* source,
+                                     const gfx::Rect& bounds) {
+  DCHECK_EQ(web_contents(), source);
+  Browser* browser = ::vivaldi::FindBrowserWithWebContents(source);
+  if (browser && browser->window() && !browser->is_type_normal() &&
+      !browser->is_type_picture_in_picture()) {
+    browser->window()->SetBounds(bounds);
+  } else {
+    // Store the bounds and use the last received on attach.
+    last_set_bounds_.reset(new gfx::Rect(bounds));
+  }
+}
+
 bool WebViewGuest::IsVivaldiMail() {
   return name_.compare("vivaldi-mail") == 0;
 }
@@ -1019,12 +1032,6 @@ void WebViewGuest::VivaldiCreateWebContents(
           task_manager::WebContentsTags::CreateForTabContents(
               new_contents.get());
         }
-      } else if (*view_name == "vivaldi_embedded_view") {
-        // Create WebContents where we can open
-        // chrome-extension://mpognobbkildjkofajifpdfhcoklimli resources.
-        WebContents::CreateParams params(context);
-        params.guest_delegate = this;
-        new_contents = WebContents::Create(params);
       }
     }
 
@@ -1057,7 +1064,8 @@ void WebViewGuest::VivaldiCreateWebContents(
     }
   }
   DCHECK(new_contents);
-  if (owner_web_contents()->IsAudioMuted()) {
+  if (owner_web_contents()->IsAudioMuted()
+      && LastMuteMetadata::FromWebContents(owner_web_contents())) {
     // NOTE(pettern@vivaldi.com): If the owner is muted it means the webcontents
     // of the AppWindow has been muted due to thumbnail capturing, so we also
     // mute the webview webcontents.

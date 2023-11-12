@@ -37,6 +37,8 @@
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_delegate.h"
+#include "components/privacy_sandbox/privacy_sandbox_attestations/privacy_sandbox_attestations.h"
+#include "components/privacy_sandbox/privacy_sandbox_attestations/scoped_privacy_sandbox_attestations.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
@@ -232,7 +234,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CheckReportedPreloadingState) {
   const base::Value::Dict result =
       WaitForNotification("Preload.preloadEnabledStateUpdated", true);
 
-  EXPECT_THAT(*result.FindString("state"), "DisabledByPreference");
+  EXPECT_THAT(result.FindBool("disabledByPreference"), true);
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -383,6 +385,63 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest_BounceTrackingMitigations,
 
   EXPECT_THAT(deleted_sites, testing::ElementsAre("example.test"));
 }
+
+class DIPSStatusDevToolsProtocolTest
+    : public DevToolsProtocolTest,
+      public testing::WithParamInterface<std::tuple<bool, bool, std::string>> {
+  // The fields of `GetParam()` indicate/control the following:
+  //   `std::get<0>(GetParam())` => `dips::kFeature`
+  //   `std::get<1>(GetParam())` => `dips::kDeletionEnabled`
+  //   `std::get<2>(GetParam())` => `dips::kTriggeringAction`
+  //
+  // In order for Bounce Tracking Mitigations to take effect, `kFeature` must
+  // be true/enabled, `kDeletionEnabled` must be true, and `kTriggeringAction`
+  // must NOT be `none`.
+  //
+  // Note: Bounce Tracking Mitigations issues only report sites that would
+  // be affected when `kTriggeringAction` is set to 'stateful_bounce'.
+
+ protected:
+  void SetUp() override {
+    if (std::get<0>(GetParam())) {
+      scoped_feature_list_.InitAndEnableFeatureWithParameters(
+          dips::kFeature,
+          {{"delete", (std::get<1>(GetParam()) ? "true" : "false")},
+           {"triggering_action", std::get<2>(GetParam())}});
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(dips::kFeature);
+    }
+
+    DevToolsProtocolTest::SetUp();
+  }
+
+  bool ShouldBeEnabled() {
+    return (std::get<0>(GetParam()) && std::get<1>(GetParam()) &&
+            (std::get<2>(GetParam()) != "none"));
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_P(DIPSStatusDevToolsProtocolTest,
+                       TrueWhenEnabledAndDeleting) {
+  AttachToBrowserTarget();
+
+  base::Value::Dict paramsDIPS;
+  paramsDIPS.Set("featureState", "DIPS");
+
+  SendCommand("SystemInfo.getFeatureState", std::move(paramsDIPS));
+  EXPECT_EQ(result()->FindBool("featureEnabled"), ShouldBeEnabled());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    DIPSStatusDevToolsProtocolTest,
+    ::testing::Combine(
+        ::testing::Bool(),
+        ::testing::Bool(),
+        ::testing::Values("none", "storage", "bounce", "stateful_bounce")));
 
 using DevToolsProtocolTest_AppId = DevToolsProtocolTest;
 
@@ -764,7 +823,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionProtocolTest,
   std::string target_id;
   base::Value::Dict ext_target;
   for (const auto& target : *result->FindList("targetInfos")) {
-    if (*target.FindStringKey("type") == "service_worker") {
+    if (*target.GetDict().FindString("type") == "service_worker") {
       ext_target = target.Clone().TakeDict();
       break;
     }
@@ -791,7 +850,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionProtocolTest,
 
   {
     base::Value::Dict params;
-    params.Set("targetId", *targetInfo->FindStringKey("targetId"));
+    params.Set("targetId", *targetInfo->GetDict().FindString("targetId"));
     params.Set("waitForDebuggerOnStart", false);
     SendCommandSync("Target.autoAttachRelated", std::move(params));
   }
@@ -855,10 +914,62 @@ IN_PROC_BROWSER_TEST_F(PrerenderDataSaverProtocolTest,
   const base::Value::Dict result =
       WaitForNotification("Preload.preloadEnabledStateUpdated", true);
 
-  EXPECT_THAT(*result.FindString("state"), "DisabledByDataSaver");
+  EXPECT_THAT(result.FindBool("disabledByDataSaver"), true);
   histogram_tester.ExpectUniqueSample(
       "Prerender.Experimental.PrerenderHostFinalStatus.SpeculationRule",
       /*PrerenderFinalStatus::kDataSaverEnabled=*/38, 1);
+}
+
+class PrivacySandboxAttestationsOverrideTest : public DevToolsProtocolTest {
+ public:
+  PrivacySandboxAttestationsOverrideTest() = default;
+
+  void SetUpOnMainThread() override {
+    // `PrivacySandboxAttestations` has a member of type
+    // `scoped_refptr<base::SequencedTaskRunner>`, its initialization must be
+    // done after a browser process is created.
+    DevToolsProtocolTest::SetUpOnMainThread();
+    scoped_attestations_ =
+        std::make_unique<privacy_sandbox::ScopedPrivacySandboxAttestations>(
+            privacy_sandbox::PrivacySandboxAttestations::CreateForTesting());
+  }
+
+ private:
+  std::unique_ptr<privacy_sandbox::ScopedPrivacySandboxAttestations>
+      scoped_attestations_;
+};
+
+IN_PROC_BROWSER_TEST_F(PrivacySandboxAttestationsOverrideTest,
+                       PrivacySandboxEnrollmentOverride) {
+  Attach();
+
+  base::Value::Dict paramsDIPS;
+  const std::string attestation_url = "https://google.com";
+  paramsDIPS.Set("url", attestation_url);
+
+  SendCommand("Browser.addPrivacySandboxEnrollmentOverride",
+              std::move(paramsDIPS));
+
+  EXPECT_TRUE(
+      privacy_sandbox::PrivacySandboxAttestations::GetInstance()->IsOverridden(
+          net::SchemefulSite(GURL(attestation_url))));
+}
+
+IN_PROC_BROWSER_TEST_F(PrivacySandboxAttestationsOverrideTest,
+                       PrivacySandboxEnrollmentOverrideInvalidUrl) {
+  Attach();
+
+  base::Value::Dict paramsDIPS;
+  const std::string attestation_url = "this is a bad url";
+  paramsDIPS.Set("url", attestation_url);
+
+  SendCommand("Browser.addPrivacySandboxEnrollmentOverride",
+              std::move(paramsDIPS));
+
+  EXPECT_TRUE(error());
+  EXPECT_FALSE(
+      privacy_sandbox::PrivacySandboxAttestations::GetInstance()->IsOverridden(
+          net::SchemefulSite(GURL(attestation_url))));
 }
 
 }  // namespace

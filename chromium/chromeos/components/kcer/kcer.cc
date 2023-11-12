@@ -33,6 +33,14 @@ PublicKey::PublicKey(PublicKey&&) = default;
 PublicKey& PublicKey::operator=(PublicKey&&) = default;
 PublicKey::~PublicKey() = default;
 
+bool PublicKey::operator==(const PublicKey& other) const {
+  return ((token_ == other.token_) && (pkcs11_id_ == other.pkcs11_id_) &&
+          (pub_key_spki_ == other.pub_key_spki_));
+}
+bool PublicKey::operator!=(const PublicKey& other) const {
+  return !operator==(other);
+}
+
 //==================== KeyInfo =================================================
 
 KeyInfo::KeyInfo() = default;
@@ -62,6 +70,14 @@ PrivateKeyHandle::PrivateKeyHandle(const Cert& cert)
     : token_(cert.GetToken()), pkcs11_id_(cert.GetPkcs11Id()) {}
 PrivateKeyHandle::PrivateKeyHandle(PublicKeySpki pub_key_spki)
     : pub_key_spki_(std::move(pub_key_spki)) {}
+PrivateKeyHandle::PrivateKeyHandle(Token token, PublicKeySpki pub_key_spki)
+    : token_(token), pub_key_spki_(std::move(pub_key_spki)) {}
+PrivateKeyHandle::PrivateKeyHandle(Token token, PrivateKeyHandle&& other)
+    : token_(token),
+      pkcs11_id_(std::move(other.pkcs11_id_)),
+      pub_key_spki_(std::move(other.pub_key_spki_)) {
+  CHECK(!other.token_.has_value());
+}
 
 PrivateKeyHandle::~PrivateKeyHandle() = default;
 PrivateKeyHandle::PrivateKeyHandle(const PrivateKeyHandle&) = default;

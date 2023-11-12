@@ -27,19 +27,25 @@ Service* ServiceFactory::FindExisting(content::BrowserContext* context) {
 }
 
 ServiceFactory* ServiceFactory::GetInstance() {
-  return base::Singleton<ServiceFactory>::get();
+  static base::NoDestructor<ServiceFactory> instance;
+  return instance.get();
 }
 
 ServiceFactory::ServiceFactory()
     : ProfileKeyedServiceFactory(
           "Service",
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   DependsOn(extensions::ExtensionRegistryFactory::GetInstance());
   DependsOn(extensions::ExtensionSystemFactory::GetInstance());
   DependsOn(NotificationDisplayServiceFactory::GetInstance());
 }
 
-ServiceFactory::~ServiceFactory() {}
+ServiceFactory::~ServiceFactory() = default;
 
 KeyedService* ServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* profile) const {

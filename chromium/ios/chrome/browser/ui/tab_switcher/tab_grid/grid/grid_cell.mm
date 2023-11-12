@@ -304,8 +304,6 @@ void PositionView(UIView* view, CGPoint point) {
   if (_theme == theme)
     return;
 
-  self.iconView.backgroundColor = UIColor.clearColor;
-
   self.overrideUserInterfaceStyle = (theme == GridThemeDark)
                                         ? UIUserInterfaceStyleDark
                                         : UIUserInterfaceStyleUnspecified;
@@ -423,6 +421,8 @@ void PositionView(UIView* view, CGPoint point) {
   iconView.contentMode = UIViewContentModeScaleAspectFill;
   iconView.layer.cornerRadius = kGridCellIconCornerRadius;
   iconView.layer.masksToBounds = YES;
+  iconView.backgroundColor = UIColor.clearColor;
+  iconView.tintColor = [UIColor colorNamed:kGrey400Color];
 
   // Vivaldi
   iconView.tintColor = UIColor.labelColor;

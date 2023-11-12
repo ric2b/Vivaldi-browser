@@ -32,7 +32,11 @@ class NoteModelTypeProcessor;
 // This service owns the NoteModelTypeProcessor.
 class NoteSyncService : public KeyedService {
  public:
-  NoteSyncService(file_sync::SyncedFileStore* synced_file_store);
+  // If `wipe_model_on_stopping_sync_with_clear_data` is `true`,
+  // lifetime of notes in the associated storage is coupled with sync
+  // metadata's, so disabling sync will delete notes in the storage.
+  NoteSyncService(file_sync::SyncedFileStore* synced_file_store,
+                  bool wipe_model_on_stopping_sync_with_clear_data);
 
   NoteSyncService(const NoteSyncService&) = delete;
   NoteSyncService& operator=(const NoteSyncService&) = delete;
@@ -50,6 +54,13 @@ class NoteSyncService : public KeyedService {
   // Returns the ModelTypeControllerDelegate for syncer::NOTES.
   virtual base::WeakPtr<syncer::ModelTypeControllerDelegate>
   GetNoteSyncControllerDelegate();
+
+  // Returns true if sync metadata is being tracked. This means sync is enabled
+  // and the initial download of data is completed, which implies that the
+  // relevant NotesModel already reflects remote data. Note however that this
+  // doesn't mean notes are actively sync-ing at the moment, for example
+  // sync could be paused due to an auth error.
+  bool IsTrackingMetadata() const;
 
   // For integration tests.
   void SetNotesLimitForTesting(size_t limit);

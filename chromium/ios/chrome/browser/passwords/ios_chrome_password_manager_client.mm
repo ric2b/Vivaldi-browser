@@ -25,13 +25,10 @@
 #import "components/password_manager/core/browser/password_requirements_service.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/password_manager/ios/password_manager_ios_util.h"
-#import "components/sync/driver/sync_service.h"
+#import "components/sync/service/sync_service.h"
 #import "components/translate/core/browser/translate_manager.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
-#import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/credential_provider_promo/features.h"
-#import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/passwords/ios_chrome_account_password_store_factory.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_change_success_tracker_factory.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_reuse_manager_factory.h"
@@ -41,8 +38,11 @@
 #import "ios/chrome/browser/safe_browsing/chrome_password_protection_service.h"
 #import "ios/chrome/browser/safe_browsing/chrome_password_protection_service_factory.h"
 #import "ios/chrome/browser/safe_browsing/features.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/credential_provider_promo_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
@@ -160,7 +160,7 @@ void IOSChromePasswordManagerClient::PromptUserToEnableAutosignin() {
   NOTIMPLEMENTED();
 }
 
-bool IOSChromePasswordManagerClient::IsIncognito() const {
+bool IOSChromePasswordManagerClient::IsOffTheRecord() const {
   return (bridge_.browserState)->IsOffTheRecord();
 }
 
@@ -253,7 +253,7 @@ void IOSChromePasswordManagerClient::NotifyUserCredentialsWereLeaked(
 
 bool IOSChromePasswordManagerClient::IsSavingAndFillingEnabled(
     const GURL& url) const {
-  return *saving_passwords_enabled_ && !IsIncognito() &&
+  return *saving_passwords_enabled_ && !IsOffTheRecord() &&
          !net::IsCertStatusError(GetMainFrameCertStatus()) &&
          IsFillingEnabled(url);
 }
@@ -317,6 +317,10 @@ password_manager::PasswordRequirementsService*
 IOSChromePasswordManagerClient::GetPasswordRequirementsService() {
   return IOSPasswordRequirementsServiceFactory::GetForBrowserState(
       bridge_.browserState, ServiceAccessType::EXPLICIT_ACCESS);
+}
+
+void IOSChromePasswordManagerClient::UpdateFormManagers() {
+  bridge_.passwordManager->UpdateFormManagers();
 }
 
 bool IOSChromePasswordManagerClient::IsIsolationForPasswordSitesEnabled()

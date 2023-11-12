@@ -21,6 +21,7 @@ import './esim_install_error_dialog.js';
 import {CellularSetupPageName} from 'chrome://resources/ash/common/cellular_setup/cellular_types.js';
 import {ESimManagerListenerBehavior, ESimManagerListenerBehaviorInterface} from 'chrome://resources/ash/common/cellular_setup/esim_manager_listener_behavior.js';
 import {getEuicc, getPendingESimProfiles} from 'chrome://resources/ash/common/cellular_setup/esim_manager_utils.js';
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {getSimSlotCount} from 'chrome://resources/ash/common/network/cellular_utils.js';
 import {MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
 import {NetworkList} from 'chrome://resources/ash/common/network/network_list_types.js';
@@ -32,7 +33,7 @@ import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n
 import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {ESimProfileProperties, ESimProfileRemote, EuiccRemote, ProfileInstallResult, ProfileState} from 'chrome://resources/mojo/chromeos/ash/services/cellular_setup/public/mojom/esim_manager.mojom-webui.js';
-import {CrosNetworkConfigRemote, GlobalPolicy, InhibitReason} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
+import {CrosNetworkConfigInterface, GlobalPolicy, InhibitReason} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {DeviceStateType, NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -208,6 +209,16 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
         computed: 'computeIsDeviceInhibited_(cellularDeviceState,' +
             'cellularDeviceState.inhibitReason)',
       },
+      /**
+       * Return true if SmdsSupportEnabled feature flag is enabled.
+       */
+      smdsSupportEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.valueExists('isSmdsSupportEnabled') &&
+              loadTimeData.getBoolean('isSmdsSupportEnabled');
+        },
+      },
     };
   }
 
@@ -226,12 +237,13 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
   private installingESimProfile_: ESimProfileRemote|null;
   private isDeviceInhibited_: boolean;
   private multiDevicePageContentData_: MultiDevicePageContentData|null;
-  private networkConfig_: CrosNetworkConfigRemote;
+  private networkConfig_: CrosNetworkConfigInterface;
   private profilesMap_: Map<string, ESimProfileRemote>;
   private pSimNetworks_: OncMojo.NetworkStateProperties[];
   private shouldShowEidDialog_: boolean;
   private shouldShowInstallErrorDialog_: boolean;
   private tetherNetworks_: OncMojo.NetworkStateProperties[];
+  private smdsSupportEnabled_: boolean;
 
   constructor() {
     super();
@@ -263,6 +275,9 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
   }
 
   override async onProfileChanged(profile: ESimProfileRemote): Promise<void> {
+    if (this.smdsSupportEnabled_) {
+      return;
+    }
     const response = await profile.getProperties();
 
     const eSimPendingProfileItem = this.eSimPendingProfileItems_.find(item => {
@@ -283,6 +298,10 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
         return;
       }
       this.euicc_ = euicc;
+
+      if (this.smdsSupportEnabled_) {
+        return;
+      }
 
       // Restricting managed cellular network should not show pending eSIM
       // profiles.
@@ -312,6 +331,9 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
 
   private async fetchEsimPendingProfileListForEuicc_(euicc: EuiccRemote):
       Promise<void> {
+    if (this.smdsSupportEnabled_) {
+      return;
+    }
     const profiles = await getPendingESimProfiles(euicc);
     this.processEsimPendingProfiles_(profiles);
   }

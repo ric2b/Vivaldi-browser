@@ -32,6 +32,7 @@
 #define THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_URL_RESPONSE_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
@@ -46,7 +47,7 @@
 #include "third_party/blink/public/platform/web_vector.h"
 
 namespace network {
-class TriggerAttestation;
+class TriggerVerification;
 namespace mojom {
 enum class AlternateProtocolUsage;
 enum class FetchResponseSource;
@@ -112,8 +113,8 @@ class BLINK_PLATFORM_EXPORT WebURLResponse {
 
   void SetConnectionReused(bool);
 
-  void SetTriggerAttestation(
-      const absl::optional<network::TriggerAttestation>&);
+  void SetTriggerVerifications(
+      const std::vector<network::TriggerVerification>&);
 
   void SetLoadTiming(const network::mojom::LoadTimingInfo&);
 

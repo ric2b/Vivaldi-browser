@@ -9,7 +9,10 @@
 #include <string>
 
 #include "base/functional/callback_forward.h"
+#include "content/common/content_export.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
+#include "services/network/public/mojom/attribution.mojom-forward.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 class Time;
@@ -25,13 +28,41 @@ struct OsRegistration;
 
 // Interface between the browser's Attribution Reporting implementation and the
 // operating system's.
-class AttributionOsLevelManager {
+class CONTENT_EXPORT AttributionOsLevelManager {
  public:
+  enum class ApiState {
+    kDisabled,
+    kEnabled,
+  };
+
+  class CONTENT_EXPORT ScopedApiStateForTesting {
+   public:
+    explicit ScopedApiStateForTesting(absl::optional<ApiState>);
+    ~ScopedApiStateForTesting();
+
+    ScopedApiStateForTesting(const ScopedApiStateForTesting&) = delete;
+    ScopedApiStateForTesting& operator=(const ScopedApiStateForTesting&) =
+        delete;
+
+    ScopedApiStateForTesting(ScopedApiStateForTesting&&) = delete;
+    ScopedApiStateForTesting& operator=(ScopedApiStateForTesting&&) = delete;
+
+   private:
+    const absl::optional<ApiState> previous_;
+  };
+
+  static network::mojom::AttributionSupport GetSupport();
+
+  static void SetApiState(absl::optional<ApiState>);
+
   virtual ~AttributionOsLevelManager() = default;
 
-  virtual void Register(const OsRegistration&,
+  using RegisterCallback =
+      base::OnceCallback<void(const OsRegistration&, bool success)>;
+
+  virtual void Register(OsRegistration,
                         bool is_debug_key_allowed,
-                        base::OnceCallback<void(bool success)>) = 0;
+                        RegisterCallback) = 0;
 
   // Clears storage data with the OS.
   // Note that `done` is not run if `AttributionOsLevelManager` is destroyed
@@ -43,6 +74,28 @@ class AttributionOsLevelManager {
                          BrowsingDataFilterBuilder::Mode mode,
                          bool delete_rate_limit_data,
                          base::OnceClosure done) = 0;
+
+ protected:
+  [[nodiscard]] static bool ShouldInitializeApiState();
+  [[nodiscard]] static bool ShouldUseOsWebSource();
+};
+
+class CONTENT_EXPORT NoOpAttributionOsLevelManager
+    : public AttributionOsLevelManager {
+ public:
+  ~NoOpAttributionOsLevelManager() override;
+
+  void Register(OsRegistration,
+                bool is_debug_key_allowed,
+                RegisterCallback) override;
+
+  void ClearData(base::Time delete_begin,
+                 base::Time delete_end,
+                 const std::set<url::Origin>& origins,
+                 const std::set<std::string>& domains,
+                 BrowsingDataFilterBuilder::Mode mode,
+                 bool delete_rate_limit_data,
+                 base::OnceClosure done) override;
 };
 
 }  // namespace content

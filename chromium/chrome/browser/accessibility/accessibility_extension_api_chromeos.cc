@@ -46,7 +46,6 @@
 #include "extensions/common/error_utils.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "ui/accessibility/accessibility_features.h"
-#include "ui/accessibility/accessibility_switches.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ui_base_features.h"
@@ -335,10 +334,10 @@ AccessibilityPrivatePerformAcceleratorActionFunction::Run() {
   ash::AcceleratorAction accelerator_action;
   switch (params->accelerator_action) {
     case accessibility_private::ACCELERATOR_ACTION_FOCUSPREVIOUSPANE:
-      accelerator_action = ash::FOCUS_PREVIOUS_PANE;
+      accelerator_action = ash::AcceleratorAction::kFocusPreviousPane;
       break;
     case accessibility_private::ACCELERATOR_ACTION_FOCUSNEXTPANE:
-      accelerator_action = ash::FOCUS_NEXT_PANE;
+      accelerator_action = ash::AcceleratorAction::kFocusNextPane;
       break;
     case accessibility_private::ACCELERATOR_ACTION_NONE:
       NOTREACHED();

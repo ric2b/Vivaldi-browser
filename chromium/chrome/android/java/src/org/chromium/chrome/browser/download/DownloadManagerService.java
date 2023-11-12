@@ -35,7 +35,6 @@ import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.download.DownloadManagerBridge.DownloadEnqueueRequest;
 import org.chromium.chrome.browser.download.DownloadManagerBridge.DownloadEnqueueResponse;
-import org.chromium.chrome.browser.download.DownloadNotificationUmaHelper.UmaDownloadResumption;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
@@ -447,8 +446,6 @@ public class DownloadManagerService implements DownloadController.Observer,
             case DownloadStatus.IN_PROGRESS:
                 if (info.isPaused()) {
                     mDownloadNotifier.notifyDownloadPaused(info);
-                    DownloadNotificationUmaHelper.recordDownloadResumptionHistogram(
-                            UmaDownloadResumption.MANUAL_PAUSE);
                 } else {
                     mDownloadNotifier.notifyDownloadProgress(
                             info, progress.mStartTimeInMillis, progress.mCanDownloadWhileMetered);
@@ -679,8 +676,7 @@ public class DownloadManagerService implements DownloadController.Observer,
         if (messageUiController != null) messageUiController.onDownloadStarted();
     }
 
-    @Nullable
-    static Intent getLaunchIntentForDownload(@Nullable String filePath, long downloadId,
+    static @Nullable Intent getLaunchIntentForDownload(@Nullable String filePath, long downloadId,
             boolean isSupportedMimeType, String originalUrl, String referrer,
             @Nullable String mimeType) {
         assert !ThreadUtils.runningOnUiThread();
@@ -714,8 +710,7 @@ public class DownloadManagerService implements DownloadController.Observer,
      * @param mimeType   MIME type of the downloaded file.
      * @return the intent to launch for the given download item.
      */
-    @Nullable
-    private static Intent getLaunchIntentFromDownloadUri(String contentUri,
+    private static @Nullable Intent getLaunchIntentFromDownloadUri(String contentUri,
             boolean isSupportedMimeType, String originalUrl, String referrer,
             @Nullable String mimeType) {
         assert !ThreadUtils.runningOnUiThread();
@@ -882,17 +877,12 @@ public class DownloadManagerService implements DownloadController.Observer,
             // Download already in progress, do nothing
             return;
         }
-        int uma =
-                hasUserGesture ? UmaDownloadResumption.CLICKED : UmaDownloadResumption.AUTO_STARTED;
-        DownloadNotificationUmaHelper.recordDownloadResumptionHistogram(uma);
         if (progress == null) {
             assert !item.getDownloadInfo().isPaused();
             // If the download was not resumed before, the browser must have been killed while the
             // download is active.
             if (!sFirstSeenDownloadIds.contains(item.getId())) {
                 sFirstSeenDownloadIds.add(item.getId());
-                DownloadNotificationUmaHelper.recordDownloadResumptionHistogram(
-                        UmaDownloadResumption.BROWSER_KILLED);
             }
             updateDownloadProgress(item, DownloadStatus.IN_PROGRESS);
             progress = mDownloadProgressMap.get(item.getId());
@@ -1069,8 +1059,6 @@ public class DownloadManagerService implements DownloadController.Observer,
                                                        .setFailState(FailState.CANNOT_DOWNLOAD)
                                                        .build());
         removeDownloadProgress(downloadGuid);
-        DownloadNotificationUmaHelper.recordDownloadResumptionHistogram(
-                UmaDownloadResumption.FAILED);
     }
 
     /**
@@ -1269,7 +1257,6 @@ public class DownloadManagerService implements DownloadController.Observer,
         Intent intent = DownloadNotificationFactory.buildActionIntent(appContext, action,
                 LegacyHelpers.buildLegacyContentId(false, downloadItem.getId()),
                 downloadItem.getDownloadInfo().getOTRProfileId());
-        addCancelExtra(intent, downloadItem);
         appContext.startService(intent);
     }
 
@@ -1279,32 +1266,6 @@ public class DownloadManagerService implements DownloadController.Observer,
         DownloadManagerServiceJni.get().renameDownload(getNativeDownloadManagerService(),
                 DownloadManagerService.this, id.id, name, callback,
                 IncognitoUtils.getProfileKeyFromOTRProfileID(otrProfileID));
-    }
-
-    /**
-     * Add an Intent extra for StateAtCancel UMA to know the state of a request prior to a
-     * user-initiated cancel.
-     * @param intent The Intent associated with the download action.
-     * @param downloadItem The download associated with download action.
-     */
-    // Deprecated after new download backend.
-    private void addCancelExtra(Intent intent, DownloadItem downloadItem) {
-        if (intent.getAction().equals(DownloadNotificationService.ACTION_DOWNLOAD_CANCEL)) {
-            int state;
-            if (DownloadUtils.isDownloadPaused(downloadItem)) {
-                state = DownloadNotificationUmaHelper.StateAtCancel.PAUSED;
-            } else if (DownloadUtils.isDownloadPending(downloadItem)) {
-                if (downloadItem.getDownloadInfo().getPendingState()
-                        == PendingState.PENDING_NETWORK) {
-                    state = DownloadNotificationUmaHelper.StateAtCancel.PENDING_NETWORK;
-                } else {
-                    state = DownloadNotificationUmaHelper.StateAtCancel.PENDING_ANOTHER_DOWNLOAD;
-                }
-            } else {
-                state = DownloadNotificationUmaHelper.StateAtCancel.DOWNLOADING;
-            }
-            intent.putExtra(DownloadNotificationService.EXTRA_DOWNLOAD_STATE_AT_CANCEL, state);
-        }
     }
 
     /**

@@ -138,6 +138,7 @@ declare global {
         suspiciousInstall: boolean;
         corruptInstall: boolean;
         updateRequired: boolean;
+        publishedInStoreRequired: boolean;
         blockedByPolicy: boolean;
         reloading: boolean;
         custodianApprovalRequired: boolean;
@@ -167,6 +168,11 @@ declare global {
         ON_CLICK = 'ON_CLICK',
         ON_SPECIFIC_SITES = 'ON_SPECIFIC_SITES',
         ON_ALL_SITES = 'ON_ALL_SITES',
+      }
+
+      export interface  SafetyCheckStrings {
+        panelString?: string;
+        detailString?: string;
       }
 
       export interface ControlledInfo {
@@ -210,6 +216,7 @@ declare global {
 
       export interface ExtensionInfo {
         blacklistText?: string;
+        safetyCheckText?: SafetyCheckStrings;
         commands: Command[];
         controlledInfo?: ControlledInfo;
         dependentExtensions: DependentExtension[];

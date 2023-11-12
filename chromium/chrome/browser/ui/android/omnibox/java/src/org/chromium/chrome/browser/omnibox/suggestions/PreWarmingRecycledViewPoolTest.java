@@ -38,6 +38,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.omnibox.suggestions.OmniboxSuggestionUiType;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 
 import java.util.Arrays;
@@ -69,8 +70,7 @@ public class PreWarmingRecycledViewPoolTest {
             }
 
             @Override
-            @NonNull
-            public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            public @NonNull ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
                 return new ViewHolder(mView, null);
             }
         });

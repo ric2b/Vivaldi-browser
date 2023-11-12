@@ -23,11 +23,16 @@ namespace ntp_tiles {
 class MostVisitedSites;
 }
 
+namespace signin {
+class IdentityManager;
+}
+
 namespace user_prefs {
 class PrefRegistrySyncable;
 }  // namespace user_prefs
 
 @protocol ApplicationCommands;
+class AuthenticationService;
 class Browser;
 @protocol BrowserCoordinatorCommands;
 @class ContentSuggestionsMetricsRecorder;
@@ -55,6 +60,8 @@ class WebStateList;
                  readingListModel:(ReadingListModel*)readingListModel
                       prefService:(PrefService*)prefService
     isGoogleDefaultSearchProvider:(BOOL)isGoogleDefaultSearchProvider
+            authenticationService:(AuthenticationService*)authService
+                  identityManager:(signin::IdentityManager*)identityManager
                           browser:(Browser*)browser NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
@@ -92,7 +99,7 @@ class WebStateList;
 @property(nonatomic, weak) id<NewTabPageMetricsDelegate> NTPMetricsDelegate;
 
 // Recorder for content suggestions metrics.
-@property(nonatomic, assign)
+@property(nonatomic, weak)
     ContentSuggestionsMetricsRecorder* contentSuggestionsMetricsRecorder;
 
 // Disconnects the mediator.
@@ -123,6 +130,12 @@ class WebStateList;
 
 // Indicates that the "Return to Recent Tab" tile should be hidden.
 - (void)hideRecentTabTile;
+
+// Disable and hide the Set Up List;
+- (void)disableSetUpList;
+
+// Returns all possible items in the Set Up List.
+- (NSArray<SetUpListItemViewData*>*)allSetUpListItems;
 
 @end
 

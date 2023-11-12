@@ -15,17 +15,17 @@ import '../../css/wallpaper.css.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 
 import {ColorScheme, CurrentWallpaper, OnlineImageType, WallpaperCollection, WallpaperImage, WallpaperType} from '../../personalization_app.mojom-webui.js';
+import {dismissTimeOfDayBanner} from '../ambient/ambient_controller.js';
 import {PersonalizationRouter} from '../personalization_router_element.js';
 import {WithPersonalizationStore} from '../personalization_store.js';
-import {setColorModeAutoSchedule, setColorSchemePref} from '../theme/theme_controller.js';
 import {getThemeProvider} from '../theme/theme_interface_provider.js';
 import {ThemeObserver} from '../theme/theme_observer.js';
-import {DEFAULT_COLOR_SCHEME, isAutomaticSeedColorEnabled} from '../theme/utils.js';
+import {isAutomaticSeedColorEnabled} from '../theme/utils.js';
 import {isNonEmptyArray} from '../utils.js';
 
 import {ImageTile} from './constants.js';
 import {getLoadingPlaceholderAnimationDelay, getLoadingPlaceholders, isWallpaperImage} from './utils.js';
-import {selectWallpaper} from './wallpaper_controller.js';
+import {selectTimeOfDayWallpaper, selectWallpaper} from './wallpaper_controller.js';
 import {WallpaperGridItemSelectedEvent} from './wallpaper_grid_item_element';
 import {getTemplate} from './wallpaper_images_element.html.js';
 import {getWallpaperProvider} from './wallpaper_interface_provider.js';
@@ -169,6 +169,7 @@ export class WallpaperImages extends WithPersonalizationStore {
         type: Array,
         computed:
             'computeTiles_(images_, imagesLoading_, collectionId, isDarkModeActive)',
+        observer: 'onTilesChanged_',
       },
 
       pendingTimeOfDayWallpaper_: Object,
@@ -275,6 +276,14 @@ export class WallpaperImages extends WithPersonalizationStore {
     return getImageTiles(isDarkModeActive, imageArr);
   }
 
+  private onTilesChanged_(tiles: ImageTile[]) {
+    if (tiles.some((tile => this.isTimeOfDayWallpaper_(tile)))) {
+      // Dismisses the banner after the Time of Day collection images are
+      // displayed.
+      dismissTimeOfDayBanner(this.getStore());
+    }
+  }
+
   private getMainAriaLabel_(
       collectionId: string, collections: WallpaperCollection[]) {
     if (!collectionId || !Array.isArray(collections)) {
@@ -352,13 +361,9 @@ export class WallpaperImages extends WithPersonalizationStore {
     assert(
         this.pendingTimeOfDayWallpaper_,
         'could not find the time of day wallpaper');
-    setColorSchemePref(
-        DEFAULT_COLOR_SCHEME, getThemeProvider(), this.getStore());
-    setColorModeAutoSchedule(
-        /*enabled=*/ true, getThemeProvider(), this.getStore());
-    selectWallpaper(
+    selectTimeOfDayWallpaper(
         this.pendingTimeOfDayWallpaper_, getWallpaperProvider(),
-        this.getStore());
+        getThemeProvider(), this.getStore());
     this.closeTimeOfDayWallpaperDialog_();
   }
 

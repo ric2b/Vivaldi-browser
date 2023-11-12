@@ -81,11 +81,11 @@ VivaldiAccountManagerAndroid::GetPendingRegistration(
       vivaldiprefs::kVivaldiAccountPendingRegistration);
 
   const std::string* username =
-      pending_registration.FindStringKey(kUsernameKey);
+      pending_registration.GetDict().FindString(kUsernameKey);
   const std::string* encoded_password =
-      pending_registration.FindStringKey(kPasswordKey);
+      pending_registration.GetDict().FindString(kPasswordKey);
   const std::string* recovery_email =
-      pending_registration.FindStringKey(kRecoveryEmailKey);
+      pending_registration.GetDict().FindString(kRecoveryEmailKey);
 
   if (!username || !encoded_password || !recovery_email)
     return nullptr;
@@ -123,10 +123,10 @@ jboolean VivaldiAccountManagerAndroid::SetPendingRegistration(
   base::Base64Encode(encrypted_password, &encoded_password);
   base::Value pending_registration(base::Value::Type::DICT);
 
-  pending_registration.SetStringKey(
+  pending_registration.GetDict().Set(
       kUsernameKey, base::android::ConvertJavaStringToUTF8(env, username));
-  pending_registration.SetStringKey(kPasswordKey, encoded_password);
-  pending_registration.SetStringKey(
+  pending_registration.GetDict().Set(kPasswordKey, encoded_password);
+  pending_registration.GetDict().Set(
       kRecoveryEmailKey,
       base::android::ConvertJavaStringToUTF8(env, recovery_email));
 

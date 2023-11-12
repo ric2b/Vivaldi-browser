@@ -21,11 +21,14 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import traceback
 
 import constants
+import iossim_util
+import mac_util
 import shard_util
 import test_runner
 import test_runner_errors
@@ -56,6 +59,9 @@ class Runner():
     self.args = argparse.Namespace()
     self.test_args = []
     self.should_move_xcode_runtime_to_cache = True
+    # Xcode might be corruped, so this the flag to decide
+    # whether we should clear it from cache
+    self.should_delete_xcode_cache = False
 
     if args:
       self.parse_args(args)
@@ -91,6 +97,8 @@ class Runner():
       # xcode.install() installs the Xcode & iOS runtime, and returns a bool
       # indicating if the Xcode version in CIPD is a legacy Xcode package (which
       # includes iOS runtimes).
+      # Update as of 2023: for MacOS13+, iOS runtime will not be installed in
+      # xcode.install(). See xcode.install_runtime_dmg below().
       is_legacy_xcode = xcode.install(
           self.args.mac_toolchain_cmd,
           self.args.xcode_build_version,
@@ -98,6 +106,12 @@ class Runner():
           runtime_cache_folder=runtime_cache_folder,
           ios_version=self.args.version)
       xcode.select(self.args.xcode_path)
+
+      # Starting MacOS13+, additional simulator runtime will be installed
+      # in DMG format
+      if self.args.version and mac_util.is_macos_13_or_higher():
+        xcode.install_runtime_dmg(self.args.mac_toolchain_cmd,
+                                  runtime_cache_folder, self.args.version)
     except subprocess.CalledProcessError as e:
       # Flush buffers to ensure correct output ordering.
       sys.stdout.flush()
@@ -321,6 +335,9 @@ class Runner():
       summary['step_text'] = '%s%s' % (e.__class__.__name__,
                                        ': %s' % e.args[0] if e.args else '')
       return 2
+    except test_runner.MIGServerDiedError as e:
+      self.should_delete_xcode_cache = True
+      return 2
     except test_runner.TestRunnerError as e:
       sys.stderr.write(traceback.format_exc())
       summary['step_text'] = '%s%s' % (e.__class__.__name__,
@@ -367,6 +384,19 @@ class Runner():
           xcode.move_runtime(runtime_cache_folder, self.args.xcode_path, False)
         else:
           xcode.remove_runtimes(self.args.xcode_path)
+
+      # For MacOS13+, delete iOS simulator runtime because it will
+      # be re-added on the next task depending on test args
+      if self.args.version:
+        if mac_util.is_macos_13_or_higher() and not xcode.is_runtime_builtin(
+            self.args.version):
+          logging.debug(
+              'Deleting iOS simulator runtime %s after tests are finished...' %
+              self.args.version)
+          iossim_util.delete_simulator_runtime_and_wait(self.args.version)
+
+      if self.should_delete_xcode_cache:
+        shutil.rmtree(self.args.xcode_path)
 
       test_runner.defaults_delete('com.apple.CoreSimulator',
                                   'FramebufferServerRendererPolicy')

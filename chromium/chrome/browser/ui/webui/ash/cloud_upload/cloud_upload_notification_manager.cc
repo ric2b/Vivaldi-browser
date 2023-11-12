@@ -42,12 +42,14 @@ CloudUploadNotificationManager::CloudUploadNotificationManager(
     const std::string& file_name,
     const std::string& cloud_provider_name,
     const std::string& target_app_name,
-    int num_files)
+    int num_files,
+    file_manager::io_task::OperationType operation_type)
     : profile_(profile),
       file_name_(file_name),
       cloud_provider_name_(cloud_provider_name),
       target_app_name_(target_app_name),
-      num_files_(num_files) {
+      num_files_(num_files),
+      operation_type_(operation_type) {
   // Generate a unique ID for the cloud upload notifications.
   notification_id_ =
       "cloud-upload-" +
@@ -77,10 +79,13 @@ CloudUploadNotificationManager::GetNotificationDisplayService() {
 
 std::unique_ptr<message_center::Notification>
 CloudUploadNotificationManager::CreateUploadProgressNotification() {
+  std::string operation =
+      operation_type_ == file_manager::io_task::OperationType::kCopy ? "Copying"
+                                                                     : "Moving";
   std::string title =
       // TODO(b/242685536) Use "files" for multi-files when support for
       // multi-files is added.
-      "Moving " + base::NumberToString(num_files_) + " file to " +
+      operation + " " + base::NumberToString(num_files_) + " file to " +
       cloud_provider_name_;
   std::string message = "File will open in " + target_app_name_;
 
@@ -104,7 +109,10 @@ std::unique_ptr<message_center::Notification>
 CloudUploadNotificationManager::CreateUploadCompleteNotification() {
   // TODO(b/242685536) Use "files" for multi-files when support for multi-files
   // is added.
-  std::string title = "Moved " + base::NumberToString(num_files_) +
+  std::string operation =
+      operation_type_ == file_manager::io_task::OperationType::kCopy ? "Copied"
+                                                                     : "Moved";
+  std::string title = operation + " " + base::NumberToString(num_files_) +
                       " file to " + cloud_provider_name_;
   std::string message = "Opening in " + target_app_name_;
   auto notification = ash::CreateSystemNotificationPtr(
@@ -117,7 +125,7 @@ CloudUploadNotificationManager::CreateUploadCompleteNotification() {
       /*delegate=*/
       base::MakeRefCounted<message_center::HandleNotificationClickDelegate>(
           base::BindRepeating(
-              &CloudUploadNotificationManager::HandleNotificationClick,
+              &CloudUploadNotificationManager::HandleCompleteNotificationClick,
               weak_ptr_factory_.GetWeakPtr())),
       /*small_image=*/ash::kFolderIcon,
       /*warning_level=*/
@@ -137,8 +145,16 @@ CloudUploadNotificationManager::CreateUploadCompleteNotification() {
 std::unique_ptr<message_center::Notification>
 CloudUploadNotificationManager::CreateUploadErrorNotification(
     std::string message) {
-  std::string title = "Can't move file";
-  return ash::CreateSystemNotificationPtr(
+  // TODO(b/254586358): i18n these strings.
+  std::string operation =
+      operation_type_ == file_manager::io_task::OperationType::kCopy ? "copy"
+                                                                     : "move";
+  std::string file_string = num_files_ == 1 ? "file" : "files";
+  std::string title =
+      "Can't " + operation + " " + file_string + " to " + cloud_provider_name_;
+  std::vector<message_center::ButtonInfo> notification_buttons;
+
+  auto notification = ash::CreateSystemNotificationPtr(
       /*type=*/message_center::NOTIFICATION_TYPE_SIMPLE,
       /*id=*/notification_id_, base::UTF8ToUTF16(title),
       base::UTF8ToUTF16(message),
@@ -148,11 +164,20 @@ CloudUploadNotificationManager::CreateUploadErrorNotification(
       /*delegate=*/
       base::MakeRefCounted<message_center::HandleNotificationClickDelegate>(
           base::BindRepeating(
-              &CloudUploadNotificationManager::CloseNotification,
+              &CloudUploadNotificationManager::HandleErrorNotificationClick,
               weak_ptr_factory_.GetWeakPtr())),
       /*small_image=*/ash::kFolderIcon,
       /*warning_level=*/
       message_center::SystemNotificationWarningLevel::WARNING);
+
+  //  Add "Sign in" button if this is a reauthentication error.
+  if (message == kReauthenticationRequiredMessage) {
+    std::string button_title = "Sign in";
+    notification_buttons.emplace_back(base::UTF8ToUTF16(button_title));
+  }
+
+  notification->set_buttons(notification_buttons);
+  return notification;
 }
 
 void CloudUploadNotificationManager::ShowUploadProgress(int progress) {
@@ -234,7 +259,20 @@ void CloudUploadNotificationManager::CloseNotification() {
   }
 }
 
-void CloudUploadNotificationManager::HandleNotificationClick(
+void CloudUploadNotificationManager::HandleErrorNotificationClick(
+    absl::optional<int> button_index) {
+  // If the "Sign in" button was pressed, rather than a click to somewhere
+  // else in the notification.
+  if (button_index) {
+    // TODO(b/282619291) decide what callback should be.
+    // Request an ODFS mount which will trigger reauthentication.
+    CloudUploadDialog::RequestODFSMount(profile_, base::DoNothing());
+  }
+
+  CloseNotification();
+}
+
+void CloudUploadNotificationManager::HandleCompleteNotificationClick(
     absl::optional<int> button_index) {
   if (callback_for_testing_) {
     std::move(callback_for_testing_).Run(destination_path_);

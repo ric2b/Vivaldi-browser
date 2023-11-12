@@ -88,8 +88,7 @@ suite('PasswordViewTest', function() {
   }
 
   setup(function() {
-    loadTimeData.overrideValues(
-        {enablePasswordViewPage: true, enablePasswordNotes: false});
+    loadTimeData.overrideValues({enablePasswordViewPage: true});
     Router.resetInstanceForTesting(buildRouter());
     routes.PASSWORD_VIEW =
         (Router.getInstance().getRoutes() as SettingsRoutes).PASSWORD_VIEW;
@@ -98,34 +97,20 @@ suite('PasswordViewTest', function() {
     PasswordManagerImpl.setInstance(passwordManager);
   });
 
-  [false, true].forEach(
-      notesEnabled =>
-          test(
-              `Textarea is shown when notes enabled: ${notesEnabled}`,
-              async function() {
-                loadTimeData.overrideValues(
-                    {enablePasswordNotes: notesEnabled});
+  test('Textarea is shown', async function() {
+    const passwordEntry = createPasswordEntry({
+      url: SITE,
+      username: USERNAME,
+      id: ID,
+      note: NOTE,
+    });
 
-                const passwordEntry = createPasswordEntry({
-                  url: SITE,
-                  username: USERNAME,
-                  id: ID,
-                  note: NOTE,
-                });
+    const page = await loadViewPage(passwordEntry);
 
-                const page = await loadViewPage(passwordEntry);
-
-                assertVisibilityOfPageElements(page, /*visibility=*/ true);
-                if (notesEnabled) {
-                  assertEquals(
-                      NOTE,
-                      page.shadowRoot!.querySelector(
-                                          '#note')!.innerHTML.trim());
-                } else {
-                  assertFalse(
-                      isVisible(page.shadowRoot!.querySelector('#note')));
-                }
-              }));
+    assertVisibilityOfPageElements(page, /*visibility=*/ true);
+    assertEquals(
+        NOTE, page.shadowRoot!.querySelector('#note')!.innerHTML.trim());
+  });
 
   [{
     requestedId: 1,
@@ -196,7 +181,6 @@ suite('PasswordViewTest', function() {
               }));
 
   test('Empty note shows placeholder text', async function() {
-    loadTimeData.overrideValues({enablePasswordNotes: true});
     const passwordEntry =
         createPasswordEntry({url: SITE, username: USERNAME, id: ID});
 
@@ -306,7 +290,7 @@ suite('PasswordViewTest', function() {
         page.shadowRoot!.querySelector<HTMLButtonElement>(
                             '#deleteButton')!.click();
         const {id, fromStores} =
-            await passwordManager.whenCalled('removeSavedPassword');
+            await passwordManager.whenCalled('removeCredential');
         assertEquals(ID, id);
         assertEquals(
             chrome.passwordsPrivate.PasswordStoreSet.DEVICE, fromStores);
@@ -344,7 +328,7 @@ suite('PasswordViewTest', function() {
         // click delete on the dialog.
         dialog.$.removeButton.click();
         const {id, fromStores} =
-            await passwordManager.whenCalled('removeSavedPassword');
+            await passwordManager.whenCalled('removeCredential');
         assertEquals(ID, id);
         assertEquals(
             chrome.passwordsPrivate.PasswordStoreSet.DEVICE_AND_ACCOUNT,

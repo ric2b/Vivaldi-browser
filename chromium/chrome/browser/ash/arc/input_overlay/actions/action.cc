@@ -8,6 +8,8 @@
 #include "chrome/browser/ash/arc/input_overlay/actions/position.h"
 #include "chrome/browser/ash/arc/input_overlay/display_overlay_controller.h"
 #include "chrome/browser/ash/arc/input_overlay/touch_id_manager.h"
+#include "chrome/browser/ash/arc/input_overlay/touch_injector.h"
+#include "chrome/browser/ash/arc/input_overlay/ui/action_view.h"
 #include "ui/aura/window.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -113,9 +115,9 @@ void LogTouchEvents(const std::list<ui::TouchEvent>& events) {
 }
 
 absl::optional<std::pair<ui::DomCode, int>> ParseKeyboardKey(
-    const base::Value& value,
+    const base::Value::Dict& value,
     const base::StringPiece key_name) {
-  const std::string* key = value.FindStringKey(kKey);
+  const std::string* key = value.FindString(kKey);
   if (!key) {
     LOG(ERROR) << "No key-value for {" << key_name << "}.";
     return absl::nullopt;
@@ -128,10 +130,10 @@ absl::optional<std::pair<ui::DomCode, int>> ParseKeyboardKey(
     return absl::nullopt;
   }
   // "modifiers" is optional.
-  auto* modifier_list = value.FindListKey(kModifiers);
+  const base::Value::List* modifier_list = value.FindList(kModifiers);
   int modifiers = 0;
   if (modifier_list) {
-    for (const base::Value& val : modifier_list->GetList()) {
+    for (const base::Value& val : *modifier_list) {
       if (base::ToLowerASCII(val.GetString()) == kCtrl) {
         modifiers |= ui::EF_CONTROL_DOWN;
       } else if (base::ToLowerASCII(val.GetString()) == kShift) {
@@ -147,26 +149,19 @@ absl::optional<std::pair<ui::DomCode, int>> ParseKeyboardKey(
 }
 
 Action::Action(TouchInjector* touch_injector)
-    : touch_injector_(touch_injector),
-      allow_reposition_(touch_injector->allow_reposition()),
-      beta_(touch_injector->beta()) {}
+    : touch_injector_(touch_injector), beta_(touch_injector->beta()) {}
 
 Action::~Action() = default;
 
-bool Action::ParseFromJson(const base::Value& value) {
-  if (!value.is_dict()) {
-    LOG(ERROR) << "Value must be a dictionary.";
-    return false;
-  }
-
+bool Action::ParseFromJson(const base::Value::Dict& value) {
   // Name can be empty.
-  auto* name = value.GetDict().FindString(kName);
+  auto* name = value.FindString(kName);
   if (name) {
     name_ = *name;
   }
 
   // Unique ID is required.
-  auto id = value.GetDict().FindInt(kID);
+  auto id = value.FindInt(kID);
   if (!id) {
     LOG(ERROR) << "Must have unique ID for action {" << name_ << "}";
     return false;
@@ -174,12 +169,12 @@ bool Action::ParseFromJson(const base::Value& value) {
   id_ = *id;
 
   // Parse action device source.
-  auto* sources = value.FindListKey(kInputSources);
-  if (!sources || !sources->is_list()) {
+  const base::Value::List* sources = value.FindList(kInputSources);
+  if (!sources) {
     LOG(ERROR) << "Must have input source(s) for each action.";
     return false;
   }
-  for (auto& source : sources->GetList()) {
+  for (auto& source : *sources) {
     if (!source.is_string()) {
       LOG(ERROR) << "Must have input source(s) in string.";
       return false;
@@ -197,20 +192,18 @@ bool Action::ParseFromJson(const base::Value& value) {
   }
 
   // Location can be empty for mouse related actions.
-  const base::Value::List* position = value.GetDict().FindList(kLocation);
+  const base::Value::List* position = value.FindList(kLocation);
   if (position) {
     auto parsed_pos = ParseLocation(*position);
     if (!parsed_pos.empty()) {
       original_positions_ = parsed_pos;
       on_left_or_middle_side_ =
           (original_positions_.front().anchor().x() <= kHalf);
-      if (allow_reposition_) {
-        current_positions_ = std::move(parsed_pos);
-      }
+      current_positions_ = std::move(parsed_pos);
     }
   }
   // Parse action radius.
-  if (!ParsePositiveFraction(value.GetDict(), kRadius, &radius_)) {
+  if (!ParsePositiveFraction(value, kRadius, &radius_)) {
     return false;
   }
 
@@ -232,7 +225,7 @@ bool Action::ParseFromProto(const ActionProto& proto) {
   original_input_ = InputElement::ConvertFromProto(proto.input_element());
   current_input_ = std::make_unique<InputElement>(*original_input_);
 
-  if (allow_reposition_ && !proto.positions().empty()) {
+  if (!proto.positions().empty()) {
     std::vector<Position> positions;
     for (const auto& pos_proto : proto.positions()) {
       auto position = Position::ConvertFromProto(pos_proto);
@@ -255,16 +248,13 @@ void Action::OverwriteFromProto(const ActionProto& proto) {
       current_input_ = std::move(input_element);
     }
   }
-  if (allow_reposition_ && !proto.positions().empty()) {
+  if (!proto.positions().empty()) {
     auto position = Position::ConvertFromProto(proto.positions()[0]);
     DCHECK(position);
     if (position) {
       current_positions_[0] = *position;
     }
     position.reset();
-  }
-  if (beta_ && proto.has_deleted()) {
-    deleted_ = proto.deleted();
   }
 }
 
@@ -298,7 +288,7 @@ void Action::PrepareToBindInput(std::unique_ptr<InputElement> input_element) {
   }
   pending_input_ = std::move(input_element);
 
-  if (!action_view_) {
+  if (beta_ || !action_view_) {
     return;
   }
   action_view_->SetViewContent(BindingOption::kPending);
@@ -306,7 +296,7 @@ void Action::PrepareToBindInput(std::unique_ptr<InputElement> input_element) {
 
 void Action::BindPending() {
   // Check whether position is adjusted.
-  if (allow_reposition_ && pending_position_) {
+  if (pending_position_) {
     current_positions_[0] = *pending_position_;
     pending_position_.reset();
     UpdateTouchDownPositions();
@@ -325,7 +315,7 @@ void Action::BindPending() {
 void Action::CancelPendingBind() {
   // Clear the pending positions.
   bool canceled = false;
-  if (allow_reposition_ && pending_position_) {
+  if (pending_position_) {
     pending_position_.reset();
     canceled = true;
   }
@@ -343,9 +333,7 @@ void Action::CancelPendingBind() {
 }
 
 void Action::ResetPendingBind() {
-  if (allow_reposition_) {
-    pending_position_.reset();
-  }
+  pending_position_.reset();
   pending_input_.reset();
 }
 
@@ -360,14 +348,12 @@ void Action::PrepareToBindPosition(const gfx::Point& new_touch_center) {
   pending_position_ = std::make_unique<Position>(PositionType::kDefault);
   pending_position_->Normalize(new_touch_center,
                                touch_injector_->content_bounds());
-}
 
-void Action::PrepareToBindPosition(std::unique_ptr<Position> position) {
-  if (pending_position_) {
-    pending_position_.reset();
+  // "Restore to default" and "Cancel" functions are removed for Beta version,
+  // so the change is applied immediately after change.
+  if (beta_) {
+    BindPending();
   }
-  // Now it only supports changing the first touch position.
-  pending_position_ = std::move(position);
 }
 
 void Action::RestoreToDefault() {
@@ -377,14 +363,9 @@ void Action::RestoreToDefault() {
     pending_input_ = std::make_unique<InputElement>(*original_input_);
     restored = true;
   }
-  if (allow_reposition_ &&
-      GetCurrentDisplayedPosition() != original_positions_[0]) {
+  if (GetCurrentDisplayedPosition() != original_positions_[0]) {
     pending_position_.reset();
     pending_position_ = std::make_unique<Position>(original_positions_[0]);
-    restored = true;
-  }
-  if (beta_ && deleted_) {
-    deleted_ = false;
     restored = true;
   }
 
@@ -527,7 +508,7 @@ bool Action::VerifyOnKeyRelease(ui::DomCode code) {
 }
 
 void Action::PostUnbindInputProcess() {
-  if (!action_view_) {
+  if (beta_ || !action_view_) {
     return;
   }
   action_view_->SetViewContent(BindingOption::kPending);
@@ -552,16 +533,11 @@ std::unique_ptr<ActionProto> Action::ConvertToProtoIfCustomized() const {
       customized = true;
     }
 
-    if (allow_reposition_ && original_positions_ != current_positions_) {
+    if (original_positions_ != current_positions_) {
       // Now only supports changing and saving the first touch position.
       auto pos_proto = current_positions_[0].ConvertToProto();
       *proto->add_positions() = *pos_proto;
       pos_proto.reset();
-      customized = true;
-    }
-
-    if (beta_ && deleted_) {
-      proto->set_deleted(true);
       customized = true;
     }
 
@@ -591,25 +567,27 @@ void Action::UpdateTouchDownPositions() {
   touch_down_positions_.clear();
   const auto& content_bounds = touch_injector_->content_bounds();
   for (size_t i = 0; i < original_positions_.size(); i++) {
-    auto point = allow_reposition_
-                     ? current_positions_[i].CalculatePosition(content_bounds)
-                     : original_positions_[i].CalculatePosition(content_bounds);
+    auto point = current_positions_[i].CalculatePosition(content_bounds);
     const auto calculated_point = point.ToString();
     point.Offset(content_bounds.origin().x(), content_bounds.origin().y());
     const auto root_point = point.ToString();
     float scale = touch_injector_->window()->GetHost()->device_scale_factor();
     point.Scale(scale);
-    const auto root_point_pixel = point.ToString();
-    if (touch_injector_->rotation_transform()) {
-      point = touch_injector_->rotation_transform()->MapPoint(point);
-    }
-    touch_down_positions_.emplace_back(point);
 
     VLOG(1) << "Calculate touch position for location at index " << i
             << ": local position {" << calculated_point << "}, root location {"
-            << root_point << "}, root location in pixels {" << root_point_pixel
+            << root_point << "}, root location in pixels {" << point.ToString()
             << "}";
+
+    if (touch_injector_->rotation_transform()) {
+      point = touch_injector_->rotation_transform()->MapPoint(point);
+    }
+    touch_down_positions_.emplace_back(std::move(point));
   }
+
+  on_left_or_middle_side_ =
+      touch_down_positions_[0].x() <= content_bounds.width() / 2 ? true : false;
+
   DCHECK_EQ(touch_down_positions_.size(), original_positions_.size());
 }
 
@@ -641,6 +619,15 @@ void Action::CreateTouchEvent(ui::EventType type,
       ui::PointerDetails(ui::EventPointerType::kTouch, *touch_id_));
   ui::Event::DispatcherApi(&(touch_events.back()))
       .set_target(touch_injector_->window());
+}
+
+void Action::PrepareToBindPositionForTesting(
+    std::unique_ptr<Position> position) {
+  if (pending_position_) {
+    pending_position_.reset();
+  }
+  // Now it only supports changing the first touch position.
+  pending_position_ = std::move(position);
 }
 
 }  // namespace arc::input_overlay

@@ -47,6 +47,7 @@ NSString* const kCloudAndArrowUpSymbol = @"cloud_and_arrow_up";
 NSString* const kDinoSymbol = @"dino";
 NSString* const kChromeProductSymbol = @"chrome_product";
 NSString* const kTunerSymbol = @"tuner";
+NSString* const kMoveFolderSymbol = @"folder_badge_arrow_forward";
 
 // Custom symbol names which can be configured with a color palette.
 NSString* const kIncognitoCircleFillSymbol = @"incognito_circle_fill";
@@ -91,6 +92,7 @@ NSString* const kCreditCardSymbol = @"creditcard";
 NSString* const kMicrophoneFillSymbol = @"mic.fill";
 NSString* const kMicrophoneSymbol = @"mic";
 NSString* const kMagnifyingglassSymbol = @"magnifyingglass";
+NSString* const kMagnifyingglassCircleSymbol = @"magnifyingglass.circle";
 NSString* const kEllipsisCircleFillSymbol = @"ellipsis.circle.fill";
 NSString* const kEllipsisRectangleSymbol = @"ellipsis.rectangle";
 NSString* const kPinSymbol = @"pin";
@@ -110,11 +112,13 @@ NSString* const kWarningFillSymbol = @"exclamationmark.triangle.fill";
 NSString* const kHelpSymbol = @"questionmark.circle";
 NSString* const kCheckmarkCircleSymbol = @"checkmark.circle";
 NSString* const kCheckmarkCircleFillSymbol = @"checkmark.circle.fill";
+NSString* const kErrorCircleSymbol = @"exclamationmark.circle";
 NSString* const kErrorCircleFillSymbol = @"exclamationmark.circle.fill";
 NSString* const kTrashSymbol = @"trash";
 NSString* const kInfoCircleSymbol = @"info.circle";
 NSString* const kHistorySymbol = @"clock.arrow.circlepath";
 NSString* const kCheckmarkSealSymbol = @"checkmark.seal";
+NSString* const kCheckmarkSealFillSymbol = @"checkmark.seal.fill";
 NSString* const kWifiSymbol = @"wifi";
 NSString* const kBookmarksSymbol = @"star";
 NSString* const kSyncErrorSymbol =
@@ -147,6 +151,7 @@ NSString* const kHighlighterSymbol = @"highlighter";
 NSString* const kSquareOnSquareDashedSymbol = @"square.on.square.dashed";
 NSString* const kDocPlaintext = @"doc.plaintext";
 NSString* const kFlagSymbol = @"flag";
+NSString* const kKeyboardSymbol = @"keyboard";
 
 // Names of the default symbol being non-monochrome by default. When using them,
 // you probably want to set their color to monochrome.

@@ -7,6 +7,7 @@
 #include "base/i18n/case_conversion.h"
 #include "base/strings/utf_string_conversions.h"
 #include "url/gurl.h"
+#include "db/vivaldi_history_types.h"
 
 namespace history {
 
@@ -67,10 +68,12 @@ bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
   return !results->empty();
 }
 
-bool URLDatabase::GetMatchesWStatement(const char* sql_statement,
-                                       const std::string& search_string,
-                                       int max_hits,
-                                       URLRows* results) {
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+bool URLDatabase::GetDetailedMatchesWStatement(
+                                const char* sql_statement,
+                                const std::string& search_string,
+                                int max_hits,
+                                DetailedHistory::DetailedHistoryList* results) {
   results->clear();
   sql::Statement statement(
       GetDB().GetCachedStatement(SQL_FROM_HERE, sql_statement));
@@ -80,12 +83,20 @@ bool URLDatabase::GetMatchesWStatement(const char* sql_statement,
   statement.BindInt(2, max_hits);
 
   while (statement.Step()) {
-    URLResult info;
-    FillURLRow(statement, &info);
-    if (info.url().is_valid())
+    DetailedHistory info;
+    info.id = statement.ColumnString(0);
+    info.url = GURL(statement.ColumnString(1));
+    info.title = statement.ColumnString(2);
+    info.visit_count = statement.ColumnInt(3);
+    info.typed_count = statement.ColumnInt(4);
+    info.last_visit_time = statement.ColumnTime(5);
+    info.transition_type = ui::PageTransitionFromInt(statement.ColumnInt(6));
+
+    if (info.url.is_valid())
       results->push_back(info);
   }
   return !results->empty();
 }
+#endif
 
 }  // namespace history

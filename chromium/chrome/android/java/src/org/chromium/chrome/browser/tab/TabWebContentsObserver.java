@@ -57,7 +57,6 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
 
     private final TabImpl mTab;
     private final ObserverList<Callback<WebContents>> mInitObservers = new ObserverList<>();
-    private final Handler mHandler = new Handler();
     private WebContentsObserver mObserver;
     private GURL mLastUrl;
 

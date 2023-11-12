@@ -33,11 +33,10 @@ constexpr char kExtensionsTypeName[] = "extensions";
 constexpr char kAppsTypeName[] = "apps";
 constexpr char kReadingListTypeName[] = "readingList";
 constexpr char kTabsTypeName[] = "tabs";
-constexpr char kWifiConfigurationsTypeName[] = "wifiConfigurations";
 constexpr char kSavedTabGroupsTypeName[] = "savedTabGroups";
 
 UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
-  static_assert(46 + 1 /* notes */ == syncer::GetNumModelTypes(),
+  static_assert(48 + 1 /* notes */ == syncer::GetNumModelTypes(),
                 "Almost always when adding a new ModelType, you must tie it to "
                 "a UserSelectableType below (new or existing) so the user can "
                 "disable syncing of that data. Today you must also update the "
@@ -58,7 +57,11 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
     case UserSelectableType::kPasswords:
       // TODO(crbug.com/1223853): Revisit whether WEBAUTHN_CREDENTIAL should be
       // its own UserSelectableType before launch.
-      return {kPasswordsTypeName, PASSWORDS, {PASSWORDS, WEBAUTHN_CREDENTIAL}};
+      return {
+          kPasswordsTypeName,
+          PASSWORDS,
+          {PASSWORDS, WEBAUTHN_CREDENTIAL, INCOMING_PASSWORD_SHARING_INVITATION,
+           OUTGOING_PASSWORD_SHARING_INVITATION}};
     case UserSelectableType::kAutofill:
       return {kAutofillTypeName,
               AUTOFILL,
@@ -91,15 +94,6 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
       return {kReadingListTypeName, READING_LIST, {READING_LIST}};
     case UserSelectableType::kTabs:
       return {kTabsTypeName, PROXY_TABS, {PROXY_TABS, SESSIONS}};
-    case UserSelectableType::kWifiConfigurations:
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-      // In Ash, "Wi-Fi configurations" is part of Chrome OS settings.
-      return {kWifiConfigurationsTypeName, UNSPECIFIED};
-#else
-      return {kWifiConfigurationsTypeName,
-              WIFI_CONFIGURATIONS,
-              {WIFI_CONFIGURATIONS}};
-#endif
     case UserSelectableType::kSavedTabGroups:
       return {kSavedTabGroupsTypeName, SAVED_TAB_GROUP, {SAVED_TAB_GROUP}};
 
@@ -114,6 +108,7 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
 constexpr char kOsAppsTypeName[] = "osApps";
 constexpr char kOsPreferencesTypeName[] = "osPreferences";
 constexpr char kOsWifiConfigurationsTypeName[] = "osWifiConfigurations";
+constexpr char kWifiConfigurationsTypeName[] = "wifiConfigurations";
 
 UserSelectableTypeInfo GetUserSelectableOsTypeInfo(UserSelectableOsType type) {
   // UserSelectableTypeInfo::type_name is used in js code and shouldn't be
@@ -173,9 +168,6 @@ absl::optional<UserSelectableType> GetUserSelectableTypeFromString(
   }
   if (type == kTabsTypeName) {
     return UserSelectableType::kTabs;
-  }
-  if (type == kWifiConfigurationsTypeName) {
-    return UserSelectableType::kWifiConfigurations;
   }
   if (type == kSavedTabGroupsTypeName) {
     return UserSelectableType::kSavedTabGroups;

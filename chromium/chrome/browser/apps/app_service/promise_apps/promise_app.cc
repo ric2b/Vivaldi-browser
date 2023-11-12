@@ -17,6 +17,15 @@ PromiseApp::PromiseApp(const apps::PackageId& package_id)
     : package_id(package_id) {}
 PromiseApp::~PromiseApp() = default;
 
+PromiseAppIcon::PromiseAppIcon() = default;
+PromiseAppIcon::~PromiseAppIcon() = default;
+
+bool PromiseApp::operator==(const PromiseApp& rhs) const {
+  return this->package_id == rhs.package_id && this->name == rhs.name &&
+         this->progress == rhs.progress && this->status == rhs.status &&
+         this->should_show == rhs.should_show;
+}
+
 PromiseAppPtr PromiseApp::Clone() const {
   auto promise_app = std::make_unique<PromiseApp>(package_id);
   if (name.has_value()) {
@@ -26,7 +35,9 @@ PromiseAppPtr PromiseApp::Clone() const {
     promise_app->progress = progress;
   }
   promise_app->status = status;
-  promise_app->should_show = should_show;
+  if (should_show.has_value()) {
+    promise_app->should_show = should_show;
+  }
   return promise_app;
 }
 
@@ -39,7 +50,8 @@ std::ostream& operator<<(std::ostream& out, const PromiseApp& promise_app) {
               : "N/A")
       << std::endl;
   out << "- Status: " << EnumToString(promise_app.status) << std::endl;
-  out << "- Should Show: " << promise_app.should_show << std::endl;
+  out << "- Should Show: " << promise_app.should_show.value_or(false)
+      << std::endl;
   return out;
 }
 

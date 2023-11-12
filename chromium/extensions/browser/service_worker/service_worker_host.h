@@ -45,9 +45,12 @@ class ServiceWorkerHost : public base::SupportsUserData::Data,
       mojo::PendingAssociatedReceiver<mojom::ServiceWorkerHost> receiver);
 
   // mojom::ServiceWorkerHost:
-  void DidInitializeServiceWorkerContext(const ExtensionId& extension_id,
-                                         int64_t service_worker_version_id,
-                                         int worker_thread_id) override;
+  void DidInitializeServiceWorkerContext(
+      const ExtensionId& extension_id,
+      int64_t service_worker_version_id,
+      int worker_thread_id,
+      mojo::PendingAssociatedRemote<mojom::EventDispatcher> event_dispatcher)
+      override;
   void DidStartServiceWorkerContext(
       const ExtensionId& extension_id,
       const base::UnguessableToken& activation_token,
@@ -60,10 +63,6 @@ class ServiceWorkerHost : public base::SupportsUserData::Data,
       const GURL& service_worker_scope,
       int64_t service_worker_version_id,
       int worker_thread_id) override;
-  void IncrementServiceWorkerActivity(int64_t service_worker_version_id,
-                                      const std::string& request_uuid) override;
-  void DecrementServiceWorkerActivity(int64_t service_worker_version_id,
-                                      const std::string& request_uuid) override;
   void RequestWorker(mojom::RequestParamsPtr params) override;
   void WorkerResponseAck(int request_id,
                          int64_t service_worker_version_id) override;
@@ -76,9 +75,6 @@ class ServiceWorkerHost : public base::SupportsUserData::Data,
   // This is safe because ServiceWorkerHost is tied to the life time of
   // RenderProcessHost.
   const raw_ptr<content::RenderProcessHost> render_process_host_;
-
-  // This set is maintained by `(In|De)crementServiceWorkerActivity`.
-  std::unordered_set<std::string> active_request_uuids_;
 
   std::unique_ptr<ExtensionFunctionDispatcher> dispatcher_;
 

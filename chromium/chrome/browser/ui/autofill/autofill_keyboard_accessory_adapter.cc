@@ -78,7 +78,7 @@ void AutofillKeyboardAccessoryAdapter::OnSuggestionsChanged() {
   front_element_ = absl::nullopt;
   for (int i = 0; i < GetLineCount(); ++i) {
     const Suggestion& suggestion = controller_->GetSuggestionAt(i);
-    if (suggestion.frontend_id != POPUP_ITEM_ID_CLEAR_FORM) {
+    if (suggestion.popup_item_id != PopupItemId::kClearForm) {
       labels_.push_back(CreateLabel(suggestion));
       continue;
     }
@@ -115,9 +115,9 @@ AutofillKeyboardAccessoryAdapter::GetWeakPtr() {
 // AutofillPopupController implementation.
 
 void AutofillKeyboardAccessoryAdapter::AcceptSuggestion(int index) {
-  // Suggestions inside the keyboard accessory adapter are accepted without
-  // requiring a minimum time threshold.
-  NOTREACHED();
+  if (controller_) {
+    controller_->AcceptSuggestion(OffsetIndexFor(index));
+  }
 }
 
 void AutofillKeyboardAccessoryAdapter::AcceptSuggestionWithoutThreshold(

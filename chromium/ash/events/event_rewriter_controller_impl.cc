@@ -15,7 +15,6 @@
 #include "ash/public/cpp/accessibility_event_rewriter_delegate.h"
 #include "ash/shell.h"
 #include "base/command_line.h"
-#include "ui/accessibility/accessibility_switches.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/events/event_sink.h"
@@ -36,12 +35,13 @@ EventRewriterControllerImpl::EventRewriterControllerImpl() {
 
 EventRewriterControllerImpl::~EventRewriterControllerImpl() {
   aura::Env::GetInstance()->RemoveObserver(this);
-  // Remove the rewriters from every root window EventSource and destroy them.
-  for (const auto& rewriter : rewriters_) {
-    for (auto* window : Shell::GetAllRootWindows())
-      window->GetHost()->GetEventSource()->RemoveEventRewriter(rewriter.get());
+  // Remove the rewriters from every root window EventSource.
+  for (auto* window : Shell::GetAllRootWindows()) {
+    auto* event_source = window->GetHost()->GetEventSource();
+    for (const auto& rewriter : rewriters_) {
+      event_source->RemoveEventRewriter(rewriter.get());
+    }
   }
-  rewriters_.clear();
 }
 
 void EventRewriterControllerImpl::Initialize(

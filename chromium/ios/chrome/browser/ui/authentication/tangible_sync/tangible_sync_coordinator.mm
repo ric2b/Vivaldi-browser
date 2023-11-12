@@ -5,11 +5,11 @@
 #import "ios/chrome/browser/ui/authentication/tangible_sync/tangible_sync_coordinator.h"
 
 #import "base/metrics/histogram_functions.h"
-#import "components/sync/driver/sync_service.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "components/sync/service/sync_service.h"
 #import "ios/chrome/browser/consent_auditor/consent_auditor_factory.h"
 #import "ios/chrome/browser/first_run/first_run_metrics.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/ui/elements/activity_overlay_coordinator.h"
@@ -30,6 +30,13 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+
+constexpr signin_metrics::AccessPoint kTangibleSyncAccessPoint =
+    signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE;
+
+}  // namespace
 
 @interface TangibleSyncCoordinator () <AuthenticationFlowDelegate,
                                        TangibleSyncMediatorDelegate,
@@ -55,16 +62,17 @@
 
 @synthesize baseNavigationController = _baseNavigationController;
 
-- (instancetype)initFirstRunWithBaseNavigationController:
+- (instancetype)initWithBaseNavigationController:
                     (UINavigationController*)navigationController
-                                                 browser:(Browser*)browser {
+                                         browser:(Browser*)browser
+                                        firstRun:(BOOL)firstRun {
   self = [super initWithBaseViewController:navigationController
                                    browser:browser];
   if (self) {
     DCHECK(!browser->GetBrowserState()->IsOffTheRecord());
     _baseNavigationController = navigationController;
     _consentStringIDs = [NSMutableArray array];
-    _firstRun = YES;
+    _firstRun = firstRun;
   }
   return self;
 }
@@ -73,7 +81,6 @@
   [super start];
   _viewController = [[TangibleSyncViewController alloc] init];
   _viewController.delegate = self;
-  _viewController.modalInPresentation = YES;
   ChromeBrowserState* browserState = self.browser->GetBrowserState();
   AuthenticationService* authenticationService =
       AuthenticationServiceFactory::GetForBrowserState(browserState);
@@ -91,10 +98,12 @@
                    syncSetupService:SyncSetupServiceFactory::GetForBrowserState(
                                         browserState)
               unifiedConsentService:UnifiedConsentServiceFactory::
-                                        GetForBrowserState(browserState)];
+                                        GetForBrowserState(browserState)
+                        accessPoint:kTangibleSyncAccessPoint];
   _mediator.consumer = _viewController;
   _mediator.delegate = self;
   if (_firstRun) {
+    _viewController.modalInPresentation = YES;
     base::UmaHistogramEnumeration("FirstRun.Stage",
                                   first_run::kTangibleSyncScreenStart);
   }
@@ -200,6 +209,7 @@
   AuthenticationFlow* authenticationFlow =
       [[AuthenticationFlow alloc] initWithBrowser:self.browser
                                          identity:identity
+                                      accessPoint:kTangibleSyncAccessPoint
                                  postSignInAction:postSignInAction
                          presentingViewController:_viewController];
   authenticationFlow.dispatcher = HandlerForProtocol(

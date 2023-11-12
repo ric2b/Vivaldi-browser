@@ -337,6 +337,26 @@ TEST_F(ZeroSuggestProviderTest, AllowZeroPrefixSuggestionsNTP) {
   }
 }
 
+TEST_F(ZeroSuggestProviderTest, AllowZeroPrefixSuggestionsOnSearchActivity) {
+  AutocompleteInput input(u"",
+                          metrics::OmniboxEventProto::ANDROID_SHORTCUTS_WIDGET,
+                          TestSchemeClassifier());
+  input.set_focus_type(metrics::OmniboxFocusType::INTERACTION_FOCUS);
+  EXPECT_CALL(*client_, IsAuthenticated())
+      .WillRepeatedly(testing::Return(true));
+
+  // Offer ZPS when the user focus the omnibox.
+  EXPECT_EQ(ZeroSuggestProvider::ResultType::kRemoteNoURL,
+            ZeroSuggestProvider::ResultTypeToRun(input));
+  EXPECT_TRUE(provider_->AllowZeroPrefixSuggestions(client_.get(), input));
+
+  // Don't offer ZPS when the user is typing.
+  input.set_focus_type(metrics::OmniboxFocusType::INTERACTION_DEFAULT);
+  EXPECT_EQ(ZeroSuggestProvider::ResultType::kNone,
+            ZeroSuggestProvider::ResultTypeToRun(input));
+  EXPECT_FALSE(provider_->AllowZeroPrefixSuggestions(client_.get(), input));
+}
+
 // Tests whether zero-suggest is allowed on Web/SRP when the external request
 // conditions are met.
 TEST_F(ZeroSuggestProviderTest, AllowZeroPrefixSuggestionsContextualWebAndSRP) {
@@ -2897,7 +2917,7 @@ TEST_F(ZeroSuggestProviderTest, TestDeleteMatchClearsInMemoryCache) {
   provider_->DeleteMatch(provider_->matches()[0]);
 
   // Verify that the entire cache has been cleared.
-  ASSERT_TRUE(cache_svc->IsCacheEmpty());
+  ASSERT_TRUE(cache_svc->IsInMemoryCacheEmptyForTesting());
 }
 
 TEST_F(ZeroSuggestProviderTest, TestDeleteMatchTriggersDeletionRequest) {

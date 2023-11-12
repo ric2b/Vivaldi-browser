@@ -6,7 +6,7 @@
 #import "app/vivaldi_version_info.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/version_ui/version_ui_constants.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/web/public/webui/web_ui_ios_data_source.h"
 
 namespace vivaldi {

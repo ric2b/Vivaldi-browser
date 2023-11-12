@@ -214,8 +214,6 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "Password generated";
     case SavePasswordProgressLogger::STRING_TIMES_USED:
       return "Times used";
-    case SavePasswordProgressLogger::STRING_PSL_MATCH:
-      return "PSL match";
     case SavePasswordProgressLogger::STRING_NAME_OR_ID:
       return "Form name or ID";
     case SavePasswordProgressLogger::STRING_MESSAGE:
@@ -272,6 +270,8 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "PasswordManager::IsAutomaticSavePromptAvailable";
     case SavePasswordProgressLogger::STRING_NO_PROVISIONAL_SAVE_MANAGER:
       return "No provisional save manager";
+    case SavePasswordProgressLogger::STRING_ANOTHER_MANAGER_WAS_SUBMITTED:
+      return "Another form manager was submitted";
     case SavePasswordProgressLogger::STRING_NUMBER_OF_VISIBLE_FORMS:
       return "Number of visible forms";
     case SavePasswordProgressLogger::STRING_PASSWORD_FORM_REAPPEARED:

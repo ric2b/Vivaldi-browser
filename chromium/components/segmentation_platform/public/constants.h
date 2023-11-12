@@ -88,9 +88,15 @@ const char kTabletProductivityUserUmaName[] = "TabletProductivityUser";
 const char kWebAppInstallationPromoKey[] = "web_app_installation_promo";
 const char kWebAppInstallationPromoUmaName[] = "WebAppInstallationPromo";
 
+const char kPasswordManagerUserKey[] = "password_manager_user";
+const char kPasswordManagerUserUmaName[] = "PasswordManagerUser";
+
 // Key for segment that tells in which tier the device used by the user belongs.
 const char kDeviceTierKey[] = "device_tier";
 const char kDeviceTierUmaName[] = "DeviceTier";
+
+const char kTabResumptionClassifierKey[] = "tab_resupmtion_classifier";
+const char kTabResumptionClassifierUmaName[] = "TabResumptionClassifier";
 
 // Config parameter name specified in experiment configs. Any experiment config
 // or feature can include this param and segmentation will enable the config for

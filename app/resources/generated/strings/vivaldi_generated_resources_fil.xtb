@@ -15,7 +15,6 @@
 <translation id="2087822576218954668">Print: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">Tab na Incognito: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Module ng Native Client: <ph name="NEXE_NAME" /></translation>
-<translation id="225240747099314620">Payagan ang mga identifier para sa protektadong nilalaman (maaaring kailanganin ang pag restart ng computer)</translation>
 <translation id="2282146716419988068">Proseso ng GPU</translation>
 <translation id="2301382460326681002">Hindi wasto ang pinagmulang direktoryo ng extension.</translation>
 <translation id="2327492829706409234">Paganahin ang app</translation>
@@ -43,7 +42,6 @@
 <translation id="3305661444342691068">Buksan ang PDF sa Preview</translation>
 <translation id="3341703758641437857">Payagan ang pag access sa mga URL ng file</translation>
 <translation id="3378572629723696641">Maaaring nasira ang extension na ito.</translation>
-<translation id="3505030558724226696">Bawiin ang access sa device</translation>
 <translation id="3678156199662914018">Extension: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">Ayusin ang app</translation>
 <translation id="3908501907586732282">Paganahin ang extension</translation>
@@ -78,7 +76,6 @@
 <translation id="5355926466126177564">Binago ng isang extension na "<ph name="EXTENSION_NAME" />" ang ipinapakitang page kapag naghanap ka sa Omnibox.</translation>
 <translation id="5362741141255528695">Piliin ang file ng private na key.</translation>
 <translation id="5370819323174483825">I-&amp;reload</translation>
-<translation id="5483785310822538350">Bawiin ang access sa file at device</translation>
 <translation id="5485102783864353244">Magdagdag ng app</translation>
 <translation id="5521078259930077036">Ito ba ang inaasahan mong home page?</translation>
 <translation id="5542132724887566711">Profile</translation>
@@ -103,7 +100,6 @@
 <translation id="6691936601825168937">&amp;Sumulong</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6900284862687837908">Background App: <ph name="BACKGROUND_APP_URL" /></translation>
-<translation id="6904344821472985372">Bawiin ang access sa file</translation>
 <translation id="7175353351958621980">Nakarga mula sa:</translation>
 <translation id="7287143125007575591">Tinanggihan ang access.</translation>
 <translation id="7427348830195639090">Pahina ng Background: <ph name="BACKGROUND_PAGE_URL" /></translation>

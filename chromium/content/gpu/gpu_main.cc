@@ -86,7 +86,7 @@
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "media/base/win/mf_initializer.h"
-#include "media/gpu/windows/dxva_video_decode_accelerator_win.h"
+#include "sandbox/policy/win/sandbox_warmup.h"
 #include "sandbox/win/src/sandbox.h"
 #endif
 
@@ -147,7 +147,11 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
       TRACE_EVENT0("gpu", "Warm up rand");
       // Warm up the random subsystem, which needs to be done pre-sandbox on all
       // platforms.
+#if BUILDFLAG(IS_WIN)
+      sandbox::policy::WarmupRandomnessInfrastructure();
+#else
       std::ignore = base::RandUint64();
+#endif  // BUILDFLAG(IS_WIN)
     }
 
 #if BUILDFLAG(USE_VAAPI)
@@ -159,9 +163,7 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
 #endif
 #endif  // BUILDFLAG(USE_VAAPI)
 #if BUILDFLAG(IS_WIN)
-    if (media::PreSandboxMediaFoundationInitialization()) {
-      media::DXVAVideoDecodeAccelerator::PreSandboxInitialization();
-    }
+    media::PreSandboxMediaFoundationInitialization();
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -468,7 +470,7 @@ bool StartSandboxLinux(gpu::GpuWatchdogThread* watchdog_thread,
   sandbox_options.accelerated_video_encode_enabled =
       !gpu_prefs.disable_accelerated_video_encode;
 
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   // Video decoding of many video streams can use thousands of FDs as well as
   // Exo clients like Lacros.
   // See https://crbug.com/1417237

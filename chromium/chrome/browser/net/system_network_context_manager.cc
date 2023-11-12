@@ -58,8 +58,8 @@
 #include "content/public/browser/child_process_termination_info.h"
 #include "content/public/browser/network_context_client_base.h"
 #include "content/public/browser/network_service_instance.h"
+#include "content/public/browser/network_service_util.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/network_service_util.h"
 #include "content/public/common/user_agent.h"
 #include "crypto/sha2.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -197,17 +197,6 @@ network::mojom::HttpAuthDynamicParamsPtr CreateHttpAuthDynamicParams(
   auth_dynamic_params->allow_gssapi_library_load =
       local_state->GetBoolean(prefs::kKerberosEnabled);
 #endif  // BUILDFLAG(IS_CHROMEOS)
-
-// TODO(crbug.com/1295308): Remove the following check after Chromad is
-// deprecated.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (!auth_dynamic_params->allow_gssapi_library_load) {
-    policy::BrowserPolicyConnectorAsh* connector =
-        g_browser_process->platform_part()->browser_policy_connector_ash();
-    auth_dynamic_params->allow_gssapi_library_load =
-        connector->IsActiveDirectoryManaged();
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   return auth_dynamic_params;
 }
@@ -538,8 +527,7 @@ void SystemNetworkContextManager::RegisterPrefs(PrefRegistrySimple* registry) {
         // !BUILDFLAG(IS_CHROMEOS)
 
   // Dynamic auth params.
-  registry->RegisterListPref(prefs::kAllHttpAuthSchemesAllowedForOrigins,
-                             base::Value(base::Value::Type::LIST));
+  registry->RegisterListPref(prefs::kAllHttpAuthSchemesAllowedForOrigins);
   registry->RegisterBooleanPref(prefs::kDisableAuthNegotiateCnameLookup, false);
   registry->RegisterBooleanPref(prefs::kEnableAuthNegotiatePort, false);
   registry->RegisterBooleanPref(prefs::kBasicAuthOverHttpEnabled, true);
@@ -747,25 +735,10 @@ void SystemNetworkContextManager::ConfigureDefaultNetworkContextParams(
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
 
-  std::string quic_user_agent_id;
-
-  if (base::FeatureList::IsEnabled(blink::features::kReduceUserAgent)) {
-    quic_user_agent_id = "";
-  } else {
-    // Extended stable reports as regular stable due to the similarity, and to
-    // avoid adding more signal to the user agent string.
-    quic_user_agent_id =
-        chrome::GetChannelName(chrome::WithExtendedStable(false));
-    if (!quic_user_agent_id.empty())
-      quic_user_agent_id.push_back(' ');
-    quic_user_agent_id.append(
-        version_info::GetProductNameAndVersionForUserAgent());
-    quic_user_agent_id.push_back(' ');
-    quic_user_agent_id.append(
-        content::BuildOSCpuInfo(content::IncludeAndroidBuildNumber::Exclude,
-                                content::IncludeAndroidModel::Include));
-  }
-  network_context_params->quic_user_agent_id = quic_user_agent_id;
+  // TODO(crbug.com/1448657) Chrome no longer supports versions of QUIC which
+  // send the quic_user_agent_id. We should remove quic_user_agent_id from
+  // Chrome completely.
+  network_context_params->quic_user_agent_id = "";
 
   // TODO(eroman): Figure out why this doesn't work in single-process mode,
   // or if it does work, now.
@@ -807,7 +780,7 @@ void SystemNetworkContextManager::ConfigureDefaultNetworkContextParams(
 
   // If a custom proxy for IP protection is specified by either command line
   // switch or Finch experiment flag, set the proxy rules
-  if (command_line.HasSwitch(::switches::kIPAnonymizationProxyServer) ||
+  if (command_line.HasSwitch(network::switches::kIPAnonymizationProxyServer) ||
       base::FeatureList::IsEnabled(net::features::kEnableIpProtectionProxy)) {
     auto proxy_config = network::mojom::CustomProxyConfig::New();
     proxy_config->rules.type =
@@ -815,9 +788,9 @@ void SystemNetworkContextManager::ConfigureDefaultNetworkContextParams(
 
     // Command line input takes precedence over flag configuration
     std::string ip_protection_proxy_server =
-        command_line.HasSwitch(::switches::kIPAnonymizationProxyServer)
+        command_line.HasSwitch(network::switches::kIPAnonymizationProxyServer)
             ? command_line.GetSwitchValueASCII(
-                  ::switches::kIPAnonymizationProxyServer)
+                  network::switches::kIPAnonymizationProxyServer)
             : net::features::kIpPrivacyProxyServer.Get();
 
     proxy_config->rules.ParseFromString(ip_protection_proxy_server);
@@ -825,9 +798,9 @@ void SystemNetworkContextManager::ConfigureDefaultNetworkContextParams(
     // Get allowlist hosts, command line input takes precedence over flag
     // configuration
     std::string ip_protection_proxy_allow_list =
-        command_line.HasSwitch(::switches::kIPAnonymizationProxyServer)
+        command_line.HasSwitch(network::switches::kIPAnonymizationProxyServer)
             ? command_line.GetSwitchValueASCII(
-                  ::switches::kIPAnonymizationProxyAllowList)
+                  network::switches::kIPAnonymizationProxyAllowList)
             : net::features::kIpPrivacyProxyAllowlist.Get();
 
     proxy_config->rules.reverse_bypass = true;
@@ -840,7 +813,7 @@ void SystemNetworkContextManager::ConfigureDefaultNetworkContextParams(
     proxy_config->connect_tunnel_headers.SetHeader(
         kIPAnonymizationProxyPassword,
         command_line.GetSwitchValueASCII(
-            ::switches::kIPAnonymizationProxyPassword));
+            network::switches::kIPAnonymizationProxyPassword));
 
     // Set initial custom proxy configuration
     network_context_params->initial_custom_proxy_config =

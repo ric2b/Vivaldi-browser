@@ -55,7 +55,7 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
 
   bool IsBasicShapeValue() const {
     return class_type_ >= kBasicShapeCircleClass &&
-           class_type_ <= kBasicShapeRectClass;
+           class_type_ <= kBasicShapeXYWHClass;
   }
   bool IsBasicShapeCircleValue() const {
     return class_type_ == kBasicShapeCircleClass;
@@ -123,6 +123,7 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   bool IsLinearGradientValue() const {
     return class_type_ == kLinearGradientClass;
   }
+  bool IsPaletteMixValue() const { return class_type_ == kPaletteMixClass; }
   bool IsPathValue() const { return class_type_ == kPathClass; }
   bool IsQuadValue() const { return class_type_ == kQuadClass; }
   bool IsRayValue() const { return class_type_ == kRayClass; }
@@ -282,6 +283,7 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
     kShadowClass,
     kUnicodeRangeClass,
     kGridTemplateAreasClass,
+    kPaletteMixClass,
     kPathClass,
     kRayClass,
     kVariableReferenceClass,

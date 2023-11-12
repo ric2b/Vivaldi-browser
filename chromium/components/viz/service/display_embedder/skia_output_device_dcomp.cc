@@ -33,6 +33,7 @@
 #include "third_party/skia/include/core/SkSurfaceProps.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
+#include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -79,9 +80,13 @@ class SkiaOutputDeviceDComp::OverlayData {
   }
 
   absl::optional<gl::DCLayerOverlayImage> BeginOverlayAccess() {
-    DCHECK(representation_);
-    access_ = representation_->BeginScopedReadAccess();
-    DCHECK(access_);
+    CHECK(representation_);
+    if (!access_) {
+      access_ = representation_->BeginScopedReadAccess();
+      if (!access_) {
+        return absl::nullopt;
+      }
+    }
     return access_->GetDCLayerOverlayImage();
   }
 
@@ -99,6 +104,7 @@ SkiaOutputDeviceDComp::SkiaOutputDeviceDComp(
     gpu::MemoryTracker* memory_tracker,
     DidSwapBufferCompleteCallback did_swap_buffer_complete_callback)
     : SkiaOutputDevice(context_state->gr_context(),
+                       context_state->graphite_context(),
                        memory_tracker,
                        std::move(did_swap_buffer_complete_callback)),
       shared_image_representation_factory_(shared_image_representation_factory),
@@ -205,8 +211,8 @@ void SkiaOutputDeviceDComp::ScheduleOverlays(
     params->protected_video_type = dc_layer.protected_video_type;
     params->color_space = dc_layer.color_space;
     params->hdr_metadata = dc_layer.hdr_metadata.value_or(gfx::HDRMetadata());
-    params->maybe_video_fullscreen_letterboxing =
-        dc_layer.maybe_video_fullscreen_letterboxing;
+    params->possible_video_fullscreen_letterboxing =
+        dc_layer.possible_video_fullscreen_letterboxing;
 
     // Schedule DC layer overlay to be presented at next SwapBuffers().
     if (!ScheduleDCLayer(std::move(params))) {
@@ -318,7 +324,7 @@ bool SkiaOutputDeviceDCompGLSurface::Reshape(const SkImageInfo& image_info,
   auto origin = (gl_surface_->GetOrigin() == gfx::SurfaceOrigin::kTopLeft)
                     ? kTopLeft_GrSurfaceOrigin
                     : kBottomLeft_GrSurfaceOrigin;
-  sk_surface_ = SkSurface::MakeFromBackendRenderTarget(
+  sk_surface_ = SkSurfaces::WrapBackendRenderTarget(
       context_state_->gr_context(), render_target, origin, color_type,
       image_info.refColorSpace(), &surface_props);
   if (!sk_surface_) {
@@ -411,6 +417,7 @@ SkiaOutputDeviceDCompPresenter::SkiaOutputDeviceDCompPresenter(
   capabilities_.supports_delegated_ink = presenter_->SupportsDelegatedInk();
   capabilities_.pending_swap_params.max_pending_swaps = 1;
   capabilities_.renderer_allocates_images = true;
+  capabilities_.supports_viewporter = true;
 }
 
 SkiaOutputDeviceDCompPresenter::~SkiaOutputDeviceDCompPresenter() = default;

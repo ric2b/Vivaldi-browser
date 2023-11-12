@@ -12,6 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/page_info/core/features.h"
 #include "components/page_info/page_info.h"
@@ -216,6 +217,8 @@ base::span<const PageInfoUI::PermissionUIInfo> GetContentSettingsUIInfo() {
     {ContentSettingsType::WINDOW_MANAGEMENT,
      IDS_SITE_SETTINGS_TYPE_WINDOW_MANAGEMENT,
      IDS_SITE_SETTINGS_TYPE_WINDOW_MANAGEMENT_MID_SENTENCE},
+    {ContentSettingsType::STORAGE_ACCESS, IDS_SITE_SETTINGS_TYPE_STORAGE_ACCESS,
+     IDS_SITE_SETTINGS_TYPE_STORAGE_ACCESS_MID_SENTENCE},
 #endif
 #if defined(VIVALDI_BUILD)
     {ContentSettingsType::AUTOPLAY, IDS_SITE_SETTINGS_TYPE_AUTOPLAY,
@@ -357,6 +360,9 @@ std::u16string GetPermissionAskStateString(ContentSettingsType type) {
       break;
     case ContentSettingsType::FILE_SYSTEM_WRITE_GUARD:
       message_id = IDS_PAGE_INFO_STATE_TEXT_FILE_SYSTEM_WRITE_ASK;
+      break;
+    case ContentSettingsType::STORAGE_ACCESS:
+      message_id = IDS_PAGE_INFO_STATE_TEXT_STORAGE_ACCESS_ASK;
       break;
     default:
       NOTREACHED();
@@ -687,9 +693,7 @@ std::u16string PageInfoUI::PermissionStateToUIString(
         DCHECK_EQ(permission.source, content_settings::SETTING_SOURCE_USER);
         DCHECK(permissions::PermissionUtil::CanPermissionBeAllowedOnce(
             permission.type));
-        message_id = delegate->IsMultipleTabsOpen()
-                         ? IDS_PAGE_INFO_STATE_TEXT_ALLOWED_ONCE_MULTIPLE_TAB
-                         : IDS_PAGE_INFO_STATE_TEXT_ALLOWED_ONCE_ONE_TAB;
+        message_id = IDS_PAGE_INFO_STATE_TEXT_ALLOWED_ONCE;
 #endif
       } else {
         message_id = IDS_PAGE_INFO_STATE_TEXT_ALLOWED;
@@ -823,6 +827,7 @@ void PageInfoUI::ToggleBetweenAllowAndBlock(
     case CONTENT_SETTING_DEFAULT: {
       CreateOppositeToDefaultSiteException(permission,
                                            opposite_to_block_setting);
+
       // If one-time permissions are supported, permission should go from
       // default state to allow once state, not directly to allow.
       if (permissions::PermissionUtil::CanPermissionBeAllowedOnce(

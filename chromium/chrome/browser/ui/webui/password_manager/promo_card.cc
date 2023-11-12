@@ -12,6 +12,8 @@
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/sync_service_factory.h"
+#include "chrome/browser/ui/user_education/user_education_service.h"
+#include "chrome/browser/ui/user_education/user_education_service_factory.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -20,7 +22,7 @@
 #include "components/password_manager/core/browser/password_sync_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/sync/driver/sync_service.h"
+#include "components/sync/service/sync_service.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace password_manager {
@@ -233,7 +235,8 @@ std::u16string WebPasswordManagerPromo::GetDescription() const {
 }
 
 PasswordManagerShortcutPromo::PasswordManagerShortcutPromo(Profile* profile)
-    : PromoCardInterface(kShortcutPromoId, profile->GetPrefs()) {
+    : PromoCardInterface(kShortcutPromoId, profile->GetPrefs()),
+      profile_(profile) {
   is_shortcut_installed_ =
       web_app::FindInstalledAppWithUrlInScope(
           profile, GURL(chrome::kChromeUIPasswordManagerURL))
@@ -247,6 +250,14 @@ std::string PasswordManagerShortcutPromo::GetPromoID() const {
 bool PasswordManagerShortcutPromo::ShouldShowPromo() const {
   if (is_shortcut_installed_) {
     return false;
+  }
+
+  auto* service = UserEducationServiceFactory::GetForProfile(profile_);
+  if (service) {
+    auto* tutorial_service = &service->tutorial_service();
+    if (tutorial_service && tutorial_service->IsRunningTutorial()) {
+      return false;
+    }
   }
 
   return !was_dismissed_ && number_of_times_shown_ < kPromoDisplayLimit;

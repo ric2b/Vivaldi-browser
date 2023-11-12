@@ -100,6 +100,10 @@ component("display") {
 
   defines = [ "DISPLAY_IMPLEMENTATION" ]
 
+  if (is_apple) {
+    configs += [ "//build/config/compiler:enable_arc" ]
+  }
+
   public_deps = [
     ":display_features",
     "//ui/display/types",
@@ -199,6 +203,7 @@ static_library("test_support") {
       "mac/test/virtual_display_mac_util.h",
       "mac/test/virtual_display_mac_util.mm",
     ]
+    configs += [ "//build/config/compiler:enable_arc" ]
   }
 
   if (is_chromeos_ash) {
@@ -277,8 +282,7 @@ test("display_unittests") {
       "manager/content_protection_manager_unittest.cc",
       "manager/display_change_observer_unittest.cc",
       "manager/display_configurator_unittest.cc",
-      "manager/display_manager_util_unittest.cc",
-      "manager/display_manager_utilities_unittest.cc",
+      "manager/display_port_observer_unittest.cc",
       "manager/display_properties_parser_unittest.cc",
       "manager/json_converter_unittest.cc",
       "manager/managed_display_info_unittest.cc",
@@ -286,6 +290,7 @@ test("display_unittests") {
       "manager/touch_device_manager_unittest.cc",
       "manager/touch_transform_controller_unittest.cc",
       "manager/update_display_configuration_task_unittest.cc",
+      "manager/util/display_manager_util_unittest.cc",
     ]
 
     deps += [
@@ -310,6 +315,8 @@ source_set("display_interactive_ui_tests") {
   testonly = true
   if (is_mac) {
     sources = [ "mac/test/virtual_display_mac_util_interactive_uitest.mm" ]
+
+    configs += [ "//build/config/compiler:enable_arc" ]
 
     deps = [
       ":display",

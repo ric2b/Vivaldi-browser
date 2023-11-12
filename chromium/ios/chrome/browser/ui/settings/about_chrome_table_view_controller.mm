@@ -14,6 +14,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/version_info/version_info.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -26,7 +27,6 @@
 #import "ios/chrome/browser/ui/settings/cells/version_item.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/utils/settings_utils.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
@@ -189,12 +189,17 @@ const CGFloat kDefaultHeight = 70;
 - (void)didTapVersionFooter:(VersionFooter*)footer {
   StoreTextInPasteboard([self versionOnlyString]);
 
+  if (IsVivaldiRunning()) {
+    [self openURL:GURL(kChromeUIVersionURL)];
+  } else {
   TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeSuccess);
   NSString* messageText = l10n_util::GetNSString(IDS_IOS_VERSION_COPIED);
   MDCSnackbarMessage* message =
       [MDCSnackbarMessage messageWithText:messageText];
   message.category = @"version copied";
   [self.snackbarCommandsHandler showSnackbarMessage:message bottomOffset:0];
+  } // End Vivaldi
+
 }
 
 #pragma mark - Private methods
@@ -205,9 +210,9 @@ const CGFloat kDefaultHeight = 70;
 
 - (std::string)versionString {
 #if defined(VIVALDI_BUILD)
-  std::string versionString = vivaldi::GetVivaldiVersionString();
+  std::string versionString(vivaldi::GetVivaldiVersionString());
 #else
-  std::string versionString = version_info::GetVersionNumber();
+  std::string versionString(version_info::GetVersionNumber());
 #endif // VIVALDI_BUILD
   std::string versionStringModifier = GetChannelString();
   if (!versionStringModifier.empty()) {

@@ -242,10 +242,13 @@ source_set("common") {
     "notifications/platform_notification_data.cc",
     "origin_trials/manual_completion_origin_trial_features.cc",
     "origin_trials/navigation_origin_trial_features.cc",
+    "origin_trials/origin_trials_settings_provider.cc",
     "origin_trials/persistent_origin_trials.cc",
     "origin_trials/trial_token.cc",
     "origin_trials/trial_token_result.cc",
     "origin_trials/trial_token_validator.cc",
+    "page/browsing_context_group_info.cc",
+    "page/browsing_context_group_info_mojom_traits.cc",
     "page/content_to_visible_time_reporter.cc",
     "page/drag_mojom_traits.cc",
     "page/drag_operation.cc",
@@ -266,6 +269,8 @@ source_set("common") {
     "scheme_registry.cc",
     "security/address_space_feature.cc",
     "service_worker/service_worker_loader_helpers.cc",
+    "service_worker/service_worker_router_rule.cc",
+    "service_worker/service_worker_router_rule_mojom_traits.cc",
     "service_worker/service_worker_scope_match.cc",
     "service_worker/service_worker_status_code.cc",
     "service_worker/service_worker_type_converters.cc",
@@ -322,6 +327,7 @@ source_set("common") {
     "//services/metrics/public/mojom:mojom",
     "//services/network/public/cpp:cpp",
     "//third_party/blink/public/common:buildflags",
+    "//third_party/re2",
     "//ui/base:base",
     "//ui/base/dragdrop/mojom:mojom_shared",
     "//ui/display",
@@ -406,6 +412,7 @@ source_set("common_unittests_sources") {
     "interest_group/ad_display_size_utils_unittest.cc",
     "interest_group/auction_config_mojom_traits_test.cc",
     "interest_group/interest_group_mojom_traits_test.cc",
+    "interest_group/interest_group_unittest.cc",
     "loader/inter_process_time_ticks_converter_unittest.cc",
     "loader/mime_sniffing_throttle_unittest.cc",
     "loader/referrer_utils_unittest.cc",
@@ -419,9 +426,12 @@ source_set("common_unittests_sources") {
     "mime_util/mime_util_unittest.cc",
     "notifications/notification_mojom_traits_unittest.cc",
     "notifications/platform_notification_data_unittest.cc",
+    "origin_trials/origin_trials_settings_provider_unittest.cc",
     "origin_trials/origin_trials_test.cc",
     "origin_trials/trial_token_unittest.cc",
     "origin_trials/trial_token_validator_unittest.cc",
+    "page/browsing_context_group_info_mojom_traits_test.cc",
+    "page/browsing_context_group_info_unittest.cc",
     "page/content_to_visible_time_reporter_unittest.cc",
     "page_state/page_state_serialization_unittest.cc",
     "permissions_policy/document_policy_unittest.cc",
@@ -431,6 +441,7 @@ source_set("common_unittests_sources") {
     "permissions_policy/policy_value_unittest.cc",
     "scheduler/web_scheduler_tracked_feature_unittest.cc",
     "security/address_space_feature_unittest.cc",
+    "service_worker/service_worker_router_rule_mojom_traits_unittest.cc",
     "service_worker/service_worker_scope_match_unittest.cc",
     "shared_storage/module_script_downloader_unittest.cc",
     "shared_storage/shared_storage_mojom_traits_unittest.cc",
@@ -532,8 +543,8 @@ if (use_fuzzing_engine_with_lpm) {
     seed_corpus = "//third_party/blink/common/storage_key/storage_key_corpus"
   }
 
-  fuzzer_test("interest_group_parse_size_fuzzer") {
-    sources = [ "interest_group/interest_group_parse_size_fuzzer.cc" ]
+  fuzzer_test("ad_display_size_parser_fuzzer") {
+    sources = [ "interest_group/ad_display_size_parser_fuzzer.cc" ]
     deps = [
       ":common",
       "//content/public/common",

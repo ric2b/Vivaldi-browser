@@ -28,6 +28,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 
 class AutocompleteScoringModelService;
+class OnDeviceTailModelService;
 
 struct AutocompleteMatch;
 
@@ -57,6 +58,7 @@ class MockAutocompleteProviderClient
   scoped_refptr<history::TopSites> GetTopSites() override { return nullptr; }
 
   MOCK_METHOD0(GetLocalOrSyncableBookmarkModel, bookmarks::BookmarkModel*());
+  MOCK_METHOD0(GetAccountBookmarkModel, bookmarks::BookmarkModel*());
   MOCK_METHOD0(GetInMemoryDatabase, history::URLDatabase*());
   MOCK_METHOD0(GetInMemoryURLIndex, InMemoryURLIndex*());
 
@@ -114,6 +116,10 @@ class MockAutocompleteProviderClient
 
   AutocompleteScoringModelService* GetAutocompleteScoringModelService()
       const override {
+    return nullptr;
+  }
+
+  OnDeviceTailModelService* GetOnDeviceTailModelService() const override {
     return nullptr;
   }
 

@@ -87,7 +87,7 @@ ChromeWebContentsViewDelegateViews::BuildMenu(
   if (::vivaldi::IsVivaldiRunning() &&
       ::vivaldi::VivaldiRenderViewContextMenu::Supports(params)) {
     menu.reset(vivaldi::VivaldiRenderViewContextMenu::Create(render_frame_host,
-        params, gfx::kNullNativeView));
+        params, gfx::NativeView()));
   } else
   menu.reset(
       RenderViewContextMenuViews::Create(render_frame_host, params));

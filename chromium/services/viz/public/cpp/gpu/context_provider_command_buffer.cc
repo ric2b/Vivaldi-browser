@@ -25,6 +25,7 @@
 #include "base/trace_event/memory_dump_provider.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/context_cache_controller.h"
+#include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/gles2_trace_implementation.h"
 #include "gpu/command_buffer/client/gpu_switches.h"
@@ -108,15 +109,6 @@ ContextProviderCommandBuffer::GetCommandBufferProxy() {
   return command_buffer_.get();
 }
 
-uint32_t ContextProviderCommandBuffer::GetCopyTextureInternalFormat() {
-  if (attributes_.alpha_size > 0)
-    return GL_RGBA;
-  DCHECK_NE(attributes_.red_size, 0);
-  DCHECK_NE(attributes_.green_size, 0);
-  DCHECK_NE(attributes_.blue_size, 0);
-  return GL_RGB;
-}
-
 void ContextProviderCommandBuffer::AddRef() const {
   base::RefCountedThreadSafe<ContextProviderCommandBuffer>::AddRef();
 }
@@ -128,11 +120,23 @@ void ContextProviderCommandBuffer::Release() const {
 gpu::ContextResult ContextProviderCommandBuffer::BindToCurrentSequence() {
   // This is called on the thread the context will be used.
   DCHECK(context_sequence_checker_.CalledOnValidSequence());
+  CHECK(channel_);
 
   if (bind_tried_)
     return bind_result_;
 
   bind_tried_ = true;
+
+  // This is for no swiftshader and no software rasterization.
+  // Return kFatalFailure to indicate no retry is necessary. Should update
+  // Renderer Thread Impl or Blink so it won't keep retrying
+  // BindToCurrentSequence.
+  if (channel_->gpu_info().gl_implementation_parts.gl ==
+      gl::kGLImplementationDisabled) {
+    bind_result_ = gpu::ContextResult::kFatalFailure;
+    return bind_result_;
+  }
+
   // Any early-out should set this to a failure code and return it.
   bind_result_ = gpu::ContextResult::kSuccess;
 
@@ -501,6 +505,12 @@ void ContextProviderCommandBuffer::AddObserver(ContextLostObserver* obs) {
 void ContextProviderCommandBuffer::RemoveObserver(ContextLostObserver* obs) {
   CheckValidSequenceOrLockAcquired();
   observers_.RemoveObserver(obs);
+}
+
+unsigned int ContextProviderCommandBuffer::GetGrGLTextureFormat(
+    SharedImageFormat format) const {
+  return TextureStorageFormat(format.resource_format(),
+                              ContextCapabilities().angle_rgbx_internal_format);
 }
 
 gpu::webgpu::WebGPUInterface* ContextProviderCommandBuffer::WebGPUInterface() {

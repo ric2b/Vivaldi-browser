@@ -44,8 +44,7 @@ class User;
 }  // namespace user_manager
 
 // These methods are used by ash-chrome.
-namespace crosapi {
-namespace browser_util {
+namespace crosapi::browser_util {
 
 // Indicates how the decision for the usage of Lacros has been made.
 enum class LacrosLaunchSwitchSource {
@@ -529,12 +528,9 @@ bool WasGotoFilesClicked(PrefService* local_state,
 // Returns true if ash 1st party extension keep list should be enforced.
 bool ShouldEnforceAshExtensionKeepList();
 
-// Forces IsLacrosPrimaryBrowser() to return true or false for testing.
-// Reset upon destruction of returned |base::AutoReset| object.
-base::AutoReset<absl::optional<bool>> SetLacrosPrimaryBrowserForTest(
-    absl::optional<bool> value);
+// Indicates whether user can open DevTools in Ash.
+bool IsAshDevToolEnabled();
 
-}  // namespace browser_util
-}  // namespace crosapi
+}  // namespace crosapi::browser_util
 
 #endif  // CHROME_BROWSER_ASH_CROSAPI_BROWSER_UTIL_H_

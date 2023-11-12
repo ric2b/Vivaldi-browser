@@ -374,15 +374,19 @@ mojom("mojom_attribution") {
     {
       types = [
         {
-          mojom = "network.mojom.TriggerAttestation"
-          cpp = "::network::TriggerAttestation"
+          mojom = "network.mojom.TriggerVerification"
+          cpp = "::network::TriggerVerification"
           move_only = true
+        },
+        {
+          mojom = "network.mojom.AttributionReportingRuntimeFeatures"
+          cpp = "::network::AttributionReportingRuntimeFeatures"
+          copyable_pass_by_value = true
         },
       ]
       traits_headers =
           [ "//services/network/public/cpp/attribution_mojom_traits.h" ]
-      traits_deps =
-          [ "//services/network/public/cpp:trigger_attestation_traits" ]
+      traits_deps = [ "//services/network/public/cpp:attribution_traits" ]
     },
   ]
 
@@ -421,6 +425,7 @@ mojom("url_loader_base") {
     "network_interface_change_listener.mojom",
     "network_types.mojom",
     "no_vary_search.mojom",
+    "optional_bool.mojom",
     "parsed_headers.mojom",
     "referrer_policy.mojom",
     "request_priority.mojom",
@@ -531,10 +536,6 @@ mojom("url_loader_base") {
         {
           mojom = "network.mojom.WebBundleTokenParams"
           cpp = "::network::ResourceRequest::WebBundleTokenParams"
-        },
-        {
-          mojom = "network.mojom.NetLogSource"
-          cpp = "::net::NetLogSource"
         },
         {
           mojom = "network.mojom.URLRequest"
@@ -841,6 +842,10 @@ mojom("mojom_network_param") {
           mojom = "network.mojom.HostPortPair"
           cpp = "::net::HostPortPair"
         },
+        {
+          mojom = "network.mojom.NetLogSource"
+          cpp = "::net::NetLogSource"
+        },
       ]
       traits_headers =
           [ "//services/network/public/cpp/network_param_mojom_traits.h" ]
@@ -861,10 +866,6 @@ mojom("mojom_network_param") {
           cpp = "::net::CertVerifyResult"
         },
         {
-          mojom = "network.mojom.CTVerifyResult"
-          cpp = "::net::ct::CTVerifyResult"
-        },
-        {
           mojom = "network.mojom.HttpResponseHeaders"
           cpp = "::scoped_refptr<::net::HttpResponseHeaders>"
           nullable_is_same_type = true
@@ -876,6 +877,10 @@ mojom("mojom_network_param") {
         {
           mojom = "network.mojom.ProxyServer"
           cpp = "::net::ProxyServer"
+        },
+        {
+          mojom = "network.mojom.ProxyScheme"
+          cpp = "::net::ProxyServer::Scheme"
         },
         {
           mojom = "network.mojom.ResolveErrorInfo"
@@ -1034,6 +1039,11 @@ mojom("mojom_structured_headers") {
         {
           mojom = "network.mojom.StructuredHeadersParameterizedItem"
           cpp = "::net::structured_headers::ParameterizedItem"
+          move_only = true
+        },
+        {
+          mojom = "network.mojom.StructuredHeadersParameterizedMember"
+          cpp = "::net::structured_headers::ParameterizedMember"
           move_only = true
         },
       ]
@@ -1302,7 +1312,6 @@ mojom("mojom") {
     "network_service.mojom",
     "network_service_test.mojom",
     "oblivious_http_request.mojom",
-    "optional_bool.mojom",
     "proxy_lookup_client.mojom",
     "proxy_resolving_socket.mojom",
     "reporting_service.mojom",

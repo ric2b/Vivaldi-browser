@@ -11,9 +11,12 @@
 #include "ash/wm/overview/overview_utils.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/highlight_border.h"
+#include "ui/views/view.h"
+#include "ui/views/view_utils.h"
 
 namespace ash {
 
@@ -28,18 +31,27 @@ SavedDeskSaveDeskButton::SavedDeskSaveDeskButton(
                  icon),
       callback_(callback),
       button_type_(button_type) {
-  views::FocusRing* focus_ring =
-      StyleUtil::SetUpFocusRingForView(this, kFocusRingHaloInset);
-  focus_ring->SetHasFocusPredicate([](views::View* view) {
-    return static_cast<SavedDeskSaveDeskButton*>(view)->IsViewHighlighted();
-  });
-  focus_ring->SetColorId(ui::kColorAshFocusRing);
+  views::FocusRing::Get(this)->SetHasFocusPredicate(
+      base::BindRepeating([](const views::View* view) {
+        const auto* v = views::AsViewClass<SavedDeskSaveDeskButton>(view);
+        CHECK(v);
+        return v->IsViewHighlighted();
+      }));
 
   SetBorder(std::make_unique<views::HighlightBorder>(
       kSaveDeskCornerRadius,
       chromeos::features::IsJellyrollEnabled()
           ? views::HighlightBorder::Type::kHighlightBorderNoShadow
           : views::HighlightBorder::Type::kHighlightBorder2));
+
+  View* background_view = AddChildView(std::make_unique<views::View>());
+  background_view->SetPaintToLayer();
+
+  background_view->layer()->SetRoundedCornerRadius(
+      gfx::RoundedCornersF{kSaveDeskCornerRadius});
+  background_view->layer()->SetBackgroundBlur(
+      ColorProvider::kBackgroundBlurSigma);
+  background_view->layer()->SetFillsBoundsOpaquely(false);
 }
 
 SavedDeskSaveDeskButton::~SavedDeskSaveDeskButton() = default;
@@ -63,12 +75,6 @@ void SavedDeskSaveDeskButton::OnViewHighlighted() {
 
 void SavedDeskSaveDeskButton::OnViewUnhighlighted() {
   views::FocusRing::Get(this)->SchedulePaint();
-}
-
-void SavedDeskSaveDeskButton::OnThemeChanged() {
-  PillButton::OnThemeChanged();
-  SetBackgroundColor(AshColorProvider::Get()->GetBaseLayerColor(
-      AshColorProvider::BaseLayerType::kTransparent80));
 }
 
 void SavedDeskSaveDeskButton::OnFocus() {

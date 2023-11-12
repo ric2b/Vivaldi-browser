@@ -136,6 +136,7 @@
     *   [lib_dirs: [directory list] Additional library directories.](#var_lib_dirs)
     *   [libs: [string list] Additional libraries to link.](#var_libs)
     *   [metadata: [scope] Metadata of this target.](#var_metadata)
+    *   [mnemonic: [string] Prefix displayed when ninja runs this action.](#var_mnemonic)
     *   [module_name: [string] The name for the compiled module.](#var_module_name)
     *   [output_conversion: Data format for generated_file targets.](#var_output_conversion)
     *   [output_dir: [directory] Directory to put output file in.](#var_output_dir)
@@ -148,7 +149,7 @@
     *   [precompiled_header: [string] Header file to precompile.](#var_precompiled_header)
     *   [precompiled_header_type: [string] "gcc" or "msvc".](#var_precompiled_header_type)
     *   [precompiled_source: [file name] Source file to precompile.](#var_precompiled_source)
-    *   [product_type: [string] Product type for Xcode projects.](#var_product_type)
+    *   [product_type: [string] Product type for the bundle.](#var_product_type)
     *   [public: [file list] Declare public header files for a target.](#var_public)
     *   [public_configs: [label list] Configs applied to dependents.](#var_public_configs)
     *   [public_deps: [label list] Declare public dependencies.](#var_public_deps)
@@ -158,6 +159,7 @@
     *   [sources: [file list] Source files for a target.](#var_sources)
     *   [swiftflags: [string list] Flags passed to the swift compiler.](#var_swiftflags)
     *   [testonly: [boolean] Declares a target must only be used for testing.](#var_testonly)
+    *   [transparent: [bool] True if the bundle is transparent.](#var_transparent)
     *   [visibility: [label list] A list of labels that can depend on a target.](#var_visibility)
     *   [walk_keys: [string list] Key(s) for managing the metadata collection walk.](#var_walk_keys)
     *   [weak_frameworks: [name list] Name of frameworks that must be weak linked.](#var_weak_frameworks)
@@ -1420,9 +1422,9 @@
            output_extension, output_name, public, sources, testonly,
            visibility
   Action variables: args, bridge_header, configs, data, depfile,
-                    framework_dirs, inputs, module_deps, module_name,
-                    outputs*, pool, response_file_contents, script*,
-                    sources
+                    framework_dirs, inputs, mnemonic, module_deps,
+                    module_name, outputs*, pool, response_file_contents,
+                    script*, sources
   * = required
 ```
 
@@ -1521,9 +1523,9 @@
            output_extension, output_name, public, sources, testonly,
            visibility
   Action variables: args, bridge_header, configs, data, depfile,
-                    framework_dirs, inputs, module_deps, module_name,
-                    outputs*, pool, response_file_contents, script*,
-                    sources
+                    framework_dirs, inputs, mnemonic, module_deps,
+                    module_name, outputs*, pool, response_file_contents,
+                    script*, sources
   * = required
 ```
 
@@ -1535,6 +1537,10 @@
   action_foreach("my_idl") {
     script = "idl_processor.py"
     sources = [ "foo.idl", "bar.idl" ]
+
+    # Causes ninja to output "IDL <label>" rather than the default
+    # "ACTION <label>" when building this action.
+    mnemonic = "IDL"
 
     # Our script reads this file each time, so we need to list it as a
     # dependency so we can rebuild if it changes.
@@ -2525,6 +2531,13 @@
   which will return true or false depending on whether bar is defined in the
   named scope foo. It will throw an error if foo is not defined or is not a
   scope.
+
+  You can also check a named scope using a subscript string expression:
+    defined(foo[bar + "_name"])
+  which will return true or false depending on whether the subscript
+  expression expands to the name of a member of the scope foo. It will
+  throw an error if foo is not defined or is not a scope, or if the
+  expression does not expand to a string, or if it is an empty string.
 ```
 
 #### **Example**
@@ -3968,6 +3981,20 @@
         process, but may be used when generating metadata for rust-analyzer.
         (See --export-rust-project). It enables such metadata to include
         information about the Rust standard library.
+
+    dynamic_link_switch
+        Valid for: Rust tools which link
+
+        A switch to be optionally inserted into linker command lines
+        to indicate that subsequent items may be dynamically linked.
+        For ld-like linkers, -Clink-arg=-Bdynamic may be a good choice.
+        This switch is inserted by gn into rustc command lines before
+        listing any non-Rust dependencies. This may be necessary because
+        sometimes rustc puts the linker into a mode where it would otherwise
+        link against static libraries by default. This flag will be
+        inserted into the {{rustdeps}} variable at the appropriate place;
+        {{ldflags}} can't be used for the same purpose because the flags
+        may not be inserted at the desired place in the command line.
 ```
 
 #### **Expansions for tool variables**
@@ -6289,6 +6316,17 @@
     }
   }
 ```
+### <a name="var_mnemonic"></a>**mnemonic**: [string] Prefix displayed when ninja runs this action.
+
+```
+  Tools in GN can set their ninja "description" which is displayed when
+  building a target. These are commonly set with the format "CXX $output"
+  or "LINK $label". By default, all GN actions will have the description
+  "ACTION $label". Setting a mnemonic will override the "ACTION" prefix
+  with another string, but the label will still be unconditionally displayed.
+
+  Whitespace is not allowed within a mnemonic.
+```
 ### <a name="var_module_name"></a>**module_name**: [string] The name for the compiled module.
 
 ```
@@ -6548,14 +6586,17 @@
   "msvc"-style precompiled headers. It will be implicitly added to the sources
   of the target. See "gn help precompiled_header".
 ```
-### <a name="var_product_type"></a>**product_type**: Product type for Xcode projects.
+### <a name="var_product_type"></a>**product_type**: [string] Product type for the bundle.
 
 ```
-  Correspond to the type of the product of a create_bundle target. Only
-  meaningful to Xcode (used as part of the Xcode project generation).
+  Valid for "create_bundle" and "bundle_data" targets.
 
-  When generating Xcode project files, only create_bundle target with a
-  non-empty product_type will have a corresponding target in Xcode project.
+  Correspond to the type of the bundle. Used by transparent "create_bundle"
+  target to control whether a "bundle_data" needs to be propagated or not.
+
+  When generating Xcode project, the product_type is propagated and only
+  "create_bundle" with a non-empty product_type will have a corresponding
+  target in the project.
 ```
 ### <a name="var_public"></a>**public**: Declare public header files for a target.
 
@@ -6901,6 +6942,16 @@
     testonly = true
     ...
   }
+```
+### <a name="var_transparent"></a>**transparent**: [bool] True if the bundle is transparent.
+
+```
+  A boolean.
+
+  Valid for "create_bundle" target. If true, the "create_bundle" target will
+  not package the "bundle_data" deps but will forward them to all targets that
+  depends on it (unless the "bundle_data" target sets "product_type" to the
+  same value as the "create_bundle" target).
 ```
 ### <a name="var_visibility"></a>**visibility**: A list of labels that can depend on a target.
 

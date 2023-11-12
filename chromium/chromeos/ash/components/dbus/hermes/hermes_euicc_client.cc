@@ -13,6 +13,7 @@
 #include "chromeos/ash/components/dbus/hermes/hermes_response_status.h"
 #include "components/device_event_log/device_event_log.h"
 #include "dbus/bus.h"
+#include "dbus/dbus_result.h"
 #include "dbus/message.h"
 #include "dbus/object_path.h"
 #include "dbus/object_proxy.h"
@@ -154,7 +155,7 @@ class HermesEuiccClientImpl : public HermesEuiccClient {
     writer.AppendInt32(static_cast<int32_t>(reset_option));
     dbus::ObjectProxy* object_proxy = GetOrCreateProperties(euicc_path).first;
     object_proxy->CallMethodWithErrorResponse(
-        &method_call, hermes_constants::kHermesNetworkOperationTimeoutMs,
+        &method_call, hermes_constants::kHermesOperationTimeoutMs,
         base::BindOnce(&HermesEuiccClientImpl::OnResetMemoryResponse,
                        weak_ptr_factory_.GetWeakPtr(), euicc_path,
                        std::move(callback)));
@@ -205,7 +206,7 @@ class HermesEuiccClientImpl : public HermesEuiccClient {
                      << error_response->GetErrorName();
       std::move(callback).Run(
           HermesResponseStatusFromErrorName(error_response->GetErrorName()),
-          nullptr);
+          GetResult(error_response), nullptr);
       return;
     }
 
@@ -213,14 +214,16 @@ class HermesEuiccClientImpl : public HermesEuiccClient {
       // No Error or Response received.
       NET_LOG(ERROR) << "Carrier profile installation Error: No error or "
                         "response received.";
-      std::move(callback).Run(HermesResponseStatus::kErrorNoResponse, nullptr);
+      std::move(callback).Run(HermesResponseStatus::kErrorNoResponse,
+                              dbus::DBusResult::kErrorNoReply, nullptr);
       return;
     }
 
     dbus::MessageReader reader(response);
     dbus::ObjectPath profile_path;
     reader.PopObjectPath(&profile_path);
-    std::move(callback).Run(HermesResponseStatus::kSuccess, &profile_path);
+    std::move(callback).Run(HermesResponseStatus::kSuccess,
+                            dbus::DBusResult::kSuccess, &profile_path);
   }
 
   void OnRefreshSmdxProfilesResponse(RefreshSmdxProfilesCallback callback,

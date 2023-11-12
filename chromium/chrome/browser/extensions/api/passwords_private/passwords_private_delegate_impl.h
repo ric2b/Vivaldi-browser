@@ -74,7 +74,9 @@ class PasswordsPrivateDelegateImpl
   absl::optional<int> ChangeSavedPassword(
       int id,
       const api::passwords_private::ChangeSavedPasswordParams& params) override;
-  void RemoveSavedPassword(
+  bool ChangeCredential(
+      const api::passwords_private::PasswordUiEntry& credential) override;
+  void RemoveCredential(
       int id,
       api::passwords_private::PasswordStoreSet from_stores) override;
   void RemovePasswordException(int id) override;
@@ -151,7 +153,8 @@ class PasswordsPrivateDelegateImpl
   ~PasswordsPrivateDelegateImpl() override;
 
   // password_manager::SavedPasswordsPresenter::Observer implementation.
-  void OnSavedPasswordsChanged() override;
+  void OnSavedPasswordsChanged(
+      const password_manager::PasswordStoreChangeList& changes) override;
 
   // web_app::WebAppInstallManagerObserver implementation.
   void OnWebAppInstalledWithOsHooks(const web_app::AppId& app_id) override;

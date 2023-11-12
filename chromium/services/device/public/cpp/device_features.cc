@@ -22,19 +22,22 @@ BASE_FEATURE(kWinrtGeolocationImplementation,
 #endif  // defined(VIVALDI_BUILD)
 );
 // Enables usage of the CoreLocation API for LocationProvider instead of
-// NetworkLocationProvider for macOS.
+// NetworkLocationProvider for macOS or iOS.
 BASE_FEATURE(kMacCoreLocationBackend,
              "MacCoreLocationBackend",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-// Enables async calls to stopSensor and startSensor on a different thread than
-// the main thread.
-BASE_FEATURE(kAsyncSensorCalls,
-             "AsyncSensorCalls",
+#if defined(VIVALDI_BUILD)
              base::FEATURE_ENABLED_BY_DEFAULT);
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif  // defined(VIVALDI_BUILD)
 // Reduces the interval between WiFi polls to fetch new WiFi data sooner. This
 // can be useful in situations where new WiFi data is needed frequently.
 BASE_FEATURE(kCrOSGeolocationReducedWifiPollingInterval,
              "ReducedWifiPollingInterval",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+// Enable serial communication for SPP devices.
+BASE_FEATURE(kEnableBluetoothSerialPortProfileInSerialApi,
+             "EnableBluetoothSerialPortProfileInSerialApi",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features

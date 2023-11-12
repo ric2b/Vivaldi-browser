@@ -21,13 +21,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/types/expected.h"
-#include "base/values.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_hdc.h"
 #include "base/win/scoped_hglobal.h"
 #include "base/win/windows_types.h"
 #include "printing/backend/print_backend_consts.h"
 #include "printing/backend/printing_info_win.h"
+#include "printing/backend/spooler_win.h"
 #include "printing/backend/win_helper.h"
 #include "printing/mojom/print.mojom.h"
 #include "printing/printing_utils.h"
@@ -54,6 +54,21 @@ class ScopedProvider {
  private:
   HPTPROVIDER provider_;
 };
+
+std::string ErrorMessageCheckSpooler(const std::string& base_message,
+                                     logging::SystemErrorCode err) {
+  std::string message = base_message;
+  if (err != ERROR_SUCCESS) {
+    message += logging::SystemErrorCodeToString(err);
+  }
+  if (internal::IsSpoolerRunning() !=
+      internal::SpoolerServiceStatus::kRunning) {
+    message += " Windows print spooler is not running";
+  } else if (err == ERROR_SUCCESS) {
+    message += " unknown internal printing error";
+  }
+  return message;
+}
 
 // `GetResultCodeFromSystemErrorCode()` is only ever invoked when something has
 // gone wrong while interacting with the OS printing system.  If the cause of
@@ -121,8 +136,8 @@ gfx::Rect LoadPaperPrintableAreaUm(const wchar_t* printer, DEVMODE* devmode) {
   gfx::Rect printable_area_device_units =
       GetPrintableAreaDeviceUnits(hdc.get());
 
-  // Device units can be non-square, so scale for non-square DPIs and convert to
-  // microns.
+  // Device units can be non-square, so scale for non-square pixels and convert
+  // to microns.
   gfx::Rect printable_area_um =
       gfx::Rect(ConvertUnit(printable_area_device_units.x(),
                             default_dpi.width(), kMicronsPerInch),
@@ -369,9 +384,8 @@ mojom::ResultCode PrintBackendWin::GetDefaultPrinterName(
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
   if (!::GetDefaultPrinter(default_printer_name, &size)) {
-    LOG(ERROR) << "Error getting default printer: "
-               << logging::SystemErrorCodeToString(
-                      logging::GetLastSystemErrorCode());
+    LOG(ERROR) << ErrorMessageCheckSpooler("Error getting default printer: ",
+                                           logging::GetLastSystemErrorCode());
     return mojom::ResultCode::kFailed;
   }
   default_printer = base::WideToUTF8(default_printer_name);
@@ -590,7 +604,6 @@ bool PrintBackendWin::IsValidPrinter(const std::string& printer_name) {
 
 // static
 scoped_refptr<PrintBackend> PrintBackend::CreateInstanceImpl(
-    const base::Value::Dict* print_backend_settings,
     const std::string& /*locale*/) {
   return base::MakeRefCounted<PrintBackendWin>();
 }

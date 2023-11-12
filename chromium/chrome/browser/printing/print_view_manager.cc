@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
@@ -26,14 +27,15 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "printing/buildflags/buildflags.h"
 #include "printing/printing_features.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
-#include "chrome/browser/enterprise/connectors/analysis/content_analysis_delegate.h"
-#endif  // BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
+#include "chrome/browser/enterprise/connectors/analysis/print_content_analysis_utils.h"
+#endif
 
 using content::BrowserThread;
 
@@ -52,6 +54,12 @@ ScriptedPrintPreviewClosureMap& GetScriptedPrintPreviewClosureMap() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   static base::NoDestructor<ScriptedPrintPreviewClosureMap> closure_map;
   return *closure_map;
+}
+
+void OnScriptedPrintPreviewReply(
+    PrintViewManager::SetupScriptedPrintPreviewCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  std::move(callback).Run();
 }
 
 }  // namespace
@@ -124,11 +132,8 @@ bool PrintViewManager::PrintForSystemDialogNow(
 }
 
 bool PrintViewManager::BasicPrint(content::RenderFrameHost* rfh) {
-  PrintPreviewDialogController* dialog_controller =
-      PrintPreviewDialogController::GetInstance();
-  if (!dialog_controller)
-    return false;
-
+  auto* dialog_controller = PrintPreviewDialogController::GetInstance();
+  CHECK(dialog_controller);
   content::WebContents* print_preview_dialog =
       dialog_controller->GetPrintPreviewForContents(web_contents());
   if (!print_preview_dialog)
@@ -139,13 +144,35 @@ bool PrintViewManager::BasicPrint(content::RenderFrameHost* rfh) {
 
 bool PrintViewManager::PrintPreviewNow(content::RenderFrameHost* rfh,
                                        bool has_selection) {
-  return PrintPreview(rfh, mojo::NullAssociatedRemote(), has_selection);
+  return PrintPreview(rfh,
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+                      mojo::NullAssociatedRemote(),
+#endif
+                      has_selection);
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 bool PrintViewManager::PrintPreviewWithPrintRenderer(
     content::RenderFrameHost* rfh,
     mojo::PendingAssociatedRemote<mojom::PrintRenderer> print_renderer) {
-  return PrintPreview(rfh, std::move(print_renderer), false);
+  return PrintPreview(rfh, std::move(print_renderer), /*has_selection=*/false);
+}
+#endif
+
+void PrintViewManager::PrintPreviewForNodeUnderContextMenu(
+    content::RenderFrameHost* rfh) {
+  if (print_preview_state_ != NOT_PREVIEWING) {
+    return;
+  }
+
+  // Don't print / print preview crashed tabs.
+  if (IsCrashed() || !rfh->IsRenderFrameLive()) {
+    return;
+  }
+
+  // This will indirectly trigger PrintPreviewForWebNode() below, which sets
+  // `print_preview_state_`.
+  GetPrintRenderFrame(rfh)->PrintNodeUnderContextMenu();
 }
 
 void PrintViewManager::PrintPreviewForWebNode(content::RenderFrameHost* rfh) {
@@ -155,8 +182,9 @@ void PrintViewManager::PrintPreviewForWebNode(content::RenderFrameHost* rfh) {
   SetPrintPreviewRenderFrameHost(rfh);
   print_preview_state_ = USER_INITIATED_PREVIEW;
 
-  for (auto& observer : GetObservers())
+  for (auto& observer : GetTestObservers()) {
     observer.OnPrintPreview(print_preview_rfh_);
+  }
 }
 
 void PrintViewManager::PrintPreviewAlmostDone() {
@@ -266,18 +294,14 @@ void PrintViewManager::OnDlpPrintingRestrictionsChecked(
 void PrintViewManager::RejectPrintPreviewRequestIfRestrictedByContentAnalysis(
     content::GlobalRenderFrameHostId rfh_id,
     base::OnceCallback<void(bool should_proceed)> callback) {
-  enterprise_connectors::ContentAnalysisDelegate::Data scanning_data;
+  absl::optional<enterprise_connectors::ContentAnalysisDelegate::Data>
+      scanning_data = enterprise_connectors::GetBeforePrintPreviewAnalysisData(
+          web_contents());
   content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(rfh_id);
-  if (rfh &&
-      base::FeatureList::IsEnabled(features::kEnablePrintContentAnalysis) &&
-      enterprise_connectors::ContentAnalysisDelegate::IsEnabled(
-          Profile::FromBrowserContext(web_contents()->GetBrowserContext()),
-          web_contents()->GetOutermostWebContents()->GetLastCommittedURL(),
-          &scanning_data, enterprise_connectors::AnalysisConnector::PRINT)) {
-    set_snapshotting_for_content_analysis();
+  if (rfh && scanning_data) {
     GetPrintRenderFrame(rfh)->SnapshotForContentAnalysis(base::BindOnce(
         &PrintViewManager::OnGotSnapshotCallback, weak_factory_.GetWeakPtr(),
-        std::move(callback), std::move(scanning_data), rfh_id));
+        std::move(callback), std::move(*scanning_data), rfh_id));
     return;
   }
 
@@ -300,7 +324,9 @@ void PrintViewManager::SetReceiverImplForTesting(PrintManager* impl) {
 
 bool PrintViewManager::PrintPreview(
     content::RenderFrameHost* rfh,
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     mojo::PendingAssociatedRemote<mojom::PrintRenderer> print_renderer,
+#endif
     bool has_selection) {
   // Users can send print commands all they want and it is beyond
   // PrintViewManager's control. Just ignore the extra commands.
@@ -312,14 +338,18 @@ bool PrintViewManager::PrintPreview(
   if (IsCrashed() || !rfh->IsRenderFrameLive())
     return false;
 
-  GetPrintRenderFrame(rfh)->InitiatePrintPreview(std::move(print_renderer),
-                                                 has_selection);
+  GetPrintRenderFrame(rfh)->InitiatePrintPreview(
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      std::move(print_renderer),
+#endif
+      has_selection);
 
   SetPrintPreviewRenderFrameHost(rfh);
   print_preview_state_ = USER_INITIATED_PREVIEW;
 
-  for (auto& observer : GetObservers())
+  for (auto& observer : GetTestObservers()) {
     observer.OnPrintPreview(print_preview_rfh_);
+  }
 
   return true;
 }
@@ -367,13 +397,6 @@ void PrintViewManager::SetupScriptedPrintPreview(
     return;
   }
 
-  PrintPreviewDialogController* dialog_controller =
-      PrintPreviewDialogController::GetInstance();
-  if (!dialog_controller) {
-    std::move(callback).Run();
-    return;
-  }
-
   // Since window.print() is renderer-initiated, explicitly establish a
   // connection to the RenderFrame here. Without this, later operations that
   // expect the established connection can unexpected fail.
@@ -381,8 +404,7 @@ void PrintViewManager::SetupScriptedPrintPreview(
 
   SetPrintPreviewRenderFrameHost(rfh);
   print_preview_state_ = SCRIPTED_PREVIEW;
-  map[rph] = base::BindOnce(&PrintViewManager::OnScriptedPrintPreviewReply,
-                            base::Unretained(this), std::move(callback));
+  map[rph] = base::BindOnce(&OnScriptedPrintPreviewReply, std::move(callback));
   scripted_print_preview_rph_ = rph;
   DCHECK(!scripted_print_preview_rph_set_blocked_);
   if (!scripted_print_preview_rph_->IsBlocked()) {
@@ -424,19 +446,15 @@ void PrintViewManager::OnScriptedPrintPreviewCallback(
   if (!rfh || rfh != print_preview_rfh_)
     return;
 
-  PrintPreviewDialogController* dialog_controller =
-      PrintPreviewDialogController::GetInstance();
-  if (!dialog_controller) {
-    PrintPreviewDone();
-    return;
-  }
-
   // Running a dialog causes an exit to webpage-initiated fullscreen.
   // http://crbug.com/728276
   if (web_contents()->IsFullscreen())
     web_contents()->ExitFullscreen(true);
 
+  auto* dialog_controller = PrintPreviewDialogController::GetInstance();
+  CHECK(dialog_controller);
   dialog_controller->PrintPreview(web_contents());
+
   mojom::RequestPrintPreviewParams params;
   params.is_modifiable = source_is_modifiable;
   PrintPreviewUI::SetInitialParams(
@@ -446,6 +464,9 @@ void PrintViewManager::OnScriptedPrintPreviewCallback(
 
 void PrintViewManager::RequestPrintPreview(
     mojom::RequestPrintPreviewParamsPtr params) {
+#if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
+  set_analyzing_content(/*analyzing=*/true);
+#endif
   RejectPrintPreviewRequestIfRestricted(
       GetCurrentTargetFrame()->GetGlobalId(),
       base::BindOnce(&PrintViewManager::OnRequestPrintPreviewCallback,
@@ -457,6 +478,9 @@ void PrintViewManager::OnRequestPrintPreviewCallback(
     mojom::RequestPrintPreviewParamsPtr params,
     content::GlobalRenderFrameHostId rfh_id,
     bool should_proceed) {
+#if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
+  set_analyzing_content(/*analyzing=*/false);
+#endif
   if (!should_proceed) {
     OnPrintPreviewRequestRejected(rfh_id);
     return;
@@ -468,16 +492,13 @@ void PrintViewManager::OnRequestPrintPreviewCallback(
   if (!render_frame_host || !render_frame_host->IsRenderFrameLive())
     return;
 
-  auto* dialog_controller = PrintPreviewDialogController::GetInstance();
-  if (!dialog_controller) {
-    PrintPreviewDone();
-    return;
-  }
-
   if (params->webnode_only)
     PrintPreviewForWebNode(render_frame_host);
 
+  auto* dialog_controller = PrintPreviewDialogController::GetInstance();
+  CHECK(dialog_controller);
   dialog_controller->PrintPreview(web_contents());
+
   PrintPreviewUI::SetInitialParams(
       dialog_controller->GetPrintPreviewForContents(web_contents()), *params);
   PrintPreviewAllowedForTesting();
@@ -488,12 +509,6 @@ void PrintViewManager::CheckForCancel(int32_t preview_ui_id,
                                       CheckForCancelCallback callback) {
   std::move(callback).Run(
       PrintPreviewUI::ShouldCancelRequest(preview_ui_id, request_id));
-}
-
-void PrintViewManager::OnScriptedPrintPreviewReply(
-    SetupScriptedPrintPreviewCallback callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::move(callback).Run();
 }
 
 void PrintViewManager::MaybeUnblockScriptedPreviewRPH() {

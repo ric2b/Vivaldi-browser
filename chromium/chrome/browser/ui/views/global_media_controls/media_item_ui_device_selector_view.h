@@ -125,7 +125,7 @@ class MediaItemUIDeviceSelectorView
   bool is_audio_device_switching_enabled_ = false;
   bool has_cast_device_ = false;
   const std::string item_id_;
-  const raw_ptr<MediaItemUIDeviceSelectorDelegate> delegate_;
+  const raw_ptr<MediaItemUIDeviceSelectorDelegate, DanglingUntriaged> delegate_;
   std::string current_device_id_ =
       media::AudioDeviceDescription::kDefaultDeviceId;
   SkColor foreground_color_ = global_media_controls::kDefaultForegroundColor;
@@ -133,7 +133,8 @@ class MediaItemUIDeviceSelectorView
   global_media_controls::GlobalMediaControlsEntryPoint const entry_point_;
 
   // Child views
-  raw_ptr<AudioDeviceEntryView> current_audio_device_entry_view_ = nullptr;
+  raw_ptr<AudioDeviceEntryView, DanglingUntriaged>
+      current_audio_device_entry_view_ = nullptr;
   raw_ptr<views::View> expand_button_strip_ = nullptr;
   raw_ptr<ExpandDeviceSelectorLabel> expand_label_ = nullptr;
   raw_ptr<ExpandDeviceSelectorButton> dropdown_button_ = nullptr;

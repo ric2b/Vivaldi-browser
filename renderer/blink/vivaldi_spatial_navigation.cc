@@ -32,9 +32,8 @@ namespace {
 
 // Borrowed from chromium spatnav code, but cannot be #included
 // because it is private.
-bool IsUnobscured(const blink::WebElement& element) {
-  blink::WebNode web_node = element;
-  const blink::Node* node = web_node.ConstUnwrap<blink::Node>();
+bool IsUnobscured(const blink::Element* element) {
+  const blink::Node* node = element;
   if (!node) {
     return false;
   }
@@ -77,6 +76,18 @@ bool IsUnobscured(const blink::WebElement& element) {
             ->contentDocument()
             ->ContainsIncludingHostElements(**hit_node))
       return true;
+  }
+  return false;
+}
+
+bool HasFocusableChildren(blink::Element* elm) {
+  for (blink::Node* node = blink::FlatTreeTraversal::FirstChild(*elm); node;
+       node = blink::FlatTreeTraversal::Next(*node, elm)) {
+    if (blink::Element* element = blink::DynamicTo<blink::Element>(node)) {
+      if (element->IsFocusable()) {
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -269,9 +280,13 @@ std::string ElementPath(blink::WebElement& element) {
   return path.str();
 }
 
+// We pass in the currently focused element which gets an automatic pass.
+// Sometimes it fails the IsObscured test because the indicator element is on
+// top of it. If there is no focused element, just pass null.
 std::vector<blink::WebElement> GetSpatialNavigationElements(
-    blink::Document *document,
+    blink::Document* document,
     float scale,
+    blink::Element* current,
     std::vector<blink::WebElement>& spatnav_elements) {
 
   blink::WebElementCollection all_elements = document->all();
@@ -280,6 +295,10 @@ std::vector<blink::WebElement> GetSpatialNavigationElements(
        element = all_elements.NextItem()) {
     gfx::Rect rect = RevertDeviceScaling(element.BoundsInWidget(), scale);
     blink::Element* elm = element.Unwrap<blink::Element>();
+    if (elm && current && elm == current) {
+      spatnav_elements.push_back(element);
+      continue;
+    }
     if (elm &&
         (elm->IsFocusable() || HasNavigableListeners(element) ||
          HasNavigableTag(element))) {
@@ -289,11 +308,14 @@ std::vector<blink::WebElement> GetSpatialNavigationElements(
             blink::DynamicTo<blink::LocalFrame>(owner->ContentFrame());
         if (subframe) {
           blink::Document* subdocument = subframe->GetDocument();
-          GetSpatialNavigationElements(subdocument, scale, spatnav_elements);
+          GetSpatialNavigationElements(subdocument, scale, current,
+                                       spatnav_elements);
         }
-      } else if (!IsTooSmallOrBig(document, rect) && IsUnobscured(element) &&
+      } else if (!IsTooSmallOrBig(document, rect) && IsUnobscured(elm) &&
                  IsVisible(element)) {
-        spatnav_elements.push_back(element);
+        if (!HasFocusableChildren(elm)) {
+          spatnav_elements.push_back(element);
+        }
       }
     }
   }

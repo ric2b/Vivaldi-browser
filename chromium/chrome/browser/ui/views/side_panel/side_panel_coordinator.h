@@ -5,10 +5,12 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_SIDE_PANEL_COORDINATOR_H_
 #define CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_SIDE_PANEL_COORDINATOR_H_
 
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/time/time.h"
+#include "chrome/browser/ui/side_panel/side_panel_ui.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_registry.h"
@@ -43,7 +45,8 @@ class View;
 // determine what entry is seen when the panel is reopened.
 class SidePanelCoordinator final : public SidePanelRegistryObserver,
                                    public TabStripModelObserver,
-                                   public views::ViewObserver {
+                                   public views::ViewObserver,
+                                   public SidePanelUI {
  public:
   explicit SidePanelCoordinator(BrowserView* browser_view);
   SidePanelCoordinator(const SidePanelCoordinator&) = delete;
@@ -52,22 +55,31 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
 
   static SidePanelRegistry* GetGlobalSidePanelRegistry(Browser* browser);
 
+  // SidePanelUI:
   void Show(absl::optional<SidePanelEntry::Id> entry_id = absl::nullopt,
             absl::optional<SidePanelUtil::SidePanelOpenTrigger> open_trigger =
-                absl::nullopt);
+                absl::nullopt) override;
   void Show(SidePanelEntry::Key entry_key,
             absl::optional<SidePanelUtil::SidePanelOpenTrigger> open_trigger =
-                absl::nullopt);
-  void Close();
-  void Toggle();
+                absl::nullopt) override;
+  void Close() override;
+  void Toggle() override;
+  void OpenInNewTab() override;
+  void UpdatePinState() override;
+  absl::optional<SidePanelEntry::Id> GetCurrentEntryId() const override;
+  bool IsSidePanelShowing() const override;
+  bool IsSidePanelEntryShowing(
+      const SidePanelEntry::Key& entry_key) const override;
 
-  // Opens the current side panel contents in a new tab. This is called by the
-  // header button, when it's visible.
-  void OpenInNewTab();
+  // TODO(crbug.com/1341399): Move this method to `SidePanelUI` after decoupling
+  // `SidePanelEntry` from views.
+  bool IsSidePanelEntryShowing(const SidePanelEntry* entry) const;
 
-  // Toggle the pin state. This is called by the header button, when it's
-  // visible.
-  void UpdatePinState();
+  // Re-runs open new tab URL check and sets button state to enabled/disabled
+  // accordingly.
+  void UpdateNewTabButtonState();
+
+  void UpdateHeaderPinButtonState();
 
   // Prevent content swapping delays from happening for testing.
   // This should be called before the side panel is first shown.
@@ -89,28 +101,9 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
     return header_pin_button_;
   }
 
-  absl::optional<SidePanelEntry::Id> GetCurrentEntryId() const;
-
   SidePanelEntry::Id GetComboboxDisplayedEntryIdForTesting() const;
 
   SidePanelEntry* GetLoadingEntryForTesting() const;
-
-  bool IsSidePanelShowing() const;
-
-  // Returns whether `entry_key` is currently being shown in the side panel.
-  // Note: this returns false if `entry` is current loading but not actually
-  // shown.
-  bool IsSidePanelEntryShowing(const SidePanelEntry::Key& entry_key) const;
-
-  // Returns whether `entry` is currently being shown in the side panel. Note:
-  // this returns false if `entry` is current loading but not actually shown.
-  bool IsSidePanelEntryShowing(const SidePanelEntry* entry) const;
-
-  // Re-runs open new tab URL check and sets button state to enabled/disabled
-  // accordingly.
-  void UpdateNewTabButtonState();
-
-  void UpdateHeaderPinButtonState();
 
   void AddSidePanelViewStateObserver(SidePanelViewStateObserver* observer);
 
@@ -192,6 +185,10 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   // delays as the side panel content when there are delays for loading content.
   bool OnComboboxChangeTriggered(size_t index);
 
+  // Called before the combobox dropdown menu is about to show. Used to record
+  // the combobox shown metric.
+  void OnComboboxMenuWillShow();
+
   // Sets the entry corresponding to `entry_key` as selected in the combobox.
   void SetSelectedEntryInCombobox(const SidePanelEntry::Key& entry_key);
 
@@ -266,6 +263,9 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
       nullptr;
 
   base::ObserverList<SidePanelViewStateObserver> view_state_observers_;
+
+  // Combobox menu subscription.
+  base::CallbackListSubscription on_menu_will_show_subscription_;
 
   base::ScopedMultiSourceObservation<SidePanelRegistry,
                                      SidePanelRegistryObserver>

@@ -21,11 +21,11 @@ class DuckDuckGoRulesParser {
 
  private:
   void AddBlockingRuleForDomain(const std::string& domain,
-                                const base::Value* excluded_origins);
+                                const base::Value::List* excluded_origins);
   void ParseRule(const base::Value& rule,
                  const std::string& domain,
                  bool default_ignore,
-                 const base::Value* excluded_origins);
+                 const base::Value::List* excluded_origins);
   absl::optional<std::bitset<RequestFilterRule::kTypeCount>> GetTypes(
       const base::Value* rule_properties);
   absl::optional<std::vector<std::string>> GetDomains(

@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
+#include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_fragment_geometry.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_disable_side_effects_scope.h"
@@ -15,36 +16,6 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 
 namespace blink {
-
-DISABLE_CFI_PERF
-bool LayoutBox::ShrinkToAvoidFloats() const {
-  NOT_DESTROYED();
-  // Floating objects don't shrink.  Objects that don't avoid floats don't
-  // shrink.
-  if (IsInline() || !CreatesNewFormattingContext() || IsFloating())
-    return false;
-
-  // Only auto width objects can possibly shrink to avoid floats.
-  if (!StyleRef().UsedWidth().IsAuto()) {
-    return false;
-  }
-
-  // If the containing block is LayoutNG, we will not let legacy layout deal
-  // with positioning of floats or sizing of auto-width new formatting context
-  // block level objects adjacent to them.
-  if (const auto* containing_block = ContainingBlock()) {
-    if (containing_block->IsLayoutNGObject())
-      return false;
-  }
-
-  // Legends are taken out of the normal flow, and are laid out at the very
-  // start of the fieldset, and are therefore not affected by floats (that may
-  // appear earlier in the DOM).
-  if (IsRenderedLegend())
-    return false;
-
-  return true;
-}
 
 // Hit Testing
 bool LayoutBox::MayIntersect(const HitTestResult& result,
@@ -76,21 +47,9 @@ bool LayoutBox::MayIntersect(const HitTestResult& result,
   return hit_test_location.Intersects(overflow_box);
 }
 
-bool LayoutBox::CanBeProgrammaticallyScrolled() const {
+bool LayoutBox::IsUserScrollable() const {
   NOT_DESTROYED();
-  Node* node = GetNode();
-  if (node && node->IsDocumentNode())
-    return true;
-
-  if (!IsScrollContainer())
-    return false;
-
-  bool has_scrollable_overflow =
-      HasScrollableOverflowX() || HasScrollableOverflowY();
-  if (ScrollsOverflow() && has_scrollable_overflow)
-    return true;
-
-  return node && IsEditable(*node);
+  return HasScrollableOverflowX() || HasScrollableOverflowY();
 }
 
 const NGLayoutResult* LayoutBox::CachedLayoutResult(
@@ -114,6 +73,10 @@ const NGLayoutResult* LayoutBox::CachedLayoutResult(
 
   if (early_break)
     return nullptr;
+
+  if (ShouldSkipLayoutCache()) {
+    return nullptr;
+  }
 
   DCHECK_EQ(cached_layout_result->Status(), NGLayoutResult::kSuccess);
 
@@ -193,6 +156,14 @@ const NGLayoutResult* LayoutBox::CachedLayoutResult(
   // the cache.
   if (size_cache_status == NGLayoutCacheStatus::kNeedsLayout)
     return nullptr;
+
+  if (cached_layout_result->HasOrthogonalFallbackSizeDescendant() &&
+      View()->IsResizingInitialContainingBlock()) {
+    // There's an orthogonal writing-mode root somewhere inside that depends on
+    // the size of the initial containing block, and the initial containing
+    // block size is changing.
+    return nullptr;
+  }
 
   // If we need simplified layout, but the cached fragment's children are not
   // valid (see comment in `SetCachedLayoutResult`), don't return the fragment,
@@ -364,6 +335,12 @@ const NGLayoutResult* LayoutBox::CachedLayoutResult(
         // relatively to the fragment.
         if (is_fragmented)
           return nullptr;
+
+        if (cached_layout_result->MinimalSpaceShortage()) {
+          // The fragmentation line has moved, and there was space shortage
+          // reported. This value is no longer valid.
+          return nullptr;
+        }
 
         // Fragmentation inside a nested multicol container depends on the
         // amount of remaining space in the outer fragmentation context, so if

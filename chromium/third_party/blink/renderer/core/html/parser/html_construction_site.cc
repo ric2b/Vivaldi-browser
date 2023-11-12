@@ -364,8 +364,12 @@ void HTMLConstructionSite::FlushPendingText() {
       // case, just keep the entire string.
       break_index = string.length();
     }
+    unsigned substring_view_length = break_index - current_position;
     StringView substring_view =
-        string.SubstringView(current_position, break_index - current_position);
+        LIKELY(!current_position && substring_view_length >= string.length())
+            ? string
+            : string.SubstringView(current_position,
+                                   break_index - current_position);
     String substring = canonicalize_whitespace_strings_
                            ? TryCanonicalizeString(
                                  substring_view, pending_text_.whitespace_mode)
@@ -833,12 +837,13 @@ void HTMLConstructionSite::InsertHTMLTemplateElement(
     auto slot_assignment_mode = SlotAssignmentMode::kNamed;
     HTMLStackItem* shadow_host_stack_item = open_elements_.TopStackItem();
     Element* host = shadow_host_stack_item->GetElement();
+
     ShadowRootType type = declarative_shadow_root_type ==
                                   DeclarativeShadowRootType::kStreamingOpen
                               ? ShadowRootType::kOpen
                               : ShadowRootType::kClosed;
-    bool success = host->AttachDeclarativeShadowRoot(
-        template_element, type, focus_delegation, slot_assignment_mode);
+    bool success = host->AttachStreamingDeclarativeShadowRoot(
+        *template_element, type, focus_delegation, slot_assignment_mode);
     if (success) {
       DCHECK(host->AuthorShadowRoot());
       UseCounter::Count(host->GetDocument(),

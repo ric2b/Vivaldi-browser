@@ -17,21 +17,16 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
-#include "build/build_config.h"
-#include "build/buildflag.h"
+#include "base/types/expected.h"
 #include "content/browser/attribution_reporting/attribution_beacon_id.h"
 #include "content/browser/attribution_reporting/attribution_data_host_manager.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
+#include "net/http/structured_headers.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/conversions/attribution_data_host.mojom.h"
-
-#if BUILDFLAG(IS_ANDROID)
-#include "base/types/expected.h"
-#include "net/http/structured_headers.h"
-#endif
 
 namespace attribution_reporting {
 class SuitableOrigin;
@@ -47,13 +42,8 @@ class TimeDelta;
 namespace content {
 
 class AttributionManager;
-class AttributionTrigger;
 
 struct GlobalRenderFrameHostId;
-
-#if BUILDFLAG(IS_ANDROID)
-struct OsRegistration;
-#endif
 
 // Manages a receiver set of all ongoing `AttributionDataHost`s and forwards
 // events to the `AttributionManager` that owns `this`. Because attributionsrc
@@ -90,20 +80,19 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl
   void NotifyNavigationRegistrationStarted(
       const blink::AttributionSrcToken& attribution_src_token,
       const attribution_reporting::SuitableOrigin& source_origin,
-      blink::mojom::AttributionNavigationType nav_type,
       bool is_within_fenced_frame,
       GlobalRenderFrameHostId render_frame_id,
       int64_t navigation_id) override;
-  void NotifyNavigationRegistrationData(
+  bool NotifyNavigationRegistrationData(
       const blink::AttributionSrcToken& attribution_src_token,
       const net::HttpResponseHeaders* headers,
       attribution_reporting::SuitableOrigin reporting_origin,
       const attribution_reporting::SuitableOrigin& source_origin,
       AttributionInputEvent input_event,
-      blink::mojom::AttributionNavigationType nav_type,
       bool is_within_fenced_frame,
       GlobalRenderFrameHostId render_frame_id,
       int64_t navigation_id,
+      network::AttributionReportingRuntimeFeatures,
       bool is_final_response) override;
 
   void NotifyFencedFrameReportingBeaconStarted(
@@ -115,12 +104,13 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl
       GlobalRenderFrameHostId render_frame_id) override;
   void NotifyFencedFrameReportingBeaconData(
       BeaconId beacon_id,
+      network::AttributionReportingRuntimeFeatures,
       url::Origin reporting_origin,
       const net::HttpResponseHeaders* headers,
       bool is_final_response) override;
 
  private:
-  class ReceiverContext;
+  class RegistrationContext;
 
   struct DeferredReceiverTimeout;
   struct DeferredReceiver;
@@ -133,12 +123,6 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl
   using SourceRegistrationsId =
       absl::variant<blink::AttributionSrcToken, BeaconId>;
 
-#if BUILDFLAG(IS_ANDROID)
-  using TriggerPayload = absl::variant<AttributionTrigger, OsRegistration>;
-#else
-  using TriggerPayload = AttributionTrigger;
-#endif
-
   // blink::mojom::AttributionDataHost:
   void SourceDataAvailable(
       attribution_reporting::SuitableOrigin reporting_origin,
@@ -146,14 +130,14 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl
   void TriggerDataAvailable(
       attribution_reporting::SuitableOrigin reporting_origin,
       attribution_reporting::TriggerRegistration,
-      absl::optional<network::TriggerAttestation> attestation) override;
-#if BUILDFLAG(IS_ANDROID)
-  void OsSourceDataAvailable(const GURL& registration_url) override;
-  void OsTriggerDataAvailable(const GURL& registration_url) override;
-#endif
+      std::vector<network::TriggerVerification>) override;
+  void OsSourceDataAvailable(
+      std::vector<attribution_reporting::OsRegistrationItem>) override;
+  void OsTriggerDataAvailable(
+      std::vector<attribution_reporting::OsRegistrationItem>) override;
 
-  const ReceiverContext* GetReceiverContextForSource();
-  const ReceiverContext* GetReceiverContextForTrigger();
+  const RegistrationContext* GetReceiverRegistrationContextForSource();
+  const RegistrationContext* GetReceiverRegistrationContextForTrigger();
 
   void OnReceiverDisconnected();
 
@@ -166,13 +150,11 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl
   void OnWebSourceParsed(SourceRegistrationsId,
                          data_decoder::DataDecoder::ValueOrError result);
 
-#if BUILDFLAG(IS_ANDROID)
   void HandleNextOsDecode(const SourceRegistrations&);
 
   using OsParseResult =
-      base::expected<net::structured_headers::ParameterizedItem, std::string>;
+      base::expected<net::structured_headers::List, std::string>;
   void OnOsSourceParsed(SourceRegistrationsId, OsParseResult);
-#endif  // BUILDFLAG(IS_ANDROID)
 
   void MaybeOnRegistrationsFinished(
       base::flat_set<SourceRegistrations>::const_iterator);
@@ -185,7 +167,7 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl
   // Owns `this`.
   raw_ptr<AttributionManager> attribution_manager_;
 
-  mojo::ReceiverSet<blink::mojom::AttributionDataHost, ReceiverContext>
+  mojo::ReceiverSet<blink::mojom::AttributionDataHost, RegistrationContext>
       receivers_;
 
   // Map which stores pending receivers for data hosts which are going to

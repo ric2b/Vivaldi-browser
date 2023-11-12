@@ -13,7 +13,7 @@ import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/polymer/v3_0/iron-a11y-keys/iron-a11y-keys.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
-import '../../settings_shared.css.js';
+import '../settings_shared.css.js';
 
 import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
@@ -22,7 +22,7 @@ import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/po
 
 import {GlobalScrollTargetMixin} from '../common/global_scroll_target_mixin.js';
 import {recordSettingChange} from '../metrics_recorder.js';
-import {routes} from '../os_settings_routes.js';
+import {routes} from '../router.js';
 
 import {LanguagesBrowserProxyImpl} from './languages_browser_proxy.js';
 import {getTemplate} from './os_edit_dictionary_page.html.js';

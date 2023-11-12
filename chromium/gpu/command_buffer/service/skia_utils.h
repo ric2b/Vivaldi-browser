@@ -16,10 +16,7 @@
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrContextOptions.h"
 #include "third_party/skia/include/gpu/GrTypes.h"
-
-#if BUILDFLAG(ENABLE_SKIA_GRAPHITE)
 #include "third_party/skia/include/gpu/graphite/ContextOptions.h"
-#endif
 
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "third_party/skia/include/gpu/vk/GrVkTypes.h"
@@ -42,6 +39,10 @@ namespace viz {
 class VulkanContextProvider;
 }  // namespace viz
 
+namespace skgpu::graphite {
+struct InsertRecordingInfo;
+}  // namespace skgpu::graphite
+
 namespace gpu {
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -57,10 +58,8 @@ class SharedContextState;
 // Returns default GrContextOptions.
 GPU_GLES2_EXPORT GrContextOptions GetDefaultGrContextOptions();
 
-#if BUILDFLAG(ENABLE_SKIA_GRAPHITE)
 GPU_GLES2_EXPORT skgpu::graphite::ContextOptions
 GetDefaultGraphiteContextOptions();
-#endif
 
 // Returns internal gl format of texture for Skia for given `gl_storage_format`.
 GPU_GLES2_EXPORT GLuint GetGrGLBackendTextureFormat(
@@ -82,6 +81,11 @@ GPU_GLES2_EXPORT bool GetGrBackendTexture(
 // Adds a task to be executed when the flush in |flush_info| is complete.
 GPU_GLES2_EXPORT void AddCleanupTaskForSkiaFlush(base::OnceClosure task,
                                                  GrFlushInfo* flush_info);
+
+// Adds a task to be executed when the recording in |info| finishes on the GPU.
+GPU_GLES2_EXPORT void AddCleanupTaskForGraphiteRecording(
+    base::OnceClosure task,
+    skgpu::graphite::InsertRecordingInfo* info);
 
 // Helper which associates cleanup callbacks with a Skia GrFlushInfo's callback.
 // Is a no-op if |context_provider| is null.

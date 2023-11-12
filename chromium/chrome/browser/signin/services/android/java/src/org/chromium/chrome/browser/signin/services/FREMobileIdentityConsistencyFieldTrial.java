@@ -104,8 +104,7 @@ public class FREMobileIdentityConsistencyFieldTrial {
     }
 
     @AnyThread
-    @VariationsGroup
-    private static int getFirstRunTrialGroup() {
+    private static @VariationsGroup int getFirstRunTrialGroup() {
         synchronized (LOCK) {
             return SharedPreferencesManager.getInstance().readInt(
                     ChromePreferenceKeys.FIRST_RUN_VARIATIONS_FIELD_TRIAL_GROUP,
@@ -175,8 +174,7 @@ public class FREMobileIdentityConsistencyFieldTrial {
     @CalledByNative
     @AnyThread
     public static String getFirstRunVariationsTrialGroupName() {
-        @VariationsGroup
-        final int group = getFirstRunTrialGroup();
+        final @VariationsGroup int group = getFirstRunTrialGroup();
         switch (group) {
             case VariationsGroup.WELCOME_TO_CHROME:
                 return "Control";
@@ -203,8 +201,7 @@ public class FREMobileIdentityConsistencyFieldTrial {
      */
     @MainThread
     public static Pair<Integer, Integer> getVariationTitleAndSubtitle() {
-        @VariationsGroup
-        final int group = getFirstRunTrialGroup();
+        final @VariationsGroup int group = getFirstRunTrialGroup();
         switch (group) {
             case VariationsGroup.WELCOME_TO_CHROME:
                 return new Pair(R.string.fre_welcome, 0);
@@ -224,18 +221,19 @@ public class FREMobileIdentityConsistencyFieldTrial {
         }
     }
 
-    @VariationsGroup
-    private static int generateFirstRunStringVariationsGroup(
+    private static @VariationsGroup int generateFirstRunStringVariationsGroup(
             int lowEntropyValue, int lowEntropySize) {
-        int variationsPercentage = 0;
+        double variationsPercentage = 0;
         switch (VersionConstants.CHANNEL) {
             case Channel.DEFAULT:
             case Channel.CANARY:
             case Channel.DEV:
+            case Channel.BETA:
                 variationsPercentage = 10;
                 break;
-            case Channel.BETA:
             case Channel.STABLE:
+                variationsPercentage = 0.5;
+                break;
         }
         // For A/B testing all experiment groups should have the same percentages.
         assert variationsPercentage * VariationsGroup.MAX_VALUE <= 100;
@@ -258,8 +256,7 @@ public class FREMobileIdentityConsistencyFieldTrial {
      */
     @MainThread
     public static boolean shouldHideTitleUntilPoliciesAreLoaded() {
-        @VariationsGroup
-        final int group = getFirstRunTrialGroup();
+        final @VariationsGroup int group = getFirstRunTrialGroup();
         return group != VariationsGroup.DEFAULT && group != VariationsGroup.WELCOME_TO_CHROME;
     }
 

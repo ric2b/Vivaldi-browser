@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/barrier_closure.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "components/ad_blocker/adblock_known_sources_handler.h"
@@ -17,6 +18,13 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace adblock_filter {
+
+struct RuleServiceImpl::LoadData {
+  std::array<std::unique_ptr<AdBlockerContentRuleListProvider>, kRuleGroupCount>
+      loading_content_rule_list_providers;
+  RuleServiceStorage::LoadResult load_result;
+};
+
 RuleServiceImpl::RuleServiceImpl(
     web::BrowserState* browser_state,
     RuleSourceHandler::RulesCompiler rules_compiler,
@@ -42,9 +50,30 @@ void RuleServiceImpl::Load() {
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
   state_store_.emplace(browser_state_->GetStatePath(), this, file_task_runner_);
 
-  // Unretained is safe because we own the sources store
-  state_store_->Load(
-      base::BindOnce(&RuleServiceImpl::OnStateLoaded, base::Unretained(this)));
+  auto load_data = std::make_unique<LoadData>();
+  LoadData* load_data_ptr = load_data.get();
+
+  auto on_loading_done = base::BarrierClosure(
+      kRuleGroupCount + 1,
+      base::BindOnce(&RuleServiceImpl::OnStateLoaded,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(load_data)));
+
+  for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
+    load_data_ptr
+        ->loading_content_rule_list_providers[static_cast<size_t>(group)] =
+        AdBlockerContentRuleListProvider::Create(
+            browser_state_, group, on_loading_done,
+            base::BindRepeating(&RuleServiceImpl::OnRulesApplied,
+                                weak_ptr_factory_.GetWeakPtr(), group));
+  }
+
+  state_store_->Load(base::BindOnce(
+      [](base::RepeatingClosure on_loading_done, LoadData* load_data,
+         RuleServiceStorage::LoadResult load_result) {
+        load_data->load_result = std::move(load_result);
+        on_loading_done.Run();
+      },
+      on_loading_done, load_data_ptr));
 }
 
 bool RuleServiceImpl::IsLoaded() const {
@@ -76,8 +105,8 @@ void RuleServiceImpl::SetRuleGroupEnabled(RuleGroup group, bool enabled) {
   state_store_->ScheduleSave();
 }
 
-void RuleServiceImpl::OnStateLoaded(
-    RuleServiceStorage::LoadResult load_result) {
+void RuleServiceImpl::OnStateLoaded(std::unique_ptr<LoadData> load_data) {
+  RuleServiceStorage::LoadResult& load_result = load_data->load_result;
   // All cases of base::Unretained here are safe. We are generally passing
   // callbacks to objects that we own, calling to either this or other objects
   // that we own.
@@ -102,10 +131,9 @@ void RuleServiceImpl::OnStateLoaded(
   for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
     organized_rules_manager_[static_cast<size_t>(group)].emplace(
         this,
-        AdBlockerContentRuleListProvider::Create(
-            browser_state_, group,
-            base::BindRepeating(&RuleServiceImpl::OnRulesApplied,
-                                base::Unretained(this), group)),
+        std::move(
+            load_data->loading_content_rule_list_providers[static_cast<size_t>(
+                group)]),
         group, browser_state_->GetStatePath(),
         load_result.index_checksums[static_cast<size_t>(group)],
         base::BindRepeating(&RuleServiceImpl::OnRulesIndexChanged,

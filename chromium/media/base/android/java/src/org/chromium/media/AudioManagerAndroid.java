@@ -29,6 +29,9 @@ import org.chromium.base.annotations.NativeMethods;
 import java.lang.reflect.Method;
 import java.util.Optional;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 @JNINamespace("media")
 class AudioManagerAndroid {
     private static final String TAG = "media";
@@ -324,8 +327,12 @@ class AudioManagerAndroid {
 
     @CalledByNative
     private boolean isAudioLowLatencySupported() {
-        return ContextUtils.getApplicationContext().getPackageManager().hasSystemFeature(
+        // Vivaldi
+        boolean result = ContextUtils.getApplicationContext().getPackageManager().hasSystemFeature(
                 PackageManager.FEATURE_AUDIO_LOW_LATENCY);
+        if (BuildConfig.IS_OEM_MERCEDES_BUILD)
+            Log.i(TAG, "Vivaldi OEM: FEATURE_AUDIO_LOW_LATENCY = " + result);
+        return result;
     }
 
     @CalledByNative

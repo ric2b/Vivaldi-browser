@@ -72,6 +72,9 @@ void CreateBundleTargetGenerator::DoRun() {
 
   if (!FillXcassetCompilerFlags())
     return;
+
+  if (!FillTransparent())
+    return;
 }
 
 bool CreateBundleTargetGenerator::FillBundleDir(
@@ -315,4 +318,16 @@ bool CreateBundleTargetGenerator::FillXcassetCompilerFlags() {
     return false;
 
   return target_->bundle_data().xcasset_compiler_flags().Parse(*value, err_);
+}
+
+bool CreateBundleTargetGenerator::FillTransparent() {
+  const Value* value = scope_->GetValue(variables::kTransparent, true);
+  if (!value)
+    return true;
+
+  if (!value->VerifyTypeIs(Value::BOOLEAN, err_))
+    return false;
+
+  target_->bundle_data().set_transparent(value->boolean_value());
+  return true;
 }

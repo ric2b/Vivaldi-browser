@@ -7,6 +7,7 @@
 #include <jni.h>
 #include <cstdint>
 
+#include "android_webview/browser/metrics/android_metrics_provider.h"
 #include "android_webview/browser_jni_headers/AwMetricsServiceClient_jni.h"
 #include "android_webview/common/aw_features.h"
 #include "android_webview/common/metrics/app_package_name_logging_rule.h"
@@ -176,8 +177,8 @@ void AwMetricsServiceClient::SetAppPackageNameLoggingRule(
 
   PrefService* local_state = pref_service();
   DCHECK(local_state);
-  local_state->Set(prefs::kMetricsAppPackageNameLoggingRule,
-                   record.value().ToDictionary());
+  local_state->SetDict(prefs::kMetricsAppPackageNameLoggingRule,
+                       record.value().ToDictionary());
   cached_package_name_record_ = record;
   package_name_record_status_ =
       AppPackageNameLoggingRuleStatus::kNewVersionLoaded;
@@ -196,7 +197,7 @@ AwMetricsServiceClient::GetCachedAppPackageNameLoggingRule() {
   PrefService* local_state = pref_service();
   DCHECK(local_state);
   cached_package_name_record_ = AppPackageNameLoggingRule::FromDictionary(
-      local_state->GetValue(prefs::kMetricsAppPackageNameLoggingRule));
+      local_state->GetDict(prefs::kMetricsAppPackageNameLoggingRule));
   if (cached_package_name_record_.has_value()) {
     package_name_record_status_ =
         AppPackageNameLoggingRuleStatus::kNotLoadedUseCache;
@@ -295,10 +296,10 @@ void AwMetricsServiceClient::RegisterAdditionalMetricsProviders(
 void AwMetricsServiceClient::RegisterMetricsPrefs(
     PrefRegistrySimple* registry) {
   RegisterPrefs(registry);
-  registry->RegisterDictionaryPref(prefs::kMetricsAppPackageNameLoggingRule,
-                                   base::Value(base::Value::Type::DICT));
+  registry->RegisterDictionaryPref(prefs::kMetricsAppPackageNameLoggingRule);
   registry->RegisterTimePref(prefs::kAppPackageNameLoggingRuleLastUpdateTime,
                              base::Time());
+  AndroidMetricsProvider::RegisterPrefs(registry);
 }
 
 // static

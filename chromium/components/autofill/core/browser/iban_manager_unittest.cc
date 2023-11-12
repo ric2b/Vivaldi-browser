@@ -44,7 +44,7 @@ class MockSuggestionsHandler : public IBANManager::SuggestionsHandler {
   MOCK_METHOD(void,
               OnSuggestionsReturned,
               (FieldGlobalId field_id,
-               AutoselectFirstSuggestion autoselect_first_suggestion,
+               AutofillSuggestionTriggerSource trigger_source,
                const std::vector<Suggestion>& suggestions),
               (override));
 
@@ -115,20 +115,20 @@ class IBANManagerTest : public testing::Test {
                                     base::StringPiece nickname) {
     IBAN iban = SetUpIBAN(value, nickname);
     Suggestion iban_suggestion(iban.GetIdentifierStringForAutofillDisplay());
-    iban_suggestion.frontend_id = POPUP_ITEM_ID_IBAN_ENTRY;
+    iban_suggestion.popup_item_id = PopupItemId::kIbanEntry;
     return iban_suggestion;
   }
 
   Suggestion SetUpSeparator() {
     Suggestion separator;
-    separator.frontend_id = POPUP_ITEM_ID_SEPARATOR;
+    separator.popup_item_id = PopupItemId::kSeparator;
     return separator;
   }
 
   Suggestion SetUpFooterManagePaymentMethods() {
     Suggestion footer_suggestion(
         l10n_util::GetStringUTF16(IDS_AUTOFILL_MANAGE_PAYMENT_METHODS));
-    footer_suggestion.frontend_id = POPUP_ITEM_ID_AUTOFILL_OPTIONS;
+    footer_suggestion.popup_item_id = PopupItemId::kAutofillOptions;
     footer_suggestion.icon = "settingsIcon";
     return footer_suggestion;
   }
@@ -144,9 +144,9 @@ class IBANManagerTest : public testing::Test {
   raw_ptr<ui::ResourceBundle> original_resource_bundle_;
 };
 
-MATCHER_P(MatchesTextAndFrontendId, suggestion, "") {
+MATCHER_P(MatchesTextAndPopupItemId, suggestion, "") {
   return arg.main_text == suggestion.main_text &&
-         arg.frontend_id == suggestion.frontend_id;
+         arg.popup_item_id == suggestion.popup_item_id;
 }
 
 TEST_F(IBANManagerTest, ShowsIBANSuggestions) {
@@ -160,20 +160,21 @@ TEST_F(IBANManagerTest, ShowsIBANSuggestions) {
 
   // Setting up mock to verify that the handler is returned a list of
   // IBAN-based suggestions.
-  EXPECT_CALL(
-      suggestions_handler_,
-      OnSuggestionsReturned(
-          test_field.global_id(), AutoselectFirstSuggestion(false),
-          testing::IsSupersetOf({MatchesTextAndFrontendId(iban_suggestion_0),
-                                 MatchesTextAndFrontendId(iban_suggestion_1)})))
+  EXPECT_CALL(suggestions_handler_,
+              OnSuggestionsReturned(
+                  test_field.global_id(),
+                  AutofillSuggestionTriggerSource::kFormControlElementClicked,
+                  testing::IsSupersetOf(
+                      {MatchesTextAndPopupItemId(iban_suggestion_0),
+                       MatchesTextAndPopupItemId(iban_suggestion_1)})))
       .Times(1);
 
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(),
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
 }
 
@@ -190,8 +191,8 @@ TEST_F(IBANManagerTest, PaymentsAutofillEnabledPrefOff_NoIbanSuggestionsShown) {
   // Because the "Save and autofill payment methods" toggle is off, the
   // suggestion handler should not be triggered.
   EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(),
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
 }
 
@@ -209,19 +210,20 @@ TEST_F(IBANManagerTest, IBANSuggestions_SeparatorAndFooter) {
   // also be returned.
   EXPECT_CALL(suggestions_handler_,
               OnSuggestionsReturned(
-                  test_field.global_id(), AutoselectFirstSuggestion(false),
+                  test_field.global_id(),
+                  AutofillSuggestionTriggerSource::kFormControlElementClicked,
                   testing::UnorderedElementsAre(
-                      MatchesTextAndFrontendId(iban_suggestion_0),
-                      MatchesTextAndFrontendId(iban_suggestion_1),
-                      MatchesTextAndFrontendId(iban_suggestion_2))))
+                      MatchesTextAndPopupItemId(iban_suggestion_0),
+                      MatchesTextAndPopupItemId(iban_suggestion_1),
+                      MatchesTextAndPopupItemId(iban_suggestion_2))))
       .Times(1);
 
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(),
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
 }
 
@@ -243,8 +245,8 @@ TEST_F(IBANManagerTest, ShowsIBANSuggestions_NoSuggestion) {
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(),
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
 }
 
@@ -266,20 +268,21 @@ TEST_F(IBANManagerTest, ShowsIBANSuggestions_OnlyPrefixMatch) {
   // one separator and one footer suggestion displayed.
   EXPECT_CALL(suggestions_handler_,
               OnSuggestionsReturned(
-                  test_field.global_id(), AutoselectFirstSuggestion(false),
+                  test_field.global_id(),
+                  AutofillSuggestionTriggerSource::kFormControlElementClicked,
                   testing::UnorderedElementsAre(
-                      MatchesTextAndFrontendId(iban_suggestion_0),
-                      MatchesTextAndFrontendId(iban_suggestion_1),
-                      MatchesTextAndFrontendId(iban_suggestion_2),
-                      MatchesTextAndFrontendId(iban_suggestion_3))))
+                      MatchesTextAndPopupItemId(iban_suggestion_0),
+                      MatchesTextAndPopupItemId(iban_suggestion_1),
+                      MatchesTextAndPopupItemId(iban_suggestion_2),
+                      MatchesTextAndPopupItemId(iban_suggestion_3))))
       .Times(1);
 
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(),
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
 
   test_field.value = u"CH5604";
@@ -290,19 +293,20 @@ TEST_F(IBANManagerTest, ShowsIBANSuggestions_OnlyPrefixMatch) {
   // there are one separator and one footer suggestion displayed.
   EXPECT_CALL(suggestions_handler_,
               OnSuggestionsReturned(
-                  test_field.global_id(), AutoselectFirstSuggestion(false),
+                  test_field.global_id(),
+                  AutofillSuggestionTriggerSource::kFormControlElementClicked,
                   testing::UnorderedElementsAre(
-                      MatchesTextAndFrontendId(iban_suggestion_0),
-                      MatchesTextAndFrontendId(iban_suggestion_2),
-                      MatchesTextAndFrontendId(iban_suggestion_3))))
+                      MatchesTextAndPopupItemId(iban_suggestion_0),
+                      MatchesTextAndPopupItemId(iban_suggestion_2),
+                      MatchesTextAndPopupItemId(iban_suggestion_3))))
       .Times(1);
 
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(),
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
 
   test_field.value = u"AB56";
@@ -315,8 +319,8 @@ TEST_F(IBANManagerTest, ShowsIBANSuggestions_OnlyPrefixMatch) {
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(),
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
 }
 
@@ -335,8 +339,8 @@ TEST_F(IBANManagerTest, DoesNotShowIBANsForBlockedWebsite) {
 
   // Simulate request for suggestions.
   EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(),
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
 }
 
@@ -354,19 +358,20 @@ TEST_F(IBANManagerTest, ShowsIBANSuggestions_OptimizationGuideNotPresent) {
 
   // Setting up mock to verify that the handler is returned a list of
   // IBAN-based suggestions.
-  EXPECT_CALL(
-      suggestions_handler_,
-      OnSuggestionsReturned(
-          test_field.global_id(), AutoselectFirstSuggestion(false),
-          testing::IsSupersetOf({MatchesTextAndFrontendId(iban_suggestion_0)})))
+  EXPECT_CALL(suggestions_handler_,
+              OnSuggestionsReturned(
+                  test_field.global_id(),
+                  AutofillSuggestionTriggerSource::kFormControlElementClicked,
+                  testing::IsSupersetOf(
+                      {MatchesTextAndPopupItemId(iban_suggestion_0)})))
       .Times(1);
 
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(),
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
 }
 
@@ -385,8 +390,8 @@ TEST_F(IBANManagerTest, NotIbanFieldFocused_NoSuggestionsShown) {
 
   // Simulate request for suggestions.
   EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(),
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
 }
 
@@ -402,12 +407,12 @@ TEST_F(IBANManagerTest, Metrics_SuggestionsShown) {
 
   // Simulate request for suggestions.
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(), context));
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(), context));
 
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(), context));
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(), context));
 
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.Iban.Suggestions"),
@@ -433,9 +438,9 @@ TEST_F(IBANManagerTest, Metrics_SuggestionSelected) {
 
   // Simulate request for suggestions and select one suggested IBAN.
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(), context));
-  iban_manager_.OnSingleFieldSuggestionSelected(u"", POPUP_ITEM_ID_IBAN_ENTRY);
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(), context));
+  iban_manager_.OnSingleFieldSuggestionSelected(u"", PopupItemId::kIbanEntry);
 
   histogram_tester.ExpectBucketCount(
       "Autofill.Iban.Suggestions",
@@ -445,9 +450,9 @@ TEST_F(IBANManagerTest, Metrics_SuggestionSelected) {
       autofill_metrics::IbanSuggestionsEvent::kIbanSuggestionSelectedOnce, 1);
 
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(), context));
-  iban_manager_.OnSingleFieldSuggestionSelected(u"", POPUP_ITEM_ID_IBAN_ENTRY);
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(), context));
+  iban_manager_.OnSingleFieldSuggestionSelected(u"", PopupItemId::kIbanEntry);
 
   histogram_tester.ExpectBucketCount(
       "Autofill.Iban.Suggestions",
@@ -472,8 +477,8 @@ TEST_F(IBANManagerTest, Metrics_NoSuggestionShown) {
   // The suggestion handler should be triggered as some IBANs are available.
   // However, no suggestions are returned due to the prefix match requirement.
   EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      AutoselectFirstSuggestion(false), test_field, autofill_client_,
-      suggestions_handler_.GetWeakPtr(),
+      AutofillSuggestionTriggerSource::kFormControlElementClicked, test_field,
+      autofill_client_, suggestions_handler_.GetWeakPtr(),
       /*context=*/context));
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.Iban.Suggestions"),

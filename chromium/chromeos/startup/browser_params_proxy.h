@@ -65,8 +65,6 @@ class COMPONENT_EXPORT(CHROMEOS_STARTUP) BrowserParamsProxy {
 
   crosapi::mojom::OpenUrlFrom StartupUrlsFrom() const;
 
-  const absl::optional<std::vector<GURL>>& StartupUrls() const;
-
   const crosapi::mojom::DeviceSettingsPtr& DeviceSettings() const;
 
   const absl::optional<std::string>& MetricsServiceClientId() const;
@@ -108,6 +106,8 @@ class COMPONENT_EXPORT(CHROMEOS_STARTUP) BrowserParamsProxy {
 
   bool IsCurrentUserDeviceOwner() const;
 
+  bool IsCurrentUserEphemeral() const;
+
   bool DoNotMuxExtensionAppIds() const;
 
   bool EnableLacrosTtsSupport() const;
@@ -133,6 +133,10 @@ class COMPONENT_EXPORT(CHROMEOS_STARTUP) BrowserParamsProxy {
   bool OopVideoDecodingEnabled() const;
 
   bool IsUploadOfficeToCloudEnabled() const;
+
+  bool EnableClipboardHistoryRefresh() const;
+
+  bool IsVariableRefreshRateEnabled() const;
 
  private:
   friend base::NoDestructor<BrowserParamsProxy>;

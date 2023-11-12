@@ -16,6 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
 #include "components/request_filter/request_filter_manager.h"
+#include "components/request_filter/request_filter_proxying_websocket.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -112,6 +113,8 @@ class RequestFilterProxyingWebSocket
       const url::Origin& origin,
       content::BrowserContext* browser_context,
       RequestFilterManager::ProxySet* proxies);
+
+  static void EnsureAssociatedFactoryBuilt();
 
  private:
   void OnBeforeRequestComplete(int error_code);

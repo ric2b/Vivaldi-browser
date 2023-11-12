@@ -46,6 +46,7 @@
 #include "cc/tiles/tiling_set_raster_queue_all.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "components/viz/common/resources/resource_sizes.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "components/viz/test/begin_frame_args_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -1751,8 +1752,8 @@ class TestSoftwareRasterBufferProvider : public FakeRasterBufferProviderImpl {
       auto backing = std::make_unique<TestSoftwareBacking>();
       backing->shared_bitmap_id = viz::SharedBitmap::GenerateId();
       backing->pixels = std::make_unique<uint32_t[]>(
-          viz::ResourceSizes::CheckedSizeInBytes<size_t>(
-              resource.size(), kSharedImageFormat.resource_format()));
+          viz::ResourceSizes::CheckedSizeInBytes<size_t>(resource.size(),
+                                                         kSharedImageFormat));
       resource.set_software_backing(std::move(backing));
     }
     auto* backing =
@@ -2052,8 +2053,8 @@ TEST_F(PixelInspectTileManagerTest, LowResHasNoImage) {
     SCOPED_TRACE(resolutions[i]);
 
     // Make a RasterSource that will draw a blue bitmap image.
-    sk_sp<SkSurface> surface =
-        SkSurface::MakeRasterN32Premul(size.width(), size.height());
+    sk_sp<SkSurface> surface = SkSurfaces::Raster(
+        SkImageInfo::MakeN32Premul(size.width(), size.height()));
     ASSERT_NE(surface, nullptr);
     surface->getCanvas()->clear(SK_ColorBLUE);
     sk_sp<SkImage> blue_image = surface->makeImageSnapshot();

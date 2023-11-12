@@ -8,13 +8,13 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
-#include "base/guid.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -49,7 +49,7 @@ void MakeGuids(const base::FilePath& path) {
       printf("%s", buf);
       char* s = strstr(buf, "\"action\":");
       if (s) {
-        sprintf(&buf[s-buf], "\"guid\": \"%s\",", base::GenerateGUID().c_str());
+        sprintf(&buf[s-buf], "\"guid\": \"%s\",", base::Uuid::GenerateRandomV4().c_str());
         puts(buf);
       }
     }
@@ -148,7 +148,7 @@ void OnLoad(const base::FilePath& profile_file,
     if (base::PathExists(profile_file)) {
       std::string profile_version;
       if (!GetVersion(&profile_version, profile_file)) {
-        LOG(ERROR) << "Menu Storage: Failed to upgrade, version missing";
+        LOG(ERROR) << "Menu Storage: Can not check for upgrade, version missing";
       } else {
         std::string bundled_version = details->control()->version;
         if (HasVersionStepped(bundled_version, profile_version)) {
@@ -240,20 +240,24 @@ void OnLoad(const base::FilePath& profile_file,
 MenuLoadDetails::MenuLoadDetails(Menu_Node* mainmenu_node,
                                  Menu_Control* control,
                                  int64_t id,
-                                 bool force_bundle)
+                                 bool force_bundle,
+                                 bool is_reset)
     : mainmenu_node_(mainmenu_node),
       control_(control),
       id_(id),
-      force_bundle_(force_bundle) {}
+      force_bundle_(force_bundle),
+      is_reset_(is_reset) {}
 
 MenuLoadDetails::MenuLoadDetails(Menu_Node* mainmenu_node,
                                  Menu_Control* control,
                                  const std::string& menu,
-                                 bool force_bundle)
+                                 bool force_bundle,
+                                 bool is_reset)
     : mainmenu_node_(mainmenu_node),
       control_(control),
       id_(-1),
       force_bundle_(force_bundle),
+      is_reset_(is_reset),
       menu_(menu) {}
 
 MenuLoadDetails::~MenuLoadDetails() {}
@@ -322,6 +326,16 @@ void MenuStorage::OnModelWillBeDeleted() {
 }
 
 absl::optional<std::string> MenuStorage::SerializeData() {
+  if (!model_) {
+    // We can get into this state if there is a pending save on exit. It will
+    // only happen if a forced save fails (eg absl::nullopt is returned below)
+    // A forced save is initiated from ~Menu_Model() which calls
+    // MenuStorage::OnModelWillBeDeleted(). The forced save will clear the
+    // pending save request in the file writer only if it succeeds. If not we
+    // can end up here with model_ set to nullptr.
+    return absl::nullopt;
+  }
+
   MenuCodec codec;
   std::string output;
   JSONStringValueSerializer serializer(&output);

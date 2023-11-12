@@ -72,8 +72,11 @@ android_library("java") {
     "//ui/android:ui_full_java",
     "//ui/android:ui_no_recycler_view_java",
   ]
-  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
-  srcjar_deps = [ ":safe_browsing_enums" ]
+
+  srcjar_deps = [
+    ":jni_headers",
+    ":safe_browsing_enums",
+  ]
   resources_package = "org.chromium.chrome.browser.safe_browsing.settings"
 }
 
@@ -104,6 +107,7 @@ android_library("javatests") {
     "//content/public/test/android:content_java_test_support",
     "//third_party/android_deps:espresso_java",
     "//third_party/androidx:androidx_preference_preference_java",
+    "//third_party/androidx:androidx_test_core_java",
     "//third_party/androidx:androidx_test_monitor_java",
     "//third_party/androidx:androidx_test_runner_java",
     "//third_party/junit",

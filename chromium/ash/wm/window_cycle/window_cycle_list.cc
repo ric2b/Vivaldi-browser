@@ -16,12 +16,10 @@
 #include "ash/system/tray/tray_background_view.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "ash/wm/window_cycle/window_cycle_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/check.h"
 #include "base/location.h"
-#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/ranges/algorithm.h"
@@ -30,10 +28,7 @@
 #include "ui/aura/window_targeter.h"
 #include "ui/compositor/layer_type.h"
 #include "ui/display/display.h"
-#include "ui/display/display_observer.h"
-#include "ui/display/screen.h"
 #include "ui/events/event.h"
-#include "ui/views/controls/label.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/window_animations.h"
@@ -79,19 +74,6 @@ gfx::Point ConvertEventToScreen(const ui::LocatedEvent* event) {
   gfx::Point event_screen_point = event->root_location();
   wm::ConvertPointToScreen(event_root, &event_screen_point);
   return event_screen_point;
-}
-
-aura::Window* GetRootWindowForCycleView() {
-  // Returns the root window for initializing cycle view if tablet mode is
-  // enabled, or if the feature for alt-tab to follow the cursor is disabled.
-  if (Shell::Get()->tablet_mode_controller()->InTabletMode() ||
-      !features::DoWindowsFollowCursor()) {
-    return Shell::GetRootWindowForNewWindows();
-  }
-
-  // Return the root window the cursor is currently on.
-  return Shell::GetRootWindowForDisplayId(
-      Shell::Get()->cursor_manager()->GetDisplay().id());
 }
 
 }  // namespace
@@ -350,7 +332,7 @@ void WindowCycleList::RemoveAllWindows() {
 void WindowCycleList::InitWindowCycleView() {
   if (cycle_view_)
     return;
-  aura::Window* root_window = GetRootWindowForCycleView();
+  aura::Window* root_window = Shell::GetRootWindowForNewWindows();
 
   // Close any tray bubbles that are opened before creating the cycle view.
   StatusAreaWidget* status_area_widget =

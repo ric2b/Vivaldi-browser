@@ -10,6 +10,7 @@
 #include "chrome/browser/browsing_data/browsing_data_file_system_util.h"
 #include "chrome/browser/browsing_data/cookies_tree_model.h"
 #include "components/browsing_data/core/features.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_usage_info.h"
 #include "net/cookies/canonical_cookie.h"
 
@@ -43,8 +44,7 @@ LocalDataContainer::CreateFromStoragePartition(
         base::MakeRefCounted<browsing_data::CookieHelper>(
             storage_partition, is_cookie_deletion_disabled_callback),
         /*database_helper=*/nullptr,
-        base::MakeRefCounted<browsing_data::LocalStorageHelper>(
-            storage_partition),
+        /*local_storage_helper=*/nullptr,
         /*session_storage_helper=*/nullptr,
         /*indexed_db_helper=*/nullptr,
         /*file_system_helper=*/nullptr,

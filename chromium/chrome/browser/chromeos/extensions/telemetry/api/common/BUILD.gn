@@ -23,6 +23,7 @@ source_set("common") {
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui",
     "//chrome/common/chromeos/extensions",
+    "//components/account_id",
     "//components/security_state/content",
     "//components/security_state/core",
     "//content/public/browser",
@@ -57,7 +58,7 @@ source_set("remote_probe_strategy") {
   ]
 
   if (is_chromeos_ash) {
-    deps += [ "//chrome/browser/ash/telemetry_extension" ]
+    deps += [ "//chrome/browser/ash/telemetry_extension/telemetry" ]
   }
 
   if (is_chromeos_lacros) {
@@ -143,7 +144,6 @@ source_set("browser_tests") {
   if (is_chromeos_ash) {
     deps += [
       "//chrome/browser/ash:test_support",
-      "//chrome/browser/ash/telemetry_extension",
       "//components/user_manager",
     ]
   }

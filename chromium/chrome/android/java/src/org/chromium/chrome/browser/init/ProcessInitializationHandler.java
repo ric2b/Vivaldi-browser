@@ -37,7 +37,6 @@ import org.chromium.chrome.browser.DevToolsServer;
 import org.chromium.chrome.browser.app.bluetooth.BluetoothNotificationService;
 import org.chromium.chrome.browser.app.feature_guide.notifications.FeatureNotificationGuideDelegate;
 import org.chromium.chrome.browser.app.usb.UsbNotificationService;
-import org.chromium.chrome.browser.app.video_tutorials.VideoTutorialShareHelper;
 import org.chromium.chrome.browser.bluetooth.BluetoothNotificationManager;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
 import org.chromium.chrome.browser.contacts_picker.ChromePickerAdapter;
@@ -66,7 +65,6 @@ import org.chromium.chrome.browser.metrics.WebApkUninstallUmaTracker;
 import org.chromium.chrome.browser.notifications.channels.ChannelsUpdater;
 import org.chromium.chrome.browser.ntp.FeedPositionUtils;
 import org.chromium.chrome.browser.offlinepages.measurements.OfflineMeasurementsBackgroundTask;
-import org.chromium.chrome.browser.omnibox.voice.AssistantVoiceSearchService;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeFactory;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.photo_picker.DecoderService;
@@ -101,14 +99,13 @@ import org.chromium.components.minidump_uploader.CrashFileManager;
 import org.chromium.components.optimization_guide.proto.HintsProto;
 import org.chromium.components.signin.AccountManagerFacadeImpl;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
-import org.chromium.components.version_info.Channel;
-import org.chromium.components.version_info.VersionConstants;
 import org.chromium.components.version_info.VersionInfo;
 import org.chromium.components.webapps.AppBannerManager;
 import org.chromium.content_public.browser.ChildProcessLauncherHelper;
 import org.chromium.content_public.browser.ContactsPicker;
 import org.chromium.content_public.browser.ContactsPickerListener;
 import org.chromium.content_public.common.ContentSwitches;
+import org.chromium.ui.accessibility.AccessibilityState;
 import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.base.PhotoPicker;
 import org.chromium.ui.base.PhotoPickerListener;
@@ -262,6 +259,8 @@ public class ProcessInitializationHandler {
         PrivacyPreferencesManagerImpl.getInstance().onNativeInitialized();
         refreshCachedSegmentationResult();
         setProcessStateSummaryForAnrs(true);
+
+        AccessibilityState.registerObservers();
     }
 
     /**
@@ -439,16 +438,10 @@ public class ProcessInitializationHandler {
         deferredStartupHandler.addDeferredTask(
                 () -> EnterpriseInfo.getInstance().logDeviceEnterpriseInfo());
         deferredStartupHandler.addDeferredTask(
-                () -> VideoTutorialShareHelper.saveUrlsToSharedPrefs());
-        deferredStartupHandler.addDeferredTask(
                 () -> TosDialogBehaviorSharedPrefInvalidator.refreshSharedPreferenceIfTosSkipped());
         deferredStartupHandler.addDeferredTask(
                 () -> OfflineMeasurementsBackgroundTask.clearPersistedDataFromPrefs());
         deferredStartupHandler.addDeferredTask(() -> QueryTileUtils.isQueryTilesEnabledOnNTP());
-        deferredStartupHandler.addDeferredTask(
-                ()
-                        -> AssistantVoiceSearchService.reportStartupUserEligibility(
-                                ContextUtils.getApplicationContext()));
         deferredStartupHandler.addDeferredTask(() -> {
             GlobalAppLocaleController.getInstance().maybeSetupLocaleManager();
             GlobalAppLocaleController.getInstance().recordOverrideLanguageMetrics();
@@ -475,6 +468,9 @@ public class ProcessInitializationHandler {
             }
         });
         deferredStartupHandler.addDeferredTask(() -> { PersistedTabData.onDeferredStartup(); });
+
+        // Asynchronously query system accessibility state so it is ready for clients.
+        deferredStartupHandler.addDeferredTask(AccessibilityState::initializeOnStartup);
     }
 
     private void initChannelsAsync() {
@@ -553,10 +549,8 @@ public class ProcessInitializationHandler {
                         new CrashFileManager(ContextUtils.getApplicationContext().getCacheDir());
                 crashFileManager.cleanOutAllNonFreshMinidumpFiles();
 
-                // Restricting ANR collection to Canary until we are totally happy with it.
                 // ANR collection is only available on R+.
-                if (VersionConstants.CHANNEL == Channel.CANARY
-                        && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     crashFileManager.collectAndWriteAnrs();
                 }
                 // Next, identify any minidumps that lack logcat output, and are too old to add

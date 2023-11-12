@@ -18,8 +18,8 @@
 #import "components/sessions/core/session_id.h"
 #import "components/sessions/core/session_types.h"
 #import "components/sync/base/user_selectable_type.h"
-#import "components/sync/driver/sync_service.h"
-#import "components/sync/driver/sync_user_settings.h"
+#import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_user_settings.h"
 #import "components/sync/test/test_sync_service.h"
 #import "components/sync_device_info/device_info.h"
 #import "components/sync_sessions/open_tabs_ui_delegate.h"
@@ -28,8 +28,8 @@
 #import "components/sync_sessions/synced_session.h"
 #import "ios/chrome/browser/bring_android_tabs/features.h"
 #import "ios/chrome/browser/bring_android_tabs/metrics.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/segmentation_platform/segmentation_platform_config.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/sync/session_sync_service_factory.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
@@ -264,8 +264,7 @@ TEST_F(BringAndroidTabsToIOSServiceTest, UserNotSynced) {
   // Set something other than `kTabs` as the selected type.
   test_sync_service_->GetUserSettings()->SetSelectedTypes(
       /*sync_everything=*/false,
-      /*types=*/syncer::UserSelectableTypeSet(
-          syncer::UserSelectableType::kPasswords));
+      /*types=*/{syncer::UserSelectableType::kPasswords});
   EXPECT_EQ(NumberOfTabsLoaded(/*is_android_switcher=*/true,
                                /*tabs_recently_active=*/true),
             0);
@@ -277,7 +276,6 @@ TEST_F(BringAndroidTabsToIOSServiceTest, UserNotAndroidSwitcher) {
   EXPECT_EQ(NumberOfTabsLoaded(/*is_android_switcher=*/false,
                                /*tabs_recently_active=*/true),
             0);
-  ExpectHistogram(bring_android_tabs::PromptAttemptStatus::kNotAndroidSwitcher);
 }
 
 // Tests that no tabs are loaded when the user's open tabs were not recently

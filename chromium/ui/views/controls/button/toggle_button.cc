@@ -369,6 +369,10 @@ bool ToggleButton::GetAcceptsEvents() const {
   return accepts_events_;
 }
 
+int ToggleButton::GetVisualHorizontalMargin() const {
+  return kTrackHorizontalMargin - kThumbInset;
+}
+
 void ToggleButton::AddLayerToRegion(ui::Layer* layer,
                                     views::LayerRegion region) {
   // Ink-drop layers should go above/below the ThumbView.
@@ -381,7 +385,9 @@ void ToggleButton::RemoveLayerFromRegions(ui::Layer* layer) {
 
 gfx::Size ToggleButton::CalculatePreferredSize() const {
   gfx::Rect rect(GetTrackSize());
-  rect.Inset(gfx::Insets::VH(-kTrackVerticalMargin, -kTrackHorizontalMargin));
+  if (!features::IsChromeRefresh2023()) {
+    rect.Inset(gfx::Insets::VH(-kTrackVerticalMargin, -kTrackHorizontalMargin));
+  }
   rect.Inset(-GetInsets());
   return rect.size();
 }

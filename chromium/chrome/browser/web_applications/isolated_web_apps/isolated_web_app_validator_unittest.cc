@@ -13,6 +13,8 @@
 #include "base/strings/string_util.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "base/types/expected.h"
+#include "chrome/browser/web_applications/isolated_web_apps/error/unusable_swbn_file_error.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_trust_checker.h"
 #include "chrome/common/url_constants.h"
 #include "components/prefs/pref_service.h"
@@ -62,10 +64,18 @@ constexpr std::array<uint8_t, 64> kEd25519Signature = {
     0xc2, 0xd9, 0xf2, 0x02, 0x03, 0x42, 0x18, 0x10, 0x12, 0x26, 0x62,
     0x88, 0xf6, 0xa3, 0xa5, 0x47, 0x14, 0x69, 0x00, 0x73};
 
-class MockIsolatedWebAppTrustChecker : public IsolatedWebAppTrustChecker {
+// This class needs to be a IsolatedWebAppTrustChecker, but also must
+// provide a TestingPrefServiceSimple that outlives it. So rather than
+// making TestingPrefServiceSimple a member, make it the leftmost base class.
+class MockIsolatedWebAppTrustChecker : private TestingPrefServiceSimple,
+                                       public IsolatedWebAppTrustChecker {
  public:
   MockIsolatedWebAppTrustChecker()
-      : IsolatedWebAppTrustChecker(TestingPrefServiceSimple()) {}
+      : IsolatedWebAppTrustChecker(
+            // Disambiguate the constructor using the form that takes the
+            // already-initialized leftmost base class, rather than the copy
+            // constructor for the uninitialized rightmost base class.
+            *static_cast<TestingPrefServiceSimple*>(this)) {}
 
   MOCK_METHOD(
       IsolatedWebAppTrustChecker::Result,
@@ -160,11 +170,11 @@ class IsolatedWebAppValidatorMetadataTest
       public ::testing::WithParamInterface<
           std::tuple<absl::optional<std::string>,
                      std::vector<std::string>,
-                     std::string>> {
+                     base::expected<void, UnusableSwbnFileError>>> {
  public:
   IsolatedWebAppValidatorMetadataTest()
       : primary_url_(std::get<0>(GetParam())),
-        error_message_(std::get<2>(GetParam())) {
+        status_(std::get<2>(GetParam())) {
     for (const std::string& entry : std::get<1>(GetParam())) {
       entries_.emplace_back(entry);
     }
@@ -173,7 +183,7 @@ class IsolatedWebAppValidatorMetadataTest
  protected:
   absl::optional<GURL> primary_url_;
   std::vector<GURL> entries_;
-  std::string error_message_;
+  base::expected<void, UnusableSwbnFileError> status_;
 };
 
 TEST_P(IsolatedWebAppValidatorMetadataTest, Validate) {
@@ -184,9 +194,8 @@ TEST_P(IsolatedWebAppValidatorMetadataTest, Validate) {
   auto isolated_web_app_trust_checker =
       std::make_unique<MockIsolatedWebAppTrustChecker>();
   IsolatedWebAppValidator validator(std::move(isolated_web_app_trust_checker));
-  EXPECT_EQ(validator.ValidateMetadata(*web_bundle_id, primary_url_, entries_)
-                .error_or(std::string()),
-            error_message_);
+  EXPECT_EQ(validator.ValidateMetadata(*web_bundle_id, primary_url_, entries_),
+            status_);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -195,28 +204,42 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(
         std::make_tuple(absl::nullopt,
                         std::vector<std::string>({kUrl}),
-                        std::string()),
-        std::make_tuple(absl::nullopt,
-                        std::vector<std::string>({kUrl, kUrl + "/foo#bar"}),
-                        "The URL of an exchange is invalid: URLs must not have "
-                        "a fragment part."),
-        std::make_tuple(absl::nullopt,
-                        std::vector<std::string>({kUrl, kUrl + "/foo?bar"}),
-                        "The URL of an exchange is invalid: URLs must not have "
-                        "a query part."),
+                        base::ok()),
+        std::make_tuple(
+            absl::nullopt,
+            std::vector<std::string>({kUrl, kUrl + "/foo#bar"}),
+            base::unexpected(UnusableSwbnFileError(
+                UnusableSwbnFileError::Error::kMetadataValidationError,
+                "The URL of an exchange is invalid: URLs must not have "
+                "a fragment part."))),
+        std::make_tuple(
+            absl::nullopt,
+            std::vector<std::string>({kUrl, kUrl + "/foo?bar"}),
+            base::unexpected(UnusableSwbnFileError(
+                UnusableSwbnFileError::Error::kMetadataValidationError,
+                "The URL of an exchange is invalid: URLs must not have "
+                "a query part."))),
         std::make_tuple(
             kUrl,
             std::vector<std::string>({kUrl}),
-            "Primary URL must not be present, but was isolated-app://"
-            "aerugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaic/"),
-        std::make_tuple(absl::nullopt,
-                        std::vector<std::string>({kUrl, "https://foo/"}),
-                        "The URL of an exchange is invalid: The URL scheme "
-                        "must be isolated-app, but was https"),
+            base::unexpected(UnusableSwbnFileError(
+                UnusableSwbnFileError::Error::kMetadataValidationError,
+                "Primary URL must not be present, but was isolated-app://"
+                "aerugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaic/"))),
+        std::make_tuple(
+            absl::nullopt,
+            std::vector<std::string>({kUrl, "https://foo/"}),
+            base::unexpected(UnusableSwbnFileError(
+                UnusableSwbnFileError::Error::kMetadataValidationError,
+                "The URL of an exchange is invalid: The URL scheme "
+                "must be isolated-app, but was https"))),
         std::make_tuple(
             absl::nullopt,
             std::vector<std::string>({kUrl, kUrlFromAnotherIsolatedWebApp}),
-            "The URL of an exchange contains the wrong Signed Web Bundle ID: "
-            "berugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaic")));
+            base::unexpected(UnusableSwbnFileError(
+                UnusableSwbnFileError::Error::kMetadataValidationError,
+                "The URL of an exchange contains the wrong Signed Web Bundle "
+                "ID: "
+                "berugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaic")))));
 
 }  // namespace web_app

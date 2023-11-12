@@ -288,22 +288,6 @@ blink::WebString RendererBlinkPlatformImpl::UserAgent() {
   return render_thread->GetUserAgent();
 }
 
-blink::WebString RendererBlinkPlatformImpl::FullUserAgent() {
-  auto* render_thread = RenderThreadImpl::current();
-  // RenderThreadImpl is null in some tests.
-  if (!render_thread)
-    return WebString();
-  return render_thread->GetFullUserAgent();
-}
-
-blink::WebString RendererBlinkPlatformImpl::ReducedUserAgent() {
-  auto* render_thread = RenderThreadImpl::current();
-  // RenderThreadImpl is null in some tests.
-  if (!render_thread)
-    return WebString();
-  return render_thread->GetReducedUserAgent();
-}
-
 blink::UserAgentMetadata RendererBlinkPlatformImpl::UserAgentMetadata() {
   auto* render_thread = RenderThreadImpl::current();
   // RenderThreadImpl is null in some tests.
@@ -605,11 +589,6 @@ bool RendererBlinkPlatformImpl::IsWebRtcHWDecodingEnabled() {
       switches::kDisableWebRtcHWDecoding);
 }
 
-bool RendererBlinkPlatformImpl::IsWebRtcSrtpAesGcmEnabled() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableWebRtcSrtpAesGcm);
-}
-
 bool RendererBlinkPlatformImpl::IsWebRtcSrtpEncryptedHeadersEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kEnableWebRtcSrtpEncryptedHeaders);
@@ -650,7 +629,7 @@ void RendererBlinkPlatformImpl::Collect3DContextInformation(
 std::unique_ptr<blink::WebGraphicsContext3DProvider>
 RendererBlinkPlatformImpl::CreateOffscreenGraphicsContext3DProvider(
     const blink::Platform::ContextAttributes& web_attributes,
-    const blink::WebURL& top_document_web_url,
+    const blink::WebURL& document_url,
     blink::Platform::GraphicsInfo* gl_info) {
   DCHECK(gl_info);
   if (!RenderThreadImpl::current()) {
@@ -669,20 +648,7 @@ RendererBlinkPlatformImpl::CreateOffscreenGraphicsContext3DProvider(
   }
   Collect3DContextInformation(gl_info, gpu_channel_host->gpu_info());
 
-  // This is an offscreen context. Generally it won't use the default
-  // frame buffer, in that case don't request any alpha, depth, stencil,
-  // antialiasing. But we do need those attributes for the "own
-  // offscreen surface" optimization which supports directly drawing
-  // to a custom surface backed frame buffer.
   gpu::ContextCreationAttribs attributes;
-  attributes.alpha_size = web_attributes.support_alpha ? 8 : -1;
-  attributes.depth_size = web_attributes.support_depth ? 24 : 0;
-  attributes.stencil_size = web_attributes.support_stencil ? 8 : 0;
-  attributes.samples = web_attributes.support_antialias ? 4 : 0;
-  attributes.own_offscreen_surface =
-      web_attributes.support_alpha || web_attributes.support_depth ||
-      web_attributes.support_stencil || web_attributes.support_antialias;
-  attributes.sample_buffers = 0;
   attributes.bind_generates_resource = false;
   attributes.enable_raster_interface = web_attributes.enable_raster_interface;
   attributes.enable_oop_rasterization =
@@ -711,9 +677,8 @@ RendererBlinkPlatformImpl::CreateOffscreenGraphicsContext3DProvider(
           std::move(gpu_channel_host),
           RenderThreadImpl::current()->GetGpuMemoryBufferManager(),
           kGpuStreamIdDefault, kGpuStreamPriorityDefault,
-          gpu::kNullSurfaceHandle, GURL(top_document_web_url),
-          automatic_flushes, support_locking, use_grcontext,
-          gpu::SharedMemoryLimits(), attributes,
+          gpu::kNullSurfaceHandle, GURL(document_url), automatic_flushes,
+          support_locking, use_grcontext, gpu::SharedMemoryLimits(), attributes,
           viz::command_buffer_metrics::ContextType::WEBGL));
   return std::make_unique<WebGraphicsContext3DProviderImpl>(
       std::move(provider));
@@ -747,7 +712,7 @@ RendererBlinkPlatformImpl::CreateSharedOffscreenGraphicsContext3DProvider() {
 
 std::unique_ptr<blink::WebGraphicsContext3DProvider>
 RendererBlinkPlatformImpl::CreateWebGPUGraphicsContext3DProvider(
-    const blink::WebURL& top_document_web_url) {
+    const blink::WebURL& document_url) {
 #if !BUILDFLAG(USE_DAWN)
   return nullptr;
 #else
@@ -785,8 +750,8 @@ RendererBlinkPlatformImpl::CreateWebGPUGraphicsContext3DProvider(
           std::move(gpu_channel_host),
           RenderThreadImpl::current()->GetGpuMemoryBufferManager(),
           kGpuStreamIdDefault, kGpuStreamPriorityDefault,
-          gpu::kNullSurfaceHandle, GURL(top_document_web_url),
-          automatic_flushes, support_locking, support_grcontext,
+          gpu::kNullSurfaceHandle, GURL(document_url), automatic_flushes,
+          support_locking, support_grcontext,
           gpu::SharedMemoryLimits::ForWebGPUContext(), attributes,
           viz::command_buffer_metrics::ContextType::WEBGPU, buffer_mapper));
   return std::make_unique<WebGraphicsContext3DProviderImpl>(
@@ -876,16 +841,19 @@ void RendererBlinkPlatformImpl::CreateServiceWorkerSubresourceLoaderFactory(
         blink::mojom::ServiceWorkerContainerHostInterfaceBase>
         service_worker_container_host,
     const blink::WebString& client_id,
-    blink::mojom::ServiceWorkerFetchHandlerBypassOption
-        fetch_handler_bypass_option,
     std::unique_ptr<network::PendingSharedURLLoaderFactory> fallback_factory,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
+  // TODO(crbug.com/1371756): plumb `router_rules` with the function callers
+  // if there is such use case. As of 2023-06-01, only
+  // `DedicatedOrSharedWorkerFetchContextImpl` calls the function, and
+  // no need to allow it set the `router_rules`.
   ServiceWorkerSubresourceLoaderFactory::Create(
       base::MakeRefCounted<ControllerServiceWorkerConnector>(
           std::move(service_worker_container_host),
           /*remote_controller=*/mojo::NullRemote(), client_id.Utf8(),
-          fetch_handler_bypass_option),
+          blink::mojom::ServiceWorkerFetchHandlerBypassOption::kDefault,
+          /*router_rules=*/absl::nullopt),
       network::SharedURLLoaderFactory::Create(std::move(fallback_factory)),
       std::move(receiver), std::move(task_runner));
 }

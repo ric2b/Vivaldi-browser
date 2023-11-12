@@ -3,7 +3,6 @@
 #include "browser/sessions/vivaldi_session_utils.h"
 
 #include "base/files/file_util.h"
-#include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/json/json_writer.h"
@@ -22,6 +21,7 @@
 #include "sessions/index_node.h"
 #include "sessions/index_service_factory.h"
 #include "sessions/index_storage.h"
+#include "base/uuid.h"
 #include "vivaldi/app/grit/vivaldi_native_strings.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -72,7 +72,7 @@ absl::optional<int> GetTabFlag(const sessions::SessionTab* tab) {
      base::JSONReader::Read(tab->viv_ext_data, options);
   absl::optional<int> value;
   if (json && json->is_dict()) {
-    value = json->FindIntKey(kVivaldiTabFlag);
+    value = json->GetDict().FindInt(kVivaldiTabFlag);
   }
   return value;
 }
@@ -311,6 +311,40 @@ int CopySessionFile(BrowserContext* browser_context,
   return sessions::kNoError;
 }
 
+int PurgeAutosaves(BrowserContext* browser_context) {
+  Index_Model* model = IndexServiceFactory::GetForBrowserContext(
+      browser_context);
+  if (!model || !model->items_node()) {
+    return sessions::kErrorNoModel;
+  }
+
+  Index_Node* autosave_node = model->items_node()->GetById(
+      Index_Node::autosave_node_id());
+  if (!autosave_node) {
+    return sessions::kNoError;
+  }
+
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  int save_days = profile->GetPrefs()->GetInteger(
+      vivaldiprefs::kSessionsSaveDays);
+
+  std::vector<Index_Node*> nodes;
+  sessions::GetExpiredAutoSaveNodes(browser_context, save_days, true, nodes);
+
+  for (Index_Node* node : nodes) {
+    int error_code = DeleteSessionFile(browser_context, node);
+    // Allow a missing session file when we are deleting.
+    if (error_code != sessions::kNoError &&
+        error_code != sessions::kErrorFileMissing) {
+      return error_code;
+    }
+    model->Remove(node);
+  }
+
+  return sessions::kNoError;
+}
+
+
 int HandleAutoSave(BrowserContext* browser_context,
                    sessions::WriteSessionOptions& ctl,
                    double* modify_time = nullptr) {
@@ -353,30 +387,20 @@ int HandleAutoSave(BrowserContext* browser_context,
     }
     model->Add(std::move(node), model->items_node(), index, "");
   } else {
-    // Test for number of children and remove oldest if needed.
-    Profile* profile = Profile::FromBrowserContext(browser_context);
-    size_t size = autosave_node->children().size();
-    size_t max = profile->GetPrefs()->GetInteger(
-        vivaldiprefs::kSessionsExitSaveListSize);
-    if (size >= max) {
-      Index_Node* child = autosave_node->children()[size - 1].get();
-      error_code = DeleteSessionFile(browser_context, child);
-      // Allow a missing session file when we are deleting.
-      if (error_code == sessions::kErrorFileMissing) {
-        error_code = sessions::kNoError;
-      }
-      if (error_code == sessions::kNoError) {
-        model->Remove(child);
-      }
-    }
+    // When we add a new child to the autosave_node we do it by making the
+    // auto_save node itself the node that holds the new data. The existing
+    // content of the auto_save node is added as the first child. This way we
+    // "push" the older state down into child list forming a history.
 
-    // New child of the node we are about to update. Holds old state of node.
+    // The new child of the auto_save node we are about to update. Holds old
+    // state of the auto_save node.
     std::unique_ptr<Index_Node> child = std::make_unique<Index_Node>(
-        base::GenerateGUID(), Index_Node::GetNewId());
+        base::Uuid::GenerateRandomV4().AsLowercaseString(),
+        Index_Node::GetNewId());
     child->Copy(autosave_node);
     child->SetContainerGuid(autosave_node->guid());
 
-    // Placeholder for transferring updated data to existing node.
+    // Placeholder for transferring new data to the auto_save node.
     std::unique_ptr<Index_Node> tmp = std::make_unique<Index_Node>("", -1);
     tmp->SetFilename(ctl.filename); // Must be set if calling DeleteSessionFile
 
@@ -385,7 +409,7 @@ int HandleAutoSave(BrowserContext* browser_context,
       DeleteSessionFile(browser_context, tmp.get());
       return error_code;
     }
-    // Entries we do not want to modify when updating below.
+    // Entries we want to keep unmodified when updating the autosave_node below.
     tmp->SetTitle(autosave_node->GetTitle());
     tmp->SetCreateTime(autosave_node->create_time());
     // The typical case for overriding the modify time is when we update the
@@ -396,11 +420,14 @@ int HandleAutoSave(BrowserContext* browser_context,
       tmp->SetModifyTime(*modify_time);
     }
 
-    // Update the existing node.
+    // Update auto_save node with newest save state.
     model->Change(autosave_node, tmp.get());
-    // Add child to the node we have updated.
+    // Add child with old autosave_node data as first child of autosave_node.
     model->Add(std::move(child), autosave_node, 0, "");
   }
+
+  // Remove too old nodes.
+  PurgeAutosaves(browser_context);
 
   // Always delete any backup when auto save list is updated.
   if (model->backup_node()) {
@@ -698,6 +725,88 @@ int DeleteSessionFile(BrowserContext* browser_context, Index_Node* node) {
   return kNoError;
 }
 
+int MoveAutoSaveNodesToTrash(BrowserContext* browser_context) {
+  Index_Model* model = IndexServiceFactory::GetForBrowserContext(
+      browser_context);
+  if (!model || !model->items_node()) {
+    return sessions::kErrorNoModel;
+  }
+
+  Index_Node* autosave_node = model->items_node()->GetById(
+      Index_Node::autosave_node_id());
+  if (!autosave_node) {
+    return sessions::kNoError;
+  }
+
+  // Move all children of node to trash.
+  std::vector<Index_Node*> nodes;
+  for (const std::unique_ptr<Index_Node>& node : autosave_node->children()) {
+    nodes.push_back(node.get());
+  }
+  Index_Node* trash_folder = model->root_node()->GetById(
+      Index_Node::trash_node_id());
+  if (!trash_folder) {
+    return sessions::kErrorUnknownId;
+  }
+
+  int index = 0;
+  for (const Index_Node* node : nodes) {
+    model->Move(node, trash_folder, index++);
+  }
+
+  // Move node itself to trash. We can not move as is since it holds a
+  // special id. Duplicate content with new id.
+  std::unique_ptr<Index_Node> node = std::make_unique<Index_Node>(
+    base::Uuid::GenerateRandomV4().AsLowercaseString(),
+    Index_Node::GetNewId());
+  node->Copy(autosave_node);
+  model->Add(std::move(node), trash_folder, 0, "");
+  model->Remove(autosave_node);
+
+  return kNoError;
+}
+
+int GetExpiredAutoSaveNodes(BrowserContext* browser_context,
+                            int days_before,
+                            bool on_add,
+                            std::vector<Index_Node*>& nodes) {
+  Index_Model* model = IndexServiceFactory::GetForBrowserContext(
+      browser_context);
+  if (!model || !model->items_node()) {
+    return sessions::kErrorNoModel;
+  }
+
+  Index_Node* autosave_node = model->items_node()->GetById(
+      Index_Node::autosave_node_id());
+  if (!autosave_node) {
+    return sessions::kNoError;
+  }
+
+  base::Time time = on_add
+    ? base::Time::FromJsTime(autosave_node->modify_time())
+    : base::Time::Now();
+  base::Time expire_time = time - base::Days(days_before);
+  base::Time::Exploded time_exploded;
+  time.LocalExplode(&time_exploded);
+
+  for (const std::unique_ptr<Index_Node>& node : autosave_node->children()) {
+    base::Time node_time = base::Time::FromJsTime(node->modify_time());
+    if (node_time <= expire_time) {
+      nodes.push_back(node.get());
+    } else if (on_add) {
+      base::Time::Exploded node_exploded;
+      node_time.LocalExplode(&node_exploded);
+      if (time_exploded.year == node_exploded.year &&
+          time_exploded.day_of_month == node_exploded.day_of_month &&
+          time_exploded.month == node_exploded.month) {
+        nodes.push_back(node.get());
+      }
+    }
+  }
+
+  return sessions::kNoError;
+}
+
 // Moves a backup session to the auto saved session list. Intended to be used
 // while loading the model.
 int AutoSaveFromBackup(BrowserContext* browser_context) {
@@ -707,7 +816,7 @@ int AutoSaveFromBackup(BrowserContext* browser_context) {
     return sessions::kErrorNoModel;
   }
 
-  // If auto saving is turned off backup genearation is also turned off. Should
+  // If auto saving is turned off backup generation is also turned off. Should
   // there be backup information in the model when loading we just delete it
   // since the user has turned functionality off.
   Profile* profile = Profile::FromBrowserContext(browser_context);
@@ -1257,7 +1366,7 @@ std::string GetTabStackId(const SessionTab* tab) {
      base::JSONReader::Read(tab->viv_ext_data, options);
   std::string value;
   if (json && json->is_dict()) {
-    std::string* s = json->FindStringKey(kVivaldiTabStackId);
+    std::string* s = json->GetDict().FindString(kVivaldiTabStackId);
     if (s) {
       value = *s;
     }
@@ -1382,6 +1491,26 @@ void DumpContent(base::FilePath name) {
     printf("window: id: %d\n", it->second->window_id.id());
   }
   */
+}
+
+// Add index to list of tabs opened on the command-line, before tab to window
+bool AddCommandLineTab(Browser* browser) {
+  if (!browser)
+    return false;
+  std::string v_e_d = browser->viv_ext_data();
+  absl::optional<base::Value> json = absl::nullopt;
+  json = base::JSONReader::Read(v_e_d, base::JSON_PARSE_RFC);
+  if (!(json && json->is_dict()))
+    return false;
+  auto* val = json->GetDict().EnsureList("commandline_tab");
+  if (!val)
+    return false;
+  val->Append(browser->tab_strip_model()->count());
+  std::string new_v_e_d;
+  JSONStringValueSerializer serializer(&new_v_e_d);
+  serializer.Serialize(*json);
+  browser->set_viv_ext_data(new_v_e_d);
+  return true;
 }
 
 }  // namespace sessions

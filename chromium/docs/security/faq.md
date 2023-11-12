@@ -47,6 +47,35 @@ deployments should always track the latest stable release. When you do this,
 there is no need to further assess the risk of Chromium vulnerabilities: we
 strive to fix vulnerabilities quickly and release often.
 
+<a name="TOC-How-can-I-know-which-fixes-to-include-in-my-downstream-project-"></a>
+### How can I know which fixes to include in my downstream project?
+
+Chrome is built with mitigations and hardening which aim to prevent or reduce
+the impact of security issues. We classify bugs as security issues if they are
+known to affect a version and configuration of Chrome that we ship to the
+public. Some classes of bug might present as security issues if Chrome was
+compiled with different flags, or linked against a different C++ standard
+library, but do not with the toolchain and configuration that we use to build
+Chrome. We discuss some of these cases elsewhere in this FAQ.
+
+If we become aware of them, these issues may be triaged as `Type=Bug-Security,
+Security_Impact=None` or as `Type=Bug` because they do not affect the production
+version of Chrome. They may or may not be immediately visible to the public in
+the bug tracker, and may or may not be identified as security issues. If fixes
+are landed, they may or may not be merged from HEAD to a release branch. Chrome
+will only label, fix and merge security issues in Chrome, but attackers can
+still analyze public issues, or commits in the Chromium project to identify bugs
+that might be exploitable in other contexts.
+
+Chromium embedders and other downstream projects may build with different
+compilers, compile options, target operating systems, standard library, or
+additional software components. It is possible that some issues Chrome
+classifies as functional issues will manifest as security issues in a product
+embedding Chromium - it is the responsibility of any such project to understand
+what code they are shipping, and how it is compiled. We recommend using Chrome's
+[configuration](https://source.chromium.org/chromium/chromium/src/+/main:build/config/)
+whenever possible.
+
 <a name="TOC-Can-I-see-these-security-bugs-so-that-I-can-back-port-the-fixes-to-my-downstream-project-"></a>
 ### Can I see these security bugs so that I can back-port the fixes to my downstream project?
 
@@ -478,7 +507,7 @@ of user expectations, we will attempt to remedy these policies and we will apply
 the guidance laid out in this document to any newly added policies.
 
 See the [Web Platform Security
-guidelines](https://chromium.googlesource.com/chromium/src/+/master/docs/security/web-platfom-security-guidelines.md#enterprise-policies)
+guidelines](https://chromium.googlesource.com/chromium/src/+/main/docs/security/web-platform-security-guidelines.md#enterprise-policies)
 for more information on how enterprise policies should interact with Web
 Platform APIs.
 
@@ -571,7 +600,7 @@ that the current server is not the true server.
 
 To enable certificate chain validation, Chrome has access to two stores of trust
 anchors (i.e., certificates that are empowered as issuers). One trust anchor
-store is for authenticating public internet servers, and depending on the 
+store is for authenticating public internet servers, and depending on the
 version of Chrome being used and the platform it is running on, the
 [Chrome Root Store](https://chromium.googlesource.com/chromium/src/+/main/net/data/ssl/chrome_root_store/faq.md#what-is-the-chrome-root-store)
 might be in use. The private store contains certificates installed by the user
@@ -658,7 +687,7 @@ securely, it cannot actually provide any guarantee. (After all, a MITM attacker
 could have modified the code, if it was not transported securely.)
 
 See the [Web Platform Security
-guidelines](https://chromium.googlesource.com/chromium/src/+/master/docs/security/web-platform-security-guidelines.md#encryption)
+guidelines](https://chromium.googlesource.com/chromium/src/+/main/docs/security/web-platform-security-guidelines.md#encryption)
 for more information on security guidelines applicable to web platform APIs.
 
 <a name="TOC-Which-origins-are-secure-"></a>
@@ -686,25 +715,25 @@ for more details.
 ### What's the story with certificate revocation?
 
 Chrome's primary mechanism for checking certificate revocation status is
-[CRLsets](https://dev.chromium.org/Home/chromium-security/crlsets). 
+[CRLsets](https://dev.chromium.org/Home/chromium-security/crlsets).
 Additionally, by default, [stapled Online Certificate Status Protocol (OCSP)
 responses](https://en.wikipedia.org/wiki/OCSP_stapling) are honored.
 
 "Online" certificate revocation status checks using Certificate Revocation
 List (CRL) or OCSP URLs included in certificates are disabled by default. This
 is because unless a client, like Chrome, refuses to connect to a website if it
-cannot get a valid response, online checks offer limited security value. 
+cannot get a valid response, online checks offer limited security value.
 
 Unfortunately, there are many widely-prevalent causes for why a client
 might be unable to get a valid certificate revocation status response to
 include:
 * timeouts (e.g., an OCSP responder is online but does not respond within an
-  acceptable time limit), 
-* availability issues (e.g., the OCSP responder is offline), 
-* invalid responses (e.g., a "stale" or malformed status response), and 
-* local network attacks misrouting traffic or blocking responses. 
+  acceptable time limit),
+* availability issues (e.g., the OCSP responder is offline),
+* invalid responses (e.g., a "stale" or malformed status response), and
+* local network attacks misrouting traffic or blocking responses.
 
-Additional concern with OCSP checks are related to privacy. OCSP 
+Additional concern with OCSP checks are related to privacy. OCSP
 requests reveal details of individuals' browsing history to the operator of the
 OCSP responder (i.e., a third party). These details can be exposed accidentally
 (e.g., via data breach of logs) or intentionally (e.g., via subpoena). Chrome
@@ -822,11 +851,11 @@ specific:
      encrypted on disk with a key that is then stored in the user's Keychain.
      See [Issue 466638](https://crbug.com/466638) for further explanation.
 *    On Linux, Chrome previously stored credentials directly in the user's
-     Gnome Keyring or KWallet, but for technical reasons, it has switched to
+     Gnome Secret Service or KWallet, but for technical reasons, it has switched to
      storing the credentials in "Login Data" in the Chrome user's profile directory,
      but encrypted on disk with a key that is then stored in the user's Gnome
-     Keyring or KWallet. If there is no available Keyring or KWallet, the data is
-     not encrypted when stored.
+     Secret Service or KWallet. If there is no available Secret Service or KWallet,
+     the data is not encrypted when stored.
 *    On iOS, passwords are currently stored directly in the iOS Keychain and
      referenced from the rest of the metadata stored in a separate DB. The plan
      there is to just store them in plain text in the DB, because iOS gives
@@ -859,6 +888,17 @@ FAQ](https://chromium.googlesource.com/chromium/src/+/main/docs/security/service
 ### What is the security story for Extensions?
 
 See our dedicated [Extensions Security FAQ](https://chromium.googlesource.com/chromium/src/+/main/extensions/docs/security_faq.md).
+
+<a name="TOC-Are-all-Chrome-updates-important--"></a>
+### Are all Chrome updates important?
+
+Yes - see [our updates FAQ](updates.md).
+
+<a name="TOC-What-older-Chrome-versions-are-supported--"></a>
+### What older Chrome versions are supported?
+
+We always recommend being on the most recent Chrome stable version - see
+[our updates FAQ](updates.md).
 
 <a name="TOC-Im-making-a-Chromium-based-browser-how-should-I-secure-it-"></a>
 ### I'm making a Chromium-based browser. How should I secure it?

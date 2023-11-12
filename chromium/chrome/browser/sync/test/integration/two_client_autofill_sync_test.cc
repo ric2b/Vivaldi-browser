@@ -158,51 +158,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientAutofillProfileSyncTest,
   EXPECT_TRUE(AutofillProfileChecker(0, 1, /*expected_count=*/1U).Wait());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientAutofillProfileSyncTest,
-                       AddDuplicateProfiles_OneIsVerified) {
-  ASSERT_TRUE(SetupClients());
-
-  // Create two identical profiles where one of them is verified, additionally.
-  AutofillProfile profile0 = autofill::test::GetFullProfile();
-  AutofillProfile profile1 =
-      autofill::test::GetVerifiedProfile();  // I.e. Full + Verified.
-  std::string verified_origin = profile1.origin();
-
-  AddProfile(0, profile0);
-  AddProfile(1, profile1);
-  ASSERT_TRUE(SetupSync());
-  EXPECT_TRUE(AutofillProfileChecker(0, 1, /*expected_count=*/1U).Wait());
-
-  EXPECT_EQ(verified_origin, GetAllAutoFillProfiles(0)[0]->origin());
-  EXPECT_EQ(verified_origin, GetAllAutoFillProfiles(1)[0]->origin());
-}
-
-IN_PROC_BROWSER_TEST_F(TwoClientAutofillProfileSyncTest,
-                       AddDuplicateProfiles_OneAtStart_OtherComesLater) {
-  ASSERT_TRUE(SetupClients());
-
-  AutofillProfile profile0 = autofill::test::GetFullProfile();
-  AutofillProfile profile1 =
-      autofill::test::GetVerifiedProfile();  // I.e. Full + Verified.
-  std::string verified_origin = profile1.origin();
-
-  AddProfile(0, profile0);
-  ASSERT_TRUE(SetupSync());
-  EXPECT_TRUE(AutofillProfileChecker(0, 1, /*expected_count=*/1U).Wait());
-
-  // Add the same (but verified) profile on the other client, afterwards.
-  AddProfile(1, profile1);
-  EXPECT_TRUE(AutofillProfileChecker(0, 1, /*expected_count=*/1U).Wait());
-
-  // The latter addition is caught in deduplication logic in PDM to sync. As a
-  // result, both clients end up with the non-verified profile.
-  EXPECT_EQ(1U, GetAllAutoFillProfiles(0).size());
-  EXPECT_EQ(1U, GetAllAutoFillProfiles(0).size());
-
-  EXPECT_NE(verified_origin, GetAllAutoFillProfiles(0)[0]->origin());
-  EXPECT_NE(verified_origin, GetAllAutoFillProfiles(1)[0]->origin());
-}
-
 // Tests that a null profile does not get synced across clients.
 IN_PROC_BROWSER_TEST_F(TwoClientAutofillProfileSyncTest, AddEmptyProfile) {
   ASSERT_TRUE(SetupSync());
@@ -454,6 +409,10 @@ IN_PROC_BROWSER_TEST_F(TwoClientAutofillProfileSyncTest, MaxLength) {
   EXPECT_TRUE(AutofillProfileChecker(0, 1, /*expected_count=*/1U).Wait());
 }
 
+// Tests that values exceeding `AutofillTable::kMaxDataLength` are truncated.
+// TODO(crbug.com/1443393): As of the unified table layout, values are already
+// truncated in AutofillTable. No special logic on the Sync-side is necessary.
+// Clean this up.
 IN_PROC_BROWSER_TEST_F(TwoClientAutofillProfileSyncTest, ExceedsMaxLength) {
   ASSERT_TRUE(SetupSync());
 
@@ -472,9 +431,17 @@ IN_PROC_BROWSER_TEST_F(TwoClientAutofillProfileSyncTest, ExceedsMaxLength) {
   UpdateProfile(0, GetAllAutoFillProfiles(0)[0]->guid(),
                 AutofillType(autofill::ADDRESS_HOME_LINE1),
                 exceeds_max_length_string);
+  // The values stored on clients 0 are already truncated.
+  AutofillProfile* profile = GetAllAutoFillProfiles(0)[0];
+  for (const auto type :
+       {autofill::NAME_FIRST, autofill::NAME_LAST, autofill::EMAIL_ADDRESS,
+        autofill::ADDRESS_HOME_LINE1}) {
+    EXPECT_EQ(profile->GetRawInfo(type).size(), AutofillTable::kMaxDataLength);
+  }
 
   ASSERT_TRUE(AwaitQuiescence());
-  EXPECT_FALSE(ProfilesMatch(0, 1));
+  // Both clients store the truncated values.
+  EXPECT_TRUE(ProfilesMatch(0, 1));
 }
 
 // Test credit cards don't sync.

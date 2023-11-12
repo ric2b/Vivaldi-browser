@@ -14,6 +14,7 @@ import android.graphics.RectF;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.util.Pair;
 import android.view.DragEvent;
@@ -22,7 +23,6 @@ import android.view.MotionEvent;
 import android.view.PointerIcon;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewGroup.LayoutParams;
 import android.view.accessibility.AccessibilityEvent;
 import android.widget.FrameLayout;
 
@@ -39,6 +39,7 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.compat.ApiHelperForN;
 import org.chromium.base.compat.ApiHelperForO;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
@@ -244,6 +245,8 @@ public class CompositorViewHolder extends FrameLayout
     private boolean mFirstTabCreated;
     private boolean mHasDrawnOnce;
     private int mDelayTempStripRemovalTimeoutMs;
+    private long mBuffersSwappedTimestamp;
+    private long mTabStateInitializedTimestamp;
 
     /**
      * Last MotionEvent dispatched to this object for a currently active gesture. If there is no
@@ -494,9 +497,11 @@ public class CompositorViewHolder extends FrameLayout
                         }, ThreadUtils.getUiThreadHandler());
         }
         // Note(david@vivaldi.com): On first runs we activate the focus on new tab setting.
-        if (FirstRunStatus.isFirstRunTriggered())
+        // NOTE(jarle@vivaldi.com): https://bugs.vivaldi.com/browse/VAB-7659 (Not for cars).
+        if (FirstRunStatus.isFirstRunTriggered() && !BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
             VivaldiPreferences.getSharedPreferencesManager().writeBoolean(
                     VivaldiPreferences.FOCUS_ADDRESS_BAR_SWITCH, true);
+        }
     }
 
     private Point getViewportSize() {
@@ -819,6 +824,7 @@ public class CompositorViewHolder extends FrameLayout
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent e) {
+        assert e != null : "The motion event dispatched shouldn't be null!";
         updateLastActiveTouchEvent(e);
         updateIsInGesture(e);
         for (TouchEventObserver o : mTouchEventObservers) o.handleTouchEvent(e);
@@ -1322,6 +1328,16 @@ public class CompositorViewHolder extends FrameLayout
             } else {
                 mCanSetBackground = true;
             }
+
+            // If tab state is already initialized, record how long it took for the real tab strip
+            // to be ready to be drawn.
+            if (mTabStateInitializedTimestamp != 0) {
+                RecordHistogram.recordTimesHistogram(
+                        "Android.TabStrip.TimeToBufferSwapAfterInitializeTabState",
+                        SystemClock.elapsedRealtime() - mTabStateInitializedTimestamp);
+            } else {
+                mBuffersSwappedTimestamp = SystemClock.elapsedRealtime();
+            }
         }
 
         for (Runnable runnable : mDidSwapBuffersCallbacks) {
@@ -1332,8 +1348,18 @@ public class CompositorViewHolder extends FrameLayout
     }
 
     private void runSetBackgroundRunnable() {
+        // This runnable should only be run once.
+        if (mSetBackgroundRunnable == null) return;
+
         new Handler().post(mSetBackgroundRunnable);
         mSetBackgroundRunnable = null;
+
+        // Mark that we timed out if we remove the background before the tab state is initialized.
+        // Called when the background is actually being removed, since if the timeout is reached,
+        // but the second buffer swap happens after the tab state is initialized, we shouldn't
+        // actually see any jank.
+        RecordHistogram.recordBooleanHistogram("Android.TabStrip.DelayTempStripRemovalTimedOut",
+                !mTabModelSelector.isTabStateInitialized());
     }
 
     @VisibleForTesting
@@ -1529,6 +1555,16 @@ public class CompositorViewHolder extends FrameLayout
                 // frame is ready.
                 if (mDelayTempStripRemoval && mSetBackgroundRunnable != null && mCanSetBackground) {
                     runSetBackgroundRunnable();
+                }
+
+                // If real tab strip is ready to be drawn, record how long it took for the tab state
+                // to be initialized.
+                if (mBuffersSwappedTimestamp != 0) {
+                    RecordHistogram.recordTimesHistogram(
+                            "Android.TabStrip.TimeToInitializeTabStateAfterBufferSwap",
+                            SystemClock.elapsedRealtime() - mBuffersSwappedTimestamp);
+                } else {
+                    mTabStateInitializedTimestamp = SystemClock.elapsedRealtime();
                 }
             }
 

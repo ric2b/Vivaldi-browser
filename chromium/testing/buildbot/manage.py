@@ -15,7 +15,6 @@ import collections
 import glob
 import json
 import os
-import six
 import subprocess
 import sys
 
@@ -71,7 +70,6 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
     'remoting/host:host',
 
     # These targets are listed only in build-side recipes.
-    'All_syzygy',
     'blink_tests',
     'captured_sites_interactive_tests',
     'cast_shell',
@@ -220,8 +218,7 @@ def process_file(mode, test_name, tests_location, filepath, ninja_targets,
   try:
     config = json.loads(content)
   except ValueError as e:
-    six.raise_from(
-        Error('Exception raised while checking %s: %s' % (filepath, e)), e)
+    raise Error('Exception raised while checking %s: %s' % (filepath, e)) from e
 
   for builder, data in sorted(config.items()):
     if builder in SKIP:
@@ -275,8 +272,6 @@ def process_file(mode, test_name, tests_location, filepath, ninja_targets,
         raise Error('%s: %s / %s is listed multiple times.' %
                     (filename, builder, name))
       seen.add(name)
-      d.setdefault('swarming', {}).setdefault(
-          'can_use_on_swarming_builders', False)
 
     if gtest_tests:
       config[builder]['gtest_tests'] = sorted(
@@ -291,7 +286,8 @@ def process_file(mode, test_name, tests_location, filepath, ninja_targets,
       if name in ninja_targets:
         ninja_targets_seen.add(name)
 
-    for d in data.get('instrumentation_tests', []):
+    for d in (data.get('instrumentation_tests', []) +
+              data.get('skylab_tests', [])):
       name = d['test']
       if (name not in ninja_targets and
           name not in SKIP_GN_ISOLATE_MAP_TARGETS):

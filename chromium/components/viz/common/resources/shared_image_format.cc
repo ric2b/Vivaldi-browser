@@ -253,6 +253,10 @@ size_t SharedImageFormat::EstimatedSizeInBytes(const gfx::Size& size) const {
   return MaybeEstimatedSizeInBytes(size).value_or(0);
 }
 
+bool SharedImageFormat::VerifySizeInBytes(const gfx::Size& size) const {
+  return MaybeEstimatedSizeInBytes(size).has_value();
+}
+
 gfx::Size SharedImageFormat::GetPlaneSize(int plane_index,
                                           const gfx::Size& size) const {
   DCHECK(IsValidPlaneIndex(plane_index));
@@ -383,6 +387,42 @@ bool SharedImageFormat::IsLegacyMultiplanar() const {
     default:
       return false;
   }
+}
+
+int SharedImageFormat::BitsPerPixel() const {
+  CHECK(is_single_plane());
+  switch (resource_format()) {
+    case RGBA_F16:
+      return 64;
+    case BGRA_8888:
+    case RGBA_8888:
+    case RGBX_8888:
+    case BGRX_8888:
+    case RGBA_1010102:
+    case BGRA_1010102:
+    case RG16_EXT:
+      return 32;
+    case RGBA_4444:
+    case RGB_565:
+    case LUMINANCE_F16:
+    case R16_EXT:
+    case BGR_565:
+    case RG_88:
+      return 16;
+    case ALPHA_8:
+    case LUMINANCE_8:
+    case RED_8:
+      return 8;
+    case ETC1:
+      return 4;
+    case P010:
+    case YUVA_420_TRIPLANAR:
+    case YVU_420:
+    case YUV_420_BIPLANAR:
+      // Legacy multiplanar formats are not supported.
+      CHECK(0);
+  }
+  NOTREACHED_NORETURN();
 }
 
 bool SharedImageFormat::operator==(const SharedImageFormat& o) const {

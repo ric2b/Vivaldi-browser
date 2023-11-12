@@ -26,6 +26,7 @@ import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {sendWithPromise} from 'chrome://resources/js/cr.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import {sanitizeInnerHtml} from 'chrome://resources/js/parse_html_subset.js';
 import {ContactManagerInterface, ContactRecord, DownloadContactsObserverReceiver, Visibility} from 'chrome://resources/mojo/chromeos/ash/services/nearby/public/mojom/nearby_share_settings.mojom-webui.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -82,6 +83,15 @@ const DEVICE_VISIBILITY_LIGHT_ICON =
 
 const DEVICE_VISIBILITY_DARK_ICON =
     'nearby-images:nearby-device-visibility-dark';
+
+const CONTACTS_EMPTY_ICON = 'nearby-images:contacts-empty';
+
+const CONTACTS_EMPTY_JELLY_ICON = 'nearby-images:contacts-empty-jelly';
+
+const CONTACTS_FAILED_ICON = 'nearby-images:contacts-download-failed';
+
+const CONTACTS_FAILED_JELLY_ICON =
+    'nearby-images:contacts-download-failed-jelly';
 
 export interface NearbyVisibilityContact {
   id: string;
@@ -162,6 +172,18 @@ export class NearbyContactVisibilityElement extends
         type: Boolean,
         value: false,
       },
+
+      /**
+       * Return true if the Jelly feature flag is enabled.
+       */
+      isJellyEnabled_: {
+        type: Boolean,
+        readOnly: true,
+        value() {
+          return loadTimeData.valueExists('isJellyEnabled') &&
+              loadTimeData.getBoolean('isJellyEnabled');
+        },
+      },
     };
   }
 
@@ -185,6 +207,7 @@ export class NearbyContactVisibilityElement extends
       null;
   private downloadTimeoutId_: number|null;
   private isDarkModeActive_: boolean;
+  private isJellyEnabled_: boolean;
   private numUnreachable_: number;
   private numUnreachableMessage_: string;
 
@@ -461,7 +484,7 @@ export class NearbyContactVisibilityElement extends
    * used directly because this is Polymer element is used outside settings.
    * TODO(crbug.com/1170849): Extract this logic into a general method.
    */
-  private getAriaLabelledZeroStateText_(): string|TrustedHTML {
+  private getAriaLabelledZeroStateText_(): TrustedHTML {
     const tempEl = document.createElement('div');
     const localizedString =
         this.i18nAdvanced('nearbyShareContactVisibilityZeroStateText');
@@ -510,7 +533,8 @@ export class NearbyContactVisibilityElement extends
     anchorTag.href = linkUrl;
     anchorTag.target = '_blank';
 
-    return tempEl.innerHTML;
+    return sanitizeInnerHtml(
+        tempEl.innerHTML, {attrs: ['id', 'aria-hidden', 'aria-labelledby']});
   }
 
   private showUnreachableContactsMessage_(): boolean {
@@ -534,17 +558,17 @@ export class NearbyContactVisibilityElement extends
         });
   }
 
-  private getVisibilityDescription_(selectedVisibility: string): string
-      |TrustedHTML {
+  private getVisibilityDescription_(selectedVisibility: string): TrustedHTML {
     switch (visibilityStringToValue(selectedVisibility)) {
       case Visibility.kAllContacts:
-        return this.i18n('nearbyShareContactVisibilityOwnAll');
+        return this.i18nAdvanced('nearbyShareContactVisibilityOwnAll');
       case Visibility.kSelectedContacts:
-        return this.i18n('nearbyShareContactVisibilityOwnSome');
+        return this.i18nAdvanced('nearbyShareContactVisibilityOwnSome');
       case Visibility.kNoOne:
         return this.i18nAdvanced('nearbyShareContactVisibilityOwnNone');
       default:
-        return '';
+        assert(window.trustedTypes);
+        return window.trustedTypes.emptyHTML;
     }
   }
 
@@ -582,6 +606,22 @@ export class NearbyContactVisibilityElement extends
   private getDeviceVisibilityIcon_(): string {
     return this.isDarkModeActive_ ? DEVICE_VISIBILITY_DARK_ICON :
                                     DEVICE_VISIBILITY_LIGHT_ICON;
+  }
+
+  /**
+   * Returns the contacts empty icon based on Jelly enablement.
+   */
+  private getContactsEmptyIcon_(): string {
+    return this.isJellyEnabled_ ? CONTACTS_EMPTY_JELLY_ICON :
+                                  CONTACTS_EMPTY_ICON;
+  }
+
+  /**
+   * Returns the contacts failed icon based on Jelly enablement.
+   */
+  private getContactsFailedIcon_(): string {
+    return this.isJellyEnabled_ ? CONTACTS_FAILED_JELLY_ICON :
+                                  CONTACTS_FAILED_ICON;
   }
 }
 

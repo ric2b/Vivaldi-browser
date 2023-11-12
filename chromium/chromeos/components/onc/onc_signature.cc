@@ -4,6 +4,7 @@
 
 #include "chromeos/components/onc/onc_signature.h"
 
+#include "base/memory/raw_ptr_exclusion.h"
 #include "components/onc/onc_constants.h"
 
 using base::Value;
@@ -324,6 +325,7 @@ const OncFieldSignature cellular_fields[] = {
     {::onc::cellular::kCustomAPNList, &kCellularApnListSignature},
     {::onc::cellular::kICCID, &kStringSignature},
     {::onc::cellular::kSMDPAddress, &kStringSignature},
+    {::onc::cellular::kSMDSAddress, &kStringSignature},
     {nullptr}};
 
 const OncFieldSignature cellular_with_state_fields[] = {
@@ -557,7 +559,9 @@ const OncFieldSignature* GetFieldSignature(const OncValueSignature& signature,
 namespace {
 
 struct CredentialEntry {
-  const OncValueSignature* value_signature;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #global-scope
+  RAW_PTR_EXCLUSION const OncValueSignature* value_signature;
   const char* field_name;
 };
 

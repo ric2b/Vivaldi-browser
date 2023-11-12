@@ -1507,6 +1507,12 @@ TEST_F(StyleResolverTestCQ, DependsOnSizeContainerQueries) {
   EXPECT_TRUE(c->ComputedStyleRef().DependsOnSizeContainerQueries());
   EXPECT_TRUE(d->ComputedStyleRef().DependsOnSizeContainerQueries());
   EXPECT_FALSE(e->ComputedStyleRef().DependsOnSizeContainerQueries());
+
+  EXPECT_FALSE(a->ComputedStyleRef().DependsOnStyleContainerQueries());
+  EXPECT_FALSE(b->ComputedStyleRef().DependsOnStyleContainerQueries());
+  EXPECT_FALSE(c->ComputedStyleRef().DependsOnStyleContainerQueries());
+  EXPECT_FALSE(d->ComputedStyleRef().DependsOnStyleContainerQueries());
+  EXPECT_FALSE(e->ComputedStyleRef().DependsOnStyleContainerQueries());
 }
 
 TEST_F(StyleResolverTestCQ, DependsOnSizeContainerQueriesPseudo) {
@@ -1571,6 +1577,50 @@ TEST_F(StyleResolverTestCQ, DependsOnSizeContainerQueriesMPC) {
 
   EXPECT_TRUE(a->ComputedStyleRef().DependsOnSizeContainerQueries());
   EXPECT_FALSE(b->ComputedStyleRef().DependsOnSizeContainerQueries());
+}
+
+TEST_F(StyleResolverTestCQ, DependsOnStyleContainerQueries) {
+  GetDocument().documentElement()->setInnerHTML(R"HTML(
+    <style>
+      #a { color: red; }
+      @container style(--foo: bar) {
+        #b { color: blue; }
+        span { color: green; }
+        #d { color: coral; }
+      }
+    </style>
+    <div id=a></div>
+    <span id=b></span>
+    <span id=c></span>
+    <div id=d></div>
+    <div id=e></div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  auto* a = GetDocument().getElementById("a");
+  auto* b = GetDocument().getElementById("b");
+  auto* c = GetDocument().getElementById("c");
+  auto* d = GetDocument().getElementById("d");
+  auto* e = GetDocument().getElementById("e");
+
+  ASSERT_TRUE(a);
+  ASSERT_TRUE(b);
+  ASSERT_TRUE(c);
+  ASSERT_TRUE(d);
+  ASSERT_TRUE(e);
+
+  EXPECT_FALSE(a->ComputedStyleRef().DependsOnStyleContainerQueries());
+  EXPECT_TRUE(b->ComputedStyleRef().DependsOnStyleContainerQueries());
+  EXPECT_TRUE(c->ComputedStyleRef().DependsOnStyleContainerQueries());
+  EXPECT_TRUE(d->ComputedStyleRef().DependsOnStyleContainerQueries());
+  EXPECT_FALSE(e->ComputedStyleRef().DependsOnStyleContainerQueries());
+
+  EXPECT_FALSE(a->ComputedStyleRef().DependsOnSizeContainerQueries());
+  EXPECT_FALSE(b->ComputedStyleRef().DependsOnSizeContainerQueries());
+  EXPECT_FALSE(c->ComputedStyleRef().DependsOnSizeContainerQueries());
+  EXPECT_FALSE(d->ComputedStyleRef().DependsOnSizeContainerQueries());
+  EXPECT_FALSE(e->ComputedStyleRef().DependsOnSizeContainerQueries());
 }
 
 TEST_F(StyleResolverTest, NoCascadeLayers) {
@@ -2167,6 +2217,7 @@ TEST_F(StyleResolverTest, IsInertWithFrameAndFullscreen) {
   EXPECT_FALSE(body->GetComputedStyle()->IsInert());
   EXPECT_FALSE(div->GetComputedStyle()->IsInert());
   EXPECT_FALSE(div_text->GetComputedStyle()->IsInert());
+  ExitFullscreen(document);
 }
 
 TEST_F(StyleResolverTest, IsInertWithBackdrop) {
@@ -2221,6 +2272,7 @@ TEST_F(StyleResolverTest, IsInertWithBackdrop) {
   EXPECT_FALSE(IsBackdropInert(html));
   EXPECT_FALSE(IsBackdropInert(body));
   EXPECT_FALSE(IsBackdropInert(dialog));
+  ExitFullscreen(document);
 }
 
 TEST_F(StyleResolverTest, IsInertWithDialogAndFullscreen) {
@@ -3299,6 +3351,59 @@ TEST_F(StyleResolverTestCQ, CanAffectAnimationsMPC) {
   EXPECT_TRUE(a->ComputedStyleRef().CanAffectAnimations());
   EXPECT_FALSE(b->ComputedStyleRef().CanAffectAnimations());
   EXPECT_FALSE(c->ComputedStyleRef().CanAffectAnimations());
+}
+
+TEST_F(StyleResolverTest, HasAutoAnchorPositioning) {
+  GetDocument().documentElement()->setInnerHTML(R"HTML(
+    <style>
+      #target {
+        position: absolute;
+        position-fallback: --pf;
+        left: anchor(auto);
+      }
+      @position-fallback --pf {
+        @try { width: 100px; }
+        @try { top: anchor(auto); }
+        @try { left: anchor(auto); }
+        @try { left: anchor(auto); top: anchor(auto); }
+      }
+    </style>
+    <div id="target"></div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* target = GetDocument().getElementById("target");
+
+  const ComputedStyle& base_style = target->ComputedStyleRef();
+  EXPECT_TRUE(base_style.HasAutoAnchorPositioning());
+  EXPECT_FALSE(base_style.HasAutoAnchorPositioningInXAxisFromTryBlock());
+  EXPECT_FALSE(base_style.HasAutoAnchorPositioningInYAxisFromTryBlock());
+
+  // First @try block doesn't have any auto anchor positioning in it.
+  const ComputedStyle& fallback1 = *target->StyleForPositionFallback(0);
+  EXPECT_TRUE(fallback1.HasAutoAnchorPositioning());
+  EXPECT_FALSE(fallback1.HasAutoAnchorPositioningInXAxisFromTryBlock());
+  EXPECT_FALSE(fallback1.HasAutoAnchorPositioningInYAxisFromTryBlock());
+
+  // Second @try block has auto anchor positioning only in y axis.
+  const ComputedStyle& fallback2 = *target->StyleForPositionFallback(1);
+  EXPECT_TRUE(fallback2.HasAutoAnchorPositioning());
+  EXPECT_FALSE(fallback2.HasAutoAnchorPositioningInXAxisFromTryBlock());
+  EXPECT_TRUE(fallback2.HasAutoAnchorPositioningInYAxisFromTryBlock());
+
+  // Third @try block has auto anchor positioning only in x axis, even if the
+  // resolved computed style is equal to the base style.
+  const ComputedStyle& fallback3 = *target->StyleForPositionFallback(2);
+  EXPECT_TRUE(fallback3.HasAutoAnchorPositioning());
+  EXPECT_TRUE(fallback3.HasAutoAnchorPositioningInXAxisFromTryBlock());
+  EXPECT_FALSE(fallback3.HasAutoAnchorPositioningInYAxisFromTryBlock());
+
+  // Fourth @try block has auto anchor positioning in both axes.
+  const ComputedStyle& fallback4 = *target->StyleForPositionFallback(3);
+  EXPECT_TRUE(fallback4.HasAutoAnchorPositioning());
+  EXPECT_TRUE(fallback4.HasAutoAnchorPositioningInXAxisFromTryBlock());
+  EXPECT_TRUE(fallback4.HasAutoAnchorPositioningInYAxisFromTryBlock());
 }
 
 }  // namespace blink

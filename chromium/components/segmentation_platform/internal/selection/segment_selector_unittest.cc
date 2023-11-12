@@ -77,13 +77,14 @@ class MockTrainingDataCollector : public TrainingDataCollector {
   MOCK_METHOD0(OnServiceInitialized, void());
   MOCK_METHOD0(ReportCollectedContinuousTrainingData, void());
   MOCK_METHOD3(OnDecisionTime,
-               void(proto::SegmentId id,
-                    scoped_refptr<InputContext> input_context,
-                    DecisionType type));
-  MOCK_METHOD3(OnObservationTrigger,
-               void(const absl::optional<ImmediaCollectionParam>& param,
+               TrainingRequestId(proto::SegmentId id,
+                                 scoped_refptr<InputContext> input_context,
+                                 DecisionType type));
+  MOCK_METHOD4(CollectTrainingData,
+               void(SegmentId segment_id,
                     TrainingRequestId request_id,
-                    const proto::SegmentInfo& segment_info));
+                    const TrainingLabels& param,
+                    SuccessCallback callback));
 };
 
 }  // namespace
@@ -196,12 +197,12 @@ class SegmentSelectorTest : public testing::Test {
   std::unique_ptr<test::TestSegmentInfoDatabase> segment_database_;
   MockSignalStorageConfig signal_storage_config_;
   std::unique_ptr<DefaultModelManager> default_manager_;
-  raw_ptr<TestSegmentationResultPrefs> prefs_;
+  raw_ptr<TestSegmentationResultPrefs, DanglingUntriaged> prefs_;
   std::unique_ptr<SegmentSelectorImpl> segment_selector_;
   MockTrainingDataCollector training_data_collector_;
-  raw_ptr<processing::MockFeatureListQueryProcessor> mock_query_processor_ =
-      nullptr;
-  raw_ptr<MockModelExecutionManager> mock_execution_manager_;
+  raw_ptr<processing::MockFeatureListQueryProcessor, DanglingUntriaged>
+      mock_query_processor_ = nullptr;
+  raw_ptr<MockModelExecutionManager, DanglingUntriaged> mock_execution_manager_;
   std::unique_ptr<ExecutionService> execution_service_;
 };
 

@@ -11,7 +11,6 @@
 #include "base/unguessable_token.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
-#include "ui/views/view_targeter_delegate.h"
 
 namespace views {
 class MenuItemView;
@@ -19,21 +18,16 @@ class MenuItemView;
 
 namespace ash {
 class ClipboardHistory;
-class ClipboardHistoryDeleteButton;
 class ClipboardHistoryItem;
-class ClipboardHistoryMainButton;
-class ClipboardHistoryResourceManager;
 
 // The base class for menu items of the clipboard history menu.
 class ASH_EXPORT ClipboardHistoryItemView : public views::View {
  public:
   METADATA_HEADER(ClipboardHistoryItemView);
   static std::unique_ptr<ClipboardHistoryItemView>
-  CreateFromClipboardHistoryItem(
-      const base::UnguessableToken& item_id,
-      const ClipboardHistory* clipboard_history,
-      const ClipboardHistoryResourceManager* resource_manager,
-      views::MenuItemView* container);
+  CreateFromClipboardHistoryItem(const base::UnguessableToken& item_id,
+                                 const ClipboardHistory* clipboard_history,
+                                 views::MenuItemView* container);
 
   ClipboardHistoryItemView(const ClipboardHistoryItemView& rhs) = delete;
   ClipboardHistoryItemView& operator=(const ClipboardHistoryItemView& rhs) =
@@ -74,49 +68,12 @@ class ASH_EXPORT ClipboardHistoryItemView : public views::View {
   clipboard_history_util::Action action() const { return action_; }
 
  protected:
-  // Used by subclasses to draw contents, such as text or bitmaps.
-  class ContentsView : public views::View, public views::ViewTargeterDelegate {
-   public:
-    METADATA_HEADER(ContentsView);
-    explicit ContentsView(ClipboardHistoryItemView* container);
-    ContentsView(const ContentsView& rhs) = delete;
-    ContentsView& operator=(const ContentsView& rhs) = delete;
-    ~ContentsView() override;
-
-    // Install DeleteButton on the contents view.
-    void InstallDeleteButton();
-
-    void OnHostPseudoFocusUpdated();
-
-    ClipboardHistoryDeleteButton* delete_button() { return delete_button_; }
-    const ClipboardHistoryDeleteButton* delete_button() const {
-      return delete_button_;
-    }
-
-   protected:
-    virtual ClipboardHistoryDeleteButton* CreateDeleteButton() = 0;
-
-    ClipboardHistoryItemView* container() { return container_; }
-
-   private:
-    // views::ViewTargeterDelegate:
-    bool DoesIntersectRect(const views::View* target,
-                           const gfx::Rect& rect) const override;
-
-    // Owned by the view hierarchy.
-    raw_ptr<ClipboardHistoryDeleteButton, ExperimentalAsh> delete_button_ =
-        nullptr;
-
-    // The parent of ContentsView.
-    const raw_ptr<ClipboardHistoryItemView, ExperimentalAsh> container_;
-  };
-
   ClipboardHistoryItemView(const base::UnguessableToken& item_id,
                            const ClipboardHistory* clipboard_history,
                            views::MenuItemView* container);
 
   // Creates the contents view.
-  virtual std::unique_ptr<ContentsView> CreateContentsView() = 0;
+  virtual std::unique_ptr<views::View> CreateContentsView() = 0;
 
   const ClipboardHistoryItem* GetClipboardHistoryItem() const;
 
@@ -140,6 +97,8 @@ class ASH_EXPORT ClipboardHistoryItemView : public views::View {
     kMaxValue = 3
   };
 
+  class DisplayView;
+
   // views::View:
   gfx::Size CalculatePreferredSize() const override;
   void GetAccessibleNodeData(ui::AXNodeData* data) override;
@@ -149,6 +108,10 @@ class ASH_EXPORT ClipboardHistoryItemView : public views::View {
 
   // Calculates the action type when `main_button_` is clicked.
   clipboard_history_util::Action CalculateActionForMainButtonClick() const;
+
+  // Creates the delete button and any necessary containers for its formatting.
+  // Sets `delete_button_` in the process.
+  std::unique_ptr<views::View> CreateDeleteButton();
 
   bool ShouldShowDeleteButton() const;
 
@@ -162,13 +125,13 @@ class ASH_EXPORT ClipboardHistoryItemView : public views::View {
   const base::UnguessableToken item_id_;
 
   // Owned by `ClipboardHistoryControllerImpl`.
-  const base::raw_ptr<const ClipboardHistory> clipboard_history_;
+  const raw_ptr<const ClipboardHistory> clipboard_history_;
 
   const raw_ptr<views::MenuItemView, ExperimentalAsh> container_;
 
-  raw_ptr<ContentsView, ExperimentalAsh> contents_view_ = nullptr;
-
-  raw_ptr<ClipboardHistoryMainButton, ExperimentalAsh> main_button_ = nullptr;
+  // Owned by the view hierarchy.
+  raw_ptr<views::View, ExperimentalAsh> main_button_ = nullptr;
+  raw_ptr<views::View, ExperimentalAsh> delete_button_ = nullptr;
 
   PseudoFocus pseudo_focus_ = PseudoFocus::kEmpty;
 

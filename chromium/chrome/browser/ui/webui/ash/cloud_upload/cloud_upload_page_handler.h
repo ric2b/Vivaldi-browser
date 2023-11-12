@@ -59,14 +59,17 @@ class CloudUploadPageHandler : public mojom::PageHandler {
   void RespondWithUserActionAndClose(mojom::UserAction action) override;
   void RespondWithLocalTaskAndClose(int task_position) override;
   void SetOfficeAsDefaultHandler() override;
+  void GetAlwaysMoveOfficeFilesToDrive(
+      GetAlwaysMoveOfficeFilesToDriveCallback callback) override;
   void SetAlwaysMoveOfficeFilesToDrive(bool always_move) override;
+  void GetAlwaysMoveOfficeFilesToOneDrive(
+      GetAlwaysMoveOfficeFilesToOneDriveCallback callback) override;
   void SetAlwaysMoveOfficeFilesToOneDrive(bool always_move) override;
-  void SetOfficeMoveConfirmationShownForDriveTrue() override;
   void GetOfficeMoveConfirmationShownForDrive(
       GetOfficeMoveConfirmationShownForDriveCallback callback) override;
-  void SetOfficeMoveConfirmationShownForOneDriveTrue() override;
   void GetOfficeMoveConfirmationShownForOneDrive(
       GetOfficeMoveConfirmationShownForOneDriveCallback callback) override;
+  void RecordCancel(mojom::MetricsRecordedSetupPage page) override;
 
  private:
   raw_ptr<Profile, ExperimentalAsh> profile_;

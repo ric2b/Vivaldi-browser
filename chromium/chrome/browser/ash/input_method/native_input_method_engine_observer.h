@@ -101,17 +101,25 @@ class NativeInputMethodEngineObserver : public InputMethodEngineObserver,
   void FinishComposition() override;
   void DeleteSurroundingText(uint32_t num_before_cursor,
                              uint32_t num_after_cursor) override;
+  void ReplaceSurroundingText(uint32_t num_before_cursor,
+                              uint32_t num_after_cursor,
+                              const std::u16string& text) override;
   void HandleAutocorrect(
       ime::mojom::AutocorrectSpanPtr autocorrect_span) override;
   void RequestSuggestions(ime::mojom::SuggestionsRequestPtr request,
                           RequestSuggestionsCallback callback) override;
   void DisplaySuggestions(
-      const std::vector<ime::AssistiveSuggestion>& suggestions) override;
+      const std::vector<ime::AssistiveSuggestion>& suggestions,
+      const absl::optional<ime::SuggestionsTextContext>& context) override;
   void UpdateCandidatesWindow(ime::mojom::CandidatesWindowPtr window) override;
   void RecordUkm(ime::mojom::UkmEntryPtr entry) override;
-  void ReportKoreanAction(ime::mojom::KoreanAction action) override;
-  void ReportKoreanSettings(ime::mojom::KoreanSettingsPtr settings) override;
-  void ReportSuggestionOpportunity(ime::AssistiveSuggestionMode mode) override;
+  void DEPRECATED_ReportKoreanAction(ime::mojom::KoreanAction action) override;
+  void DEPRECATED_ReportKoreanSettings(
+      ime::mojom::KoreanSettingsPtr settings) override;
+  void DEPRECATED_ReportSuggestionOpportunity(
+      ime::AssistiveSuggestionMode mode) override;
+  void ReportHistogramSample(base::Histogram* histogram,
+                             uint16_t value) override;
   void UpdateQuickSettings(
       ime::mojom::InputMethodQuickSettingsPtr quick_settings) override;
 

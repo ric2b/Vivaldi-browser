@@ -361,8 +361,7 @@ void SplitViewMetricsController::OnPostWindowStateTypeChange(
     chromeos::WindowStateType old_type) {
   // We only care if a window is snapped or unsnapped.
   bool is_snapped = window_state->IsSnapped();
-  bool was_snapped = old_type == chromeos::WindowStateType::kPrimarySnapped ||
-                     old_type == chromeos::WindowStateType::kSecondarySnapped;
+  bool was_snapped = chromeos::IsSnappedWindowStateType(old_type);
   if (is_snapped == was_snapped)
     return;
   MaybeStartOrEndRecordBothSnappedClamshellSplitView();
@@ -412,9 +411,8 @@ void SplitViewMetricsController::OnWindowInitialized(aura::Window* window) {
   }
 
   // Check if the recovered window is in the current desk.
-  if (!window_info->desk_id.has_value() ||
-      window_info->desk_id.value() !=
-          DesksController::Get()->GetDeskIndex(current_desk_)) {
+  if (!window_info->desk_guid.is_valid() ||
+      window_info->desk_guid != current_desk_->uuid()) {
     return;
   }
 

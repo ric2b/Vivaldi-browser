@@ -414,22 +414,13 @@ GetPartitionRefCountIndexMultiplierShift() {
 
 PA_ALWAYS_INLINE PartitionRefCount* PartitionRefCountPointer(
     uintptr_t slot_start) {
-#if BUILDFLAG(PA_DCHECK_IS_ON) || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
-  CheckThatSlotOffsetIsZero(slot_start);
-#endif
   if (PA_LIKELY(slot_start & SystemPageOffsetMask())) {
     uintptr_t refcount_address = slot_start - sizeof(PartitionRefCount);
 #if BUILDFLAG(PA_DCHECK_IS_ON) || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
     PA_CHECK(refcount_address % alignof(PartitionRefCount) == 0);
 #endif
-    // Have to MTE-tag, because the address is untagged, but lies within a slot
-    // area, which is protected by MTE.
-    //
-    // There could be a race condition though if the previous slot is
-    // freed/retagged concurrently, so ideally the ref count should occupy its
-    // own MTE granule.
-    // TODO(richard.townsend@arm.com): improve this.
-    return static_cast<PartitionRefCount*>(TagAddr(refcount_address));
+    // No need to tag because the ref count is not protected by MTE.
+    return reinterpret_cast<PartitionRefCount*>(refcount_address);
   } else {
     // No need to tag, as the metadata region isn't protected by MTE.
     PartitionRefCount* bitmap_base = reinterpret_cast<PartitionRefCount*>(
@@ -457,9 +448,6 @@ constexpr size_t kPartitionPastAllocationAdjustment = 1;
 
 PA_ALWAYS_INLINE PartitionRefCount* PartitionRefCountPointer(
     uintptr_t slot_start) {
-#if BUILDFLAG(PA_DCHECK_IS_ON) || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
-  CheckThatSlotOffsetIsZero(slot_start);
-#endif
   // Have to MTE-tag, because the address is untagged, but lies within a slot
   // area, which is protected by MTE.
   return static_cast<PartitionRefCount*>(TagAddr(slot_start));

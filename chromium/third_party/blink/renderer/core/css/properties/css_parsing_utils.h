@@ -61,11 +61,13 @@ enum class TrackListType {
 };
 enum class UnitlessQuirk { kAllow, kForbid };
 enum class AllowedColorKeywords { kAllowSystemColor, kNoSystemColor };
+enum class EmptyPathStringHandling { kFailure, kTreatAsNone };
 
 using ConsumeAnimationItemValue = CSSValue* (*)(CSSPropertyID,
                                                 CSSParserTokenRange&,
                                                 const CSSParserContext&,
                                                 bool use_legacy_parsing);
+using IsResetOnlyFunction = bool (*)(CSSPropertyID);
 using IsPositionKeyword = bool (*)(CSSValueID);
 
 constexpr size_t kMaxNumAnimationLonghands = 12;
@@ -210,13 +212,9 @@ CSSValue* ConsumeImageOrNone(CSSParserTokenRange&, const CSSParserContext&);
 
 CSSValue* ConsumeAxis(CSSParserTokenRange&, const CSSParserContext& context);
 
-// Old syntax: auto | <length>
-CSSValue* ConsumeIntrinsicSizeLonghandOld(CSSParserTokenRange&,
-                                          const CSSParserContext&);
-// New syntax: none | <length> | auto && <length>
-CSSValue* ConsumeIntrinsicSizeLonghandNew(CSSParserTokenRange&,
-                                          const CSSParserContext&);
-// Picks between Old and New based on RuntimeEnabledFeatures
+// Syntax: none | <length> | auto && <length> | auto && none
+// If this returns a CSSIdentifierValue then it is "none"
+// Otherwise, this returns a list of 1 or 2 elements for the rest of the syntax
 CSSValue* ConsumeIntrinsicSizeLonghand(CSSParserTokenRange&,
                                        const CSSParserContext&);
 
@@ -334,11 +332,11 @@ bool ConsumeAnimationShorthand(
     const StylePropertyShorthand&,
     HeapVector<Member<CSSValueList>, kMaxNumAnimationLonghands>&,
     ConsumeAnimationItemValue,
+    IsResetOnlyFunction,
     CSSParserTokenRange&,
     const CSSParserContext&,
     bool use_legacy_parsing);
 
-CSSValue* ConsumeSingleTimelineAttachment(CSSParserTokenRange&);
 CSSValue* ConsumeSingleTimelineAxis(CSSParserTokenRange&);
 CSSValue* ConsumeSingleTimelineName(CSSParserTokenRange&,
                                     const CSSParserContext&);
@@ -429,6 +427,9 @@ CSSValue* ConsumeLineHeight(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumeMathDepth(CSSParserTokenRange& range,
                            const CSSParserContext& context);
 
+CSSValue* ConsumeFontPalette(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* ConsumePaletteMixFunction(CSSParserTokenRange&,
+                                    const CSSParserContext&);
 CSSValueList* ConsumeFontFamily(CSSParserTokenRange&);
 CSSValue* ConsumeGenericFamily(CSSParserTokenRange&);
 CSSValue* ConsumeFamilyName(CSSParserTokenRange&);
@@ -494,6 +495,8 @@ CSSValue* ConsumeMarginOrOffset(CSSParserTokenRange&,
                                 UnitlessQuirk,
                                 CSSAnchorQueryTypes = kCSSAnchorQueryTypesNone);
 CSSValue* ConsumeScrollPadding(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* ConsumeScrollStart(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* ConsumeScrollStartTarget(CSSParserTokenRange&);
 CSSValue* ConsumeOffsetPath(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ConsumePathOrNone(CSSParserTokenRange&);
 CSSValue* ConsumeOffsetRotate(CSSParserTokenRange&, const CSSParserContext&);
@@ -535,6 +538,9 @@ CSSValue* ConsumeBorderWidth(CSSParserTokenRange&,
                              UnitlessQuirk);
 CSSValue* ConsumeSVGPaint(CSSParserTokenRange&, const CSSParserContext&);
 CSSValue* ParseSpacing(CSSParserTokenRange&, const CSSParserContext&);
+CSSFunctionValue* CreateWordBoundaryDetectionValue();
+CSSValue* ParseWordBoundaryDetection(CSSParserTokenRange&,
+                                     const CSSParserContext&);
 
 CSSValue* ConsumeSingleContainerName(CSSParserTokenRange&,
                                      const CSSParserContext&);
@@ -548,6 +554,8 @@ CSSCustomIdentValue* ConsumeCounterStyleName(CSSParserTokenRange&,
                                              const CSSParserContext&);
 AtomicString ConsumeCounterStyleNameInPrelude(CSSParserTokenRange&,
                                               const CSSParserContext&);
+
+CSSValue* ConsumeFontSizeAdjust(CSSParserTokenRange&, const CSSParserContext&);
 
 // When parsing a counter style name, it should be ASCII lowercased if it's an
 // ASCII case-insensitive match of any predefined counter style name.

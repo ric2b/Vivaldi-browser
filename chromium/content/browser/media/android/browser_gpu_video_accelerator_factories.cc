@@ -28,10 +28,6 @@ void OnGpuChannelEstablished(
   attributes.red_size = 8;
   attributes.green_size = 8;
   attributes.blue_size = 8;
-  attributes.stencil_size = 0;
-  attributes.depth_size = 0;
-  attributes.samples = 0;
-  attributes.sample_buffers = 0;
   attributes.bind_generates_resource = false;
   attributes.enable_raster_interface = true;
 
@@ -178,14 +174,12 @@ BrowserGpuVideoAcceleratorFactories::VideoFrameOutputFormat(
 
 gpu::SharedImageInterface*
 BrowserGpuVideoAcceleratorFactories::SharedImageInterface() {
-  NOTREACHED();
-  return nullptr;
+  NOTREACHED_NORETURN();
 }
 
 gpu::GpuMemoryBufferManager*
 BrowserGpuVideoAcceleratorFactories::GpuMemoryBufferManager() {
-  NOTREACHED();
-  return nullptr;
+  NOTREACHED_NORETURN();
 }
 
 base::UnsafeSharedMemoryRegion

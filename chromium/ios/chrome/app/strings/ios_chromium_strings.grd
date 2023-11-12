@@ -234,9 +234,6 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_DEFAULT_BROWSER_DESCRIPTION" desc="Description of the default browser promotion modal. [iOS only]">
         To make Chromium your default browser, open Settings. Tap Default Browser App, and then select Chromium.
       </message>
-      <message name="IDS_IOS_DEFAULT_BROWSER_LEARN_MORE_MESSAGE" desc="Message when the user taps the addition information button in the default browser promotion modal. [iOS only]">
-          You can now use Chromium any time you tap links in messages, documents, and other apps.
-      </message>
       <message name="IDS_IOS_DEFAULT_BROWSER_LEARN_MORE_INSTRUCTIONS_MESSAGE" desc="Description to user about how to reach the default browser setting in their device. [iOS only]">
         To make Chromium your default:
 1. Open Settings
@@ -248,6 +245,12 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_DEFAULT_PAGE_MODE_DESKTOP_SUBTITLE" desc="The subtitle explaining what the choosen mode (here desktop, the other possible state is mobile) will do in the browser">
         This means Chromium will request the desktop site every time.
+      </message>
+      <message name="IDS_IOS_DEFAULT_BROWSER_HALF_SCREEN_PROMO_TITLE_TEXT" desc="Chromium version of the title for the default browser half screen promo. [iOS only]">
+        Open Chromium From Any App
+      </message>
+      <message name="IDS_IOS_DEFAULT_BROWSER_HALF_SCREEN_PROMO_SUBTITLE_TEXT" desc="Chromium version of the subtitle for the default browser half screen promo. [iOS only]">
+        Automatically use Chromium when you tap links in messages, documents, and other apps.
       </message>
       <message name="IDS_IOS_DEFAULT_PAGE_MODE_MOBILE_SUBTITLE" desc="The subtitle explaining what the choosen mode (here mobile, the other possible state is desktop) will do in the browser">
         This means Chromium will request the mobile site every time.
@@ -269,6 +272,12 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_DEFAULT_BROWSER_TAILORED_BUILT_FOR_IOS_DESCRIPTION" desc="Chromium version of the description for the 'Built for iOS' default browser promotion modal. [iOS only]">
         Use Chromium by default to open links, search from widgets, and autofill passwords in other apps
+      </message>
+      <message name="IDS_IOS_DEFAULT_BROWSER_VIDEO_PROMO_TITLE_TEXT" desc="Chromium version of the title for the default browser video promo. [iOS only]">
+        Open Chromium From Any App
+      </message>
+      <message name="IDS_IOS_DEFAULT_BROWSER_VIDEO_PROMO_SUBTITLE_TEXT" desc="Chromium version of the subtitle for the default browser video promo. [iOS only]">
+        Open Chromium Settings in iOS, then tap on "Browser Default APP" and select Chromium.
       </message>
       <message name="IDS_IOS_DISCONNECT_DIALOG_TITLE" desc="The title of the disconnect dialog [Length: 30em].">
         Sign out of Chromium?
@@ -389,13 +398,16 @@ Things to consider:
       <message name="IDS_IOS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY" desc="The text of the identity section for iOS.">
         Chromium verified that <ph name="ISSUER">$1<ex>VeriSign</ex></ph> issued this website's certificate.
       </message>
+      <message name="IDS_IOS_POST_RESTORE_DEFAULT_BROWSER_PROMO_TITLE" desc="The text of the title for the post restore default browser promo.">
+        Make Chromium your default browser?
+      </message>
       <message name="IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_PERMISSION_REDIRECT_ALERT_MESSAGE" desc="The description that argues why push notification permission is necessary for price tracking.">
           Chromium notifications are currently turned off in your device settings.
       </message>
       <message name="IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_PERMISSION_REDIRECT_ALERT_TITLE" desc="The title for the UIAlert that redirects the user to iOS' application settings for Chrome.">
           Allow Chromium notifications to get price drop alerts
       </message>
-      <message name="IDS_IOS_PRODUCT_NAME" desc="The Chrome application name">
+      <message name="IDS_IOS_PRODUCT_NAME" desc="The Chrome application name" translateable="false">
         Chromium
       </message>
       <message name="IDS_IOS_RECENT_TABS_OTHER_DEVICES_EMPTY_MESSAGE" desc="To use the Other Devices section of the Recent Tabs view, a user must be signed in and activate Tabs synchronization on multiple devices. This message is shown in this section when the user is signed in and has activated Tabs synchronization only on this device.">
@@ -458,6 +470,12 @@ Things to consider:
       <message name="IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPHONE" desc="The subtitle of the view that teaches users to turn on iOS auto-fill from Chrome password manager for iPhone [iOS only]">
         You can use the passwords you saved to Password Manager in other apps on your iPhone.
       </message>
+      <message name="IDS_IOS_SET_UP_LIST_HIDE_MODULE_CONTEXT_MENU_DESCRIPTION" desc="Description for the long-press context menu for the Set Up List module.">
+          Hide “Get the most out of Chromium”
+      </message>
+      <message name="IDS_IOS_SET_UP_LIST_HIDE_MODULE_CONTEXT_MENU_TITLE" desc="Title for the long-press context menu for the Set Up List module.">
+          This card shows you suggestions on how to get the most out of Chromium.
+      </message>
       <message name="IDS_IOS_SHORT_PRODUCT_NAME" desc="The Chrome application short name.">
         Chromium
       </message>
@@ -479,11 +497,11 @@ Things to consider:
       <message name="IDS_IOS_TAB_SWITCHER_NO_TABS_TO_SYNC_PROMO" desc="The title of the paragraph IDS_OPEN_TABS_NO_SESSION_INSTRUCTIONS_IOS. The paragraph explains that tabs opened on other devices where the user is signed in will appear here, in the Tab Switcher. [iOS only]">
         Use Chromium Everywhere
       </message>
+      <message name="IDS_IOS_TAILORED_SECURITY_CONSENTED_DISABLE_MESSAGE_DESCRIPTION" desc="Description shown in the iOS message when the account tailored security setting changes for a consented primary account">
+        You're getting standard security protection on this device
+      </message>
       <message name="IDS_IOS_TAILORED_SECURITY_CONSENTED_ENABLE_MESSAGE_DESCRIPTION" desc="Description shown in the iOS message when the account tailored security setting changes for a consented primary account">
         You have Chromium's strongest security against harmful websites
-      </message>
-      <message name="IDS_IOS_TAILORED_SECURITY_CONSENTED_DISABLE_MESSAGE_DESCRIPTION" desc="Description shown in the iOS message when the account tailored security setting changes for a consented primary account">
-        You're getting standard security protection for this Chromium profile
       </message>
       <message name="IDS_IOS_TAILORED_SECURITY_UNCONSENTED_ENABLE_MESSAGE_DESCRIPTION" desc="Description shown in the iOS message when the account tailored security setting changes for a consented primary account">
         Get Enhanced Safe Browsing for this Chromium profile, too
@@ -551,6 +569,9 @@ Things to consider:
       <message name="IDS_IOS_SUGGESTED_STRONG_PASSWORD_HINT_DISPLAYING_EMAIL" desc="Text shown alongside a suggested password to tell user that generated passwords are recorded by chrome. [Length: unlimited] [iOS only]">
             You won't need to remember this password. It will be saved to Password Manager for <ph name="EMAIL">$1<ex>johndoe@gmail.com</ex></ph>
       </message>
+      <message name="IDS_IOS_PASSWORD_BOTTOM_SHEET_TITLE" desc="Title of the password bottom sheet. [iOS only]">
+          Google Password Manager
+      </message>
       <message name="IDS_IOS_PASSWORD_CHECK_ERROR" desc="Description of the password check cell, explaining that Password Check failed. [iOS only]" meaning="Password Check failed due to some error.">
         Chromium can't check your passwords
       </message>
@@ -593,6 +614,21 @@ Things to consider:
       <message name="IDS_IOS_PASSWORD_CHECKUP_ERROR_OTHER" desc="Text inside popover which is shown when the user wants to see detailed information about the error. [iOS only]" meaning="Password check failed due to specific reason (out of memory).">
         Chromium couldn't check all passwords. Try again later.
       </message>
+      <message name="IDS_IOS_WHATS_NEW_APP_SETTINGS" desc="Chromium version of Text of the row indicating the step of opening the app settings. [iOS only]">
+        Go to Chromium Settings.
+      </message>
+      <message name="IDS_IOS_WHATS_NEW_INCOGNITO_LOCK_STEP_3" desc="Chromium version of Text of the row indicating the third step to turn on Incognito Lock. [iOS only]">
+        Turn on “Lock Incognito Tabs When You Close Chromium.”
+      </message>
+      <message name="IDS_IOS_WHATS_NEW_INCOGNITO_LOCK_SUBTITLE" desc="Chromium version of Incognito Lock subtitle displayed in What's New. [iOS only]">
+        Lock your incognito when you leave Chromium or switch to a different app.
+      </message>
+      <message name="IDS_IOS_WHATS_NEW_MINI_MAPS_TITLE" desc="Chromium version of Mini Maps title displayed in What's New. [iOS only]">
+        Maps in Chromium
+      </message>
+      <message name="IDS_IOS_WHATS_NEW_MINI_MAPS_STEP_2" desc="Chromium version of Text of the row indicating the second step of of the Mini Maps feature. [iOS only]">
+        Tap “View with Google Maps on Chromium.”
+      </message>
       <message name="IDS_IOS_CHANGE_COMPROMISED_PASSWORD_DESCRIPTION_BRANDED" desc="Text inside Password Details screen shown when password was compromised. [iOS only]" meaning="Text which explains the user that current password is compromised and it should be changed.">
         Your password was exposed in a data breach. Password Manager recommends changing it now.
       </message>
@@ -607,9 +643,6 @@ Things to consider:
       </message>
       <message name="IDS_IOS_SETTINGS_ADD_PASSWORD_FOOTER_BRANDED" desc="Disclaimer telling users what will happen to their passwords">
         Your password will be saved to Password Manager for <ph name="EMAIL">$1<ex>example@gmail.com</ex></ph>.
-      </message>
-      <message name="IDS_IOS_OVERFLOW_MENU_TIP" desc="The text of the tip explaining to the user that the Overflow Menu has new items">
-        Get to know the new Chromium menu
       </message>
       <message name="IDS_IOS_ACCOUNT_TABLE_ERROR_ENTER_PASSPHRASE_MESSAGE" desc="The error message to show in the account table when there is a passphrase error. [iOS only]">
         To use and save Chromium data in your Google Account, enter your passphrase.

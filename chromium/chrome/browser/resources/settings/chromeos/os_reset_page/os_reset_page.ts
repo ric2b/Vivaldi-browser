@@ -7,6 +7,7 @@
  * 'os-settings-reset-page' is the OS settings page containing reset
  * settings.
  */
+import '../os_settings_page/os_settings_section.js';
 import './os_powerwash_dialog.js';
 
 import {getEuicc, getNonPendingESimProfiles} from 'chrome://resources/ash/common/cellular_setup/esim_manager_utils.js';
@@ -17,9 +18,8 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route} from '../router.js';
+import {Route, routes} from '../router.js';
 
 import {getTemplate} from './os_reset_page.html.js';
 

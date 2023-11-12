@@ -34,8 +34,9 @@ EpochTopics CreateTestEpochTopics() {
       TopicAndDomains(Topic(100), {HashedDomain(1)}));
 
   EpochTopics epoch_topics(std::move(top_topics_and_observing_domains),
-                           kPaddedTopTopicsStartIndex, kTaxonomySize,
-                           kTaxonomyVersion, kModelVersion, kCalculationTime);
+                           kPaddedTopTopicsStartIndex, kTaxonomyVersion,
+                           kModelVersion, kCalculationTime,
+                           /*from_manually_triggered_calculation=*/true);
 
   return epoch_topics;
 }
@@ -51,8 +52,9 @@ TEST_F(EpochTopicsTest, CandidateTopicForSite_InvalidIndividualTopics) {
   }
 
   EpochTopics epoch_topics(std::move(top_topics_and_observing_domains),
-                           kPaddedTopTopicsStartIndex, kTaxonomySize,
-                           kTaxonomyVersion, kModelVersion, kCalculationTime);
+                           kPaddedTopTopicsStartIndex, kTaxonomyVersion,
+                           kModelVersion, kCalculationTime,
+                           /*from_manually_triggered_calculation=*/false);
   EXPECT_FALSE(epoch_topics.empty());
 
   CandidateTopic candidate_topic = epoch_topics.CandidateTopicForSite(
@@ -317,6 +319,11 @@ TEST_F(EpochTopicsTest, PopulatedEpochTopics_ToAndFromValue) {
   EXPECT_EQ(read_epoch_topics.taxonomy_version(), 1);
   EXPECT_EQ(read_epoch_topics.model_version(), 2);
   EXPECT_EQ(read_epoch_topics.calculation_time(), kCalculationTime);
+
+  // `from_manually_triggered_calculation` should not persist after being
+  // written.
+  EXPECT_TRUE(epoch_topics.from_manually_triggered_calculation());
+  EXPECT_FALSE(read_epoch_topics.from_manually_triggered_calculation());
 
   CandidateTopic candidate_topic = epoch_topics.CandidateTopicForSite(
       /*top_domain=*/"foo.com", HashedDomain(1), kTestKey);

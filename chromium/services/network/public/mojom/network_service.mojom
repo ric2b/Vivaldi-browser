@@ -280,8 +280,11 @@ interface NetworkService {
   // network interfaces. Corresponds to enum net::HostAddressSelectionPolicy.
   GetNetworkList(uint32 policy) => (array<NetworkInterface>? networks);
 
-  // Notification that the certificate database has been modified.
-  OnCertDBChanged();
+  // Notification that the certificate trust store has been modified.
+  OnTrustStoreChanged();
+
+  // Notification that the client certificate store has been modified.
+  OnClientCertStoreChanged();
 
   // Send the encryption key to the network service to use for AES encryption.
   SetEncryptionKey(mojo_base.mojom.ByteString encryption_key);
@@ -373,4 +376,13 @@ interface NetworkService {
   // URLLoaderNetworkServiceObserver::OnDataUseUpdate. By default it's not
   // enabled.
   EnableDataUseUpdates(bool enable);
+};
+
+// Service that tests new process overhead on Android.
+// TODO(http://crbug.com/1395707): Remove this once
+// --disable-features=NetworkServiceInProcess2 is launched stable.
+[EnableIf=is_android, ServiceSandbox=sandbox.mojom.Sandbox.kNetwork]
+interface EmptyNetworkService {
+  // Test function to check if the service is available. Returns same `value`.
+  Ping(int32 value) => (int32 value);
 };

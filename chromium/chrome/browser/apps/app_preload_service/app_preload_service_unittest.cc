@@ -51,12 +51,13 @@ class AppPreloadServiceTest : public testing::Test {
   AppPreloadServiceTest()
       : scoped_user_manager_(std::make_unique<ash::FakeChromeUserManager>()) {
     scoped_feature_list_.InitAndEnableFeature(features::kAppPreloadService);
+    AppPreloadServiceFactory::SkipApiKeyCheckForTesting(true);
   }
 
   void SetUp() override {
     testing::Test::SetUp();
 
-    GetFakeUserManager()->set_current_user_new(true);
+    GetFakeUserManager()->SetIsCurrentUserNew(true);
 
     TestingProfile::Builder profile_builder;
     profile_builder.SetSharedURLLoaderFactory(
@@ -65,6 +66,10 @@ class AppPreloadServiceTest : public testing::Test {
     profile_ = profile_builder.Build();
 
     web_app::test::AwaitStartWebAppProviderAndSubsystems(GetProfile());
+  }
+
+  void TearDown() override {
+    AppPreloadServiceFactory::SkipApiKeyCheckForTesting(false);
   }
 
   Profile* GetProfile() { return profile_.get(); }
@@ -77,6 +82,7 @@ class AppPreloadServiceTest : public testing::Test {
   network::TestURLLoaderFactory url_loader_factory_;
 
  private:
+  // BrowserTaskEnvironment has to be the first member or test will break.
   content::BrowserTaskEnvironment task_environment_;
   base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<TestingProfile> profile_;
@@ -169,7 +175,7 @@ TEST_F(AppPreloadServiceTest, FirstLoginCompletedPrefSetAfterSuccess) {
 }
 
 TEST_F(AppPreloadServiceTest, FirstLoginExistingUserNotStarted) {
-  GetFakeUserManager()->set_current_user_new(false);
+  GetFakeUserManager()->SetIsCurrentUserNew(false);
   TestingProfile existing_user_profile;
 
   // Ensure that the AppPreloadService is created.

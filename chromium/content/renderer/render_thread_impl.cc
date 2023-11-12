@@ -138,10 +138,12 @@
 #include "skia/ext/skia_memory_dump_provider.h"
 #include "third_party/abseil-cpp/absl/base/attributes.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/origin_trials/origin_trials_settings_provider.h"
 #include "third_party/blink/public/common/page/launching_process_state.h"
 #include "third_party/blink/public/common/privacy_budget/active_sampling.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/switches.h"
+#include "third_party/blink/public/mojom/origin_trials/origin_trials_settings.mojom.h"
 #include "third_party/blink/public/platform/modules/video_capture/web_video_capture_impl_manager.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_cache.h"
@@ -161,7 +163,6 @@
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/skia/include/core/SkFontMgr.h"
 #include "third_party/skia/include/core/SkGraphics.h"
-#include "ui/base/layout.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_switches_util.h"
@@ -336,11 +337,6 @@ scoped_refptr<viz::ContextProviderCommandBuffer> CreateOffscreenContext(
   // This is for an offscreen context, so the default framebuffer doesn't need
   // alpha, depth, stencil, antialiasing.
   gpu::ContextCreationAttribs attributes;
-  attributes.alpha_size = -1;
-  attributes.depth_size = 0;
-  attributes.stencil_size = 0;
-  attributes.samples = 0;
-  attributes.sample_buffers = 0;
   attributes.bind_generates_resource = false;
   attributes.lose_context_when_out_of_memory = true;
   attributes.enable_gles2_interface = support_gles2_interface;
@@ -922,19 +918,14 @@ void RenderThreadImpl::InitializeWebKit(mojo::BinderMap* binders) {
 
 void RenderThreadImpl::InitializeRenderer(
     const std::string& user_agent,
-    const std::string& full_user_agent,
-    const std::string& reduced_user_agent,
     const blink::UserAgentMetadata& user_agent_metadata,
     const std::vector<std::string>& cors_exempt_header_list,
-    network::mojom::AttributionSupport attribution_support) {
+    network::mojom::AttributionSupport attribution_support,
+    blink::mojom::OriginTrialsSettingsPtr origin_trials_settings) {
   DCHECK(user_agent_.IsNull());
-  DCHECK(reduced_user_agent_.IsNull());
-  DCHECK(full_user_agent_.IsNull());
 
   user_agent_ = WebString::FromUTF8(user_agent);
   GetContentClient()->renderer()->DidSetUserAgent(user_agent);
-  full_user_agent_ = WebString::FromUTF8(full_user_agent);
-  reduced_user_agent_ = WebString::FromUTF8(reduced_user_agent);
   user_agent_metadata_ = user_agent_metadata;
   cors_exempt_header_list_ = cors_exempt_header_list;
   attribution_support_ = attribution_support;
@@ -945,6 +936,12 @@ void RenderThreadImpl::InitializeRenderer(
       cors_exempt_header_list, web_cors_exempt_header_list.begin(),
       [](const auto& header) { return blink::WebString::FromLatin1(header); });
   blink::SetCorsExemptHeaderList(web_cors_exempt_header_list);
+
+  // In single process mode, the settings have already been set by the browser.
+  if (!IsSingleProcess()) {
+    blink::OriginTrialsSettingsProvider::Get()->SetSettings(
+        std::move(origin_trials_settings));
+  }
 }
 
 void RenderThreadImpl::RegisterSchemes() {
@@ -1162,6 +1159,10 @@ RenderThreadImpl::SharedMainThreadContextProvider() {
               ->GetGraphicsResetStatusKHR() == GL_NO_ERROR)
     return shared_main_thread_contexts_;
 
+  if (is_context_result_fatal_) {
+    return nullptr;
+  }
+
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(
       EstablishGpuChannelSync());
   if (!gpu_channel_host) {
@@ -1180,6 +1181,7 @@ RenderThreadImpl::SharedMainThreadContextProvider() {
   // Enable automatic flushes to improve canvas throughput.
   // See https://crbug.com/880901
   bool automatic_flushes = true;
+
   // We use kGpuStreamIdDefault here, the same as in
   // PepperVideoDecodeContextProvider, so we don't need to handle
   // synchronization between the pepper context and the shared main thread
@@ -1192,8 +1194,11 @@ RenderThreadImpl::SharedMainThreadContextProvider() {
       viz::command_buffer_metrics::ContextType::RENDERER_MAIN_THREAD,
       kGpuStreamIdDefault, kGpuStreamPriorityDefault);
   auto result = shared_main_thread_contexts_->BindToCurrentSequence();
-  if (result != gpu::ContextResult::kSuccess)
+  if (result != gpu::ContextResult::kSuccess) {
     shared_main_thread_contexts_ = nullptr;
+    is_context_result_fatal_ = result == gpu::ContextResult::kFatalFailure;
+  }
+
   return shared_main_thread_contexts_;
 }
 
@@ -1308,18 +1313,6 @@ blink::WebString RenderThreadImpl::GetUserAgent() {
   DCHECK(!user_agent_.IsNull());
 
   return user_agent_;
-}
-
-blink::WebString RenderThreadImpl::GetFullUserAgent() {
-  DCHECK(!full_user_agent_.IsNull());
-
-  return full_user_agent_;
-}
-
-blink::WebString RenderThreadImpl::GetReducedUserAgent() {
-  DCHECK(!reduced_user_agent_.IsNull());
-
-  return reduced_user_agent_;
 }
 
 const blink::UserAgentMetadata& RenderThreadImpl::GetUserAgentMetadata() {
@@ -1626,6 +1619,11 @@ void RenderThreadImpl::PurgePluginListCache(bool reload_pages) {
 #endif
 }
 
+void RenderThreadImpl::PurgeResourceCache(PurgeResourceCacheCallback callback) {
+  blink::WebCache::Clear();
+  std::move(callback).Run();
+}
+
 void RenderThreadImpl::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
   TRACE_EVENT(
@@ -1835,12 +1833,10 @@ RenderThreadImpl::GetAttributionReportingSupport() {
   return attribution_support_;
 }
 
-#if BUILDFLAG(IS_ANDROID)
 void RenderThreadImpl::SetAttributionReportingSupport(
     network::mojom::AttributionSupport attribution_support) {
   attribution_support_ = attribution_support;
 }
-#endif
 
 std::unique_ptr<CodecFactory> RenderThreadImpl::CreateMediaCodecFactory(
     scoped_refptr<viz::ContextProviderCommandBuffer> context_provider,

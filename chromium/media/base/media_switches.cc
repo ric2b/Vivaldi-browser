@@ -238,6 +238,12 @@ MEDIA_EXPORT extern const char kLacrosUseChromeosProtectedMedia[] =
     "lacros-use-chromeos-protected-media";
 MEDIA_EXPORT extern const char kLacrosUseChromeosProtectedAv1[] =
     "lacros-use-chromeos-protected-av1";
+
+// Allows remote attestation (RA) in dev mode for testing purpose. Usually RA
+// is disabled in dev mode because it will always fail. However, there are cases
+// in testing where we do want to go through the permission flow even in dev
+// mode. This can be enabled by this flag.
+const char kAllowRAInDevMode[] = "allow-ra-in-dev-mode";
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace autoplay {
@@ -285,11 +291,10 @@ const char kCastStreamingForceEnableHardwareH264[] =
 const char kCastStreamingForceEnableHardwareVp8[] =
     "cast-streaming-force-enable-hardware-vp8";
 
-// Disables the code path that makes Pepper use the MojoVideoDecoder for
-// hardware accelerated video decoding. It overrides the value of the
-// kUseMojoVideoDecoderForPepper feature flag.
-const char kDisableUseMojoVideoDecoderForPepper[] =
-    "disable-use-mojo-video-decoder-for-pepper";
+#if !BUILDFLAG(IS_ANDROID)
+const char kCastMirroringTargetPlayoutDelay[] =
+    "cast-mirroring-target-playout-delay";
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace switches
 
@@ -331,12 +336,12 @@ BASE_FEATURE(kPlatformHEVCDecoderSupport,
              "PlatformHEVCDecoderSupport",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
 // Enables HEVC hardware accelerated encoding for Windows and Mac.
 BASE_FEATURE(kPlatformHEVCEncoderSupport,
              "PlatformHEVCEncoderSupport",
              base::FEATURE_DISABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
 #endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC)
 
 // Only decode preload=metadata elements upon visibility.
@@ -421,6 +426,11 @@ BASE_FEATURE(kCdmHostVerification,
 // using the same CDM type would share one CDM process.
 BASE_FEATURE(kCdmProcessSiteIsolation,
              "CdmProcessSiteIsolation",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables the "Copy Video Frame" context menu item.
+BASE_FEATURE(kContextMenuCopyVideoFrame,
+             "ContextMenuCopyVideoFrame",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
@@ -521,6 +531,13 @@ BASE_FEATURE(kCrOSDspBasedNsAllowed,
 BASE_FEATURE(kCrOSDspBasedAgcAllowed,
              "CrOSDspBasedAgcAllowed",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kIgnoreUiGains,
+             "IgnoreUiGains",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kShowForceRespectUiGainsToggle,
+             "ShowForceRespectUiGainsToggle",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 // Make MSE garbage collection algorithm more aggressive when we are under
@@ -534,7 +551,12 @@ BASE_FEATURE(kMemoryPressureBasedSourceBufferGC,
 // hardware video decoders.
 BASE_FEATURE(kUseMultiPlaneFormatForHardwareVideo,
              "UseMultiPlaneFormatForHardwareVideo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_ANDROID)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 // Enables creating single shared image and mailbox for multi-planar formats for
 // software video decoders.
@@ -568,6 +590,12 @@ BASE_FEATURE(kMultiPlaneVideoCaptureSharedImages,
 BASE_FEATURE(kOpenscreenCastStreamingSession,
              "OpenscreenCastStreamingSession",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls whether or not frame drops are included in the video bitrate
+// calculation for the OpenscreenFrameSender backed VideoSender implementation.
+BASE_FEATURE(kOpenscreenVideoBitrateFactorInFrameDrops,
+             "OpenscreenVideoBitrateFactorInFrameDrops",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls whether the Mirroring Service will fetch, analyze, and store
 // information on the quality of the session using RTCP logs.
@@ -643,26 +671,13 @@ BASE_FEATURE(kGlobalMediaControlsCrOSUpdatedUI,
 // If enabled, users can request Media Remoting without fullscreen-in-tab.
 BASE_FEATURE(kMediaRemotingWithoutFullscreen,
              "MediaRemotingWithoutFullscreen",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
 #endif
-
-// Allow Global Media Controls in system tray of CrOS.
-BASE_FEATURE(kGlobalMediaControlsForChromeOS,
-             "GlobalMediaControlsForChromeOS",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-constexpr base::FeatureParam<kCrosGlobalMediaControlsPinOptions>::Option
-    kCrosGlobalMediaControlsParamOptions[] = {
-        {kCrosGlobalMediaControlsPinOptions::kPin, "default-pinned"},
-        {kCrosGlobalMediaControlsPinOptions::kNotPin, "default-unpinned"},
-        {kCrosGlobalMediaControlsPinOptions::kHeuristic, "heuristic"}};
-
-constexpr base::FeatureParam<kCrosGlobalMediaControlsPinOptions>
-    kCrosGlobalMediaControlsPinParam(
-        &kGlobalMediaControlsForChromeOS,
-        "CrosGlobalMediaControlsPinParam",
-        kCrosGlobalMediaControlsPinOptions::kHeuristic,
-        &kCrosGlobalMediaControlsParamOptions);
+);
+#endif
 
 // Show picture-in-picture button in Global Media Controls.
 BASE_FEATURE(kGlobalMediaControlsPictureInPicture,
@@ -786,17 +801,41 @@ BASE_FEATURE(kVaapiH264TemporalLayerHWEncoding,
 // Enable VP8 temporal layer encoding with HW encoder on ChromeOS.
 BASE_FEATURE(kVaapiVp8TemporalLayerHWEncoding,
              "VaapiVp8TemporalLayerEncoding",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 // Enable VP9 k-SVC encoding with HW encoder for webrtc use case on ChromeOS.
 BASE_FEATURE(kVaapiVp9kSVCHWEncoding,
              "VaapiVp9kSVCHWEncoding",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS)
+#if defined(ARCH_CPU_ARM_FAMILY) && BUILDFLAG(IS_CHROMEOS)
+// Enables the new V4L2StatefulVideoDecoder instead of V4L2VideoDecoder.
+BASE_FEATURE(kV4L2FlatStatelessVideoDecoder,
+             "V4L2FlatStatelessVideoDecoder",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables the new V4L2StatefulVideoDecoder instead of V4L2VideoDecoder.
+BASE_FEATURE(kV4L2FlatStatefulVideoDecoder,
+             "V4L2FlatStatefulVideoDecoder",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 // Inform video blitter of video color space.
 BASE_FEATURE(kVideoBlitColorAccuracy,
              "video-blit-color-accuracy",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_APPLE)
+// Use the new VideoToolboxVideoDecoder for hardware decoding.
+BASE_FEATURE(kVideoToolboxVideoDecoder,
+             "VideoToolboxVideoDecoder",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_APPLE)
+
+// Inform webrtc with correct video color space information whenever
+// possible.
+BASE_FEATURE(kWebRTCColorAccuracy,
+             "WebRTCColorAccuracy",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable VP9 k-SVC decoding with HW decoder for webrtc use case.
 BASE_FEATURE(kVp9kSVCHWDecoding,
@@ -866,6 +905,11 @@ BASE_FEATURE(kLiveCaptionRightClick,
              "LiveCaptionRightClick",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enable or disable Live Caption support for WebAudio.
+BASE_FEATURE(kLiveCaptionWebAudio,
+             "LiveCaptionWebAudio",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Live Caption runs system-wide on ChromeOS, as opposed to just in the browser.
 BASE_FEATURE(kLiveCaptionSystemWideOnChromeOS,
              "LiveCaptionSystemWideOnChromeOS",
@@ -928,7 +972,7 @@ const base::FeatureParam<bool>
 // while capturing a low-resolution tab.
 BASE_FEATURE(kWebContentsCaptureHiDpi,
              "WebContentsCaptureHiDPI",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables handling of hardware media keys for controlling media.
 BASE_FEATURE(kHardwareMediaKeyHandling,
@@ -1032,7 +1076,11 @@ BASE_FEATURE(kRequestSystemAudioFocus,
 // needed, except for some Android TV devices.
 BASE_FEATURE(kUseAudioLatencyFromHAL,
              "UseAudioLatencyFromHAL",
+#if defined(OEM_MERCEDES_BUILD)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 // Enable pooling of SharedImageVideo objects for use by MCVD, to save a hop to
 // the GPU main thread during VideoFrame construction.
@@ -1040,11 +1088,13 @@ BASE_FEATURE(kUsePooledSharedImageVideoProvider,
              "UsePooledSharedImageVideoProvider",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Historically we hardcoded sRGB for color space. This flags controls if we
-// pass real color space to VideoFrame/SharedImages.
-BASE_FEATURE(kUseRealColorSpaceForAndroidVideo,
-             "UseRealColorSpaceForAndroidVideo",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+// Allow the media pipeline to prioritize the software decoder provided by
+// MediaCodec, instead of the built-in software decoders. This is only enabled
+// for platforms which shows worse performance when using the built-in software
+// decoders, e.g. Cast on ATV.
+BASE_FEATURE(kAllowMediaCodecSoftwareDecoder,
+             "AllowMediaCodecSoftwareDecoder",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -1135,6 +1185,11 @@ BASE_FEATURE(kMediaFoundationD3D11VideoCapture,
              "MediaFoundationD3D11VideoCapture",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enable zero-copy based on MediaFoundation video capture with D3D11.
+BASE_FEATURE(kMediaFoundationD3D11VideoCaptureZeroCopy,
+             "MediaFoundationD3D11VideoCaptureZeroCopy",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables VP8 decode acceleration for Windows.
 const base::Feature MEDIA_EXPORT kMediaFoundationVP8Decoding{
     "MediaFoundationVP8Decoding", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -1154,20 +1209,9 @@ BASE_FEATURE(kMediaFoundationClearPlayback,
 const base::Feature MEDIA_EXPORT kWasapiRawAudioCapture{
     "WASAPIRawAudioCapture", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Emulates audio capture timestamps instead of using timestamps from the actual
-// audio device.
-// See crbug.com/1315231 for more details.
-const base::Feature MEDIA_EXPORT kUseFakeAudioCaptureTimestamps{
-    "UseFakeAudioCaptureTimestamps", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enable VP9 kSVC decoding with HW decoder for webrtc use case on Windows.
 BASE_FEATURE(kD3D11Vp9kSVCHWDecoding,
              "D3D11Vp9kSVCHWDecoding",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Controls whether the DXVA video decoder is enabled on Windows.
-BASE_FEATURE(kDXVAVideoDecoding,
-             "DXVAVideoDecoding",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // The Media Foundation Rendering Strategy determines which presentation mode
@@ -1238,14 +1282,20 @@ BASE_FEATURE(kAllowClearDolbyVisionInMseWhenPlatformEncryptedDvEnabled,
 // lacros-chrome through the crosapi.
 const base::Feature MEDIA_EXPORT kExposeOutOfProcessVideoDecodingToLacros{
     "ExposeOutOfProcessVideoDecodingToLacros",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
 // Spawn utility processes to perform hardware decode acceleration instead of
 // using the GPU process.
 const base::Feature MEDIA_EXPORT kUseOutOfProcessVideoDecoding{
-    "UseOutOfProcessVideoDecoding", base::FEATURE_DISABLED_BY_DEFAULT};
+  "UseOutOfProcessVideoDecoding",
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 #endif  // BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -1254,13 +1304,6 @@ const base::Feature MEDIA_EXPORT kUseOutOfProcessVideoDecoding{
 const base::Feature MEDIA_EXPORT kUseOutOfProcessVideoEncoding{
     "UseOutOfProcessVideoEncoding", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-
-// Make the PepperVideoDecoderHost use the MojoVideoDecoder to talk to hardware
-// decoders instead of using the GpuVideoDecodeAcceleratorHost. Note: this
-// doesn't affect the PPB_VideoDecoder_Impl which will continue to use the
-// GpuVideoDecodeAcceleratorHost for the PPB_VideoDecoder_Dev interface.
-const base::Feature MEDIA_EXPORT kUseMojoVideoDecoderForPepper{
-    "UseMojoVideoDecoderForPepper", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Use SequencedTaskRunner for MediaService.
 BASE_FEATURE(kUseSequencedTaskRunnerForMediaService,
@@ -1400,6 +1443,14 @@ BASE_FEATURE(kAudioFocusLossSuspendMediaSession,
              "AudioFocusMediaSession",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+#if !BUILDFLAG(IS_ANDROID)
+// Hides the media metadata from the OS' media player if running in an Incognito
+// session.
+BASE_FEATURE(kHideIncognitoMediaMetadata,
+             "HideIncognitoMediaMetadata",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
 // Enables the internal Media Session logic without enabling the Media Session
 // service.
 BASE_FEATURE(kInternalMediaSession,
@@ -1437,6 +1488,10 @@ BASE_FEATURE(kCastStreamingAv1,
              "CastStreamingAv1",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kCastStreamingPerformanceOverlay,
+             "CastStreamingPerformanceOverlay",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Controls whether mirroring negotiations will include the VP9 codec for video
 // encoding.
 //
@@ -1452,6 +1507,12 @@ BASE_FEATURE(kFuchsiaMediacodecVideoEncoder,
              "FuchsiaMediacodecVideoEncoder",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_FUCHSIA)
+
+// Controls whether to pre-dispatch more decode tasks when pending decodes is
+// smaller than maximum supported decodes as advertiszed by decoder.
+BASE_FEATURE(kVideoDecodeBatching,
+             "VideoDecodeBatching",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsChromeWideEchoCancellationEnabled() {
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)

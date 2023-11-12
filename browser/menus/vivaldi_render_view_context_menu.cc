@@ -658,6 +658,8 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
         return params_.writing_direction_left_to_right &
                blink::ContextMenuData::kCheckableMenuItemEnabled;
       case IDC_CONTENT_CONTEXT_LOOK_UP:
+      case IDC_VIV_INSPECT_SERVICE_WORKER:
+      case IDC_VIV_INSPECT_PORTAL_DOCUMENT:
         return true;
       default:
         return RenderViewContextMenu::IsCommandIdEnabled(command_id);

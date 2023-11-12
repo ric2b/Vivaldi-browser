@@ -9,6 +9,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
@@ -50,6 +51,7 @@ class SiteSettingsHandler
    public:
     static GroupingKey Create(const url::Origin& origin);
     static GroupingKey CreateFromEtldPlus1(const std::string& etld_plus1);
+    static GroupingKey Deserialize(const std::string& serialized);
 
     GroupingKey(const GroupingKey& other);
     GroupingKey& operator=(const GroupingKey& other);
@@ -171,7 +173,7 @@ class SiteSettingsHandler
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, SessionOnlyException);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, ZoomLevels);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
-                           HandleClearEtldPlus1DataAndCookies);
+                           HandleClearSiteGroupDataAndCookies);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
                            HandleClearUnpartitionedUsage);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, ClearClientHints);
@@ -190,24 +192,6 @@ class SiteSettingsHandler
                            HandleGetFpsMembershipLabel);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, NonTreeModelDeletion);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, FirstPartySetsMembership);
-  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
-                           HandleIgnoreOriginsForNotificationPermissionReview);
-  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
-                           HandleBlockNotificationPermissionForOrigins);
-  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
-                           HandleAllowNotificationPermissionForOrigins);
-  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
-                           HandleResetNotificationPermissionForOrigins);
-  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
-                           PopulateNotificationPermissionReviewData);
-  FRIEND_TEST_ALL_PREFIXES(
-      SiteSettingsHandlerTest,
-      HandleUndoIgnoreOriginsForNotificationPermissionReview);
-  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
-                           SendNotificationPermissionReviewList_FeatureEnabled);
-  FRIEND_TEST_ALL_PREFIXES(
-      SiteSettingsHandlerTest,
-      SendNotificationPermissionReviewList_FeatureDisabled);
   FRIEND_TEST_ALL_PREFIXES(
       SiteSettingsHandlerInfobarTest,
       SettingPermissionsDoesNotTriggerInfobarOnDifferentProfile);
@@ -215,6 +199,9 @@ class SiteSettingsHandler
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, HandleGetExtensionName);
 #endif
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, IsolatedWebAppUsageInfo);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerIsolatedWebAppTest, ZoomLevel);
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerIsolatedWebAppTest,
+                           ZoomLevelsSortedByAppName);
 
   // Rebuilds the BrowsingDataModel & CookiesTreeModel. Pending requests are
   // serviced when both models are built.
@@ -296,9 +283,6 @@ class SiteSettingsHandler
   // Returns the list of chooser exceptions for a given chooser type.
   void HandleGetChooserExceptionList(const base::Value::List& args);
 
-  // Returns the list of notification permissions that needs to be reviewed.
-  void HandleGetNotificationPermissionReviewList(const base::Value::List& args);
-
   // Returns the list of the allowed permission grants as defined by the
   // File System Access API.
   void HandleGetFileSystemGrants(const base::Value::List& args);
@@ -325,28 +309,6 @@ class SiteSettingsHandler
   // simply (origin) and update all call sites.
   // Handles resetting a chooser exception for the given site.
   void HandleResetChooserExceptionForSite(const base::Value::List& args);
-
-  // Handles ignoring origins for the review notification permissions feature.
-  void HandleIgnoreOriginsForNotificationPermissionReview(
-      const base::Value::List& args);
-
-  // Handles resetting a notification permission for given origins.
-  void HandleResetNotificationPermissionForOrigins(
-      const base::Value::List& args);
-
-  // Handles blocking notification permissions for multiple origins.
-  void HandleBlockNotificationPermissionForOrigins(
-      const base::Value::List& args);
-
-  // Handles allowing notification permissions for multiple origins.
-  void HandleAllowNotificationPermissionForOrigins(
-      const base::Value::List& args);
-
-  // Handles reverting the action of ignoring origins for review notification
-  // permissions feature by removing them from the notification permission
-  // verification blocklist.
-  void HandleUndoIgnoreOriginsForNotificationPermissionReview(
-      const base::Value::List& args);
 
   // Returns whether a given string is a valid origin.
   void HandleIsOriginValid(const base::Value::List& args);
@@ -378,8 +340,8 @@ class SiteSettingsHandler
   // Updates the block autoplay enabled pref when the UI is toggled.
   void HandleSetBlockAutoplayEnabled(const base::Value::List& args);
 
-  // Clear web storage data and cookies from cookies tree model for an ETLD+1.
-  void HandleClearEtldPlus1DataAndCookies(const base::Value::List& args);
+  // Clear web storage data and cookies from CookiesTreeModel for a site group.
+  void HandleClearSiteGroupDataAndCookies(const base::Value::List& args);
 
   // Record metrics for actions on All Sites Page.
   void HandleRecordAction(const base::Value::List& args);
@@ -403,11 +365,6 @@ class SiteSettingsHandler
   // provides the updated description label for display.
   void SendCookieSettingDescription();
 
-  // Returns a list of domains to be shown on the 'Review Notification
-  // Permissions' module in site settings notification page. Those domains send
-  // a lot of notifications, but have low site engagement.
-  base::Value::List PopulateNotificationPermissionReviewData();
-
   // Returns a dictionary containing the lists of the allowed permission
   // grant objects granted via the File System Access API, per origin.
   base::Value::List PopulateFileSystemGrantData();
@@ -415,19 +372,16 @@ class SiteSettingsHandler
   // Sends the list of notification permissions to review to the WebUI.
   void SendNotificationPermissionReviewList();
 
-  const raw_ptr<Profile> profile_;
+  const raw_ptr<Profile, DanglingUntriaged> profile_;
 
   base::ScopedMultiSourceObservation<Profile, ProfileObserver>
       observed_profiles_{this};
 
   // Keeps track of events related to zooming.
-  base::CallbackListSubscription host_zoom_map_subscription_;
+  std::vector<base::CallbackListSubscription> host_zoom_map_subscriptions_;
 
   // The origin for which to fetch usage.
   std::string usage_origin_;
-
-  // The origin for which to clear usage.
-  std::string clearing_origin_;
 
   // Change observer for content settings.
   base::ScopedMultiSourceObservation<HostContentSettingsMap,

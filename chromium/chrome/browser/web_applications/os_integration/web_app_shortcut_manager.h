@@ -90,6 +90,7 @@ class WebAppShortcutManager {
   // RegisterShortcutsMenuWithOs() below.
   void ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
       const AppId& app_id,
+      const std::vector<WebAppShortcutsMenuItemInfo>& shortcuts_menu_item_infos,
       ResultCallback callback);
 
   // Registers a shortcuts menu for the web app's icon with the OS.
@@ -156,6 +157,7 @@ class WebAppShortcutManager {
 
   void OnShortcutsMenuIconsReadRegisterShortcutsMenu(
       const AppId& app_id,
+      const std::vector<WebAppShortcutsMenuItemInfo>& shortcuts_menu_item_infos,
       ResultCallback callback,
       ShortcutsMenuIconBitmaps shortcuts_menu_icon_bitmaps);
 
@@ -171,8 +173,8 @@ class WebAppShortcutManager {
 
   const raw_ptr<Profile> profile_;
 
-  raw_ptr<WebAppRegistrar> registrar_ = nullptr;
-  raw_ptr<WebAppIconManager> icon_manager_ = nullptr;
+  raw_ptr<WebAppRegistrar, DanglingUntriaged> registrar_ = nullptr;
+  raw_ptr<WebAppIconManager, DanglingUntriaged> icon_manager_ = nullptr;
   raw_ptr<WebAppFileHandlerManager, DanglingUntriaged> file_handler_manager_ =
       nullptr;
   raw_ptr<WebAppProtocolHandlerManager, DanglingUntriaged>

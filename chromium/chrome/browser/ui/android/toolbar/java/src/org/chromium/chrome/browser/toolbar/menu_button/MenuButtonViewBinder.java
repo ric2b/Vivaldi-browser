@@ -50,6 +50,9 @@ class MenuButtonViewBinder implements ViewBinder<PropertyModel, MenuButton, Prop
             view.onTintChanged(themeProperty.mColorStateList, themeProperty.mBrandedColorScheme);
         } else if (propertyKey == MenuButtonProperties.TRANSLATION_X) {
             view.setTranslationX(model.get(MenuButtonProperties.TRANSLATION_X));
+        } else if (propertyKey == MenuButtonProperties.VIVALDI_ATTENTION_BADGE) { // Vivaldi
+            bind(model, view, MenuButtonProperties.STATE_SUPPLIER);
+            view.removeVivaldiAttentionBadge();
         }
     }
 }

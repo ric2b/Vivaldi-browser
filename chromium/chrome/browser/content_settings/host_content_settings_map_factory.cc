@@ -53,7 +53,12 @@
 HostContentSettingsMapFactory::HostContentSettingsMapFactory()
     : RefcountedProfileKeyedServiceFactory(
           "HostContentSettingsMap",
-          ProfileSelections::BuildForRegularAndIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   DependsOn(SupervisedUserSettingsServiceFactory::GetInstance());
 #endif
@@ -71,8 +76,7 @@ HostContentSettingsMapFactory::HostContentSettingsMapFactory()
 #endif
 }
 
-HostContentSettingsMapFactory::~HostContentSettingsMapFactory() {
-}
+HostContentSettingsMapFactory::~HostContentSettingsMapFactory() = default;
 
 // static
 HostContentSettingsMap* HostContentSettingsMapFactory::GetForProfile(
@@ -85,7 +89,8 @@ HostContentSettingsMap* HostContentSettingsMapFactory::GetForProfile(
 
 // static
 HostContentSettingsMapFactory* HostContentSettingsMapFactory::GetInstance() {
-  return base::Singleton<HostContentSettingsMapFactory>::get();
+  static base::NoDestructor<HostContentSettingsMapFactory> instance;
+  return instance.get();
 }
 
 scoped_refptr<RefcountedKeyedService>

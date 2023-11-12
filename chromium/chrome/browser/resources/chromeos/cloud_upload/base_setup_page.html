@@ -69,7 +69,8 @@
 
   ::slotted([slot=header-image]) {
     /* As this surface is a dialog, replace the color palette with its elevated
-     * variant. */
+     * variant. We also do this for GM3 assets so that they correctly map back
+     * to GM2 tokens when the jelly flag is off. */
     --cros-illustration-color-1-shade-1: var(
       --cros-illustration-elevation-color-1-shade-1);
     --cros-illustration-color-1-shade-2: var(
@@ -78,6 +79,11 @@
       --cros-illustration-elevation-base-color);
     --cros-illustration-secondary-color: var(
       --cros-illustration-elevation-secondary-color);
+    --cros-sys-illo-color1-1: var(--cros-sys-illo-elevated-color-1-1);
+    --cros-sys-illo-color1-2: var(--cros-sys-illo-elevated-color-1-2);
+    --cros-sys-illo-base: var(--cros-sys-illo-elevated-base);
+    --cros-sys-illo-secondary: var(--cros-sys-illo-elevated-secondary);
+
 
     height: 100%;
     width: 100%;
@@ -117,6 +123,52 @@
 
   div#dots > div.active {
     background-color: var(--cros-icon-color-prominent);
+  }
+
+  :host-context([theme='refresh23']) cr-button {
+    --active-bg: transparent;
+    --active-shadow: none;
+    --active-shadow-action: none;
+    --bg-action: var(--cros-sys-primary);
+    --cr-button-height: 36px;
+    --disabled-bg-action:
+        var(--cros-sys-disabled_container);
+    --disabled-bg: var(--cros-sys-disabled_container);;
+    --disabled-text-color: var(--cros-sys-disabled);
+    /* Use the default bg color as hover color because we
+        rely on hoverBackground layer below.  */
+    --hover-bg-action: var(--cros-sys-primary);
+    --hover-bg-color: var(--cros-sys-primary_container);
+    --ink-color: var(--cros-sys-ripple_primary);
+    --ripple-opacity-action: 1;
+    --ripple-opacity: 1;
+    --text-color-action: var(--cros-sys-on_primary);
+    --text-color: var(--cros-sys-on_primary_container);
+    border: none;
+    border-radius: 18px;
+    box-shadow: none;
+  }
+
+  :host-context([theme='refresh23']) cr-button.cancel-button {
+    background-color: var(--cros-sys-primary_container);
+  }
+
+  :host-context([theme='refresh23'])
+      cr-button.cancel-button:hover::part(hoverBackground) {
+    background-color: var(--cros-sys-hover_on_subtle);
+    display: block;
+  }
+
+  :host-context([theme='refresh23'])
+      cr-button.action-button:hover::part(hoverBackground) {
+    background-color: var(--cros-sys-hover_on_prominent);
+    display: block;
+  }
+
+  :host-context([theme='refresh23']):host-context(.focus-outline-visible)
+      cr-button:focus {
+    outline: 2px solid var(--cros-sys-focus_ring);
+    outline-offset: 2px;
   }
 </style>
 

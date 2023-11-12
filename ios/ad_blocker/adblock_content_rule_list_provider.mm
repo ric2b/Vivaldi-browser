@@ -8,10 +8,12 @@
 #import <WebKit/WebKit.h>
 
 #import "base/barrier_callback.h"
+#import "base/barrier_closure.h"
 #import "base/containers/cxx20_erase.h"
 #import "base/json/json_string_value_serializer.h"
 #import "base/logging.h"
 #import "base/strings/string_number_conversions.h"
+#import "base/time/time.h"
 #import "ios/ad_blocker/utils.h"
 #import "ios/web/public/browser_state.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
@@ -38,6 +40,7 @@ class AdBlockerContentRuleListProviderImpl
   explicit AdBlockerContentRuleListProviderImpl(
       web::BrowserState* browser_state,
       RuleGroup group,
+      base::OnceClosure on_loaded,
       base::RepeatingClosure rules_applied);
   ~AdBlockerContentRuleListProviderImpl() override;
   AdBlockerContentRuleListProviderImpl(
@@ -47,6 +50,7 @@ class AdBlockerContentRuleListProviderImpl
 
   // Implementing AdBlockerContentRuleListProvider
   void InstallContentRuleLists(const base::Value::List& lists) override;
+  void ApplyLoadedRules() override { ApplyContentRuleLists(); }
 
  private:
   // Implementing WKWebViewConfigurationProviderObserver
@@ -54,7 +58,6 @@ class AdBlockerContentRuleListProviderImpl
       web::WKWebViewConfigurationProvider* config_provider,
       WKWebViewConfiguration* new_config) override;
 
-  void CompileContentRuleLists();
   void RemoveInstalledLists();
   void DoInstallContentRuleLists(
       std::vector<WKContentRuleList*> content_rule_lists);
@@ -63,7 +66,6 @@ class AdBlockerContentRuleListProviderImpl
   web::BrowserState* browser_state_;
   RuleGroup group_;
   __weak WKUserContentController* user_content_controller_;
-  int next_list_number_{0};
   std::vector<WKContentRuleList*> installed_content_rule_lists_;
   base::RepeatingClosure on_rules_applied_;
 
@@ -74,6 +76,7 @@ class AdBlockerContentRuleListProviderImpl
 AdBlockerContentRuleListProviderImpl::AdBlockerContentRuleListProviderImpl(
     web::BrowserState* browser_state,
     RuleGroup group,
+    base::OnceClosure on_loaded,
     base::RepeatingClosure on_rules_applied)
     : browser_state_(browser_state),
       group_(group),
@@ -83,6 +86,38 @@ AdBlockerContentRuleListProviderImpl::AdBlockerContentRuleListProviderImpl(
   DidCreateNewConfiguration(&config_provider,
                             config_provider.GetWebViewConfiguration());
   config_provider.AddObserver(this);
+
+  base::WeakPtr<AdBlockerContentRuleListProviderImpl> weak_this =
+      weak_ptr_factory_.GetWeakPtr();
+  __block base::OnceClosure on_loaded_helper(std::move(on_loaded));
+  [WKContentRuleListStore.defaultStore getAvailableContentRuleListIdentifiers:^(
+                                           NSArray<NSString*>* identifiers) {
+    std::string list_prefix(kListNamePrefix);
+    list_prefix.append(
+        std::string(kListNameGroupPrefix[static_cast<size_t>(group_)]));
+    std::vector<NSString*> relevant_identifiers;
+    for (NSString* identifier in identifiers) {
+      if ([identifier
+              hasPrefix:[NSString stringWithUTF8String:list_prefix.c_str()]]) {
+        relevant_identifiers.push_back(identifier);
+      }
+    }
+
+    __block auto notify_on_loaded = base::BarrierClosure(
+        relevant_identifiers.size(), std::move(on_loaded_helper));
+    for (NSString* identifier : relevant_identifiers) {
+      [WKContentRuleListStore.defaultStore
+          lookUpContentRuleListForIdentifier:identifier
+                           completionHandler:^(WKContentRuleList* rule_list,
+                                               NSError* error) {
+                             if (weak_this && rule_list) {
+                               weak_this->installed_content_rule_lists_
+                                   .push_back(rule_list);
+                             }
+                             notify_on_loaded.Run();
+                           }];
+    }
+  }];
 }
 
 AdBlockerContentRuleListProviderImpl::~AdBlockerContentRuleListProviderImpl() {
@@ -109,7 +144,9 @@ void AdBlockerContentRuleListProviderImpl::InstallContentRuleLists(
     std::string list_name(kListNamePrefix);
     list_name.append(
         std::string(kListNameGroupPrefix[static_cast<size_t>(group_)]));
-    list_name.append(base::NumberToString(next_list_number_++));
+
+    list_name.append(base::NumberToString(
+        base::Time::Now().ToDeltaSinceWindowsEpoch().InMicroseconds()));
 
     [WKContentRuleListStore.defaultStore
         compileContentRuleListForIdentifier:
@@ -173,9 +210,10 @@ std::unique_ptr<AdBlockerContentRuleListProvider>
 AdBlockerContentRuleListProvider::Create(
     web::BrowserState* browser_state,
     RuleGroup group,
+    base::OnceClosure on_loaded,
     base::RepeatingClosure on_rules_applied) {
   return std::make_unique<AdBlockerContentRuleListProviderImpl>(
-      browser_state, group, on_rules_applied);
+      browser_state, group, std::move(on_loaded), on_rules_applied);
 }
 
 }  // namespace adblock_filter

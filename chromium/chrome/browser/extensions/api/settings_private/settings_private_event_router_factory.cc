@@ -24,21 +24,27 @@ SettingsPrivateEventRouter* SettingsPrivateEventRouterFactory::GetForProfile(
 // static
 SettingsPrivateEventRouterFactory*
 SettingsPrivateEventRouterFactory::GetInstance() {
-  return base::Singleton<SettingsPrivateEventRouterFactory>::get();
+  static base::NoDestructor<SettingsPrivateEventRouterFactory> instance;
+  return instance.get();
 }
 
 SettingsPrivateEventRouterFactory::SettingsPrivateEventRouterFactory()
     : ProfileKeyedServiceFactory(
           "SettingsPrivateEventRouter",
-          ProfileSelections::BuildForRegularAndIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {
   DependsOn(ExtensionsBrowserClient::Get()->GetExtensionSystemFactory());
   DependsOn(EventRouterFactory::GetInstance());
   DependsOn(settings_private::GeneratedPrefsFactory::GetInstance());
   DependsOn(SettingsPrivateDelegateFactory::GetInstance());
 }
 
-SettingsPrivateEventRouterFactory::~SettingsPrivateEventRouterFactory() {
-}
+SettingsPrivateEventRouterFactory::~SettingsPrivateEventRouterFactory() =
+    default;
 
 KeyedService* SettingsPrivateEventRouterFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {

@@ -32,7 +32,7 @@
 #include "components/history/core/browser/sync/history_model_type_controller.h"
 #include "components/history/core/common/pref_names.h"
 #include "components/password_manager/core/browser/password_store_interface.h"
-#include "components/password_manager/core/browser/sync/password_model_type_controller.h"
+#include "components/password_manager/core/browser/sync/credential_model_type_controller.h"
 #include "components/power_bookmarks/core/power_bookmark_features.h"
 #include "components/power_bookmarks/core/power_bookmark_service.h"
 #include "components/prefs/pref_service.h"
@@ -46,15 +46,15 @@
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/base/sync_prefs.h"
-#include "components/sync/driver/data_type_manager_impl.h"
-#include "components/sync/driver/glue/sync_engine_impl.h"
-#include "components/sync/driver/glue/sync_transport_data_prefs.h"
-#include "components/sync/driver/model_type_controller.h"
-#include "components/sync/driver/syncable_service_based_model_type_controller.h"
 #include "components/sync/engine/sync_engine.h"
 #include "components/sync/invalidations/sync_invalidations_service.h"
 #include "components/sync/model/forwarding_model_type_controller_delegate.h"
 #include "components/sync/model/proxy_model_type_controller_delegate.h"
+#include "components/sync/service/data_type_manager_impl.h"
+#include "components/sync/service/glue/sync_engine_impl.h"
+#include "components/sync/service/glue/sync_transport_data_prefs.h"
+#include "components/sync/service/model_type_controller.h"
+#include "components/sync/service/syncable_service_based_model_type_controller.h"
 #include "components/sync_bookmarks/bookmark_model_type_controller.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
 #include "components/sync_device_info/device_info_sync_service.h"
@@ -200,8 +200,7 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
   const base::RepeatingClosure dump_stack =
       base::BindRepeating(&syncer::ReportUnrecoverableError, channel_);
 
-  // TODO(crbug.com/1005651): Consider using a separate delegate for
-  // transport-only.
+  // Same delegate for full-sync or transport mode.
   controllers.push_back(std::make_unique<ModelTypeController>(
       syncer::DEVICE_INFO,
       /*delegate_for_full_sync_mode=*/
@@ -217,30 +216,29 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
 
   // These features are enabled only if there's a DB thread to post tasks to.
   if (db_thread_) {
-    // Autocomplete sync is enabled by default. Register unless explicitly
-    // disabled.
     if (!disabled_types.Has(syncer::AUTOFILL)) {
+      // Note: Transport mode is not and will not be supported.
       controllers.push_back(std::make_unique<ModelTypeController>(
           syncer::AUTOFILL,
           std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
               db_thread_, base::BindRepeating(
                               &AutocompleteDelegateFromDataService,
-                              base::RetainedRef(web_data_service_on_disk_)))));
+                              base::RetainedRef(web_data_service_on_disk_))),
+          /*delegate_for_transport_mode=*/nullptr));
     }
 
-    // Autofill sync is enabled by default. Register unless explicitly
-    // disabled.
     if (!disabled_types.Has(syncer::AUTOFILL_PROFILE)) {
+      // Note: Transport mode is not and will not be supported - support is
+      // coming via CONTACT_INFO instead.
       controllers.push_back(std::make_unique<syncer::ModelTypeController>(
           syncer::AUTOFILL_PROFILE,
           std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
               db_thread_, base::BindRepeating(
                               &AutofillProfileDelegateFromDataService,
-                              base::RetainedRef(web_data_service_on_disk_)))));
+                              base::RetainedRef(web_data_service_on_disk_))),
+          /*delegate_for_transport_mode=*/nullptr));
     }
 
-    // Contact info sync is enabled by default. Register unless explicitly
-    // disabled.
     if (base::FeatureList::IsEnabled(syncer::kSyncEnableContactInfoDataType) &&
         !disabled_types.Has(syncer::CONTACT_INFO)) {
       // The same delegate is used for full sync and transport mode.
@@ -261,49 +259,50 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
               sync_service, sync_client_->GetIdentityManager()));
     }
 
-    // Wallet data sync is enabled by default. Register unless explicitly
-    // disabled.
     if (!disabled_types.Has(syncer::AUTOFILL_WALLET_DATA)) {
-      controllers.push_back(CreateWalletModelTypeControllerWithInMemorySupport(
-          syncer::AUTOFILL_WALLET_DATA,
-          base::BindRepeating(&AutofillWalletDelegateFromDataService),
-          sync_service));
+      controllers.push_back(
+          CreateWalletModelTypeControllerWithTransportModeSupport(
+              syncer::AUTOFILL_WALLET_DATA,
+              base::BindRepeating(&AutofillWalletDelegateFromDataService),
+              sync_service));
     }
 
-    // Wallet metadata sync depends on Wallet data sync. Register if neither
-    // Wallet data nor Wallet metadata sync is explicitly disabled.
+    // Wallet metadata sync depends on Wallet data sync.
     if (!disabled_types.Has(syncer::AUTOFILL_WALLET_DATA) &&
         !disabled_types.Has(syncer::AUTOFILL_WALLET_METADATA)) {
-      controllers.push_back(CreateWalletModelTypeController(
-          syncer::AUTOFILL_WALLET_METADATA,
-          base::BindRepeating(&AutofillWalletMetadataDelegateFromDataService),
-          sync_service));
+      // TODO(crbug.com/1448894): Enable transport mode support.
+      controllers.push_back(
+          CreateWalletModelTypeControllerWithoutTransportModeSupport(
+              syncer::AUTOFILL_WALLET_METADATA,
+              base::BindRepeating(
+                  &AutofillWalletMetadataDelegateFromDataService),
+              sync_service));
     }
 
-    // Wallet offer sync depends on Wallet data sync. Register if neither
-    // Wallet data nor Wallet offer sync is explicitly disabled.
+    // Wallet offer sync depends on Wallet data sync.
     if (!disabled_types.Has(syncer::AUTOFILL_WALLET_DATA) &&
         !disabled_types.Has(syncer::AUTOFILL_WALLET_OFFER)) {
-      controllers.push_back(CreateWalletModelTypeController(
-          syncer::AUTOFILL_WALLET_OFFER,
-          base::BindRepeating(&AutofillWalletOfferDelegateFromDataService),
-          sync_service));
+      // TODO(crbug.com/1448895): Enable transport mode support.
+      controllers.push_back(
+          CreateWalletModelTypeControllerWithoutTransportModeSupport(
+              syncer::AUTOFILL_WALLET_OFFER,
+              base::BindRepeating(&AutofillWalletOfferDelegateFromDataService),
+              sync_service));
     }
 
-    // Wallet usage data sync depends on Wallet data sync. Register if neither
-    // Wallet data nor Wallet usage data sync is explicitly disabled.
+    // Wallet usage data sync depends on Wallet data sync.
     if (base::FeatureList::IsEnabled(syncer::kSyncAutofillWalletUsageData) &&
         !disabled_types.Has(syncer::AUTOFILL_WALLET_DATA) &&
         !disabled_types.Has(syncer::AUTOFILL_WALLET_USAGE)) {
-      controllers.push_back(CreateWalletModelTypeControllerWithInMemorySupport(
-          syncer::AUTOFILL_WALLET_USAGE,
-          base::BindRepeating(&AutofillWalletUsageDataDelegateFromDataService),
-          sync_service));
+      controllers.push_back(
+          CreateWalletModelTypeControllerWithTransportModeSupport(
+              syncer::AUTOFILL_WALLET_USAGE,
+              base::BindRepeating(
+                  &AutofillWalletUsageDataDelegateFromDataService),
+              sync_service));
     }
   }
 
-  // Bookmark sync is enabled by default.  Register unless explicitly
-  // disabled.
   if (!disabled_types.Has(syncer::BOOKMARKS)) {
     favicon::FaviconService* favicon_service =
         sync_client_->GetFaviconService();
@@ -330,9 +329,11 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
     if (!disabled_types.Has(syncer::POWER_BOOKMARK) &&
         power_bookmark_service_ &&
         base::FeatureList::IsEnabled(power_bookmarks::kPowerBookmarkBackend)) {
+      // TODO(crbug.com/1426496): Support transport mode for POWER_BOOKMARK.
       controllers.push_back(std::make_unique<ModelTypeController>(
           syncer::POWER_BOOKMARK,
-          power_bookmark_service_->CreateSyncControllerDelegate()));
+          power_bookmark_service_->CreateSyncControllerDelegate(),
+          /*delegate_for_transport_mode=*/nullptr));
     }
   }
 
@@ -345,11 +346,11 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
       controllers.push_back(std::make_unique<ModelTypeController>(
           syncer::NOTES,
           std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
-              note_sync_service_->GetNoteSyncControllerDelegate().get())));
+              note_sync_service_->GetNoteSyncControllerDelegate().get()),
+          /*delegate_for_transport_mode=*/nullptr));
     }
   }
 
-  // TypedUrl sync is enabled by default.  Register unless explicitly disabled.
   if (!disabled_types.Has(syncer::TYPED_URLS)) {
     // HistoryModelTypeController uses a proxy delegate internally, as
     // provided by HistoryService.
@@ -365,7 +366,6 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
         sync_client_->GetHistoryService(), sync_client_->GetPrefService()));
   }
 
-  // Delete directive sync is enabled by default.
   if (!disabled_types.Has(syncer::HISTORY_DELETE_DIRECTIVES)) {
     controllers.push_back(
         std::make_unique<history::HistoryDeleteDirectivesModelTypeController>(
@@ -382,32 +382,43 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
                 base::Unretained(sync_client_->GetSessionSyncService()))));
   }
   if (!disabled_types.Has(syncer::SESSIONS)) {
+    syncer::ModelTypeControllerDelegate* delegate =
+        sync_client_->GetSessionSyncService()->GetControllerDelegate().get();
+    auto full_sync_mode_delegate =
+        std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
+            delegate);
+    auto transport_mode_delegate =
+        base::FeatureList::IsEnabled(syncer::kReplaceSyncPromosWithSignInPromos)
+            ? std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
+                  delegate)
+            : nullptr;
     controllers.push_back(
         std::make_unique<sync_sessions::SessionModelTypeController>(
             sync_service, sync_client_->GetPrefService(),
-            std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
-                sync_client_->GetSessionSyncService()
-                    ->GetControllerDelegate()
-                    .get())));
+            std::move(full_sync_mode_delegate),
+            std::move(transport_mode_delegate)));
   }
 
-  // Password sync is enabled by default.  Register unless explicitly
-  // disabled.
   if (!disabled_types.Has(syncer::PASSWORDS)) {
     if (profile_password_store_) {
       // |profile_password_store_| can be null in tests.
       controllers.push_back(
-          std::make_unique<password_manager::PasswordModelTypeController>(
+          std::make_unique<password_manager::CredentialModelTypeController>(
+              syncer::PASSWORDS,
               profile_password_store_->CreateSyncControllerDelegate(),
               account_password_store_
                   ? account_password_store_->CreateSyncControllerDelegate()
                   : nullptr,
-              account_password_store_, sync_client_->GetPrefService(),
+              sync_client_->GetPrefService(),
               sync_client_->GetIdentityManager(), sync_service));
     }
   }
 
   if (!disabled_types.Has(syncer::PREFERENCES)) {
+    bool allow_transport_mode =
+        base::FeatureList::IsEnabled(
+            syncer::kReplaceSyncPromosWithSignInPromos) &&
+        base::FeatureList::IsEnabled(syncer::kEnablePreferencesAccountStorage);
     controllers.push_back(
         std::make_unique<SyncableServiceBasedModelTypeController>(
             syncer::PREFERENCES,
@@ -415,11 +426,18 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
             SyncableServiceForPrefs(sync_client_->GetPrefServiceSyncable(),
                                     syncer::PREFERENCES),
             dump_stack,
-            SyncableServiceBasedModelTypeController::DelegateMode::
-                kLegacyFullSyncModeOnly));
+            allow_transport_mode
+                ? SyncableServiceBasedModelTypeController::DelegateMode::
+                      kTransportModeWithSingleModel
+                : SyncableServiceBasedModelTypeController::DelegateMode::
+                      kLegacyFullSyncModeOnly));
   }
 
   if (!disabled_types.Has(syncer::PRIORITY_PREFERENCES)) {
+    bool allow_transport_mode =
+        base::FeatureList::IsEnabled(
+            syncer::kReplaceSyncPromosWithSignInPromos) &&
+        base::FeatureList::IsEnabled(syncer::kEnablePreferencesAccountStorage);
     controllers.push_back(
         std::make_unique<SyncableServiceBasedModelTypeController>(
             syncer::PRIORITY_PREFERENCES,
@@ -427,11 +445,13 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
             SyncableServiceForPrefs(sync_client_->GetPrefServiceSyncable(),
                                     syncer::PRIORITY_PREFERENCES),
             dump_stack,
-            SyncableServiceBasedModelTypeController::DelegateMode::
-                kLegacyFullSyncModeOnly));
+            allow_transport_mode
+                ? SyncableServiceBasedModelTypeController::DelegateMode::
+                      kTransportModeWithSingleModel
+                : SyncableServiceBasedModelTypeController::DelegateMode::
+                      kLegacyFullSyncModeOnly));
   }
 
-  // Register reading list unless explicitly disabled.
   if (!disabled_types.Has(syncer::READING_LIST)) {
     // The transport-mode delegate may or may not be null depending on
     // platform and feature toggle state.
@@ -458,7 +478,13 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
     controllers.push_back(
         std::make_unique<syncer::UserEventModelTypeController>(
             sync_service,
-            CreateForwardingControllerDelegate(syncer::USER_EVENTS)));
+            /*delegate_for_full_sync_mode=*/
+            CreateForwardingControllerDelegate(syncer::USER_EVENTS),
+            /*delegate_for_transport_mode=*/
+            base::FeatureList::IsEnabled(
+                syncer::kReplaceSyncPromosWithSignInPromos)
+                ? CreateForwardingControllerDelegate(syncer::USER_EVENTS)
+                : nullptr));
   }
 
   if (!disabled_types.Has(syncer::SEND_TAB_TO_SELF)) {
@@ -491,12 +517,15 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
 #if !BUILDFLAG(IS_ANDROID) || !BUILDFLAG(IS_IOS)
   if (base::FeatureList::IsEnabled(syncer::kSyncWebauthnCredentials) &&
       !disabled_types.Has(syncer::WEBAUTHN_CREDENTIAL)) {
-    controllers.push_back(std::make_unique<ModelTypeController>(
-        syncer::WEBAUTHN_CREDENTIAL,
-        /*delegate_for_full_sync_mode=*/
-        CreateForwardingControllerDelegate(syncer::WEBAUTHN_CREDENTIAL),
-        /*delegate_for_transport_mode=*/
-        CreateForwardingControllerDelegate(syncer::WEBAUTHN_CREDENTIAL)));
+    controllers.push_back(
+        std::make_unique<password_manager::CredentialModelTypeController>(
+            syncer::WEBAUTHN_CREDENTIAL,
+            /*delegate_for_full_sync_mode=*/
+            CreateForwardingControllerDelegate(syncer::WEBAUTHN_CREDENTIAL),
+            /*delegate_for_transport_mode=*/
+            CreateForwardingControllerDelegate(syncer::WEBAUTHN_CREDENTIAL),
+            sync_client_->GetPrefService(), sync_client_->GetIdentityManager(),
+            sync_service));
   }
 #endif
 
@@ -559,29 +588,36 @@ SyncApiComponentFactoryImpl::CreateForwardingControllerDelegate(
       sync_client_->GetControllerDelegateForModelType(type).get());
 }
 
-std::unique_ptr<ModelTypeController>
-SyncApiComponentFactoryImpl::CreateWalletModelTypeController(
-    syncer::ModelType type,
-    const base::RepeatingCallback<
-        base::WeakPtr<syncer::ModelTypeControllerDelegate>(
-            autofill::AutofillWebDataService*)>& delegate_from_web_data,
-    syncer::SyncService* sync_service) {
+std::unique_ptr<ModelTypeController> SyncApiComponentFactoryImpl::
+    CreateWalletModelTypeControllerWithoutTransportModeSupport(
+        syncer::ModelType type,
+        const base::RepeatingCallback<
+            base::WeakPtr<syncer::ModelTypeControllerDelegate>(
+                autofill::AutofillWebDataService*)>& delegate_from_web_data,
+        syncer::SyncService* sync_service) {
+  // TODO(crbug.com/1448894, crbug.com/1448895): Support transport mode for
+  // METADATA and OFFER, i.e. use
+  // `CreateWalletModelTypeControllerWithTransportModeSupport` and create a
+  // `delegate_for_transport_mode`.
+  DCHECK(type == syncer::AUTOFILL_WALLET_METADATA ||
+         type == syncer::AUTOFILL_WALLET_OFFER);
   return std::make_unique<AutofillWalletModelTypeController>(
       type,
       std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
           db_thread_,
           base::BindRepeating(delegate_from_web_data,
                               base::RetainedRef(web_data_service_on_disk_))),
-      sync_client_->GetPrefService(), sync_service);
+      /*delegate_for_transport_mode=*/nullptr, sync_client_->GetPrefService(),
+      sync_service);
 }
 
-std::unique_ptr<ModelTypeController>
-SyncApiComponentFactoryImpl::CreateWalletModelTypeControllerWithInMemorySupport(
-    syncer::ModelType type,
-    const base::RepeatingCallback<
-        base::WeakPtr<syncer::ModelTypeControllerDelegate>(
-            autofill::AutofillWebDataService*)>& delegate_from_web_data,
-    syncer::SyncService* sync_service) {
+std::unique_ptr<ModelTypeController> SyncApiComponentFactoryImpl::
+    CreateWalletModelTypeControllerWithTransportModeSupport(
+        syncer::ModelType type,
+        const base::RepeatingCallback<
+            base::WeakPtr<syncer::ModelTypeControllerDelegate>(
+                autofill::AutofillWebDataService*)>& delegate_from_web_data,
+        syncer::SyncService* sync_service) {
   return std::make_unique<AutofillWalletModelTypeController>(
       type, /*delegate_for_full_sync_mode=*/
       std::make_unique<syncer::ProxyModelTypeControllerDelegate>(

@@ -29,6 +29,7 @@
 #include "chrome/browser/ash/login/signin/oauth2_login_manager.h"
 #include "chrome/browser/ash/login/signin/token_handle_util.h"
 #include "chrome/browser/ash/net/secure_dns_manager.h"
+#include "chrome/browser/ash/net/xdr_manager.h"
 #include "chrome/browser/ash/release_notes/release_notes_notification.h"
 #include "chrome/browser/ash/web_applications/help_app/help_app_notification_controller.h"
 #include "chrome/browser/profiles/profile.h"
@@ -225,8 +226,9 @@ class UserSessionManager
   // Show various notifications if applicable.
   void ShowNotificationsIfNeeded(Profile* profile);
 
-  // Launch various setting pages (or dialogs) if applicable.
-  void MaybeLaunchSettings(Profile* profile);
+  // Perform actions that were deferred from OOBE or onboarding flow once the
+  // browser is launched if applicable.
+  void PerformPostBrowserLaunchOOBEActions(Profile* profile);
 
   // Invoked when the user is logging in for the first time, or is logging in to
   // an ephemeral session type, such as guest or a public session.
@@ -484,10 +486,6 @@ class UserSessionManager
       InputEventsBlocker* input_events_blocker,
       const locale_util::LanguageSwitchResult& result);
 
-  // Returns `true` if policy mandates that all mounts on device should
-  // be ephemeral.
-  bool IsEphemeralMountForced();
-
   // Callback invoked when `token_handle_util_` has finished.
   void OnTokenHandleObtained(const AccountId& account_id, bool success);
 
@@ -625,6 +623,8 @@ class UserSessionManager
   std::unique_ptr<arc::AlwaysOnVpnManager> always_on_vpn_manager_;
 
   std::unique_ptr<SecureDnsManager> secure_dns_manager_;
+
+  std::unique_ptr<XdrManager> xdr_manager_;
 
   std::unique_ptr<ChildPolicyObserver> child_policy_observer_;
 

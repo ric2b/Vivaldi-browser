@@ -93,11 +93,12 @@ class DefaultRuleIterator : public RuleIterator {
 
   bool HasNext() const override { return !is_done_; }
 
-  Rule Next() override {
+  std::unique_ptr<Rule> Next() override {
     DCHECK(HasNext());
     is_done_ = true;
-    return Rule(ContentSettingsPattern::Wildcard(),
-                ContentSettingsPattern::Wildcard(), std::move(value_), {});
+    return std::make_unique<OwnedRule>(ContentSettingsPattern::Wildcard(),
+                                       ContentSettingsPattern::Wildcard(),
+                                       std::move(value_), RuleMetaData{});
   }
 
  private:
@@ -447,6 +448,16 @@ void DefaultProvider::RecordHistogramMetrics() {
       "ContentSettings.RegularProfile.DefaultIdleDetectionSetting",
       IntToContentSetting(
           prefs_->GetInteger(GetPrefName(ContentSettingsType::IDLE_DETECTION))),
+      CONTENT_SETTING_NUM_SETTINGS);
+  base::UmaHistogramEnumeration(
+      "ContentSettings.RegularProfile.DefaultStorageAccessSetting",
+      IntToContentSetting(
+          prefs_->GetInteger(GetPrefName(ContentSettingsType::STORAGE_ACCESS))),
+      CONTENT_SETTING_NUM_SETTINGS);
+  base::UmaHistogramEnumeration(
+      "ContentSettings.RegularProfile.DefaultAutoVerifySetting",
+      IntToContentSetting(
+          prefs_->GetInteger(GetPrefName(ContentSettingsType::ANTI_ABUSE))),
       CONTENT_SETTING_NUM_SETTINGS);
 #endif
 

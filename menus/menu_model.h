@@ -58,7 +58,7 @@ class Menu_Model : public KeyedService {
   void AddObserver(MenuModelObserver* observer);
   void RemoveObserver(MenuModelObserver* observer);
 
-  Menu_Node* GetNamedMenu(const std::string& named_menu);
+  Menu_Node* GetMenuByResourceName(const std::string& menu);
   // Returns the parent of all fixed nodes.
   Menu_Node& root_node() { return root_; }
   // Returns the fixed node that is the ancestor of main menus.
@@ -71,8 +71,9 @@ class Menu_Model : public KeyedService {
   void ClearDeleted(const Menu_Node* node, bool include_children);
   void RemoveGuidDuplication(const Menu_Node* node);
 
-  std::unique_ptr<MenuLoadDetails> CreateLoadDetails(const std::string& menu);
-  std::unique_ptr<MenuLoadDetails> CreateLoadDetails(int64_t id);
+  std::unique_ptr<MenuLoadDetails> CreateLoadDetails(const std::string& menu,
+                                                     bool is_reset);
+  std::unique_ptr<MenuLoadDetails> CreateLoadDetails(int64_t id, bool is_reset);
   bool loaded_ = false;
   base::ObserverList<MenuModelObserver> observers_;
   const raw_ptr<content::BrowserContext> context_;

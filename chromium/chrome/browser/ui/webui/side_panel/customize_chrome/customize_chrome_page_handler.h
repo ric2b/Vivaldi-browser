@@ -30,6 +30,18 @@ class WebContents;
 
 class Profile;
 
+/**
+ * Places where the chrome web store can be opened from in Customize Chrome.
+ * This enum must match the numbering for NTPChromeWebStoreOpen in enums.xml.
+ * These values are persisted to logs. Entries should not be renumbered, removed
+ * or reused.
+ */
+enum class NtpChromeWebStoreOpen {
+  kAppearance = 0,
+  kCollections = 1,
+  kMaxValue = kCollections,
+};
+
 class CustomizeChromePageHandler
     : public side_panel::mojom::CustomizeChromePageHandler,
       public NtpBackgroundServiceObserver,
@@ -58,6 +70,7 @@ class CustomizeChromePageHandler
   void SetDefaultColor() override;
   void SetSeedColor(SkColor seed_color) override;
   void GetOverviewChromeColors(
+      bool is_dark_mode,
       GetOverviewChromeColorsCallback callback) override;
   void GetChromeColors(GetChromeColorsCallback callback) override;
   void SetBackgroundImage(const std::string& attribution_1,

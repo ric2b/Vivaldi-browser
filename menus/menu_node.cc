@@ -67,6 +67,22 @@ const Menu_Node* Menu_Node::GetMenu() const {
   }
 }
 
+Menu_Node* Menu_Node::GetMenuByResourceName(const std::string& menu) {
+  Menu_Node* node = this;
+  while (parent() && node->id() != mainmenu_node_id()) {
+    node = parent();
+  }
+  if (node->id() == mainmenu_node_id()) {
+    for (const auto& menu_node : node->children()) {
+      // Resource name is stored in the action field for menu nodes.
+      if (menu_node->action() == menu) {
+        return menu_node.get();
+      }
+    }
+  }
+  return nullptr;
+}
+
 void Menu_Node::SetShowShortcut(absl::optional<bool> show_shortcut) {
   show_shortcut_ = show_shortcut;
   for (auto& child : children()) {

@@ -3,8 +3,8 @@
 #import "ios/ui/settings/sync/vivaldi_sync_coordinator.h"
 
 #import "base/strings/sys_string_conversions.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/sync/vivaldi_sync_service_factory.h"
@@ -117,6 +117,16 @@
 }
 
 #pragma mark - VivaldiSyncSettingsCommandHandler
+
+- (void)resetViewControllers {
+  self.syncLoginViewController = nil;
+  self.syncSettingsViewController = nil;
+  self.syncCreateEncryptionPasswordViewController = nil;
+  self.syncEncryptionPasswordViewController = nil;
+  self.syncCreateAccountUserViewController = nil;
+  self.syncCreateAccountPasswordViewController = nil;
+  self.syncActivateAccountViewController = nil;
+}
 
 - (void)showActivateAccountView {
   if ([self.baseNavigationController.viewControllers.lastObject

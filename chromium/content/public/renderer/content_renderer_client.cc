@@ -99,6 +99,11 @@ bool ContentRendererClient::AllowPopup() {
   return false;
 }
 
+bool ContentRendererClient::ShouldNotifyServiceWorkerOnWebSocketActivity(
+    v8::Local<v8::Context> context) {
+  return false;
+}
+
 blink::ProtocolHandlerSecurityLevel
 ContentRendererClient::GetProtocolHandlerSecurityLevel() {
   return blink::ProtocolHandlerSecurityLevel::kStrict;
@@ -200,8 +205,7 @@ ContentRendererClient::CreateWorkerContentSettingsClient(
 #if !BUILDFLAG(IS_ANDROID)
 std::unique_ptr<media::SpeechRecognitionClient>
 ContentRendererClient::CreateSpeechRecognitionClient(
-    RenderFrame* render_frame,
-    media::SpeechRecognitionClient::OnReadyCallback callback) {
+    RenderFrame* render_frame) {
   return nullptr;
 }
 #endif

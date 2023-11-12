@@ -28,21 +28,18 @@ BASE_FEATURE(kCacheOneGoogleBar,
 // on NTP Customize Chrome background change.
 BASE_FEATURE(kCustomizeChromeColorExtraction,
              "CustomizeChromeColorExtraction",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, Customize Chrome will be an option in the Unified Side Panel
 // when on the New Tab Page.
 BASE_FEATURE(kCustomizeChromeSidePanel,
              "CustomizeChromeSidePanel",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables the removal of the NTP background scrim and forced dark foreground
-// colors for a specific subset of Chrome Web Store themes (see
-// crbug.com/1329552). This is enabled by default to allow finch to disable this
-// NTP treatment in the case of unexpected regressions.
-BASE_FEATURE(kCwsScrimRemoval,
-             "CwsScrimRemoval",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Forces a dark Google logo for a specific subset of Chrome Web Store themes
+// (see crbug.com/1329552). This is enabled by default to allow finch to disable
+// this NTP treatment in the case of unexpected regressions.
+BASE_FEATURE(kCwsDarkLogo, "CwsDarkLogo", base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, "middle slot" promos on the bottom of the NTP will show a dismiss
 // UI that allows users to close them and not see them again.
@@ -56,11 +53,22 @@ BASE_FEATURE(kRealboxMatchSearchboxTheme,
              "NtpRealboxMatchSearchboxTheme",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Determines the behavior of the width of the realbox in relation to the width
+// for secondary column.
+BASE_FEATURE(kRealboxWidthBehavior,
+             "NtpRealboxWidthBehavior",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, the realbox will be taller.
+BASE_FEATURE(kRealboxIsTall,
+             "NtpRealboxIsTall",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // If enabled, the NTP "realbox" will have the same rounded corners as
 // searchbox.
 BASE_FEATURE(kRealboxRoundedCorners,
              "NtpRealboxRoundedCorners",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, the real search box ("realbox") on the New Tab page will show a
 // Google (g) icon instead of the typical magnifying glass (aka loupe).
@@ -73,15 +81,15 @@ BASE_FEATURE(kNtpAlphaBackgroundCollections,
              "NtpAlphaBackgroundCollections",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// If enabled, NTP background image links will be checked for HTTP status
+// errors."
+BASE_FEATURE(kNtpBackgroundImageErrorDetection,
+             "NtpBackgroundImageErrorDetection",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // If enabled, chrome cart module will be shown.
 BASE_FEATURE(kNtpChromeCartModule,
              "NtpChromeCartModule",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// If enabled, Comprehensive Theming color changes will be applied to elements
-// on the New Tab Page, excluding the Realbox.
-BASE_FEATURE(kNtpComprehensiveTheming,
-             "NtpComprehensiveTheming",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, Comprehensive Theming color changes will be applied to the
@@ -145,6 +153,11 @@ BASE_FEATURE(kNtpModulesOrder,
              "NtpModulesOrder",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// If true, displays a horizontal scrollbar on overflowing modules.
+BASE_FEATURE(kNtpModulesOverflowScrollbar,
+             "NtpModulesOverflowScrollbar",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // If enabled, modules will be able to be reordered via dragging and dropping
 BASE_FEATURE(kNtpModulesDragAndDrop,
              "NtpModulesDragAndDrop",
@@ -167,11 +180,10 @@ BASE_FEATURE(kNtpModulesRedesigned,
              "NtpModulesRedesigned",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// If enabled, a different module layout where modules are organized in rows and
-// columns will be shown.
-BASE_FEATURE(kNtpModulesRedesignedLayout,
-             "NtpModulesRedesignedLayout",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+// If enabled, MostVisited tiles will reflow when overflowing.
+BASE_FEATURE(kNtpMostVisitedReflowOnOverflow,
+             "NtpMostVisitedReflowOnOverflow",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, OneGoogleBar will be shown.
 BASE_FEATURE(kNtpOneGoogleBar,
@@ -212,7 +224,7 @@ BASE_FEATURE(kNtpFeedModule,
 // If enabled, Google Lens image search will be shown in the NTP Realbox.
 BASE_FEATURE(kNtpRealboxLensSearch,
              "NtpRealboxLensSearch",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, recipe tasks module will be shown.
 BASE_FEATURE(kNtpRecipeTasksModule,
@@ -222,7 +234,7 @@ BASE_FEATURE(kNtpRecipeTasksModule,
 // Controls whether the scrim is removed.
 BASE_FEATURE(kNtpRemoveScrim,
              "NtpRemoveScrim",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, SafeBrowsing module will be shown to a target user.
 BASE_FEATURE(kNtpSafeBrowsingModule,
@@ -295,15 +307,12 @@ BASE_FEATURE(kNtpChromeCartHistoryClusterCoexist,
              "NtpChromeCartHistoryClusterCoexist",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::FeatureParam<double>
-    kNtpElementLuminosityChangeForLightBackgroundParam{
-        &kNtpComprehensiveTheming,
-        "NtpElementLuminosityChangeForLightBackgroundParam", 0.1};
-
-const base::FeatureParam<double>
-    kNtpElementLuminosityChangeForDarkBackgroundParam{
-        &kNtpComprehensiveTheming,
-        "NtpElementLuminosityChangeForDarkBackgroundParam", 0.2};
+// If enabled, the History Clusters module will attempt to fetch clusters until
+// it has enough clusters for the module or the History Clusters service says
+// that all visits have been exhausted.
+BASE_FEATURE(kNtpHistoryClustersModuleFetchClustersUntilExhausted,
+             "NtpHistoryClustersModuleFetchClustersUntilExhausted",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const base::FeatureParam<std::string> kNtpOgbButtonSelectorParam{
     &kNtpRemoveScrim, "NtpOgbButtonSelectorParam", ".gb_A"};
@@ -364,6 +373,7 @@ const char kNtpHistoryClustersModuleCategoriesBoostlistParam[] =
     "NtpHistoryClustersModuleCategoriesBoostlistParam";
 const char kNtpHistoryClustersModuleMaxClustersParam[] =
     "NtpHistoryClustersModuleMaxClustersParam";
+const char kNtpRealboxWidthBehaviorParam[] = "NtpRealboxWidthBehaviorParam";
 
 base::TimeDelta GetModulesLoadTimeout() {
   std::string param_value = base::GetFieldTrialParamValueByFeature(

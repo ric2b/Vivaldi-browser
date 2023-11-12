@@ -140,6 +140,66 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB" desc="The iOS menu item for opening a new Incognito tab [iOS only]" meaning="Tools menu entry to create a new Incognito tab. [Length: Unlimited]">
         New Private Tab
       </message>
+      <message name="IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB" desc="The iOS menu item for opening a link in a new Incognito tab. Shorter than the desktop version [Length: 25em] [iOS only]">
+        Open in New Private Tab
+      </message>
+      <message name="IDS_IOS_OPEN_IN_INCOGNITO_ACTION_TITLE" desc="Title of the action used to open an URL in a new Incognito tab. [iOS only]">
+        Open in Private
+      </message>
+      <message name="IDS_IOS_BOOKMARK_CONTEXT_MENU_OPEN_INCOGNITO" desc="Text on the bookmarks context menu to open selected bookmark in Incognito">
+        Open in Private
+      </message>
+      <message name="IDS_IOS_OPTIONS_ENABLE_INCOGNITO_INTERSTITIAL" desc="Title for the option to enable the Incognito interstitial, which lets users open links from other apps in Incognito. [iOS only]">
+        Ask to Open Links from Other Apps in Private
+      </message>
+      <message name="IDS_IOS_INCOGNITO_REAUTH_SYSTEM_DIALOG_REASON" desc="Text for system biometric authentication dialog to explain why authentication is required when the user attempts to authenticate to access Incognito tabs. [iOS only]">
+        Use <ph name="BIOMETRIC_AUTHENITCATION_TYPE">$1<ex>Face ID</ex></ph> to unlock your Private tabs.
+      </message>
+      <message name="IDS_IOS_INCOGNITO_REAUTH_UNLOCK_BUTTON_VOICEOVER_LABEL" desc="Voiceover label on the button that starts biometric authentication on a screen that blocks Incognito tabs until biometric authetication. [iOS only]">
+        Unlock Private Tabs With <ph name="BIOMETRIC_AUTHENITCATION_TYPE">$1<ex>Face ID</ex></ph>
+      </message>
+      <message name="IDS_IOS_INCOGNITO_REAUTH_SET_UP_PASSCODE_HINT" desc="Explanatory text for the setting to protect Incognito tabs with biometric authentication, e.g. Face ID or Touch ID. Appears when the user has no Face ID, Touch ID, or passcode set up, and therefore the feature cannot be enabled. [iOS only]">
+        To lock your Private tabs, set up Touch ID, Face ID, or a Passcode.
+      </message>
+      <message name="IDS_IOS_INCOGNITO_INTERSTITIAL_TITLE" desc="Title of interstitial which lets the user choose, when they open a link from an external app, whether to open it in Incognito mode or in a regular tab. [iOS only]">
+        Open in Private?
+      </message>
+      <message name="IDS_IOS_INCOGNITO_INTERSTITIAL_OPEN_IN_CHROME_INCOGNITO" desc="Button to open a link from an external app in Incognito mode rather than a regular tab. [iOS only]">
+        Open in Vivaldi Private
+      </message>
+      <message name="IDS_IOS_INTENTS_OPEN_IN_CHROME_TITLE" desc="Shortcut name to open URL in Chrome [iOS only].">
+        Open URLs in Vivaldi
+      </message>
+      <message name="IDS_IOS_INTENTS_OPEN_IN_CHROME_DESCRIPTION" desc="Shortcut description to open URLs in Chrome [iOS only].">
+        Opens the inputted URLs in Vivaldi.
+      </message>
+      <message name="IDS_IOS_INTENTS_OPEN_IN_CHROME_INCOGNITO_TITLE" desc="Shortcut name to open URL in Chrome in Incognito [iOS only].">
+        Open URLs in Vivaldi in Private
+      </message>
+      <message name="IDS_IOS_INTENTS_OPEN_IN_CHROME_INCOGNITO_DESCRIPTION" desc="Shortcut description to open URLs in Chrome in Incognito [iOS only].">
+        Opens the inputted URLs in Vivaldi in Private.
+      </message>
+      <message name="IDS_IOS_INTENTS_SEARCH_IN_CHROME_TITLE" desc="Siri Shortcut for search in chrome title [iOS only].">
+        Search in Vivaldi
+      </message>
+      <message name="IDS_IOS_INTENTS_SEARCH_IN_CHROME_DESCRIPTION" desc="Siri Shortcut for search in chrome description [iOS only].">
+        Start a search in a new Vivaldi tab.
+      </message>
+      <message name="IDS_IOS_INTENTS_OPEN_IN_CHROME_INCOGNITO_PARAMETER_COMBINATION_TITLE" desc="Apple Shortcuts.app format for displaying the URL input [iOS only].">
+        Open ${url} in Private
+      </message>
+      <message name="IDS_IOS_KEYBOARD_NEW_INCOGNITO_TAB" desc="The title of the keyboard shortcut to open a new Incognito tab." meaning="Used as a command title in the iPad command menu.">
+        New Private Tab
+      </message>
+      <message name="IDS_IOS_KEYBOARD_NEW_INCOGNITO_WINDOW" desc="The title of the keyboard shortcut to open a new Incognito window." meaning="Used as a command title in the iPad command menu.">
+        New Private Window
+      </message>
+      <message name="IDS_IOS_NEW_INCOGNITO_TAB" desc="Label for text saying the tab is a new Incognito tab.">
+        New Private Tab
+      </message>
+      <message name="IDS_IOS_NEW_INCOGNITO_TAB_PAGE" desc="Label for text saying the user is on the new Incognito tab page">
+        New Private Tab Page
+      </message>
     </messages>
   </release>
 </grit>

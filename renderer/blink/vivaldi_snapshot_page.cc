@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/cull_rect.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
 namespace {
@@ -122,8 +123,8 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
   }
 
   SkSurfaceProps surface_props(0, kUnknown_SkPixelGeometry);
-  sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(
-      page_rect.width(), page_rect.height(), &surface_props);
+  sk_sp<SkSurface> surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(
+      page_rect.width(), page_rect.height()));
   if (!surface) {
     LOG(ERROR) << "failed to allocate surface width=" << page_rect.width()
                << " height=" << page_rect.height();

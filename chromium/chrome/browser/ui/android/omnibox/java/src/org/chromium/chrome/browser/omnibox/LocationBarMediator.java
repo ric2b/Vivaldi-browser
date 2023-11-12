@@ -22,6 +22,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.base.CallbackController;
 import org.chromium.base.CommandLine;
@@ -32,13 +33,11 @@ import org.chromium.base.metrics.TimingMetric;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
-import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.lens.LensController;
 import org.chromium.chrome.browser.lens.LensEntryPoint;
 import org.chromium.chrome.browser.lens.LensIntentParams;
@@ -51,14 +50,11 @@ import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
-import org.chromium.chrome.browser.omnibox.voice.AssistantVoiceSearchService;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.prefetch.settings.PreloadPagesSettingsBridge;
 import org.chromium.chrome.browser.prefetch.settings.PreloadPagesState;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
@@ -69,16 +65,14 @@ import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.embedder_support.util.UrlUtilities;
-import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
-import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.ui.interpolators.BakedBezierInterpolator;
+import org.chromium.ui.interpolators.Interpolators;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -92,6 +86,7 @@ import android.provider.Browser;
 import android.view.Window;
 import android.view.WindowManager;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.common.VivaldiIntentHandler;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
@@ -103,9 +98,9 @@ import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
  */
 class LocationBarMediator
         implements LocationBarDataProvider.Observer, OmniboxStub, VoiceRecognitionHandler.Delegate,
-                   VoiceRecognitionHandler.Observer, AssistantVoiceSearchService.Observer,
-                   UrlBarDelegate, OnKeyListener, ComponentCallbacks,
-                   TemplateUrlService.TemplateUrlServiceObserver, BackPressHandler {
+                   VoiceRecognitionHandler.Observer, UrlBarDelegate, OnKeyListener,
+                   ComponentCallbacks, TemplateUrlService.TemplateUrlServiceObserver,
+                   BackPressHandler {
     private static final int ICON_FADE_ANIMATION_DURATION_MS = 150;
     private static final int ICON_FADE_ANIMATION_DELAY_MS = 75;
     private static final long NTP_KEYBOARD_FOCUS_DURATION_MS = 200;
@@ -165,8 +160,6 @@ class LocationBarMediator
     private final LocationBarLayout mLocationBarLayout;
     private VoiceRecognitionHandler mVoiceRecognitionHandler;
     private final LocationBarDataProvider mLocationBarDataProvider;
-    private final OneshotSupplierImpl<AssistantVoiceSearchService>
-            mAssistantVoiceSearchServiceSupplier = new OneshotSupplierImpl<>();
     private StatusCoordinator mStatusCoordinator;
     private AutocompleteCoordinator mAutocompleteCoordinator;
     private OmniboxPrerender mOmniboxPrerender;
@@ -236,8 +229,7 @@ class LocationBarMediator
         mLocationBarDataProvider.addObserver(this);
         mOverrideUrlLoadingDelegate = overrideUrlLoadingDelegate;
         mLocaleManager = localeManager;
-        mVoiceRecognitionHandler = new VoiceRecognitionHandler(
-                this, mAssistantVoiceSearchServiceSupplier, profileSupplier);
+        mVoiceRecognitionHandler = new VoiceRecognitionHandler(this, profileSupplier);
         mVoiceRecognitionHandler.addObserver(this);
         mProfileSupplier = profileSupplier;
         mProfileSupplier.addObserver(mCallbackController.makeCancelable(this::setProfile));
@@ -273,10 +265,7 @@ class LocationBarMediator
         updateSearchEngineStatusIconShownState();
     }
 
-    /*package */ void destroy() {
-        if (mAssistantVoiceSearchServiceSupplier.get() != null) {
-            mAssistantVoiceSearchServiceSupplier.get().destroy();
-        }
+    /* package */ void destroy() {
         if (mTemplateUrlServiceSupplier.hasValue()) {
             mTemplateUrlServiceSupplier.get().removeObserver(this);
         }
@@ -346,19 +335,11 @@ class LocationBarMediator
     /*package */ void onFinishNativeInitialization() {
         mNativeInitialized = true;
         mOmniboxPrerender = new OmniboxPrerender();
-        mTemplateUrlServiceSupplier.onAvailable((templateUrlService) -> {
-            templateUrlService.addObserver(this);
-            mAssistantVoiceSearchServiceSupplier.set(new AssistantVoiceSearchService(mContext,
-                    ExternalAuthUtils.getInstance(), templateUrlService, GSAState.getInstance(),
-                    LocationBarMediator.this, SharedPreferencesManager.getInstance(),
-                    IdentityServicesProvider.get().getIdentityManager(
-                            Profile.getLastUsedRegularProfile()),
-                    AccountManagerFacadeProvider.getInstance()));
-            onAssistantVoiceSearchServiceChanged();
-        });
+        mTemplateUrlServiceSupplier.onAvailable(
+                (templateUrlService) -> { templateUrlService.addObserver(this); });
 
         mLocationBarLayout.onFinishNativeInitialization();
-        setProfile(mProfileSupplier.get());
+        if (mProfileSupplier.hasValue()) setProfile(mProfileSupplier.get());
         onPrimaryColorChanged();
 
         for (Runnable deferredRunnable : mDeferredNativeRunnables) {
@@ -410,23 +391,12 @@ class LocationBarMediator
         mVoiceRecognitionHandler = voiceRecognitionHandler;
     }
 
-    /* package */ void setAssistantVoiceSearchServiceForTesting(
-            AssistantVoiceSearchService assistantVoiceSearchService) {
-        mAssistantVoiceSearchServiceSupplier.set(assistantVoiceSearchService);
-        onAssistantVoiceSearchServiceChanged();
-    }
-
     /* package */ void setLensControllerForTesting(LensController lensController) {
         mLensController = lensController;
     }
 
     void resetLastCachedIsLensOnOmniboxEnabledForTesting() {
         sLastCachedIsLensOnOmniboxEnabled = null;
-    }
-
-    /* package */ OneshotSupplier<AssistantVoiceSearchService>
-    getAssistantVoiceSearchServiceSupplierForTesting() {
-        return mAssistantVoiceSearchServiceSupplier;
     }
 
     /* package */ void setIsUrlBarFocusedWithoutAnimationsForTesting(
@@ -781,7 +751,7 @@ class LocationBarMediator
             button.setAlpha(0.f);
         }
         ObjectAnimator buttonAnimator = ObjectAnimator.ofFloat(button, View.ALPHA, 1.f);
-        buttonAnimator.setInterpolator(BakedBezierInterpolator.FADE_IN_CURVE);
+        buttonAnimator.setInterpolator(Interpolators.LINEAR_OUT_SLOW_IN_INTERPOLATOR);
         buttonAnimator.setStartDelay(ICON_FADE_ANIMATION_DELAY_MS);
         buttonAnimator.setDuration(ICON_FADE_ANIMATION_DURATION_MS);
         return buttonAnimator;
@@ -795,7 +765,7 @@ class LocationBarMediator
     /* package */ ObjectAnimator createHideButtonAnimatorForTablet(View button) {
         assert mIsTablet;
         ObjectAnimator buttonAnimator = ObjectAnimator.ofFloat(button, View.ALPHA, 0.f);
-        buttonAnimator.setInterpolator(BakedBezierInterpolator.FADE_OUT_CURVE);
+        buttonAnimator.setInterpolator(Interpolators.FAST_OUT_LINEAR_IN_INTERPOLATOR);
         buttonAnimator.setDuration(ICON_FADE_ANIMATION_DURATION_MS);
         return buttonAnimator;
     }
@@ -819,7 +789,7 @@ class LocationBarMediator
         Animator widthChangeAnimator =
                 ObjectAnimator.ofFloat(this, mWidthChangeFractionPropertyTablet, 0f);
         widthChangeAnimator.setDuration(WIDTH_CHANGE_ANIMATION_DURATION_MS);
-        widthChangeAnimator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
+        widthChangeAnimator.setInterpolator(Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR);
         widthChangeAnimator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationStart(Animator animation) {
@@ -888,7 +858,7 @@ class LocationBarMediator
                 ObjectAnimator.ofFloat(this, mWidthChangeFractionPropertyTablet, 1f);
         widthChangeAnimator.setStartDelay(WIDTH_CHANGE_ANIMATION_DELAY_MS);
         widthChangeAnimator.setDuration(WIDTH_CHANGE_ANIMATION_DURATION_MS);
-        widthChangeAnimator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
+        widthChangeAnimator.setInterpolator(Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR);
         widthChangeAnimator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationStart(Animator animation) {
@@ -989,24 +959,16 @@ class LocationBarMediator
 
     @VisibleForTesting
     /* package */ void updateAssistantVoiceSearchDrawableAndColors() {
-        AssistantVoiceSearchService assistantVoiceSearchService =
-                mAssistantVoiceSearchServiceSupplier.get();
-        if (assistantVoiceSearchService == null) return;
-
         mLocationBarLayout.setMicButtonTint(
-                assistantVoiceSearchService.getButtonColorStateList(mBrandedColorScheme, mContext));
+                ThemeUtils.getThemedToolbarIconTint(mContext, mBrandedColorScheme));
         mLocationBarLayout.setMicButtonDrawable(
-                assistantVoiceSearchService.getCurrentMicDrawable());
+                AppCompatResources.getDrawable(mContext, R.drawable.btn_mic));
     }
 
     @VisibleForTesting
     /* package */ void updateLensButtonColors() {
-        AssistantVoiceSearchService assistantVoiceSearchService =
-                mAssistantVoiceSearchServiceSupplier.get();
-        if (assistantVoiceSearchService == null) return;
-
         mLocationBarLayout.setLensButtonTint(
-                assistantVoiceSearchService.getButtonColorStateList(mBrandedColorScheme, mContext));
+                ThemeUtils.getThemedToolbarIconTint(mContext, mBrandedColorScheme));
     }
 
     /**
@@ -1189,9 +1151,8 @@ class LocationBarMediator
     private void updateOmniboxPrerender() {
         if (mOmniboxPrerender == null) return;
         // Profile may be null if switching to a tab that has not yet been initialized.
-        Profile profile = mProfileSupplier.get();
-        if (profile == null) return;
-        mOmniboxPrerender.clear(profile);
+        if (!mProfileSupplier.hasValue()) return;
+        mOmniboxPrerender.clear(mProfileSupplier.get());
     }
 
     @SuppressLint("GestureBackNavigation")
@@ -1428,14 +1389,6 @@ class LocationBarMediator
     @Override
     public void notifyVoiceRecognitionCanceled() {
         mLocationBarLayout.notifyVoiceRecognitionCanceled();
-    }
-
-    // AssistantVoiceSearchService.Observer implementation.
-
-    @Override
-    public void onAssistantVoiceSearchServiceChanged() {
-        updateAssistantVoiceSearchDrawableAndColors();
-        updateLensButtonColors();
     }
 
     // VoiceRecognitionHandler.Delegate implementation.

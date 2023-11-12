@@ -211,13 +211,11 @@ public interface TabSwitcher {
         void postHiding();
 
         /**
-         * @param forceUpdate Whether to measure the current location again. If not, return the last
-         *                    location measured on last layout, which can be wrong after scrolling.
          * @return The {@link Rect} of the thumbnail of the current tab, relative to the
          *         TabSwitcher {@link TabListRecyclerView} coordinates.
          */
         @NonNull
-        Rect getThumbnailLocationOfCurrentTab(boolean forceUpdate);
+        Rect getThumbnailLocationOfCurrentTab();
 
         /**
          * Set a hook to receive all the {@link Bitmap}s returned by
@@ -232,6 +230,12 @@ public interface TabSwitcher {
          */
         @VisibleForTesting
         int getBitmapFetchCountForTesting();
+
+        /**
+         * Reset the current count of thumbnail fetches for testing.
+         */
+        @VisibleForTesting
+        default void resetBitmapFetchCountForTesting(){};
 
         /**
          * @return The soft cleanup delay for testing.

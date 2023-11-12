@@ -610,9 +610,9 @@ EVENT_TYPE(SSL_ALERT_SENT)
 EVENT_TYPE(SSL_CONFIRM_HANDSHAKE)
 
 // An SSL connection sent or received a handshake message.
-// `SSL_ENCYPTED_CLIENT_HELLO` means the handshake message was not sent over the
-// wire but encrypted with the Encrypted ClientHello (ECH) extension.
-// The following parameters are attached:
+// `SSL_ENCRYPTED_CLIENT_HELLO` means the handshake message was not sent over
+// the wire but encrypted with the Encrypted ClientHello (ECH) extension. The
+// following parameters are attached:
 //   {
 //     "type": <The type of the handshake message, as an integer>
 //     "bytes": <The exact bytes sent, Base64 encoded.
@@ -620,7 +620,7 @@ EVENT_TYPE(SSL_CONFIRM_HANDSHAKE)
 //   }
 EVENT_TYPE(SSL_HANDSHAKE_MESSAGE_RECEIVED)
 EVENT_TYPE(SSL_HANDSHAKE_MESSAGE_SENT)
-EVENT_TYPE(SSL_ENCYPTED_CLIENT_HELLO)
+EVENT_TYPE(SSL_ENCRYPTED_CLIENT_HELLO)
 
 // The specified number of bytes were sent on the socket.  Depending on the
 // source of the event, may be logged either once the data is sent, or when it
@@ -3001,7 +3001,8 @@ EVENT_TYPE(SPECIFIC_NETWORK_MADE_DEFAULT)
 
 // This event is emitted whenever CertDatabase determines that the certificate
 // database has changed.
-EVENT_TYPE(CERTIFICATE_DATABASE_CHANGED)
+EVENT_TYPE(CERTIFICATE_DATABASE_TRUST_STORE_CHANGED)
+EVENT_TYPE(CERTIFICATE_DATABASE_CLIENT_CERT_STORE_CHANGED)
 
 // ------------------------------------------------------------------------
 // Exponential back-off throttling events

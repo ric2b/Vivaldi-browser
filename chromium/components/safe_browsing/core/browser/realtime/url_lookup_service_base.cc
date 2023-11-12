@@ -127,9 +127,11 @@ RealTimeUrlLookupServiceBase::RealTimeUrlLookupServiceBase(
     VerdictCacheManager* cache_manager,
     base::RepeatingCallback<ChromeUserPopulation()>
         get_user_population_callback,
-    ReferrerChainProvider* referrer_chain_provider)
+    ReferrerChainProvider* referrer_chain_provider,
+    PrefService* pref_service)
     : url_loader_factory_(url_loader_factory),
       cache_manager_(cache_manager),
+      pref_service_(pref_service),
       get_user_population_callback_(get_user_population_callback),
       referrer_chain_provider_(referrer_chain_provider),
       backoff_operator_(std::make_unique<BackoffOperator>(
@@ -381,6 +383,15 @@ void RealTimeUrlLookupServiceBase::SendRequest(
   RecordBooleanWithAndWithoutSuffix("SafeBrowsing.RT.HasTokenInRequest",
                                     GetMetricSuffix(),
                                     !access_token_string.empty());
+  // `pref_service_` can be null in tests or in the Chrome Enterprise version of
+  // the lookup service.
+  if (pref_service_ && IsEnhancedProtectionEnabled(*pref_service_)) {
+    pref_service_->SetTime(
+        access_token_string.empty()
+            ? prefs::kSafeBrowsingEsbProtegoPingWithoutTokenLastLogTime
+            : prefs::kSafeBrowsingEsbProtegoPingWithTokenLastLogTime,
+        base::Time::Now());
+  }
 
   // NOTE: Pass |callback_task_runner| by copying it here as it's also needed
   // just below.
@@ -457,16 +468,23 @@ void RealTimeUrlLookupServiceBase::OnURLLoaderComplete(
   }
 
   auto response = std::make_unique<RTLookupResponse>();
-  bool is_rt_lookup_successful = (net_error == net::OK) &&
-                                 (response_code == net::HTTP_OK) &&
-                                 response->ParseFromString(*response_body);
+  bool is_rt_lookup_successful = false;
+  if (net_error == net::OK && response_code == net::HTTP_OK) {
+    if (response->ParseFromString(*response_body)) {
+      is_rt_lookup_successful = true;
+      backoff_operator_->ReportSuccess();
+    } else {
+      backoff_operator_->ReportError();
+    }
+  } else if (!ErrorIsRetriable(net_error, response_code)) {
+    backoff_operator_->ReportError();
+  }
+
   RecordBooleanWithAndWithoutSuffix("SafeBrowsing.RT.IsLookupSuccessful",
                                     GetMetricSuffix(), is_rt_lookup_successful);
   base::UmaHistogramBoolean(
       "SafeBrowsing.RT.IsLookupSuccessful" + report_type_suffix,
       is_rt_lookup_successful);
-  is_rt_lookup_successful ? backoff_operator_->ReportSuccess()
-                          : backoff_operator_->ReportError();
 
   MayBeCacheRealTimeUrlVerdict(*response);
 

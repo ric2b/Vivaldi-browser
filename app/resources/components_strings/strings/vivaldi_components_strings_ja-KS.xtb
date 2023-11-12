@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">ページ読み込むんやったらデータ再送信せなあかんから、再読み込みボタンを押したって。</translation>
 <translation id="3234666976984236645">このサイトの重要なコンテンツを常に検出</translation>
 <translation id="3308738399950580893">広告</translation>
+<translation id="3384522979010096022">このサイトの表示、あんたの組織が許可してへんわ</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" />、今アクセスできへんわ。</translation>
 <translation id="3427092606871434483">ええよ（デフォルト）</translation>
 <translation id="3447661539832366887">このデバイスの所有者が恐竜ゲーム無効にしてるわ。</translation>
@@ -193,7 +194,6 @@
 <translation id="8150722005171944719"><ph name="URL" />のファイル、読まれへんわ。消されたんか、どっか他のとこ行ったんちゃう？ファイルへのアクセス権もろてへん可能性もあるけど。</translation>
 <translation id="8184538546369750125">グローバルのデフォルト値（つまり許可）にしとく</translation>
 <translation id="8211406090763984747">この接続、保護されてるわ</translation>
-<translation id="8225771182978767009">このサイト、あんたの使てるパソコン設定した人にブロックされてるわ。</translation>
 <translation id="8241707690549784388">今行こうとしてるページ、あんたが入力した情報使ってるやん。そのページ戻ったら、もっかい同じことせなあかんかもしれんけど、行ってみる？</translation>
 <translation id="8241712895048303527">このサイトでブロック</translation>
 <translation id="8286036467436129157">ログイン</translation>
@@ -214,7 +214,6 @@
 <translation id="9062620674789239642">他のとこ行ったか、編集されたか、消された可能性あるわ。</translation>
 <translation id="9069693763241529744">拡張機能にブロックされたわ</translation>
 <translation id="9073799351042754113">このサイトに対するセキュリティ警告無効にしたで。</translation>
-<translation id="910924428752220542">Vivaldiパスワード</translation>
 <translation id="9169664750068251925">このサイトではいつもブロック</translation>
 <translation id="9180553614777056266">広告ブロッカー</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />、サポートされていないプロトコル使っとるわ。</translation>

@@ -10,6 +10,7 @@
 
 #include "base/feature_list.h"
 #include "base/functional/callback_forward.h"
+#include "base/metrics/histogram_functions.h"
 #include "build/build_config.h"
 #include "chrome/browser/accessibility/caption_bubble_context_browser.h"
 #include "chrome/browser/accessibility/live_caption/live_caption_controller_factory.h"
@@ -25,6 +26,7 @@
 #include "media/base/media_switches.h"
 #include "media/mojo/mojom/speech_recognition_result.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace captions {
 
@@ -53,12 +55,20 @@ LiveCaptionSpeechRecognitionHost::LiveCaptionSpeechRecognitionHost(
   prefs_ = Profile::FromBrowserContext(GetWebContents()->GetBrowserContext())
                ->GetPrefs();
   context_ = CaptionBubbleContextBrowser::Create(web_contents);
+
+  source_language_ = prefs_->GetString(prefs::kLiveCaptionLanguageCode);
 }
 
 LiveCaptionSpeechRecognitionHost::~LiveCaptionSpeechRecognitionHost() {
   LiveCaptionController* live_caption_controller = GetLiveCaptionController();
   if (live_caption_controller)
     live_caption_controller->OnAudioStreamEnd(context_.get());
+  if (base::FeatureList::IsEnabled(media::kLiveTranslate) &&
+      characters_translated_ > 0) {
+    base::UmaHistogramCounts10M(
+        "Accessibility.LiveTranslate.CharactersTranslated",
+        characters_translated_);
+  }
 }
 
 void LiveCaptionSpeechRecognitionHost::OnSpeechRecognitionRecognitionEvent(
@@ -71,13 +81,14 @@ void LiveCaptionSpeechRecognitionHost::OnSpeechRecognitionRecognitionEvent(
   }
 
   if (base::FeatureList::IsEnabled(media::kLiveTranslate) &&
-      prefs_->GetBoolean(prefs::kLiveTranslateEnabled)) {
-    std::string source_language =
-        prefs_->GetString(prefs::kLiveCaptionLanguageCode);
-    std::string target_language =
-        prefs_->GetString(prefs::kLiveTranslateTargetLanguageCode);
+      prefs_->GetBoolean(prefs::kLiveTranslateEnabled) &&
+      l10n_util::GetLanguage(
+          prefs_->GetString(prefs::kLiveTranslateTargetLanguageCode)) !=
+          l10n_util::GetLanguage(source_language_)) {
+    characters_translated_ += result.transcription.size();
     GetLiveTranslateController()->GetTranslation(
-        result, source_language, target_language,
+        result, source_language_,
+        prefs_->GetString(prefs::kLiveTranslateTargetLanguageCode),
         base::BindOnce(&LiveCaptionSpeechRecognitionHost::OnTranslationCallback,
                        weak_factory_.GetWeakPtr()));
     std::move(reply).Run(!stop_transcriptions_);
@@ -93,7 +104,13 @@ void LiveCaptionSpeechRecognitionHost::OnLanguageIdentificationEvent(
   if (!live_caption_controller)
     return;
 
-  live_caption_controller->OnLanguageIdentificationEvent(std::move(event));
+  if (event->asr_switch_result ==
+      media::mojom::AsrSwitchResult::kSwitchSucceeded) {
+    source_language_ = event->language;
+  }
+
+  live_caption_controller->OnLanguageIdentificationEvent(context_.get(),
+                                                         std::move(event));
 }
 
 void LiveCaptionSpeechRecognitionHost::OnSpeechRecognitionError() {

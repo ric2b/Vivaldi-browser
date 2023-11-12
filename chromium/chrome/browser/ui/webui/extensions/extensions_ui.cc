@@ -23,7 +23,9 @@
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/managed_ui_handler.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
+#include "chrome/browser/ui/webui/plural_string_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -74,6 +76,7 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
   webui::SetupWebUIDataSource(
       source, base::make_span(kExtensionsResources, kExtensionsResourcesSize),
       IDR_EXTENSIONS_EXTENSIONS_HTML);
+  webui::SetupChromeRefresh2023(source);
 
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
     // Add common strings.
@@ -271,6 +274,8 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
     {"packDialogKeyFile", IDS_EXTENSIONS_PACK_DIALOG_KEY_FILE_LABEL},
     {"packDialogContent", IDS_EXTENSION_PACK_DIALOG_HEADING},
     {"packDialogConfirm", IDS_EXTENSIONS_PACK_DIALOG_CONFIRM_BUTTON},
+    {"publishedInStoreRequiredByPolicy",
+     IDS_EXTENSIONS_DISABLED_PUBLISHED_IN_STORE_REQUIRED_BY_POLICY},
     {"sitePermissions", IDS_EXTENSIONS_SITE_PERMISSIONS},
     {"sitePermissionsAllSitesPageTitle",
      IDS_EXTENSIONS_SITE_PERMISSIONS_ALL_SITES_PAGE_TITLE},
@@ -338,6 +343,8 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
     {"viewInactive", IDS_EXTENSIONS_VIEW_INACTIVE},
     {"viewIframe", IDS_EXTENSIONS_VIEW_IFRAME},
     {"viewServiceWorker", IDS_EXTENSIONS_SERVICE_WORKER_BACKGROUND},
+    {"safetyCheckKeepExtension", IDS_EXTENSIONS_SC_KEEP_EXT},
+    {"safetyCheckRemoveAll", IDS_EXTENSIONS_SC_REMOVE_ALL},
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     {"manageKioskApp", IDS_EXTENSIONS_MANAGE_KIOSK_APP},
@@ -386,7 +393,9 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
       "getMoreExtensionsUrl",
       base::ASCIIToUTF16(
           google_util::AppendGoogleLocaleParam(
-              GURL(extension_urls::GetWebstoreExtensionsCategoryURL()),
+              extension_urls::AppendUtmSource(
+                  GURL(extension_urls::GetWebstoreExtensionsCategoryURL()),
+                  extension_urls::kExtensionsSidebarUtmSource),
               g_browser_process->GetApplicationLocale())
               .spec()));
   source->AddString("hostPermissionsLearnMoreLink",
@@ -408,6 +417,9 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
       "enableUserPermittedSites",
       base::FeatureList::IsEnabled(
           extensions_features::kExtensionsMenuAccessControlWithPermittedSites));
+  source->AddBoolean(
+      "safetyCheckShowReviewPanel",
+      base::FeatureList::IsEnabled(features::kSafetyCheckExtensions));
 
   return source;
 }
@@ -443,6 +455,14 @@ ExtensionsUI::ExtensionsUI(content::WebUI* web_ui)
   content::URLDataSource::Add(
       profile, std::make_unique<FaviconSource>(
                    profile, chrome::FaviconUrlFormat::kFavicon2));
+
+  // Add a handler to provide pluralized strings.
+  auto plural_string_handler = std::make_unique<PluralStringHandler>();
+  plural_string_handler->AddLocalizedString("safetyCheckTitle",
+                                            IDS_EXTENSIONS_SC_TITLE);
+  plural_string_handler->AddLocalizedString("safetyCheckDescription",
+                                            IDS_EXTENSIONS_SC_DESCRIPTION);
+  web_ui->AddMessageHandler(std::move(plural_string_handler));
 }
 
 ExtensionsUI::~ExtensionsUI() = default;

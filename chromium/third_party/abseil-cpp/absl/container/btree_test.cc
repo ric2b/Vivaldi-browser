@@ -18,6 +18,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <iostream>
 #include <iterator>
 #include <limits>
 #include <map>
@@ -1232,8 +1233,10 @@ class BtreeNodePeer {
   }
 
   template <typename Btree>
-  constexpr static bool UsesGenerations() {
-    return Btree::params_type::kEnableGenerations;
+  constexpr static bool FieldTypeEqualsSlotType() {
+    return std::is_same<
+        typename btree_node<typename Btree::params_type>::field_type,
+        typename btree_node<typename Btree::params_type>::slot_type>::value;
   }
 };
 
@@ -1462,7 +1465,7 @@ class SizedBtreeSet
   using Base = typename SizedBtreeSet::btree_set_container;
 
  public:
-  SizedBtreeSet() {}
+  SizedBtreeSet() = default;
   using Base::Base;
 };
 
@@ -1480,9 +1483,17 @@ void ExpectOperationCounts(const int expected_moves,
   tracker->ResetCopiesMovesSwaps();
 }
 
+#ifdef ABSL_HAVE_ADDRESS_SANITIZER
+constexpr bool kAsan = true;
+#else
+constexpr bool kAsan = false;
+#endif
+
 // Note: when the values in this test change, it is expected to have an impact
 // on performance.
 TEST(Btree, MovesComparisonsCopiesSwapsTracking) {
+  if (kAsan) GTEST_SKIP() << "We do extra operations in ASan mode.";
+
   InstanceTracker tracker;
   // Note: this is minimum number of values per node.
   SizedBtreeSet<MovableOnlyInstance, /*TargetValuesPerNode=*/4> set4;
@@ -1500,10 +1511,9 @@ TEST(Btree, MovesComparisonsCopiesSwapsTracking) {
   EXPECT_EQ(BtreeNodePeer::GetNumSlotsPerNode<decltype(set61)>(), 61);
   EXPECT_EQ(BtreeNodePeer::GetNumSlotsPerNode<decltype(set100)>(), 100);
   if (sizeof(void *) == 8) {
-    EXPECT_EQ(
-        BtreeNodePeer::GetNumSlotsPerNode<absl::btree_set<int32_t>>(),
-        // When we have generations, there is one fewer slot.
-        BtreeNodePeer::UsesGenerations<absl::btree_set<int32_t>>() ? 60 : 61);
+    EXPECT_EQ(BtreeNodePeer::GetNumSlotsPerNode<absl::btree_set<int32_t>>(),
+              // When we have generations, there is one fewer slot.
+              BtreeGenerationsEnabled() ? 60 : 61);
   }
 
   // Test key insertion/deletion in random order.
@@ -1534,6 +1544,8 @@ struct MovableOnlyInstanceThreeWayCompare {
 // Note: when the values in this test change, it is expected to have an impact
 // on performance.
 TEST(Btree, MovesComparisonsCopiesSwapsTrackingThreeWayCompare) {
+  if (kAsan) GTEST_SKIP() << "We do extra operations in ASan mode.";
+
   InstanceTracker tracker;
   // Note: this is minimum number of values per node.
   SizedBtreeSet<MovableOnlyInstance, /*TargetValuesPerNode=*/4,
@@ -1557,10 +1569,9 @@ TEST(Btree, MovesComparisonsCopiesSwapsTrackingThreeWayCompare) {
   EXPECT_EQ(BtreeNodePeer::GetNumSlotsPerNode<decltype(set61)>(), 61);
   EXPECT_EQ(BtreeNodePeer::GetNumSlotsPerNode<decltype(set100)>(), 100);
   if (sizeof(void *) == 8) {
-    EXPECT_EQ(
-        BtreeNodePeer::GetNumSlotsPerNode<absl::btree_set<int32_t>>(),
-        // When we have generations, there is one fewer slot.
-        BtreeNodePeer::UsesGenerations<absl::btree_set<int32_t>>() ? 60 : 61);
+    EXPECT_EQ(BtreeNodePeer::GetNumSlotsPerNode<absl::btree_set<int32_t>>(),
+              // When we have generations, there is one fewer slot.
+              BtreeGenerationsEnabled() ? 60 : 61);
   }
 
   // Test key insertion/deletion in random order.
@@ -3215,22 +3226,27 @@ TEST(Btree, MutatedKeysCaught) {
 #ifndef _MSC_VER
 // This test crashes on MSVC.
 TEST(Btree, InvalidIteratorUse) {
-  if (!BtreeNodePeer::UsesGenerations<absl::btree_set<int>>())
+  if (!BtreeGenerationsEnabled())
     GTEST_SKIP() << "Generation validation for iterators is disabled.";
+
+  // Invalid memory use can trigger heap-use-after-free in ASan or invalidated
+  // iterator assertions.
+  constexpr const char *kInvalidMemoryDeathMessage =
+      "heap-use-after-free|invalidated iterator";
 
   {
     absl::btree_set<int> set;
     for (int i = 0; i < 10; ++i) set.insert(i);
     auto it = set.begin();
     set.erase(it++);
-    EXPECT_DEATH(set.erase(it++), "invalidated iterator");
+    EXPECT_DEATH(set.erase(it++), kInvalidMemoryDeathMessage);
   }
   {
     absl::btree_set<int> set;
     for (int i = 0; i < 10; ++i) set.insert(i);
     auto it = set.insert(20).first;
     set.insert(30);
-    EXPECT_DEATH(*it, "invalidated iterator");
+    EXPECT_DEATH(*it, kInvalidMemoryDeathMessage);
   }
   {
     absl::btree_set<int> set;
@@ -3238,15 +3254,15 @@ TEST(Btree, InvalidIteratorUse) {
     auto it = set.find(5000);
     ASSERT_NE(it, set.end());
     set.erase(1);
-    EXPECT_DEATH(*it, "invalidated iterator");
+    EXPECT_DEATH(*it, kInvalidMemoryDeathMessage);
   }
   {
     absl::btree_set<int> set;
     for (int i = 0; i < 10; ++i) set.insert(i);
     auto it = set.insert(20).first;
     set.insert(30);
-    EXPECT_DEATH(void(it == set.begin()), "invalidated iterator");
-    EXPECT_DEATH(void(set.begin() == it), "invalidated iterator");
+    EXPECT_DEATH(void(it == set.begin()), kInvalidMemoryDeathMessage);
+    EXPECT_DEATH(void(set.begin() == it), kInvalidMemoryDeathMessage);
   }
 }
 #endif
@@ -3535,6 +3551,57 @@ TEST(Btree, InvalidIteratorComparison) {
   iter2 = set2.begin();
   EXPECT_DEATH(void(iter1 == iter2), kDifferentContainerDeathMessage);
   EXPECT_DEATH(void(iter2 == iter1), kDifferentContainerDeathMessage);
+}
+
+TEST(Btree, InvalidPointerUse) {
+  if (!kAsan)
+    GTEST_SKIP() << "We only detect invalid pointer use in ASan mode.";
+
+  absl::btree_set<int> set;
+  set.insert(0);
+  const int *ptr = &*set.begin();
+  set.insert(1);
+  EXPECT_DEATH(std::cout << *ptr, "heap-use-after-free");
+  size_t slots_per_node = BtreeNodePeer::GetNumSlotsPerNode<decltype(set)>();
+  for (int i = 2; i < slots_per_node - 1; ++i) set.insert(i);
+  ptr = &*set.begin();
+  set.insert(static_cast<int>(slots_per_node));
+  EXPECT_DEATH(std::cout << *ptr, "heap-use-after-free");
+}
+
+template<typename Set>
+void TestBasicFunctionality(Set set) {
+  using value_type = typename Set::value_type;
+  for (int i = 0; i < 100; ++i) { set.insert(value_type(i)); }
+  for (int i = 50; i < 100; ++i) { set.erase(value_type(i)); }
+  auto it = set.begin();
+  for (int i = 0; i < 50; ++i, ++it) {
+    ASSERT_EQ(set.find(value_type(i)), it) << i;
+  }
+}
+
+template<size_t align>
+struct alignas(align) OveralignedKey {
+  explicit OveralignedKey(int i) : key(i) {}
+  bool operator<(const OveralignedKey &other) const { return key < other.key; }
+  int key = 0;
+};
+
+TEST(Btree, OveralignedKey) {
+  // Test basic functionality with both even and odd numbers of slots per node.
+  // The goal here is to detect cases where alignment may be incorrect.
+  TestBasicFunctionality(
+      SizedBtreeSet<OveralignedKey<16>, /*TargetValuesPerNode=*/8>());
+  TestBasicFunctionality(
+      SizedBtreeSet<OveralignedKey<16>, /*TargetValuesPerNode=*/9>());
+}
+
+TEST(Btree, FieldTypeEqualsSlotType) {
+  // This breaks if we try to do layout_type::Pointer<slot_type> because
+  // slot_type is the same as field_type.
+  using set_type = absl::btree_set<uint8_t>;
+  static_assert(BtreeNodePeer::FieldTypeEqualsSlotType<set_type>(), "");
+  TestBasicFunctionality(set_type());
 }
 
 }  // namespace

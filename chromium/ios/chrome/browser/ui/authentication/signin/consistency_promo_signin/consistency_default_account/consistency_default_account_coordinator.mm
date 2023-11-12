@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/authentication/signin/consistency_promo_signin/consistency_default_account/consistency_default_account_coordinator.h"
 
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
@@ -46,6 +46,7 @@
 }
 
 - (void)start {
+  [super start];
   ChromeBrowserState* browserState = self.browser->GetBrowserState();
   self.mediator = [[ConsistencyDefaultAccountMediator alloc]
       initWithAccountManagerService:ChromeAccountManagerServiceFactory::
@@ -71,6 +72,8 @@
 - (void)stop {
   [self.mediator disconnect];
   self.mediator = nil;
+  self.defaultAccountViewController = nil;
+  [super stop];
 }
 
 #pragma mark - Properties

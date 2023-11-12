@@ -328,6 +328,9 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
         std::make_unique<StrictMock<MockSafeBrowsingTokenFetcher>>();
     raw_token_fetcher_ = token_fetcher.get();
     csd_host_->set_token_fetcher_for_testing(std::move(token_fetcher));
+    // Commit to a URL for tests that do not explicitly NavigateAndCommit.
+    // Committing to "about:blank" avoids triggering logic irrelevant for tests.
+    NavigateAndCommit(GURL("about:blank"));
 
     testing::DefaultValue<CSDModelType>::Set(CSDModelType::kProtobuf);
   }
@@ -421,8 +424,8 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
   scoped_refptr<StrictMock<MockSafeBrowsingUIManager> > ui_manager_;
   scoped_refptr<StrictMock<MockSafeBrowsingDatabaseManager>> database_manager_;
   FakePhishingDetector fake_phishing_detector_;
-  raw_ptr<StrictMock<MockSafeBrowsingTokenFetcher>> raw_token_fetcher_ =
-      nullptr;
+  raw_ptr<StrictMock<MockSafeBrowsingTokenFetcher>, DanglingUntriaged>
+      raw_token_fetcher_ = nullptr;
   base::SimpleTestTickClock clock_;
   const bool is_incognito_;
   signin::IdentityTestEnvironment identity_test_env_;

@@ -37,6 +37,13 @@ constexpr auto enabled_by_default_desktop_only =
     base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
 
+constexpr auto enabled_by_default_mobile_only =
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+    true;
+#else
+    false;
+#endif
+
 // Returns whether |locale| is a supported locale for |feature|.
 //
 // This matches |locale| with the "supported_locales" feature param value in
@@ -145,12 +152,6 @@ BASE_FEATURE(kPageEntitiesModelResetOnShutdown,
              "PageEntitiesModelResetOnShutdown",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// This feature flag enables batch entities to only be fetched via one thread
-// hop.
-BASE_FEATURE(kPageEntitiesModelBatchEntityMetadataSimplification,
-             "PageEntitiesModelBatchEntityMetadataSimplification",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables push notification of hints.
 BASE_FEATURE(kPushNotifications,
              "OptimizationGuidePushNotifications",
@@ -167,9 +168,6 @@ BASE_FEATURE(kOptimizationGuideMetadataValidation,
              "OptimizationGuideMetadataValidation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kPageTopicsBatchAnnotations,
-             "PageTopicsBatchAnnotations",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kPageVisibilityBatchAnnotations,
              "PageVisibilityBatchAnnotations",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -212,6 +210,25 @@ BASE_FEATURE(kPageContentAnnotationsPersistSalientImageMetadata,
              "PageContentAnnotationsPersistSalientImageMetadata",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Killswitch for fetching on search results from a remote Optimization Guide
+// Service.
+BASE_FEATURE(kOptimizationGuideFetchingForSRP,
+             "OptimizationHintsFetchingSRP",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables the model store to save relative paths computed from the base model
+// store dir. Storing as relative path in the model store is needed for IOS,
+// since the directories could change after Chrome upgrade. This feature is
+// expected to be enabled only for IOS.
+BASE_FEATURE(kModelStoreUseRelativePath,
+             "ModelStoreUseRelativePath",
+#if BUILDFLAG(IS_IOS)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
+
 // The default value here is a bit of a guess.
 // TODO(crbug/1163244): This should be tuned once metrics are available.
 base::TimeDelta PageTextExtractionOutstandingRequestsGracePeriod() {
@@ -221,11 +238,20 @@ base::TimeDelta PageTextExtractionOutstandingRequestsGracePeriod() {
 
 bool ShouldBatchUpdateHintsForActiveTabsAndTopHosts() {
   if (base::FeatureList::IsEnabled(kRemoteOptimizationGuideFetching)) {
+    // Batch update active tabs should only apply to non-desktop platforms.
     return GetFieldTrialParamByFeatureAsBool(kRemoteOptimizationGuideFetching,
                                              "batch_update_hints_for_top_hosts",
-                                             true);
+                                             enabled_by_default_mobile_only);
   }
   return false;
+}
+
+size_t MaxResultsForSRPFetch() {
+  static int max_urls = GetFieldTrialParamByFeatureAsInt(
+      kOptimizationGuideFetchingForSRP, "max_urls_for_srp_fetch",
+      // Default to match overall max.
+      MaxUrlsForOptimizationGuideServiceHintsFetch());
+  return max_urls;
 }
 
 size_t MaxHostsForOptimizationGuideServiceHintsFetch() {
@@ -316,6 +342,10 @@ bool IsOptimizationHintsEnabled() {
 
 bool IsRemoteFetchingEnabled() {
   return base::FeatureList::IsEnabled(kRemoteOptimizationGuideFetching);
+}
+
+bool IsSRPFetchingEnabled() {
+  return base::FeatureList::IsEnabled(kOptimizationGuideFetchingForSRP);
 }
 
 bool IsPushNotificationsEnabled() {
@@ -501,12 +531,6 @@ bool IsPageContentAnnotationEnabled() {
   return base::FeatureList::IsEnabled(kPageContentAnnotations);
 }
 
-bool ShouldPersistSearchMetadataForNonGoogleSearches() {
-  return base::GetFieldTrialParamByFeatureAsBool(
-      kPageContentAnnotations,
-      "persist_search_metadata_for_non_google_searches", true);
-}
-
 bool ShouldWriteContentAnnotationsToHistoryService() {
   return base::GetFieldTrialParamByFeatureAsBool(
       kPageContentAnnotations, "write_to_history_service", true);
@@ -528,11 +552,6 @@ bool ShouldExecutePageEntitiesModelOnPageContent(const std::string& locale) {
   return base::FeatureList::IsEnabled(kPageEntitiesPageContentAnnotations) &&
          IsSupportedLocaleForFeature(locale,
                                      kPageEntitiesPageContentAnnotations);
-}
-
-bool ShouldUseBatchEntityMetadataSimplication() {
-  return base::FeatureList::IsEnabled(
-      kPageEntitiesModelBatchEntityMetadataSimplification);
 }
 
 bool ShouldExecutePageVisibilityModelOnPageContent(const std::string& locale) {
@@ -588,10 +607,6 @@ bool ShouldDeferStartupActiveTabsHintsFetch() {
   );
 }
 
-bool PageTopicsBatchAnnotationsEnabled() {
-  return base::FeatureList::IsEnabled(kPageTopicsBatchAnnotations);
-}
-
 bool PageVisibilityBatchAnnotationsEnabled() {
   return base::FeatureList::IsEnabled(kPageVisibilityBatchAnnotations);
 }
@@ -613,9 +628,6 @@ bool PageContentAnnotationValidationEnabledForType(AnnotationType type) {
 
   base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
   switch (type) {
-    case AnnotationType::kPageTopics:
-      return cmd->HasSwitch(
-          switches::kPageContentAnnotationsValidationPageTopics);
     case AnnotationType::kPageEntities:
       return cmd->HasSwitch(
           switches::kPageContentAnnotationsValidationPageEntities);

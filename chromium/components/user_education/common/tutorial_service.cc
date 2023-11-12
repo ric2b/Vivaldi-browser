@@ -32,7 +32,7 @@ constexpr base::TimeDelta kTutorialNotStartedTimeout = base::Seconds(60);
 }  // namespace
 
 TutorialService::TutorialCreationParams::TutorialCreationParams(
-    TutorialDescription* description,
+    const TutorialDescription* description,
     ui::ElementContext context)
     : description_(description), context_(context) {}
 
@@ -40,12 +40,7 @@ TutorialService::TutorialService(
     TutorialRegistry* tutorial_registry,
     HelpBubbleFactoryRegistry* help_bubble_factory_registry)
     : tutorial_registry_(tutorial_registry),
-      help_bubble_factory_registry_(help_bubble_factory_registry) {
-  toggle_focus_subscription_ =
-      help_bubble_factory_registry->AddToggleFocusCallback(
-          base::BindRepeating(&TutorialService::OnFocusToggledForAccessibility,
-                              base::Unretained(this)));
-}
+      help_bubble_factory_registry_(help_bubble_factory_registry) {}
 
 TutorialService::~TutorialService() = default;
 
@@ -66,7 +61,7 @@ void TutorialService::StartTutorial(TutorialIdentifier id,
   is_final_bubble_ = false;
 
   // Get the description from the tutorial registry.
-  TutorialDescription* description =
+  const TutorialDescription* const description =
       tutorial_registry_->GetTutorialDescription(id);
   CHECK(description);
 
@@ -90,13 +85,13 @@ void TutorialService::StartTutorial(TutorialIdentifier id,
                      base::Unretained(this)));
 
   // Start the tutorial and mark the params used to created it for restarting.
+  most_recent_tutorial_id_ = id;
   running_tutorial_->Start();
-  toggle_focus_count_ = 0;
 }
 
 void TutorialService::LogIPHLinkClicked(TutorialIdentifier id,
                                         bool iph_link_was_clicked) {
-  TutorialDescription* description =
+  const TutorialDescription* const description =
       tutorial_registry_->GetTutorialDescription(id);
   CHECK(description);
 
@@ -106,7 +101,7 @@ void TutorialService::LogIPHLinkClicked(TutorialIdentifier id,
 
 void TutorialService::LogStartedFromWhatsNewPage(TutorialIdentifier id,
                                                  bool success) {
-  TutorialDescription* description =
+  const TutorialDescription* const description =
       tutorial_registry_->GetTutorialDescription(id);
   CHECK(description);
 
@@ -171,12 +166,6 @@ void TutorialService::AbortTutorial(absl::optional<int> abort_step) {
   // Reset the tutorial and call the external abort callback.
   ResetRunningTutorial();
 
-  // Record how many times the user toggled focus during the tutorial using
-  // the keyboard.
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Tutorial.FocusToggleCount.Aborted",
-                              toggle_focus_count_, 0, 50, 6);
-  toggle_focus_count_ = 0;
-
   if (aborted_callback_) {
     std::move(aborted_callback_).Run();
   }
@@ -206,12 +195,6 @@ void TutorialService::CompleteTutorial() {
   UMA_HISTOGRAM_BOOLEAN("Tutorial.Completion", true);
 
   ResetRunningTutorial();
-
-  // Record how many times the user toggled focus during the tutorial using
-  // the keyboard.
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Tutorial.FocusToggleCount.Completed",
-                              toggle_focus_count_, 0, 50, 6);
-  toggle_focus_count_ = 0;
 
   std::move(completed_callback_).Run();
 }
@@ -244,8 +227,12 @@ void TutorialService::HideCurrentBubbleIfShowing() {
   currently_displayed_bubble_.reset();
 }
 
-bool TutorialService::IsRunningTutorial() const {
-  return running_tutorial_ != nullptr;
+bool TutorialService::IsRunningTutorial(
+    absl::optional<TutorialIdentifier> id) const {
+  if (!running_tutorial_) {
+    return false;
+  }
+  return !id.has_value() || id.value() == most_recent_tutorial_id_;
 }
 
 void TutorialService::ResetRunningTutorial() {
@@ -255,11 +242,6 @@ void TutorialService::ResetRunningTutorial() {
   running_tutorial_creation_params_.reset();
   running_tutorial_was_restarted_ = false;
   HideCurrentBubbleIfShowing();
-}
-
-void TutorialService::OnFocusToggledForAccessibility(HelpBubble* bubble) {
-  if (bubble == currently_displayed_bubble_.get())
-    ++toggle_focus_count_;
 }
 
 void TutorialService::OnBrokenTutorial() {

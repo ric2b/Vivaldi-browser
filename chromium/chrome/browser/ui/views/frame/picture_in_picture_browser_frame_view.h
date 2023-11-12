@@ -6,6 +6,8 @@
 #define CHROME_BROWSER_UI_VIEWS_FRAME_PICTURE_IN_PICTURE_BROWSER_FRAME_VIEW_H_
 
 #include "base/scoped_observation.h"
+#include "build/build_config.h"
+#include "chrome/browser/ui/content_settings/content_setting_image_model_states.h"
 #include "chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
@@ -87,6 +89,7 @@ class PictureInPictureBrowserFrameView
   // ChromeLocationBarModelDelegate:
   content::WebContents* GetActiveWebContents() const override;
   bool GetURL(GURL* url) const override;
+  bool ShouldPreventElision() override;
   bool ShouldTrimDisplayUrlAfterHostName() const override;
   bool ShouldDisplayURL() const override;
 
@@ -105,7 +108,7 @@ class PictureInPictureBrowserFrameView
   SkColor GetIconLabelBubbleBackgroundColor() const override;
 
   // ContentSettingImageView::Delegate:
-  bool ShouldHideContentSettingImage() override;
+  bool ShouldHideContentSettingImage(ImageType type) override;
   content::WebContents* GetContentSettingWebContents() override;
   ContentSettingBubbleModelDelegate* GetContentSettingBubbleModelDelegate()
       override;
@@ -183,6 +186,17 @@ class PictureInPictureBrowserFrameView
   views::Label* GetWindowTitleForTesting();
 
  private:
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class CloseReason {
+    kOther = 0,
+    kBackToTabButton = 1,
+    kCloseButton = 2,
+    kMaxValue = kCloseButton,
+  };
+
+  CloseReason close_reason_ = CloseReason::kOther;
+
   // A model required to use LocationIconView.
   std::unique_ptr<LocationBarModel> location_bar_model_;
 

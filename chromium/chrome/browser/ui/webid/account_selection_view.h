@@ -28,6 +28,7 @@ class AccountSelectionView {
     virtual void OnDismiss(
         content::IdentityRequestDialogController::DismissReason
             dismiss_reason) = 0;
+    virtual void OnSigninToIdP() = 0;
     // The web page view containing the focused field.
     virtual gfx::NativeView GetNativeView() = 0;
     // The WebContents for the page.
@@ -77,6 +78,9 @@ class AccountSelectionView {
 
   virtual std::string GetTitle() const = 0;
   virtual absl::optional<std::string> GetSubtitle() const = 0;
+
+  virtual content::WebContents* ShowModalDialog(const GURL& url) = 0;
+  virtual void CloseModalDialog() = 0;
 
  protected:
   raw_ptr<Delegate> delegate_ = nullptr;

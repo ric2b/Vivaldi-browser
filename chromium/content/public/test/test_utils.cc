@@ -179,25 +179,6 @@ base::OnceClosure GetDeferredQuitTaskForRunLoop(base::RunLoop* run_loop) {
                         kNumQuitDeferrals);
 }
 
-base::Value ExecuteScriptAndGetValue(RenderFrameHost* render_frame_host,
-                                     const std::string& script) {
-  base::RunLoop run_loop;
-  base::Value result;
-
-  render_frame_host->ExecuteJavaScriptForTests(
-      base::UTF8ToUTF16(script),
-      base::BindOnce(
-          [](base::OnceClosure quit_closure, base::Value* out_result,
-             base::Value value) {
-            *out_result = std::move(value);
-            std::move(quit_closure).Run();
-          },
-          run_loop.QuitWhenIdleClosure(), &result));
-  run_loop.Run();
-
-  return result;
-}
-
 bool AreAllSitesIsolatedForTesting() {
   return SiteIsolationPolicy::UseDedicatedProcessesForAllSites();
 }
@@ -249,6 +230,10 @@ bool WillSameSiteNavigationsChangeRenderFrameHosts() {
 bool CanSameSiteMainFrameNavigationsChangeSiteInstances() {
   return IsProactivelySwapBrowsingInstanceOnSameSiteNavigationEnabled() ||
          IsBackForwardCacheEnabled();
+}
+
+bool IsNavigationQueueingEnabled() {
+  return ShouldQueueNavigationsWhenPendingCommitRFHExists();
 }
 
 void DisableProactiveBrowsingInstanceSwapFor(RenderFrameHost* rfh) {
@@ -505,8 +490,9 @@ bool RenderFrameDeletedObserver::WaitUntilDeleted() {
 }
 
 RenderFrameHostWrapper::RenderFrameHostWrapper(RenderFrameHost* rfh)
-    : rfh_id_(rfh->GetGlobalId()),
-      deleted_observer_(std::make_unique<RenderFrameDeletedObserver>(rfh)) {}
+    : rfh_id_(rfh ? rfh->GetGlobalId() : GlobalRenderFrameHostId()),
+      deleted_observer_(rfh ? std::make_unique<RenderFrameDeletedObserver>(rfh)
+                            : nullptr) {}
 
 RenderFrameHostWrapper::RenderFrameHostWrapper(RenderFrameHostWrapper&& rfhft) =
     default;
@@ -523,10 +509,12 @@ bool RenderFrameHostWrapper::IsDestroyed() const {
 // See RenderFrameDeletedObserver for notes on the difference between
 // RenderFrame being deleted and RenderFrameHost being destroyed.
 bool RenderFrameHostWrapper::WaitUntilRenderFrameDeleted() const {
+  CHECK(deleted_observer_);
   return deleted_observer_->WaitUntilDeleted();
 }
 
 bool RenderFrameHostWrapper::IsRenderFrameDeleted() const {
+  CHECK(deleted_observer_);
   return deleted_observer_->deleted();
 }
 

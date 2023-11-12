@@ -251,8 +251,8 @@ void DelayedOverwriteDisplayVersions(const base::FilePath& setup_exe,
   }
 }
 
-// Waits up to a minute for msiexec to release its mutex and then overwrites
-// DisplayVersion in the Windows registry.
+// Waits for msiexec to release its mutex and then overwrites DisplayVersion in
+// the Windows registry.
 LONG OverwriteDisplayVersionsAfterMsiexec(base::win::ScopedHandle startup_event,
                                           const std::wstring& product,
                                           const std::wstring& value) {
@@ -274,7 +274,7 @@ LONG OverwriteDisplayVersionsAfterMsiexec(base::win::ScopedHandle startup_event,
       startup_event.Close();
     }
 
-    auto wait_result = ::WaitForSingleObject(msi_handle.Get(), 60 * 1000);
+    const auto wait_result = ::WaitForSingleObject(msi_handle.Get(), INFINITE);
     if (wait_result == WAIT_FAILED) {
       // The handle is valid and was opened with SYNCHRONIZE, so the wait should
       // never fail. If it does, wait ten seconds and proceed with the overwrite
@@ -282,12 +282,11 @@ LONG OverwriteDisplayVersionsAfterMsiexec(base::win::ScopedHandle startup_event,
       PLOG(ERROR) << "Overwriting DisplayVersion in 10s after failing to wait "
                      "for the MSI mutex";
       base::PlatformThread::Sleep(base::Seconds(10));
-    } else if (wait_result == WAIT_ABANDONED || wait_result == WAIT_OBJECT_0) {
+    } else {
+      CHECK(wait_result == WAIT_ABANDONED || wait_result == WAIT_OBJECT_0)
+          << "WaitForSingleObject: " << wait_result;
       VLOG(1) << "Acquired MSI mutex; overwriting DisplayVersion.";
       acquired_mutex = true;
-    } else {
-      DCHECK_EQ(wait_result, static_cast<DWORD>(WAIT_TIMEOUT));
-      LOG(ERROR) << "Timed out waiting for MSI mutex.";
     }
   } else {
     // The mutex should still be held by msiexec since the parent setup.exe
@@ -674,7 +673,7 @@ bool CheckPreInstallConditions(const InstallationState& original_state,
       // Instruct Google Update to launch the existing system-level Chrome.
       // There should be no error dialog.
       base::FilePath install_path(
-          installer::GetChromeInstallPath(true /* system_install */));
+          installer::GetInstalledDirectory(/*system_install=*/true));
       if (install_path.empty()) {
         // Give up if we failed to construct the install path.
         *status = installer::OS_ERROR;
@@ -732,9 +731,12 @@ installer::InstallStatus UninstallProducts(InstallationState& original_state,
 
   if (cmd_line.HasSwitch(installer::switches::kSelfDestruct) &&
       !installer_state.system_install()) {
-    const base::FilePath system_exe_path(
-        installer::GetChromeInstallPath(true).Append(installer::kChromeExe));
-    system_level_cmd.SetProgram(system_exe_path);
+    const base::FilePath system_install_dir(
+        installer::GetInstalledDirectory(/*system_install=*/true));
+    if (!system_install_dir.empty()) {
+      system_level_cmd.SetProgram(
+          system_install_dir.Append(installer::kChromeExe));
+    }
   }
 
   installer::InstallStatus install_status = installer::UNINSTALL_SUCCESSFUL;
@@ -1475,9 +1477,6 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
     }
 
     // Update the DisplayVersion created by an MSI-based install.
-    base::FilePath initial_preferences_file(
-        installer_state.target_path().AppendASCII(
-            installer::kLegacyInitialPrefs));
     std::string install_id;
     if (prefs.GetString(installer::initial_preferences::kMsiProductId,
                         &install_id)) {

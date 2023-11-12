@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.tabbed_mode;
 
+import android.os.Bundle;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
@@ -15,6 +16,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.CommandLine;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneShotCallback;
@@ -256,6 +258,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
      * @param tabReparentingControllerSupplier Supplier for the {@link TabReparentingController}.
      * @param initializeUiWithIncognitoColors Whether to initialize the UI with incognito colors.
      * @param backPressManager The {@link BackPressManager} handling back press.
+     * @param savedInstanceState The saved bundle for the last recorded state.
      */
     public TabbedRootUiCoordinator(@NonNull AppCompatActivity activity,
             @Nullable Callback<Boolean> onOmniboxFocusChangedListener,
@@ -296,7 +299,8 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
             @NonNull Supplier<InsetObserverView> insetObserverViewSupplier,
             @NonNull Function<Tab, Boolean> backButtonShouldCloseTabFn,
             OneshotSupplier<TabReparentingController> tabReparentingControllerSupplier,
-            boolean initializeUiWithIncognitoColors, @NonNull BackPressManager backPressManager) {
+            boolean initializeUiWithIncognitoColors, @NonNull BackPressManager backPressManager,
+            @Nullable Bundle savedInstanceState) {
         super(activity, onOmniboxFocusChangedListener, shareDelegateSupplier, tabProvider,
                 profileSupplier, bookmarkModelSupplier, tabBookmarkerSupplier,
                 contextualSearchManagerSupplier, tabModelSelectorSupplier, startSurfaceSupplier,
@@ -309,7 +313,8 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                 compositorViewHolderSupplier, tabContentManagerSupplier, snackbarManagerSupplier,
                 activityType, isInOverviewModeSupplier, isWarmOnResumeSupplier, appMenuDelegate,
                 statusBarColorProvider, intentRequestTracker, tabReparentingControllerSupplier,
-                ephemeralTabCoordinatorSupplier, initializeUiWithIncognitoColors, backPressManager);
+                ephemeralTabCoordinatorSupplier, initializeUiWithIncognitoColors, backPressManager,
+                savedInstanceState);
         mControlContainerHeightResource = controlContainerHeightResource;
         mInsetObserverViewSupplier = insetObserverViewSupplier;
         mBackButtonShouldCloseTabFn = backButtonShouldCloseTabFn;
@@ -499,7 +504,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                 mCompositorViewHolderSupplier.get()::removeTouchEventObserver, mLayoutManager);
         mGestureNavLayoutObserver = new LayoutStateProvider.LayoutStateObserver() {
             @Override
-            public void onStartedShowing(int layoutType, boolean showToolbar) {
+            public void onStartedShowing(int layoutType) {
                 if (layoutType == LayoutType.TAB_SWITCHER) mHistoryNavigationCoordinator.reset();
             }
         };
@@ -666,10 +671,25 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
 
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_3)
                 || ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_4)) {
-            didTriggerPromo = PrivacySandboxDialogController.maybeLaunchPrivacySandboxDialog(
-                    mActivity, new SettingsLauncherImpl(),
-                    mTabModelSelectorSupplier.get().isIncognitoSelected(),
-                    getBottomSheetController());
+            String histogramName =
+                    "Startup.Android.PrivacySandbox.DialogNotShownDueToTabLaunchedFromExternalApp";
+            Tab tab = mActivityTabProvider.get();
+            boolean isTabLaunchedFromExternalApp =
+                    tab != null && tab.getLaunchType() == TabLaunchType.FROM_EXTERNAL_APP;
+            boolean shouldSuppressPSDialogForExternalAppLaunches =
+                    ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
+                            ChromeFeatureList.PRIVACY_SANDBOX_SETTINGS_4,
+                            "suppress-dialog-for-external-app-launches", true);
+            boolean shouldSuppressPSDialog =
+                    isTabLaunchedFromExternalApp && shouldSuppressPSDialogForExternalAppLaunches;
+
+            if (!shouldSuppressPSDialog) {
+                didTriggerPromo = PrivacySandboxDialogController.maybeLaunchPrivacySandboxDialog(
+                        mActivity, new SettingsLauncherImpl(),
+                        mTabModelSelectorSupplier.get().isIncognitoSelected(),
+                        getBottomSheetController());
+            }
+            RecordHistogram.recordBooleanHistogram(histogramName, shouldSuppressPSDialog);
         }
 
         if (!didTriggerPromo) {

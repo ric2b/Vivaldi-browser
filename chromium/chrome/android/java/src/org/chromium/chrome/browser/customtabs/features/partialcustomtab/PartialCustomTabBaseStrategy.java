@@ -27,6 +27,7 @@ import android.view.animation.AccelerateInterpolator;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.Px;
+import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
@@ -103,7 +104,7 @@ public abstract class PartialCustomTabBaseStrategy
             PartialCustomTabType.SIDE_SHEET, PartialCustomTabType.FULL_SIZE,
             PartialCustomTabType.COUNT})
     @Retention(RetentionPolicy.SOURCE)
-    @interface PartialCustomTabType {
+    public @interface PartialCustomTabType {
         int NONE = 0;
         int BOTTOM_SHEET = 1;
         int SIDE_SHEET = 2;
@@ -167,9 +168,29 @@ public abstract class PartialCustomTabBaseStrategy
         // Elevate the main web contents area as high as the handle bar to have the shadow
         // effect look right.
         int ev = mActivity.getResources().getDimensionPixelSize(R.dimen.custom_tabs_elevation);
-        getCoordinatorLayout().setElevation(ev);
+        View coordinatorLayout = getCoordinatorLayout();
+        coordinatorLayout.setElevation(ev);
 
         mPositionUpdater.run();
+
+        // Set the window title so the type announcement is made, only when CCT is first launched.
+        if (!coordinatorLayout.isAttachedToWindow()) setWindowTitleForTouchExploration();
+    }
+
+    private void setWindowTitleForTouchExploration() {
+        View coordinatorLayout = getCoordinatorLayout();
+        var attachStateListener = new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {
+                Window window = mActivity.getWindow();
+                window.setTitle(mActivity.getResources().getString(getTypeStringId()));
+                coordinatorLayout.removeOnAttachStateChangeListener(this);
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {}
+        };
+        coordinatorLayout.addOnAttachStateChangeListener(attachStateListener);
     }
 
     @Override
@@ -250,8 +271,8 @@ public abstract class PartialCustomTabBaseStrategy
         // |mNavbarHeight| is zero now. Post the task instead.
         new Handler().post(() -> {
             initializeSize();
-            if (shouldDrawDividerLine()) drawDividerLine();
-            updateShadowOffset();
+            if (shouldDrawDividerLine() && !isMaximized()) drawDividerLine();
+            if (!isMaximized()) updateShadowOffset();
             maybeInvokeResizeCallback();
         });
     }
@@ -311,11 +332,11 @@ public abstract class PartialCustomTabBaseStrategy
         mOnActivityLayoutCallback.onActivityLayout(left, top, right, bottom, activityLayoutState);
     }
 
-    @PartialCustomTabType
-    public abstract int getStrategyType();
+    public abstract @PartialCustomTabType int getStrategyType();
 
-    @ActivityLayoutState
-    protected abstract int getActivityLayoutState();
+    public abstract @StringRes int getTypeStringId();
+
+    protected abstract @ActivityLayoutState int getActivityLayoutState();
 
     protected abstract void updatePosition();
 

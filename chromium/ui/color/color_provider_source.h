@@ -27,7 +27,9 @@ class COMPONENT_EXPORT(COLOR) ColorProviderSource {
   virtual ~ColorProviderSource();
 
   // Returns the ColorProvider associated with the Key returned by
-  // GetColorProviderKey();
+  // GetColorProviderKey().
+  // TODO(tluk): This shouldn't need to be virtual, most overrides simply pass
+  // the key to the manager.
   virtual const ColorProvider* GetColorProvider() const = 0;
 
   void AddObserver(ColorProviderSourceObserver* observer);
@@ -37,6 +39,9 @@ class COMPONENT_EXPORT(COLOR) ColorProviderSource {
   // in the method `GetColorProvider()` changes.
   void NotifyColorProviderChanged();
 
+  // Gets the ColorMode currently associated with this source.
+  ui::ColorProviderManager::ColorMode GetColorMode() const;
+
   base::ObserverList<ColorProviderSourceObserver>& observers_for_testing() {
     return observers_;
   }
@@ -45,10 +50,6 @@ class COMPONENT_EXPORT(COLOR) ColorProviderSource {
   // Implementations should return the ColorProviderManager::Key associated with
   // this source.
   virtual ColorProviderManager::Key GetColorProviderKey() const = 0;
-
-  // Gets the user color for this color source. This is used as an input to
-  // generate color palettes for the material design system.
-  virtual absl::optional<SkColor> GetUserColor() const;
 
  private:
   base::ObserverList<ColorProviderSourceObserver> observers_;

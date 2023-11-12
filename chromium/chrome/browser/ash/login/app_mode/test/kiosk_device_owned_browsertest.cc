@@ -38,7 +38,6 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/network/portal_detector/network_portal_detector.h"
@@ -307,27 +306,6 @@ IN_PROC_BROWSER_TEST_F(KioskDeviceOwnedTest,
   // Network becomes online and app launch is resumed.
   SimulateNetworkOnline();
   WaitForAppLaunchSuccess();
-}
-
-// TODO(b/231213239): Flaky seg faults
-IN_PROC_BROWSER_TEST_F(KioskDeviceOwnedTest, DISABLED_LaunchAppUserCancel) {
-  StartAppLaunchFromLoginScreen(
-      NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE);
-  OobeScreenWaiter splash_waiter(AppLaunchSplashScreenView::kScreenId);
-  // Do not let the app be run to avoid race condition.
-  BlockAppLaunch(true);
-  splash_waiter.Wait();
-
-  base::RunLoop run_loop;
-  auto subscription =
-      browser_shutdown::AddAppTerminatingCallback(run_loop.QuitClosure());
-  settings_helper_.SetBoolean(
-      kAccountsPrefDeviceLocalAccountAutoLoginBailoutEnabled, true);
-  LoginDisplayHost::default_host()->HandleAccelerator(
-      LoginAcceleratorAction::kAppLaunchBailout);
-  run_loop.Run();
-  EXPECT_EQ(KioskAppLaunchError::Error::kUserCancel,
-            KioskAppLaunchError::Get());
 }
 
 // Verifies available volumes for kiosk apps in kiosk session.

@@ -4,12 +4,10 @@
 
 #include "chrome/browser/ash/arc/input_overlay/ui/action_view.h"
 
-#include "ash/public/cpp/window_properties.h"
-#include "base/json/json_reader.h"
-#include "base/test/bind.h"
 #include "chrome/browser/ash/arc/input_overlay/constants.h"
 #include "chrome/browser/ash/arc/input_overlay/display_overlay_controller.h"
 #include "chrome/browser/ash/arc/input_overlay/test/test_utils.h"
+#include "chrome/browser/ash/arc/input_overlay/test/view_test_base.h"
 #include "chrome/browser/ash/arc/input_overlay/touch_injector.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/input_mapping_view.h"
 #include "chrome/browser/ash/arc/input_overlay/util.h"
@@ -17,79 +15,12 @@
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/test/geometry_util.h"
-#include "ui/views/test/views_test_base.h"
 
 namespace arc::input_overlay {
 namespace {
 
 // Consider two points are at the same position within kTolerance.
 constexpr const float kTolerance = 0.999f;
-
-constexpr const char kValidJsonActionMoveKey[] =
-    R"json({
-      "move": [
-        {
-          "id": 0,
-          "input_sources": [
-            "keyboard"
-          ],
-          "name": "Virtual Joystick",
-          "keys": [
-            "KeyW",
-            "KeyA",
-            "KeyS",
-            "KeyD"
-          ],
-          "location": [
-            {
-              "type": "position",
-              "anchor": [
-                0,
-                0
-              ],
-              "anchor_to_target": [
-                0.5,
-                0.5
-              ]
-            }
-          ]
-        }
-      ],
-      "tap": [
-        {
-          "id": 1,
-          "input_sources": [
-            "keyboard"
-          ],
-          "name": "Fight",
-          "key": "Space",
-          "location": [
-            {
-              "type": "position",
-              "anchor": [
-                0,
-                0
-              ],
-              "anchor_to_target": [
-                0.5,
-                0.5
-              ]
-            },
-            {
-              "type": "position",
-              "anchor": [
-                0,
-                0
-              ],
-              "anchor_to_target": [
-                0.3,
-                0.3
-              ]
-            }
-          ]
-        }
-      ]
-    })json";
 
 // Check label offset in edit mode.
 void CheckActionTapLabelPosition(TapLabelPosition label_position,
@@ -128,10 +59,18 @@ void CheckActionTapLabelPosition(TapLabelPosition label_position,
   }
 }
 
-class ActionViewTest : public views::ViewsTestBase {
- protected:
+}  // namespace
+
+class ActionViewTest : public ViewTestBase {
+ public:
   ActionViewTest() = default;
 
+  void SetRepositionController() {
+    move_action_view_->SetRepositionController();
+    tap_action_view_->SetRepositionController();
+  }
+
+ protected:
   void PressLeftMouseAtActionView(ActionView* action_view) {
     // Press down at the center of the touch point.
     local_location_ = action_view->touch_point()->bounds().CenterPoint();
@@ -141,7 +80,7 @@ class ActionViewTest : public views::ViewsTestBase {
         ui::MouseEvent(ui::ET_MOUSE_PRESSED, local_location_, root_location_,
                        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
                        ui::EF_LEFT_MOUSE_BUTTON);
-    action_view->touch_point()->ApplyMousePressed(press);
+    action_view->touch_point()->OnMousePressed(press);
   }
 
   void MouseDragActionViewBy(ActionView* action_view,
@@ -151,7 +90,7 @@ class ActionViewTest : public views::ViewsTestBase {
     auto drag =
         ui::MouseEvent(ui::ET_MOUSE_DRAGGED, local_location_, root_location_,
                        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0);
-    action_view->touch_point()->ApplyMouseDragged(drag);
+    action_view->touch_point()->OnMouseDragged(drag);
   }
 
   void ReleaseLeftMouse(ActionView* action_view) {
@@ -159,7 +98,7 @@ class ActionViewTest : public views::ViewsTestBase {
         ui::MouseEvent(ui::ET_MOUSE_RELEASED, local_location_, root_location_,
                        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
                        ui::EF_LEFT_MOUSE_BUTTON);
-    action_view->touch_point()->ApplyMouseReleased(release);
+    action_view->touch_point()->OnMouseReleased(release);
   }
 
   void TouchPressAtActionView(ActionView* action_view) {
@@ -173,7 +112,7 @@ class ActionViewTest : public views::ViewsTestBase {
         root_location_.x(), root_location_.y(), ui::EF_NONE,
         base::TimeTicks::Now(),
         ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_BEGIN, 0, 0));
-    action_view->touch_point()->ApplyGestureEvent(&scroll_begin);
+    action_view->touch_point()->OnGestureEvent(&scroll_begin);
   }
 
   void TouchMoveAtActionViewBy(ActionView* action_view,
@@ -184,7 +123,7 @@ class ActionViewTest : public views::ViewsTestBase {
                          base::TimeTicks::Now(),
                          ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_UPDATE,
                                                  move.x(), move.y()));
-    action_view->touch_point()->ApplyGestureEvent(&scroll_update);
+    action_view->touch_point()->OnGestureEvent(&scroll_update);
   }
 
   void TouchReleaseAtActionView(ActionView* action_view) {
@@ -192,7 +131,7 @@ class ActionViewTest : public views::ViewsTestBase {
         ui::GestureEvent(root_location_.x(), root_location_.y(), ui::EF_NONE,
                          base::TimeTicks::Now(),
                          ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_END));
-    action_view->touch_point()->ApplyGestureEvent(&scroll_end);
+    action_view->touch_point()->OnGestureEvent(&scroll_end);
   }
 
   void SetDisplayMode(DisplayMode display_mode) {
@@ -203,57 +142,12 @@ class ActionViewTest : public views::ViewsTestBase {
     return input_mapping_view_->GetIndexOf(view);
   }
 
-  raw_ptr<ActionView> move_action_view_;
-  raw_ptr<ActionView> tap_action_view_;
-  raw_ptr<Action> move_action_;
-  raw_ptr<Action> tap_action_;
-  gfx::Point root_location_;
-  gfx::Point local_location_;
-
  private:
   void SetUp() override {
-    views::ViewsTestBase::SetUp();
-    root_window()->SetBounds(gfx::Rect(1000, 800));
-    widget_ = CreateArcWindow(root_window(), gfx::Rect(200, 100, 600, 400));
-    touch_injector_ = std::make_unique<TouchInjector>(
-        widget_->GetNativeWindow(),
-        *widget_->GetNativeWindow()->GetProperty(ash::kArcPackageNameKey),
-        base::BindLambdaForTesting(
-            [&](std::unique_ptr<AppDataProto>, std::string) {}));
-    touch_injector_->set_allow_reposition(true);
-    touch_injector_->ParseActions(
-        *base::JSONReader::ReadAndReturnValueWithError(
-            kValidJsonActionMoveKey));
-    touch_injector_->RegisterEventRewriter();
-    display_overlay_controller_ = std::make_unique<DisplayOverlayController>(
-        touch_injector_.get(), false);
-    input_mapping_view_ =
-        std::make_unique<InputMappingView>(display_overlay_controller_.get());
-
-    const auto& actions = touch_injector_->actions();
-    DCHECK_EQ(2u, actions.size());
-    // ActionTap is added first.
-    tap_action_ = actions[0].get();
-    tap_action_view_ = tap_action_->action_view();
-    move_action_ = actions[1].get();
-    move_action_view_ = move_action_->action_view();
-    SetDisplayMode(DisplayMode::kView);
+    ViewTestBase::SetUp();
+    InitWithFeature(absl::nullopt);
+    SetRepositionController();
   }
-
-  void TearDown() override {
-    move_action_view_ = nullptr;
-    move_action_ = nullptr;
-    display_overlay_controller_.reset();
-    touch_injector_.reset();
-    input_mapping_view_.reset();
-    widget_.reset();
-    views::ViewsTestBase::TearDown();
-  }
-
-  std::unique_ptr<views::Widget> widget_;
-  std::unique_ptr<InputMappingView> input_mapping_view_;
-  std::unique_ptr<TouchInjector> touch_injector_;
-  std::unique_ptr<DisplayOverlayController> display_overlay_controller_;
 };
 
 TEST_F(ActionViewTest, TestDragMoveActionMove) {
@@ -578,5 +472,4 @@ TEST_F(ActionViewTest, TestActionViewReorder) {
   EXPECT_EQ(0u, *GetIndexOf(move_action_view_));
 }
 
-}  // namespace
 }  // namespace arc::input_overlay

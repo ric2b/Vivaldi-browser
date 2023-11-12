@@ -74,15 +74,11 @@ void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
                l10n_util::GetPluralStringFUTF16(IDS_TAB_CXMENU_ADD_TAB_TO_GROUP,
                                                 num_tabs),
                add_to_existing_group_submenu_.get());
-    if (base::FeatureList::IsEnabled(features::kTabGroupsNewBadgePromo))
-      SetIsNewFeatureAt(GetItemCount() - 1, true);
   } else if (!tab_strip->delegate()->IsForWebApp()) {
     AddItem(TabStripModel::CommandAddToNewGroup,
             l10n_util::GetPluralStringFUTF16(
                 IDS_TAB_CXMENU_ADD_TAB_TO_NEW_GROUP, num_tabs));
     SetElementIdentifierAt(GetItemCount() - 1, kAddToNewGroupItemIdentifier);
-    if (base::FeatureList::IsEnabled(features::kTabGroupsNewBadgePromo))
-      SetIsNewFeatureAt(GetItemCount() - 1, true);
   }
 
   for (const auto& selection : indices) {
@@ -157,12 +153,11 @@ void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
     AddSeparator(ui::NORMAL_SEPARATOR);
 #if BUILDFLAG(IS_MAC)
     AddItem(TabStripModel::CommandSendTabToSelf,
-            l10n_util::GetStringUTF16(IDS_CONTEXT_MENU_SEND_TAB_TO_SELF));
+            l10n_util::GetStringUTF16(IDS_MENU_SEND_TAB_TO_SELF));
 #else
-    AddItemWithIcon(
-        TabStripModel::CommandSendTabToSelf,
-        l10n_util::GetStringUTF16(IDS_CONTEXT_MENU_SEND_TAB_TO_SELF),
-        ui::ImageModel::FromVectorIcon(kLaptopAndSmartphoneIcon));
+    AddItemWithIcon(TabStripModel::CommandSendTabToSelf,
+                    l10n_util::GetStringUTF16(IDS_MENU_SEND_TAB_TO_SELF),
+                    ui::ImageModel::FromVectorIcon(kDevicesIcon));
 #endif
   }
 

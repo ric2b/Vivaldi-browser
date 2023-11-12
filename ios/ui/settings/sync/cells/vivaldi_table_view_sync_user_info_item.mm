@@ -75,12 +75,8 @@ const UIFontTextStyle emailTextStyle = UIFontTextStyleSubheadline;
     verticalStackView.alignment = UIStackViewAlignmentLeading;
     verticalStackView.spacing = kVerticalStackViewSpacing;
 
-    CGSize size = CGSizeMake(kAvatarImageSize, kAvatarImageSize);
-    UIImage* image = ResizeImage([UIImage systemImageNamed:@"circle.fill"],
-        size, ProjectionMode::kAspectFit);
-    _imageView = [[UIImageView alloc] initWithImage:
-        [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
-    [_imageView setTintColor:[UIColor lightGrayColor]];
+    _imageView = [UIImageView new];
+    _imageView.contentMode = UIViewContentModeScaleAspectFill;
     _imageView.layer.cornerRadius = kAvatarImageSize/2;
     _imageView.layer.masksToBounds = YES;
 
@@ -109,10 +105,9 @@ const UIFontTextStyle emailTextStyle = UIFontTextStyleSubheadline;
 
 - (void)setUserAvatar:(UIImage*)image {
   CGSize size = CGSizeMake(kAvatarImageSize, kAvatarImageSize);
-  self.imageView.image = ResizeImage(image, size, ProjectionMode::kAspectFit);
   self.imageView.layer.cornerRadius = kAvatarImageSize/2;
   self.imageView.layer.masksToBounds = YES;
-  [self.imageView setTintColor:nil];
+  self.imageView.image = ResizeImage(image, size, ProjectionMode::kAspectFill);
 }
 
 @end

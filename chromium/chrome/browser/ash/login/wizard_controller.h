@@ -23,7 +23,6 @@
 #include "chrome/browser/ash/login/enrollment/enrollment_screen.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
 #include "chrome/browser/ash/login/screen_manager.h"
-#include "chrome/browser/ash/login/screens/active_directory_login_screen.h"
 #include "chrome/browser/ash/login/screens/assistant_optin_flow_screen.h"
 #include "chrome/browser/ash/login/screens/choobe_screen.h"
 #include "chrome/browser/ash/login/screens/consolidated_consent_screen.h"
@@ -38,6 +37,7 @@
 #include "chrome/browser/ash/login/screens/enable_debugging_screen.h"
 #include "chrome/browser/ash/login/screens/family_link_notice_screen.h"
 #include "chrome/browser/ash/login/screens/fingerprint_setup_screen.h"
+#include "chrome/browser/ash/login/screens/gaia_info_screen.h"
 #include "chrome/browser/ash/login/screens/gaia_password_changed_screen.h"
 #include "chrome/browser/ash/login/screens/gaia_password_changed_screen_legacy.h"
 #include "chrome/browser/ash/login/screens/gaia_screen.h"
@@ -237,9 +237,6 @@ class WizardController : public OobeUI::Observer {
   void ShowGaiaPasswordChangedScreenLegacy(const AccountId& account_id,
                                            bool has_error);
 
-  // Configure and show active directory password change screen.
-  void ShowActiveDirectoryPasswordChangeScreen(const std::string& username);
-
   // Configure and show the signin fatal error screen.
   void ShowSignInFatalErrorScreen(SignInFatalErrorScreen::Error error,
                                   base::Value::Dict params);
@@ -332,6 +329,7 @@ class WizardController : public OobeUI::Observer {
   void ShowDisplaySizeScreen();
   void ShowGaiaPasswordChangedScreen(std::unique_ptr<UserContext> user_context);
   void ShowDrivePinningScreen();
+  void ShowGaiaInfoScreen();
 
   // Shows images login screen.
   void ShowLoginScreen();
@@ -348,8 +346,7 @@ class WizardController : public OobeUI::Observer {
   // `exit_reason` is the screen specific exit reason reported by the screen.
   void OnScreenExit(OobeScreenId screen, const std::string& exit_reason);
 
-  // Advances either to Gaia screen or Active Directory login screen, depending
-  // on the device state.
+  // Advances to Gaia login screen.
   void AdvanceToSigninScreen();
 
   // Exit handlers:
@@ -389,7 +386,6 @@ class WizardController : public OobeUI::Observer {
   void OnUpdateRequiredScreenExit();
   void OnOobeFlowFinished();
   void OnPackagedLicenseScreenExit(PackagedLicenseScreen::Result result);
-  void OnActiveDirectoryPasswordChangeScreenExit();
   void OnFamilyLinkNoticeScreenExit(FamilyLinkNoticeScreen::Result result);
   void OnUserCreationScreenExit(UserCreationScreen::Result result);
   void OnGaiaScreenExit(GaiaScreen::Result result);
@@ -398,7 +394,6 @@ class WizardController : public OobeUI::Observer {
   void OnPasswordChangeLegacyScreenExit(
       GaiaPasswordChangedScreenLegacy::Result result);
   void OnPasswordChangeScreenExit(GaiaPasswordChangedScreen::Result result);
-  void OnActiveDirectoryLoginScreenExit();
   void OnSignInFatalErrorScreenExit();
   void OnEduCoexistenceLoginScreenExit(
       EduCoexistenceLoginScreen::Result result);
@@ -420,6 +415,7 @@ class WizardController : public OobeUI::Observer {
   void OnTouchpadScreenExit(TouchpadScrollScreen::Result result);
   void OnDisplaySizeScreenExit(DisplaySizeScreen::Result result);
   void OnDrivePinningScreenExit(DrivePinningScreen::Result result);
+  void OnGaiaInfoScreenExit(GaiaInfoScreen::Result result);
 
   // Callback invoked once it has been determined whether the device is disabled
   // or not.
@@ -526,7 +522,8 @@ class WizardController : public OobeUI::Observer {
   static bool skip_enrollment_prompts_for_testing_;
 
   // Screen that's currently active.
-  raw_ptr<BaseScreen, ExperimentalAsh> current_screen_ = nullptr;
+  raw_ptr<BaseScreen, DanglingUntriaged | ExperimentalAsh> current_screen_ =
+      nullptr;
 
   // True if full OOBE flow should be shown.
   bool is_out_of_box_ = false;
@@ -585,6 +582,9 @@ class WizardController : public OobeUI::Observer {
   base::ScopedObservation<OobeUI, OobeUI::Observer> oobe_ui_observation_{this};
 
   base::ObserverList<ScreenObserver> screen_observers_;
+
+  // Shared factory for outgoing network requests.
+  scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
 
   base::WeakPtrFactory<WizardController> weak_factory_{this};
 };

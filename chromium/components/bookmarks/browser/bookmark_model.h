@@ -56,7 +56,6 @@ class BookmarkCodecTest;
 class BookmarkLoadDetails;
 class BookmarkModelObserver;
 class BookmarkStorage;
-class BookmarkUndoDelegate;
 class ModelLoader;
 class ScopedGroupBookmarkActions;
 class TestBookmarkClient;
@@ -76,9 +75,13 @@ struct TitledUrlMatch;
 //
 // You should NOT directly create a BookmarkModel, instead go through the
 // BookmarkModelFactory.
-class BookmarkModel : public BookmarkUndoProvider,
-                      public KeyedService,
-                      public base::SupportsUserData {
+//
+// Marked final to prevent unintended subclassing.
+// `MoveToOtherModelWithNewNodeIdsAndUuids` affects two instances, and assumes
+// that both instances are `BookmarkModel`, not some subclasses.
+class BookmarkModel final : public BookmarkUndoProvider,
+                            public KeyedService,
+                            public base::SupportsUserData {
  public:
   explicit BookmarkModel(std::unique_ptr<BookmarkClient> client);
 
@@ -91,7 +94,7 @@ class BookmarkModel : public BookmarkUndoProvider,
   // most heavy-lifting taking place in a background sequence. Upon completion,
   // loaded() will return true and observers will be notified via
   // BookmarkModelLoaded(). Uses different files depending on
-  // |sync_storage_type| to support local and account storages.
+  // |storage_type| to support local and account storages.
   // Please note that for the time being the local storage is also used when
   // sync is on.
   // TODO(crbug.com/1422201): Update the note above when the local storage is
@@ -180,6 +183,30 @@ class BookmarkModel : public BookmarkUndoProvider,
   void Copy(const BookmarkNode* node,
             const BookmarkNode* new_parent,
             size_t index);
+
+  // TODO(crbug.com/1453250): Change this function to be invoked on the
+  //                          destination model rather than on the source one.
+  //
+  // Moves `node` to another instance of `BookmarkModel` as determined by
+  // `dest_model`, where it is inserted under `dest_parent` as a last child.
+  // If `node` is a folder, all descendants (if any) are also moved, maintaining
+  // the same hierarchy.
+  // Please note that `BookmarkNode` objects representing `node` itself and its
+  // descendants are not reused. Instead, the hierarchy is cloned (and new IDs
+  // are generated) and this cloned hierarchy is added to `dest_model`.
+  //
+  // `node` must belong to this model, while `dest_parent` must belong to
+  // `dest_model` (which must be different from `this`).
+  //
+  // Returns a pointer to the new node in the destination model.
+  //
+  // Calling this will send `OnWillRemoveBookmarks` and `BookmarkNodeRemoved`
+  // for observers of this model and `BookmarkNodeAdded` for observers of
+  // `dest_model`.
+  const BookmarkNode* MoveToOtherModelWithNewNodeIdsAndUuids(
+      const BookmarkNode* node,
+      BookmarkModel* dest_model,
+      const BookmarkNode* dest_parent);
 
   // Returns the favicon for |node|. If the favicon has not yet been loaded,
   // a load will be triggered and the observer of the model notified when done.
@@ -286,13 +313,13 @@ class BookmarkModel : public BookmarkUndoProvider,
   // combobox of most recently modified folders.
   void ResetDateFolderModified(const BookmarkNode* node);
 
-  // Updates the last used `time` for the given `id` / `url`. `just_opened`
+  // Updates the last used `time` for the given `node`. `just_opened`
   // indicates whether this is being called as a result of the bookmark being
-  // opened.`just_opened` being false means that this update didn't come from
-  // a user such as sync or history updating a node automatically.
+  // opened. `just_opened` being false means that this update didn't come from
+  // a user, such as sync updating a node automatically.
   void UpdateLastUsedTime(const BookmarkNode* node,
                           const base::Time time,
-                          bool just_opened = false);
+                          bool just_opened);
 
   // Clears the last used time for the given time range. Called when the user
   // clears their history. Time() and Time::Max() are used for min/max values.
@@ -353,11 +380,14 @@ class BookmarkModel : public BookmarkUndoProvider,
   // Returns the client used by this BookmarkModel.
   BookmarkClient* client() const { return client_.get(); }
 
-  void SetUndoDelegate(BookmarkUndoDelegate* undo_delegate);
-
   base::WeakPtr<BookmarkModel> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
+
+  // Attempts to delete the account storage file in case the account storage
+  // support was rolled back. If the account storage support wasn't enabled -
+  // this is a no-op. Deletion is done asynchronously on a background thread.
+  static void WipeAccountStorageForRollback(const base::FilePath& profile_path);
 
   // Vivaldi: Returns the 'trash' node. This is NULL until loaded.
   const BookmarkNode* trash_node() const { return trash_node_; }
@@ -380,13 +410,22 @@ class BookmarkModel : public BookmarkUndoProvider,
                           std::unique_ptr<BookmarkNode> node) override;
 
   // Notifies the observers for adding every descendant of |node|.
-  void NotifyNodeAddedForAllDescendants(const BookmarkNode* node);
+  void NotifyNodeAddedForAllDescendants(const BookmarkNode* node,
+                                        bool added_by_user);
 
   // Removes the node from internal maps and recurses through all children. If
   // the node is a url, its url is added to removed_urls.
   //
   // This does NOT delete the node.
   void RemoveNodeFromIndexRecursive(BookmarkNode* node);
+
+  // Clones `node` and all its descendants (if any) for adding it in
+  // `dest_model`. Doesn't add it to `dest_model` - this is the responsibility
+  // of the caller. Bookmarks IDs are not copied and new IDs are generated
+  // instead.
+  std::unique_ptr<BookmarkNode> CloneSubtreeForOtherModelWithNewNodeIdsAndUuids(
+      const BookmarkNode* node,
+      BookmarkModel* dest_model);
 
   // Called when done loading. Updates internal state and notifies observers.
   void DoneLoading(std::unique_ptr<BookmarkLoadDetails> details);
@@ -436,8 +475,6 @@ class BookmarkModel : public BookmarkUndoProvider,
   // This is used by BookmarkCodec to report the maximum ID after it's done
   // decoding since during decoding codec assigns node IDs.
   void set_next_node_id(int64_t id) { next_node_id_ = id; }
-
-  BookmarkUndoDelegate* undo_delegate() const;
 
   // Implementation of `UpdateLastUsedTime` which gives the option to skip
   // saving the change to `BookmarkStorage. Used to efficiently make changes
@@ -493,9 +530,6 @@ class BookmarkModel : public BookmarkUndoProvider,
   int extensive_changes_ = 0;
 
   std::set<std::string> non_cloned_keys_;
-
-  raw_ptr<BookmarkUndoDelegate, DanglingUntriaged> undo_delegate_ = nullptr;
-  std::unique_ptr<BookmarkUndoDelegate> empty_undo_delegate_;
 
   scoped_refptr<ModelLoader> model_loader_;
 

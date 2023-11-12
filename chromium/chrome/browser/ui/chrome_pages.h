@@ -114,6 +114,7 @@ enum FeedbackSource {
   kFeedbackSourceAutofillContextMenu,
   kFeedbackSourceUnknownLacrosSource,
   kFeedbackSourceWindowLayoutMenu,
+  kFeedbackSourcePriceInsights,
 
   // Must be last.
   kFeedbackSourceCount,
@@ -157,7 +158,6 @@ void ShowChromeWhatsNew(Browser* browser);
 #endif
 void LaunchReleaseNotes(Profile* profile, apps::LaunchSource source);
 void ShowBetaForum(Browser* browser);
-void ShowPolicy(Browser* browser);
 void ShowSlow(Browser* browser);
 
 // Constructs a settings GURL for the specified |sub_page|.
@@ -194,7 +194,7 @@ void ShowSafeBrowsingEnhancedProtection(Browser* browser);
 void ShowImportDialog(Browser* browser);
 void ShowAboutChrome(Browser* browser);
 void ShowSearchEngineSettings(Browser* browser);
-void ShowWebStoreFromAppMenu(Browser* browser);
+void ShowWebStore(Browser* browser, const base::StringPiece& utm_source_value);
 void ShowPrivacySandboxSettings(Browser* browser);
 void ShowPrivacySandboxAdMeasurementSettings(Browser* browser);
 void ShowPrivacySandboxAdPersonalization(Browser* browser);
@@ -230,18 +230,6 @@ void ShowDiagnosticsApp(Profile* profile);
 void ShowFirmwareUpdatesApp(Profile* profile);
 
 void ShowShortcutCustomizationApp(Profile* profile);
-#endif
-
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-// Initiates signin in a new browser tab.
-void ShowBrowserSignin(Browser* browser,
-                       signin_metrics::AccessPoint access_point,
-                       signin::ConsentLevel consent_level);
-
-// If the user is already signed in, shows the "Signin" portion of Settings,
-// otherwise initiates signin in a new browser tab.
-void ShowBrowserSigninOrSettings(Browser* browser,
-                                 signin_metrics::AccessPoint access_point);
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \

@@ -81,6 +81,8 @@
 #include "ui/gfx/icon_util.h"
 #endif
 
+#include "chrome/common/chrome_constants.h"
+
 namespace web_app {
 
 namespace {
@@ -442,8 +444,11 @@ base::FilePath OsIntegrationTestOverrideImpl::GetShortcutPath(
     return shortcut_path;
   }
 #elif BUILDFLAG(IS_LINUX)
+
+  std::string exec_name(chrome::kBrowserProcessExecutableName);
   std::string shortcut_filename =
-      "chrome-" + app_id + "-" + profile->GetBaseName().value() + ".desktop";
+      exec_name + "-" + app_id + "-" + profile->GetBaseName().value() +
+      ".desktop";
   base::FilePath shortcut_path = shortcut_dir.Append(shortcut_filename);
   if (base::PathExists(shortcut_path)) {
     return shortcut_path;
@@ -743,9 +748,11 @@ OsIntegrationTestOverrideImpl::OsIntegrationTestOverrideImpl(
   base::win::RegKey key;
   // In a real registry, this key would exist, but since we're using
   // hive override, it's empty, so we create this key.
-  key.Create(HKEY_CURRENT_USER,
-             L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-             KEY_SET_VALUE);
+  const LONG result =
+      key.Create(HKEY_CURRENT_USER,
+                 L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+                 KEY_SET_VALUE);
+  CHECK_EQ(result, ERROR_SUCCESS);
 #endif
 }
 

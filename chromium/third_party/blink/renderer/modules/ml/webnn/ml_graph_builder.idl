@@ -98,8 +98,12 @@ dictionary MLResample2dOptions {
   sequence<[EnforceRange] unsigned long> axes;
 };
 
-dictionary MLTransposeOptions{
+dictionary MLTransposeOptions {
   sequence<[EnforceRange] unsigned long> permutation;
+};
+
+dictionary MLSplitOptions {
+  [EnforceRange] unsigned long axis = 0;
 };
 
 [
@@ -127,6 +131,12 @@ dictionary MLTransposeOptions{
   [RaisesException] MLOperand div(MLOperand a, MLOperand b);
   [RaisesException] MLOperand max(MLOperand a, MLOperand b);
   [RaisesException] MLOperand min(MLOperand a, MLOperand b);
+
+  // Element-wise unary operations
+  [RaisesException] MLOperand abs(MLOperand x);
+  [RaisesException] MLOperand ceil(MLOperand x);
+  [RaisesException] MLOperand floor(MLOperand x);
+  [RaisesException] MLOperand neg(MLOperand x);
 
   [RaisesException] MLOperand elu(MLOperand x, optional MLEluOptions options = {});
   [RaisesException] MLActivation elu(optional MLEluOptions options = {});
@@ -158,9 +168,16 @@ dictionary MLTransposeOptions{
   [RaisesException] MLOperand sigmoid(MLOperand input);
   [RaisesException] MLActivation sigmoid();
 
+  [RaisesException] MLOperand slice(MLOperand input, sequence<[EnforceRange] unsigned long> starts, sequence<[EnforceRange] unsigned long> sizes);
+
   [RaisesException] MLOperand transpose(MLOperand input, optional MLTransposeOptions options = {});
 
   [RaisesException] MLOperand softmax(MLOperand input);
+
+  [RaisesException] sequence<MLOperand> split(MLOperand input, [EnforceRange] sequence<unsigned long> splits, optional MLSplitOptions options = {});
+
+  [RaisesException] MLOperand tanh(MLOperand input);
+  [RaisesException] MLActivation tanh();
 
   [
     CallWith=ScriptState,

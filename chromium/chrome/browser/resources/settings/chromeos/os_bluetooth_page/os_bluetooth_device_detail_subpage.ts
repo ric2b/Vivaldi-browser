@@ -8,7 +8,7 @@
  * only be called when a device exist.
  */
 
-import '../../settings_shared.css.js';
+import '../settings_shared.css.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/policy/cr_tooltip_icon.js';
 import './os_bluetooth_change_device_name_dialog.js';
@@ -27,9 +27,8 @@ import {AudioOutputCapability, BluetoothSystemProperties, DeviceConnectionState,
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {OsSettingsSubpageElement} from '../os_settings_page/os_settings_subpage.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteOriginMixin} from '../route_origin_mixin.js';
-import {Route, Router} from '../router.js';
+import {Route, Router, routes} from '../router.js';
 
 import {getTemplate} from './os_bluetooth_device_detail_subpage.html.js';
 import {OsBluetoothDevicesSubpageBrowserProxy, OsBluetoothDevicesSubpageBrowserProxyImpl} from './os_bluetooth_devices_subpage_browser_proxy.js';

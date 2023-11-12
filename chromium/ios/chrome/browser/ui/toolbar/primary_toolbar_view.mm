@@ -24,8 +24,10 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
 #import "ui/base/device_form_factor.h"
 
 using ui::GetDeviceFormFactor;
@@ -44,11 +46,6 @@ using vivaldi::IsVivaldiRunning;
 
 // ContentView of the vibrancy effect if there is one, self otherwise.
 @property(nonatomic, strong) UIView* contentView;
-
-// Container for the location bar, redefined as readwrite.
-@property(nonatomic, strong, readwrite) UIView* locationBarContainer;
-// The height of the container for the location bar, redefined as readwrite.
-@property(nonatomic, strong, readwrite) NSLayoutConstraint* locationBarHeight;
 
 // StackView containing the leading buttons (relative to the location bar). It
 // should only contain ToolbarButtons. Redefined as readwrite.
@@ -87,6 +84,15 @@ using vivaldi::IsVivaldiRunning;
 
 // Button to cancel the edit of the location bar, redefined as readwrite.
 @property(nonatomic, strong, readwrite) UIButton* cancelButton;
+
+#pragma mark** Location bar. **
+// Location bar containing the omnibox.
+@property(nonatomic, strong) UIView* locationBarView;
+// Container for the location bar, redefined as readwrite.
+@property(nonatomic, strong, readwrite) UIView* locationBarContainer;
+// The height of the container for the location bar, redefined as readwrite.
+@property(nonatomic, strong, readwrite)
+    NSLayoutConstraint* locationBarContainerHeight;
 // Button taking the full size of the toolbar. Expands the toolbar when  tapped.
 // Redefined as readwrite.
 @property(nonatomic, strong, readwrite) UIButton* collapsedToolbarButton;
@@ -113,10 +119,9 @@ using vivaldi::IsVivaldiRunning;
 
 @implementation PrimaryToolbarView
 
-@synthesize locationBarView = _locationBarView;
 @synthesize fakeOmniboxTarget = _fakeOmniboxTarget;
 @synthesize locationBarBottomConstraint = _locationBarBottomConstraint;
-@synthesize locationBarHeight = _locationBarHeight;
+@synthesize locationBarContainerHeight = _locationBarContainerHeight;
 @synthesize buttonFactory = _buttonFactory;
 @synthesize allButtons = _allButtons;
 @synthesize progressBar = _progressBar;
@@ -230,7 +235,8 @@ using vivaldi::IsVivaldiRunning;
   self.locationBarContainer = [[UIView alloc] init];
 
   if (IsVivaldiRunning()) {
-    self.locationBarContainer.backgroundColor = UIColor.clearColor;
+    self.locationBarContainer.backgroundColor =
+      [UIColor colorNamed:vNTPBackgroundColor];;
   } else {
   self.locationBarContainer.backgroundColor =
       [self.buttonFactory.toolbarConfiguration
@@ -255,25 +261,7 @@ using vivaldi::IsVivaldiRunning;
   self.reloadButton = [self.buttonFactory reloadButton];
 
   if (IsVivaldiRunning()) {
-    if (GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE) {
-      self.leadingStackViewButtons = @[
-        self.backButton,
-        self.forwardButton,
-        self.stopButton,
-        self.reloadButton,
-      ];
-    } else {
-      self.panelButton = [self.buttonFactory panelButton];
-      self.shieldButton = [self.buttonFactory shieldButton];
-      self.leadingStackViewButtons = @[
-        self.panelButton,
-        self.backButton,
-        self.forwardButton,
-        self.stopButton,
-        self.reloadButton,
-        self.shieldButton
-      ];
-    }
+    self.leadingStackViewButtons = [self buttonsForLeadingStackView];
   } else {
   self.leadingStackViewButtons = @[
     self.backButton, self.forwardButton, self.stopButton, self.reloadButton
@@ -298,17 +286,7 @@ using vivaldi::IsVivaldiRunning;
   self.toolsMenuButton = [self.buttonFactory toolsMenuButton];
 
   if (IsVivaldiRunning()) {
-    if (GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE) {
-      self.vivaldiMoreButton = [self.buttonFactory vivaldiMoreButton];
-      self.trailingStackViewButtons =
-          @[self.vivaldiMoreButton,
-            self.tabGridButton,
-            self.toolsMenuButton ];
-    } else {
-      self.trailingStackViewButtons =
-          @[self.tabGridButton,
-            self.toolsMenuButton ];
-    }
+    self.trailingStackViewButtons = [self buttonsForTrailingStackView];
   } else {
   self.trailingStackViewButtons =
       @[ self.shareButton, self.tabGridButton, self.toolsMenuButton ];
@@ -369,6 +347,17 @@ using vivaldi::IsVivaldiRunning;
                                       kToolbarSeparatorHeight)],
   ]];
 
+  if (IsVivaldiRunning()) {
+    [NSLayoutConstraint activateConstraints:@[
+      [self.leadingStackView.leadingAnchor
+          constraintEqualToAnchor:safeArea.leadingAnchor
+                         constant:vPrimaryToolbarHorizontalPadding],
+      [self.leadingStackView.centerYAnchor
+          constraintEqualToAnchor:self.locationBarContainer.centerYAnchor],
+      [self.leadingStackView.heightAnchor
+          constraintEqualToConstant:kAdaptiveToolbarButtonHeight],
+    ]];
+  } else {
   // Leading StackView constraints.
   [NSLayoutConstraint activateConstraints:@[
     [self.leadingStackView.leadingAnchor
@@ -379,16 +368,17 @@ using vivaldi::IsVivaldiRunning;
     [self.leadingStackView.heightAnchor
         constraintEqualToConstant:kAdaptiveToolbarButtonHeight],
   ]];
+  } // End Vivaldi
 
   // LocationBar constraints. The constant value is set by the VC.
-  self.locationBarHeight =
+  self.locationBarContainerHeight =
       [self.locationBarContainer.heightAnchor constraintEqualToConstant:0];
   self.locationBarBottomConstraint = [self.locationBarContainer.bottomAnchor
       constraintEqualToAnchor:self.bottomAnchor];
 
   [NSLayoutConstraint activateConstraints:@[
     self.locationBarBottomConstraint,
-    self.locationBarHeight,
+    self.locationBarContainerHeight,
   ]];
 
   if (IsVivaldiRunning()) {
@@ -412,14 +402,11 @@ using vivaldi::IsVivaldiRunning;
   } // End Vivaldi
 
   if (IsVivaldiRunning()) {
-
     [self.contractedNoMarginConstraints addObjectsFromArray:@[
-      [self.locationBarContainer.leadingAnchor
-          constraintEqualToAnchor:safeArea.leadingAnchor
-                         constant:kExpandedLocationBarHorizontalMargin],
       [self.locationBarContainer.trailingAnchor
-          constraintEqualToAnchor:safeArea.trailingAnchor
-                         constant:-kExpandedLocationBarHorizontalMargin]
+          constraintEqualToAnchor:self.trailingStackView.leadingAnchor],
+      [self.locationBarContainer.leadingAnchor
+          constraintEqualToAnchor:self.leadingStackView.trailingAnchor],
     ]];
 
     [self.expandedConstraints addObjectsFromArray:@[
@@ -428,6 +415,17 @@ using vivaldi::IsVivaldiRunning;
       [self.locationBarContainer.leadingAnchor
           constraintEqualToAnchor:safeArea.leadingAnchor
                          constant:vLocationBarLeadingPadding]
+    ]];
+
+    // Trailing StackView constraints.
+    [NSLayoutConstraint activateConstraints:@[
+      [self.trailingStackView.trailingAnchor
+          constraintEqualToAnchor:safeArea.trailingAnchor
+                         constant:-vPrimaryToolbarHorizontalPadding],
+      [self.trailingStackView.centerYAnchor
+          constraintEqualToAnchor:self.locationBarContainer.centerYAnchor],
+      [self.trailingStackView.heightAnchor
+          constraintEqualToConstant:kAdaptiveToolbarButtonHeight],
     ]];
   } else {
 
@@ -448,7 +446,6 @@ using vivaldi::IsVivaldiRunning;
         constraintEqualToAnchor:safeArea.leadingAnchor
                        constant:kExpandedLocationBarHorizontalMargin]
   ]];
-  } // End Vivaldi
 
   // Trailing StackView constraints.
   [NSLayoutConstraint activateConstraints:@[
@@ -460,6 +457,7 @@ using vivaldi::IsVivaldiRunning;
     [self.trailingStackView.heightAnchor
         constraintEqualToConstant:kAdaptiveToolbarButtonHeight],
   ]];
+  } // End Vivaldi
 
   // locationBarView constraints, if present.
   if (self.locationBarView) {
@@ -496,13 +494,16 @@ using vivaldi::IsVivaldiRunning;
   AddSameConstraints(self, self.collapsedToolbarButton);
 }
 
-#pragma mark - Property accessors
+#pragma mark - AdaptiveToolbarView
 
 - (void)setLocationBarView:(UIView*)locationBarView {
   if (_locationBarView == locationBarView) {
     return;
   }
-  [_locationBarView removeFromSuperview];
+
+  if ([_locationBarView superview] == self.locationBarContainer) {
+    [_locationBarView removeFromSuperview];
+  }
 
   _locationBarView = locationBarView;
   locationBarView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -527,13 +528,103 @@ using vivaldi::IsVivaldiRunning;
   return _allButtons;
 }
 
-#pragma mark - AdaptiveToolbarView
-
 - (ToolbarButton*)openNewTabButton {
   return nil;
 }
 
 #pragma mark: - Vivaldi
+- (void)redrawToolbarButtons {
+  [self redrawLeadingStackView];
+  [self redrawTrailingStackView];
+}
+
+- (void)redrawLeadingStackView {
+  self.leadingStackViewButtons = [self buttonsForLeadingStackView];
+  [self redrawStackView:self.leadingStackView
+            withButtons:self.leadingStackViewButtons];
+}
+
+- (void)redrawTrailingStackView {
+  self.trailingStackViewButtons = [self buttonsForTrailingStackView];
+  [self redrawStackView:self.trailingStackView
+            withButtons:self.trailingStackViewButtons];
+}
+
+- (NSArray*)buttonsForLeadingStackView {
+  BOOL isPhone = GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
+  BOOL isVerticalRegular = VivaldiGlobalHelpers.isVerticalTraitRegular;
+  BOOL isHorizontalNotRegular = !VivaldiGlobalHelpers.isHorizontalTraitRegular;
+
+  if (isPhone || !VivaldiGlobalHelpers.canShowSidePanel) {
+    if (isHorizontalNotRegular && isVerticalRegular) {
+      self.shieldButton = [self.buttonFactory shieldButton];
+      return @[ self.shieldButton ];
+    } else {
+      return @[
+        self.backButton,
+        self.forwardButton,
+        self.stopButton,
+        self.reloadButton
+      ];
+    }
+  } else {
+    self.panelButton = [self.buttonFactory panelButton];
+    self.shieldButton = [self.buttonFactory shieldButton];
+    return @[
+      self.panelButton,
+      self.backButton,
+      self.forwardButton,
+      self.stopButton,
+      self.reloadButton,
+      self.shieldButton
+    ];
+  }
+}
+
+- (NSArray*)buttonsForTrailingStackView {
+  BOOL isPhone = GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
+  BOOL isVerticalRegular = VivaldiGlobalHelpers.isVerticalTraitRegular;
+  BOOL isHorizontalNotRegular = !VivaldiGlobalHelpers.isHorizontalTraitRegular;
+
+  if (isPhone || !VivaldiGlobalHelpers.canShowSidePanel) {
+    if (isHorizontalNotRegular && isVerticalRegular) {
+      return @[ self.toolsMenuButton ];
+    } else {
+      self.vivaldiMoreButton = [self.buttonFactory vivaldiMoreButton];
+      return @[
+        self.vivaldiMoreButton,
+        self.tabGridButton,
+        self.toolsMenuButton
+      ];
+    }
+  } else {
+    return @[
+      self.tabGridButton,
+      self.toolsMenuButton
+    ];
+  }
+}
+
+- (void)redrawStackView:(UIStackView*)stackView
+            withButtons:(NSArray*)buttons {
+
+  // Remove all subviews
+  for (UIView *view in stackView.arrangedSubviews) {
+    [stackView removeArrangedSubview:view];
+    [view removeFromSuperview];
+  }
+
+  // Add new buttons
+  for (UIView *button in buttons) {
+    [stackView addArrangedSubview:button];
+  }
+}
+
+- (void)handleToolbarButtonVisibility:(BOOL)show {
+  self.leadingStackView.hidden = !show;
+  self.trailingStackView.hidden = !show;
+}
+
 - (void)setVivaldiMoreActionItemsWithShareState:(BOOL)enabled {
   self.vivaldiMoreButton.menu =
       [self.buttonFactory contextMenuForMoreWithAllButtons:enabled];

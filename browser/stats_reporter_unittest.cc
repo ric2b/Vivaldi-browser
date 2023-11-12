@@ -37,7 +37,7 @@ constexpr char kBodyStart[] =
 void ExpectReportingDataMatch(
     const StatsReporterImpl::ReportingData& local_reporting_data,
     const base::Value& os_reporting_data) {
-  const std::string* uid = os_reporting_data.FindStringKey("unique_user_id");
+  const std::string* uid = os_reporting_data.GetDict().FindString("unique_user_id");
   EXPECT_TRUE(uid && *uid == local_reporting_data.user_id);
   absl::optional<int> pings_since_last_month =
       os_reporting_data.GetDict().FindInt("pings_since_last_month");
@@ -201,27 +201,27 @@ TEST(StatsReporterTest, RejectEarlyAttempt) {
 
   absl::optional<base::Value> os_profile_reporting_data_json(
     base::Value::Type::DICT);
-  os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
-  os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
+  os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 2);
+  os_profile_reporting_data_json->GetDict().Set(
       "installation_time",
       base::TimeToValue(local_state_reporting_data.installation_time));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_daily_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.daily));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_weekly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.weekly));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_monthly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.monthly));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_trimestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_semestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.semestrial));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_yearly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.yearly));
 
@@ -273,21 +273,21 @@ TEST(StatsReporterTest, NewInstallation) {
 
   absl::optional<base::Value> os_profile_reporting_data_json(
     base::Value::Type::DICT);
-  os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
-  os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
+  os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 2);
+  os_profile_reporting_data_json->GetDict().Set(
       "installation_time", base::TimeToValue(time - base::Days(5)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_daily_ping", base::TimeToValue(time + base::Hours(2)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_weekly_ping", base::TimeToValue(time + base::Days(2)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_monthly_ping", base::TimeToValue(time + base::Days(23)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_trimestrial_ping", base::TimeToValue(time + base::Days(84)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_semestrial_ping", base::TimeToValue(time + base::Days(176)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_yearly_ping", base::TimeToValue(time + base::Days(360)));
 
   std::string request_url;
@@ -370,21 +370,21 @@ TEST(StatsReporterTest, MovedStandalone) {
 
   absl::optional<base::Value> os_profile_reporting_data_json(
     base::Value::Type::DICT);
-  os_profile_reporting_data_json->SetStringKey("unique_user_id", other_uid);
-  os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 6);
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set("unique_user_id", other_uid);
+  os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 6);
+  os_profile_reporting_data_json->GetDict().Set(
       "installation_time", base::TimeToValue(time - base::Days(365)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_daily_ping", base::TimeToValue(time + base::Hours(7)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_weekly_ping", base::TimeToValue(time + base::Days(5)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_monthly_ping", base::TimeToValue(time + base::Days(30)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_trimestrial_ping", base::TimeToValue(time + base::Days(90)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_semestrial_ping", base::TimeToValue(time + base::Days(180)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_yearly_ping", base::TimeToValue(time + base::Days(360)));
 
   std::string request_url;
@@ -492,27 +492,27 @@ TEST(StatsReporterTest, IgnoreLegacyUserId) {
 
   absl::optional<base::Value> os_profile_reporting_data_json(
     base::Value::Type::DICT);
-  os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
-  os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
+  os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 2);
+  os_profile_reporting_data_json->GetDict().Set(
       "installation_time",
       base::TimeToValue(local_state_reporting_data.installation_time));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_daily_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.daily));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_weekly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.weekly));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_monthly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.monthly));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_trimestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_semestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.semestrial));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_yearly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.yearly));
 
@@ -565,26 +565,26 @@ TEST(StatsReporterTest, DifferentPingsSinceLastMonth) {
 
   absl::optional<base::Value> os_profile_reporting_data_json(
     base::Value::Type::DICT);
-  os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
-  os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 7);
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
+  os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 7);
+  os_profile_reporting_data_json->GetDict().Set(
       "installation_time", base::TimeToValue(time - base::Days(365)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_daily_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.daily));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_weekly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.weekly));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_monthly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.monthly));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_trimestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_semestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.semestrial));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_yearly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.yearly));
 
@@ -638,24 +638,24 @@ TEST(StatsReporterTest, OsMonthlyPingAhead) {
 
   absl::optional<base::Value> os_profile_reporting_data_json(
     base::Value::Type::DICT);
-  os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
-  os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 0);
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
+  os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 0);
+  os_profile_reporting_data_json->GetDict().Set(
       "installation_time", base::TimeToValue(time - base::Days(365)));
-  os_profile_reporting_data_json->SetKey("next_daily_ping",
+  os_profile_reporting_data_json->GetDict().Set("next_daily_ping",
                                          base::TimeToValue(time));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_weekly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.weekly));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_monthly_ping", base::TimeToValue(time + base::Days(30)));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_trimestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_semestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.semestrial));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_yearly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.yearly));
 
@@ -709,27 +709,27 @@ TEST(StatsReporterTest, LongRun) {
 
   absl::optional<base::Value> os_profile_reporting_data_json(
     base::Value::Type::DICT);
-  os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
-  os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 20);
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
+  os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 20);
+  os_profile_reporting_data_json->GetDict().Set(
       "installation_time",
       base::TimeToValue(local_state_reporting_data.installation_time));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_daily_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.daily));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_weekly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.weekly));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_monthly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.monthly));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_trimestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_semestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.semestrial));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_yearly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.yearly));
 
@@ -1065,27 +1065,27 @@ TEST(StatsReporterTest, CorrectMonthSemestrialPing) {
 
   absl::optional<base::Value> os_profile_reporting_data_json(
     base::Value::Type::DICT);
-  os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
-  os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 10);
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
+  os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 10);
+  os_profile_reporting_data_json->GetDict().Set(
       "installation_time",
       base::TimeToValue(local_state_reporting_data.installation_time));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_daily_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.daily));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_weekly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.weekly));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_monthly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.monthly));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_trimestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.trimestrial));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_semestrial_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.semestrial));
-  os_profile_reporting_data_json->SetKey(
+  os_profile_reporting_data_json->GetDict().Set(
       "next_yearly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.yearly));
 

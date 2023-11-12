@@ -26,9 +26,7 @@ import androidx.core.os.BuildCompat;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.Shadows;
@@ -41,9 +39,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Matchers;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.components.browser_ui.share.ShareHelper.TargetChosenReceiver;
@@ -53,6 +49,7 @@ import org.chromium.ui.base.IntentRequestTracker;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.JUnitTestGURLs;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -60,7 +57,6 @@ import java.util.List;
  */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(shadows = {ShadowPendingIntent.class})
-@Features.DisableFeatures(ChromeFeatureList.CHROME_SHARING_HUB_LAUNCH_ADJACENT)
 public class ShareHelperUnitTest {
     private static final String INTENT_EXTRA_CHOOSER_CUSTOM_ACTIONS =
             "android.intent.extra.CHOOSER_CUSTOM_ACTIONS";
@@ -76,9 +72,6 @@ public class ShareHelperUnitTest {
     private WindowAndroid mWindow;
     private Activity mActivity;
     private Uri mImageUri;
-
-    @Rule
-    public TestRule mFeatureProcessor = new Features.JUnitProcessor();
 
     @Before
     public void setup() {
@@ -266,13 +259,6 @@ public class ShareHelperUnitTest {
         assertEquals("Custom action callback not called.", 1, callbackHelper.getCallCount());
     }
 
-    @Test(expected = AssertionError.class)
-    public void customActionShouldNotUsedWhenNotSupported() {
-        ChromeCustomShareAction.Provider provider =
-                new SingleCustomActionProvider("key", new CallbackHelper());
-        ShareHelper.shareWithSystemShareSheetUi(emptyShareParams(), null, false, provider);
-    }
-
     @Test
     public void shareWithPreviewUri() {
         ShareParams params = new ShareParams.Builder(mWindow, "title", JUnitTestGURLs.EXAMPLE_URL)
@@ -291,6 +277,28 @@ public class ShareHelperUnitTest {
         assertEquals("Intent is not a SEND intent.", Intent.ACTION_SEND, sharingIntent.getAction());
         assertEquals("Preview image Uri not set correctly.", mImageUri,
                 sharingIntent.getClipData().getItemAt(0).getUri());
+    }
+
+    @Test
+    public void shareMultipleImage() {
+        ShareParams params = new ShareParams.Builder(mWindow, "", "")
+                                     .setFileUris(new ArrayList<>(List.of(mImageUri, mImageUri)))
+                                     .setFileContentType("image/png")
+                                     .setBypassFixingDomDistillerUrl(true)
+                                     .build();
+        ShareHelper.shareWithSystemShareSheetUi(params, null, true);
+
+        Intent nextIntent = Shadows.shadowOf(mActivity).peekNextStartedActivity();
+        assertNotNull("Shared intent is null.", nextIntent);
+        assertEquals(
+                "Intent is not a chooser intent.", Intent.ACTION_CHOOSER, nextIntent.getAction());
+
+        // Verify sharing intent has the right image.
+        Intent sharingIntent = nextIntent.getParcelableExtra(Intent.EXTRA_INTENT);
+        assertEquals("Intent is not a SEND_MULTIPLE intent.", Intent.ACTION_SEND_MULTIPLE,
+                sharingIntent.getAction());
+        assertNotNull("Images should be shared as file list.",
+                sharingIntent.getParcelableArrayListExtra(Intent.EXTRA_STREAM));
     }
 
     private void selectComponentFromChooserIntent(Intent chooserIntent, ComponentName componentName)

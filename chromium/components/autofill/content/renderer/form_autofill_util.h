@@ -150,9 +150,10 @@ bool ExtractFormData(const blink::WebFormElement& form_element,
                      const FieldDataManager& field_data_manager,
                      FormData* data);
 
-// Returns true if at least one element from |control_elements| is visible.
+// Returns true if at least one element from |control_elements| is visible in
+// |document|.
 bool IsSomeControlElementVisible(
-    blink::WebLocalFrame* frame,
+    const blink::WebDocument& document,
     const std::set<FieldRendererId>& control_elements);
 
 // Helper functions to assist in getting the canonical form of the action and
@@ -193,13 +194,17 @@ bool IsAutofillableInputElement(const blink::WebInputElement& element);
 // {Text, Radiobutton, Checkbox, Select, TextArea}.
 bool IsAutofillableElement(const blink::WebFormControlElement& element);
 
+// Returns true iff `element` has a "webauthn" autocomplete attribute.
+bool IsWebauthnTaggedElement(const blink::WebFormControlElement& element);
+
 // Returns true if |element| can be edited (enabled and not read only).
 bool IsElementEditable(const blink::WebInputElement& element);
 
-// True if this node can take focus. If the layout is blocked, then the function
-// checks if the element takes up space in the layout, i.e., this element or a
-// descendant has a non-empty bounding client rect.
-bool IsWebElementFocusable(const blink::WebElement& element);
+// True if this element can take focus. If the layout is blocked, then the
+// function checks if the element takes up space in the layout, i.e., this
+// element or a descendant has a non-empty bounding client rect. If this element
+// is a selectmenu, checks whether a child of the selectmenu can take focus.
+bool IsWebElementFocusableForAutofill(const blink::WebElement& element);
 
 // A heuristic visibility detection. See crbug.com/1335257 for an overview of
 // relevant aspects.
@@ -255,7 +260,7 @@ struct ShadowFieldData;
 // will be copied from |field_data_manager|, if the argument is not null and
 // has entry for |element| (see properties in FieldPropertiesFlags).
 void WebFormControlElementToFormField(
-    FormRendererId form_renderer_id,
+    const blink::WebFormElement& form_element,
     const blink::WebFormControlElement& element,
     const FieldDataManager* field_data_manager,
     ExtractMask extract_mask,
@@ -277,6 +282,15 @@ bool WebFormElementToFormData(
     FormData* form,
     FormFieldData* field);
 
+// Returns the form that owns the `form_control`, or a null pointer if no form
+// owns the `form_control`. exists.
+//
+// The form that owns `form_control` is
+// - the form with which `form_control` is associated, if such a form exists,
+// - the closest shadow-including ancestor WebFormElement.
+blink::WebFormElement GetOwningForm(
+    const blink::WebFormControlElement& form_control);
+
 // Get all form control elements from |elements| that are not part of a form.
 std::vector<blink::WebFormControlElement> GetUnownedFormFieldElements(
     const blink::WebDocument& document);
@@ -291,7 +305,7 @@ std::vector<blink::WebElement> GetUnownedIframeElements(
     const blink::WebDocument& document);
 
 // Returns false iff the extraction fails because the number of fields exceeds
-// |kMaxParseableFields|, or |field| and |element| are not nullptr but
+// |kMaxExtractableFields|, or |field| and |element| are not nullptr but
 // |element| is not among |control_elements|.
 bool UnownedFormElementsToFormData(
     const std::vector<blink::WebFormControlElement>& control_elements,
@@ -438,6 +452,17 @@ std::u16string GetAriaLabel(const blink::WebDocument& document,
 // attribute of |element|.
 std::u16string GetAriaDescription(const blink::WebDocument& document,
                                   const blink::WebElement& element);
+
+// Helper function to return the next web node of `current_node` in the DOM.
+// `forward` determines the direction to traverse in.
+blink::WebNode NextWebNode(const blink::WebNode& current_node, bool forward);
+
+// Iterates through the node neighbors of form and form control elements in
+// `document` in search of four digit combinations.
+void TraverseDomForFourDigitCombinations(
+    const blink::WebDocument& document,
+    base::OnceCallback<void(const std::vector<std::string>&)>
+        potential_matches);
 
 }  // namespace form_util
 }  // namespace autofill

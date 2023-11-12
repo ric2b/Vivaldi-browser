@@ -284,6 +284,7 @@ ts_files = [
 
   # Containers.
   "file_manager/containers/breadcrumb_container.ts",
+  "file_manager/containers/cloud_panel_container.ts",
   "file_manager/containers/nudge_container.ts",
   "file_manager/containers/search_container.ts",
   "file_manager/containers/directory_tree_container.ts",
@@ -295,8 +296,8 @@ ts_files = [
   "file_manager/widgets/xf_conflict_dialog.ts",
   "file_manager/widgets/xf_dlp_restriction_details_dialog.ts",
   "file_manager/widgets/xf_icon.ts",
+  "file_manager/widgets/xf_jellybean.ts",
   "file_manager/widgets/xf_nudge.ts",
-  "file_manager/widgets/xf_path_display.ts",
   "file_manager/widgets/xf_search_options.ts",
   "file_manager/widgets/xf_select.ts",
   "file_manager/widgets/xf_splitter.ts",
@@ -309,6 +310,7 @@ ts_files = [
   # Foreground.
   "file_manager/foreground/js/file_tasks.ts",
   "file_manager/foreground/js/task_controller.ts",
+  "file_manager/foreground/js/uma_enums.gen.ts",
 
   # Util
   "file_manager/widgets/xf_tree_util.ts",
@@ -333,6 +335,7 @@ ts_test_files = [
 
   # Containers
   "file_manager/containers/breadcrumb_container_unittest.ts",
+  "file_manager/containers/cloud_panel_container_unittest.ts",
   "file_manager/containers/directory_tree_container_unittest.ts",
   "file_manager/containers/nudge_container_unittest.ts",
   "file_manager/containers/search_container_unittest.ts",
@@ -361,10 +364,10 @@ ts_test_files = [
   # Widgets:
   "file_manager/widgets/xf_breadcrumb_unittest.ts",
   "file_manager/widgets/xf_conflict_dialog_unittest.ts",
+  "file_manager/widgets/xf_cloud_panel_unittest.ts",
   "file_manager/widgets/xf_dlp_restriction_details_dialog_unittest.ts",
   "file_manager/widgets/xf_icon_unittest.ts",
   "file_manager/widgets/xf_nudge_unittest.ts",
-  "file_manager/widgets/xf_path_display_unittest.ts",
   "file_manager/widgets/xf_search_options_unittest.ts",
   "file_manager/widgets/xf_select_unittest.ts",
   "file_manager/widgets/xf_splitter_unittest.ts",

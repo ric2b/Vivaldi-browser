@@ -22,18 +22,23 @@ ErrorConsole* ErrorConsoleFactory::GetForBrowserContext(
 
 // static
 ErrorConsoleFactory* ErrorConsoleFactory::GetInstance() {
-  return base::Singleton<ErrorConsoleFactory>::get();
+  static base::NoDestructor<ErrorConsoleFactory> instance;
+  return instance.get();
 }
 
 ErrorConsoleFactory::ErrorConsoleFactory()
     : ProfileKeyedServiceFactory(
           "ErrorConsole",
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   DependsOn(ExtensionRegistryFactory::GetInstance());
 }
 
-ErrorConsoleFactory::~ErrorConsoleFactory() {
-}
+ErrorConsoleFactory::~ErrorConsoleFactory() = default;
 
 KeyedService* ErrorConsoleFactory::BuildServiceInstanceFor(
     BrowserContext* context) const {

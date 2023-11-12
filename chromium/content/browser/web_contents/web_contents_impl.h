@@ -22,7 +22,6 @@
 #include "base/functional/function_ref.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/safe_ref.h"
 #include "base/observer_list.h"
 #include "base/process/kill.h"
@@ -103,10 +102,6 @@ namespace mojom {
 class WakeLock;
 }
 }  // namespace device
-
-namespace power_scheduler {
-class PowerModeVoter;
-}
 
 namespace service_manager {
 class InterfaceProvider;
@@ -341,6 +336,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   const GURL& GetURL() override;
   const GURL& GetVisibleURL() override;
   const GURL& GetLastCommittedURL() override;
+  const RenderFrameHostImpl* GetPrimaryMainFrame() const override;
   RenderFrameHostImpl* GetPrimaryMainFrame() override;
   PageImpl& GetPrimaryPage() override;
   RenderFrameHostImpl* GetFocusedFrame() override;
@@ -360,6 +356,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   absl::optional<SkColor> GetBackgroundColor() override;
   void SetPageBaseBackgroundColor(absl::optional<SkColor> color) override;
   void SetColorProviderSource(ui::ColorProviderSource* source) override;
+  ui::ColorProviderManager::ColorMode GetColorMode() const override;
   WebUI* GetWebUI() override;
   void SetUserAgentOverride(const blink::UserAgentOverride& ua_override,
                             bool override_in_new_tabs) override;
@@ -367,6 +364,8 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       NavigationController::UserAgentOverrideOption option) override;
   const blink::UserAgentOverride& GetUserAgentOverride() override;
   bool ShouldOverrideUserAgentForRendererInitiatedNavigation() override;
+  void SetAlwaysSendSubresourceNotifications() override;
+  bool GetSendSubresourceNotification() override;
   void EnableWebContentsOnlyAccessibilityMode() override;
   bool IsWebContentsOnlyAccessibilityModeForTesting() override;
   bool IsFullAccessibilityModeForTesting() override;
@@ -619,6 +618,8 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
                      const std::string& name) override;
   void DidReceiveUserActivation(
       RenderFrameHostImpl* render_frame_host) override;
+  void WebAuthnAssertionRequestSucceeded(
+      RenderFrameHostImpl* render_frame_host) override;
   void BindDisplayCutoutHost(
       RenderFrameHostImpl* render_frame_host,
       mojo::PendingAssociatedReceiver<blink::mojom::DisplayCutoutHost> receiver)
@@ -789,6 +790,9 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void UpdateWindowPreferredSize(const gfx::Size& pref_size) override;
   std::vector<RenderFrameHostImpl*>
   GetActiveTopLevelDocumentsInBrowsingContextGroup(
+      RenderFrameHostImpl* render_frame_host) override;
+  std::vector<RenderFrameHostImpl*>
+  GetActiveTopLevelDocumentsInCoopRelatedGroup(
       RenderFrameHostImpl* render_frame_host) override;
   PrerenderHostRegistry* GetPrerenderHostRegistry() override;
 #if BUILDFLAG(ENABLE_PPAPI)
@@ -1339,20 +1343,14 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
     return mouse_lock_widget_;
   }
 
-  // Record a prerender activation for DevTools.
-  void set_last_navigation_was_prerender_activation_for_devtools() {
-    last_navigation_was_prerender_activation_for_devtools_ = true;
-  }
-
-  // Check if prerender was just activated.
-  bool last_navigation_was_prerender_activation_for_devtools() {
-    return last_navigation_was_prerender_activation_for_devtools_;
-  }
-
   ui::mojom::VirtualKeyboardMode GetVirtualKeyboardMode() const;
 
+  // Vivaldi additions below.
   void SetVivExtData(const std::string& viv_ext_data) override;
   const std::string& GetVivExtData() const override;
+  // This is to make is_resume_pending_ available.
+  void SetResumePending(bool resume);
+  // Vivaldi additions above..
 
  private:
   using FrameTreeIterationCallback = base::RepeatingCallback<void(FrameTree&)>;
@@ -1903,6 +1901,16 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // A scope that disallows custom cursors has expired.
   void DisallowCustomCursorScopeExpired();
 
+  // Describes the different types of groups we can be interested in when
+  // looking for scriptable frames.
+  enum class GroupType { kBrowsingContextGroup, kCoopRelatedGroup };
+
+  // Returns a vector of all the top-level active frames in the same group type
+  // specified by `group_type`.
+  std::vector<RenderFrameHostImpl*> GetActiveTopLevelDocumentsInGroup(
+      RenderFrameHostImpl* render_frame_host,
+      GroupType group_type);
+
   // NOTE(andre@vivaldi.com) : Used for tracking when it is safe to create a
   // webviewguest after detaching.
   void FrameTreeNodeDestroyed();
@@ -1919,9 +1927,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // The view of the RVHD. Usually this is our WebContentsView implementation,
   // but if an embedder uses a different WebContentsView, they'll need to
   // provide this.
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #addr-of
-  RAW_PTR_EXCLUSION RenderViewHostDelegateView* render_view_host_delegate_view_;
+  raw_ptr<RenderViewHostDelegateView> render_view_host_delegate_view_;
 
   // Tracks CreatedWindow objects that have not been shown yet. They are
   // identified by the process ID and routing ID passed to CreateNewWindow.
@@ -2335,8 +2341,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // the user is trying to move the mouse to the back button.
   base::TimeTicks last_back_navigation_hint_time_ = base::TimeTicks::Min();
 
-  std::unique_ptr<power_scheduler::PowerModeVoter> audible_power_mode_voter_;
-
   viz::FrameSinkId xr_render_target_;
 
   base::OnceCallback<void(const gfx::Rect&)> show_poup_menu_callback_;
@@ -2371,12 +2375,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       picture_in_picture_options_;
 
   VisibleTimeRequestTrigger visible_time_request_trigger_;
-
-  // Stores the information whether last navigation was prerender activation for
-  // DevTools. Set when a prerender activation completes, and cleared when
-  // either DevTools is opened and consults this value or when a non-prerendered
-  // navigation commits in the primary main frame.
-  bool last_navigation_was_prerender_activation_for_devtools_ = false;
 
   // Counts the number of open scopes that disallow custom cursors in this web
   // contents. Custom cursors are allowed if this is 0.

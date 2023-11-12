@@ -10,6 +10,9 @@
 #include "base/files/file_path.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
+#include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_frame_host.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
@@ -25,9 +28,17 @@ class BrowserContext;
 }
 
 // A single cookie-accessing operation (either read or write). Not to be
-// confused with CookieAccessType, which can also represent no access or both
+// confused with SiteDataAccessType, which can also represent no access or both
 // read+write.
 using CookieOperation = network::mojom::CookieAccessDetails::Type;
+inline CookieOperation ToCookieOperation(content_settings::AccessType type) {
+  switch (type) {
+    case content_settings::AccessType::kRead:
+    case content_settings::AccessType::kWrite:
+    case content_settings::AccessType::kUnknown:
+      return CookieOperation::kChange;
+  }
+}
 
 // The filename for the DIPS database.
 const base::FilePath::CharType kDIPSFilename[] = FILE_PATH_LITERAL("DIPS");
@@ -43,29 +54,27 @@ base::FilePath GetDIPSFilePath(content::BrowserContext* context);
 // created, if `dips::kFeature` is NOT enabled.
 ProfileSelections GetHumanProfileSelections();
 
-// CookieAccessType:
+// SiteDataAccessType:
 // NOTE: We use this type as a bitfield, and will soon be logging it. Don't
 // change the values or add additional members.
-enum class CookieAccessType {
+enum class SiteDataAccessType {
   kUnknown = -1,
   kNone = 0,
   kRead = 1,
   kWrite = 2,
   kReadWrite = 3
 };
-
-inline CookieAccessType ToCookieAccessType(CookieOperation op) {
-  return (op == CookieOperation::kChange ? CookieAccessType::kWrite
-                                         : CookieAccessType::kRead);
+inline SiteDataAccessType ToSiteDataAccessType(CookieOperation op) {
+  return (op == CookieOperation::kChange ? SiteDataAccessType::kWrite
+                                         : SiteDataAccessType::kRead);
 }
+base::StringPiece SiteDataAccessTypeToString(SiteDataAccessType type);
+std::ostream& operator<<(std::ostream& os, SiteDataAccessType access_type);
 
-base::StringPiece CookieAccessTypeToString(CookieAccessType type);
-std::ostream& operator<<(std::ostream& os, CookieAccessType access_type);
-
-constexpr CookieAccessType operator|(CookieAccessType lhs,
-                                     CookieAccessType rhs) {
-  return static_cast<CookieAccessType>(static_cast<int>(lhs) |
-                                       static_cast<int>(rhs));
+constexpr SiteDataAccessType operator|(SiteDataAccessType lhs,
+                                       SiteDataAccessType rhs) {
+  return static_cast<SiteDataAccessType>(static_cast<int>(lhs) |
+                                         static_cast<int>(rhs));
 }
 
 // DIPSCookieMode:
@@ -156,12 +165,60 @@ int64_t BucketizeBounceDelay(base::TimeDelta delta);
 // and may change.
 std::string GetSiteForDIPS(const GURL& url);
 
+// Returns `True` iff the `navigation_handle` represents a navigation happening
+// in an iframe of the primary frame tree.
+inline bool IsInPrimaryPageIFrame(
+    content::NavigationHandle* navigation_handle) {
+  return navigation_handle->GetParentFrame()
+             ? navigation_handle->GetParentFrame()->GetPage().IsPrimary()
+             : false;
+}
+
+// Returns `True` iff both urls return a similar outcome off of
+// `GetSiteForDIPS()`.
+inline bool IsSameSiteForDIPS(const GURL& url1, const GURL& url2) {
+  return GetSiteForDIPS(url1) == GetSiteForDIPS(url2);
+}
+
+// Returns `True` iff the `navigation_handle` represents a navigation happening
+// in any frame of the primary page.
+// NOTE: This does not include fenced frames.
+inline bool IsInPrimaryPage(content::NavigationHandle* navigation_handle) {
+  return navigation_handle->GetParentFrame()
+             ? navigation_handle->GetParentFrame()->GetPage().IsPrimary()
+             : navigation_handle->IsInPrimaryMainFrame();
+}
+
+// Returns `True` iff the 'rfh' exists and represents a frame in the primary
+// page.
+inline bool IsInPrimaryPage(content::RenderFrameHost* rfh) {
+  return rfh && rfh->GetPage().IsPrimary();
+}
+
+// Returns the last committed or the to be committed url of the main frame of
+// the page containing the `navigation_handle`.
+inline GURL GetFirstPartyURL(content::NavigationHandle* navigation_handle) {
+  return navigation_handle->GetParentFrame()
+             ? navigation_handle->GetParentFrame()
+                   ->GetMainFrame()
+                   ->GetLastCommittedURL()
+             : navigation_handle->GetURL();
+}
+
+// Returns an optional last committed url of the main frame of the page
+// containing the `rfh`.
+inline absl::optional<GURL> GetFirstPartyURL(content::RenderFrameHost* rfh) {
+  return rfh ? absl::optional<GURL>(rfh->GetMainFrame()->GetLastCommittedURL())
+             : absl::nullopt;
+}
+
 enum class DIPSRecordedEvent {
   kStorage,
   kInteraction,
+  kWebAuthnAssertion,
 };
 
-// RedirectCategory is basically the cross-product of CookieAccessType and a
+// RedirectCategory is basically the cross-product of SiteDataAccessType and a
 // boolean value indicating site engagement. It's used in UMA enum histograms.
 //
 // These values are persisted to logs. Entries should not be renumbered and
@@ -194,6 +251,23 @@ enum class DIPSErrorCode {
   kRead_OpenEndedRange_NullEnd = 2,
   kRead_BounceTimesIsntSupersetOfStatefulBounces = 3,
   kMaxValue = kRead_BounceTimesIsntSupersetOfStatefulBounces,
+};
+
+// DIPSDeletionAction is used in UMA enum histograms to record the actual
+// deletion action taken on DIPS-eligible (incidental) site.
+//
+// When adding an action to this enum, update the DIPSDeletionAction enum in
+// tools/metrics/histograms/enums.xml as well.
+//
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class DIPSDeletionAction {
+  kDisallowed = 0,
+  kExceptedAs1p = 1,
+  kExceptedAs3p = 2,
+  kEnforced = 3,
+  kIgnored = 4,
+  kMaxValue = kIgnored,
 };
 
 #endif  // CHROME_BROWSER_DIPS_DIPS_UTILS_H_

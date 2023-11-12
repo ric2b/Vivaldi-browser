@@ -16,8 +16,13 @@
 #include "components/attribution_reporting/source_type.mojom-forward.h"
 #include "content/browser/attribution_reporting/attribution_config.h"
 #include "content/browser/attribution_reporting/attribution_reporting.mojom-forward.h"
+#include "content/browser/attribution_reporting/destination_throttler.h"
 #include "content/common/content_export.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+
+namespace network {
+class TriggerVerification;
+}  // namespace network
 
 namespace content {
 
@@ -92,8 +97,8 @@ class CONTENT_EXPORT AttributionStorageDelegate {
 
   // Returns the maximum number of distinct attribution destinations that can
   // be in storage at any time for sources with the same <source site,
-  // reporting origin>.
-  int GetMaxDestinationsPerSourceSiteReportingOrigin() const;
+  // reporting site>.
+  int GetMaxDestinationsPerSourceSiteReportingSite() const;
 
   // Returns the rate limits for capping contributions per window.
   AttributionConfig::RateLimitConfig GetRateLimits() const;
@@ -123,6 +128,11 @@ class CONTENT_EXPORT AttributionStorageDelegate {
   // ordering on their conversion metadata bits.
   virtual void ShuffleReports(std::vector<AttributionReport>& reports) = 0;
 
+  // Shuffles trigger verifications to provide plausible deniability on the
+  // ordering and use of verification tokens.
+  virtual void ShuffleTriggerVerifications(
+      std::vector<network::TriggerVerification>& verifications) = 0;
+
   // Returns the rate used to determine whether to randomize the response to a
   // source with the given source type and expiry deadline, as implemented by
   // `GetRandomizedResponse()`. Must be in the range [0, 1] and remain constant
@@ -136,6 +146,7 @@ class CONTENT_EXPORT AttributionStorageDelegate {
   // should not be randomized.
   virtual RandomizedResponse GetRandomizedResponse(
       const CommonSourceInfo& source,
+      base::Time source_time,
       base::Time event_report_window_time) = 0;
 
   virtual base::Time GetExpiryTime(
@@ -150,6 +161,10 @@ class CONTENT_EXPORT AttributionStorageDelegate {
   // Returns the maximum sum of the contributions (values) across all buckets
   // per source.
   int64_t GetAggregatableBudgetPerSource() const;
+
+  int GetMaxAggregatableReportsPerSource() const;
+
+  DestinationThrottler::Policy GetDestinationThrottlerPolicy() const;
 
   // Sanitizes `trigger_data` according to the data limits for `source_type`.
   uint64_t SanitizeTriggerData(uint64_t trigger_data,

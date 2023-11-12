@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "ash/constants/ash_features.h"
+#include "ash/webui/common/trusted_types_util.h"
 #include "ash/webui/grit/ash_os_feedback_resources.h"
 #include "ash/webui/grit/ash_os_feedback_untrusted_resources.h"
 #include "ash/webui/grit/ash_os_feedback_untrusted_resources_map.h"
@@ -53,6 +54,11 @@ OsFeedbackUntrustedUIConfig::OsFeedbackUntrustedUIConfig()
 
 OsFeedbackUntrustedUIConfig::~OsFeedbackUntrustedUIConfig() = default;
 
+bool OsFeedbackUntrustedUIConfig::IsWebUIEnabled(
+    content::BrowserContext* browser_context) {
+  return base::FeatureList::IsEnabled(features::kOsFeedback);
+}
+
 std::unique_ptr<content::WebUIController>
 OsFeedbackUntrustedUIConfig::CreateWebUIController(content::WebUI* web_ui,
                                                    const GURL& url) {
@@ -97,10 +103,7 @@ OsFeedbackUntrustedUI::OsFeedbackUntrustedUI(content::WebUI* web_ui)
   // chrome-untrusted://os-feedback WebUI.
   untrusted_source->AddFrameAncestor(GURL(kChromeUIOSFeedbackUrl));
 
-  // DisableTrustedTypesCSP to support TrustedTypePolicy named 'goog#html'.
-  // It is the Closure templating system that renders our UI, as it does many
-  // other web apps using it.
-  untrusted_source->DisableTrustedTypesCSP();
+  ash::EnableTrustedTypesCSP(untrusted_source);
   // TODO(b/194964287): Audit and tighten CSP.
   untrusted_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::DefaultSrc, "");

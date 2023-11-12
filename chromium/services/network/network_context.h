@@ -215,8 +215,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   }
 
 #if BUILDFLAG(IS_ANDROID)
-  base::android::ApplicationStatusListener* app_status_listener() const {
-    return app_status_listener_.get();
+  const std::vector<std::unique_ptr<base::android::ApplicationStatusListener>>&
+  app_status_listeners() const {
+    return app_status_listeners_;
   }
 #endif
 
@@ -288,6 +289,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
                               const net::NetworkIsolationKey& key,
                               bool is_subframe_document_resource,
                               bool include_credentials) override;
+  void ClearCorsPreflightCache(
+      mojom::ClearDataFilterPtr filter,
+      ClearCorsPreflightCacheCallback callback) override;
   void ClearHostCache(mojom::ClearDataFilterPtr filter,
                       ClearHostCacheCallback callback) override;
   void ClearHttpAuthCache(base::Time start_time,
@@ -505,6 +509,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const std::string& realm,
       LookupProxyAuthCredentialsCallback callback) override;
 #endif
+  void SetSharedDictionaryCacheMaxSize(uint64_t cache_max_size) override;
+  void ClearSharedDictionaryCache(
+      base::Time start_time,
+      base::Time end_time,
+      mojom::ClearDataFilterPtr filter,
+      ClearSharedDictionaryCacheCallback callback) override;
 
   // Destroys |request| when a proxy lookup completes.
   void OnProxyLookupComplete(ProxyLookupRequest* proxy_lookup_request);
@@ -604,8 +614,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
     return cors_origin_access_list_;
   }
 
-  bool require_network_isolation_key() const {
-    return require_network_isolation_key_;
+  bool require_network_anonymization_key() const {
+    return require_network_anonymization_key_;
   }
 
   bool acam_preflight_spec_conformant() const {
@@ -751,8 +761,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   OnConnectionCloseCallback on_connection_close_callback_;
 
 #if BUILDFLAG(IS_ANDROID)
-  std::unique_ptr<base::android::ApplicationStatusListener>
-      app_status_listener_;
+  std::vector<std::unique_ptr<base::android::ApplicationStatusListener>>
+      app_status_listeners_;
 #endif
 
   mojo::Receiver<mojom::NetworkContext> receiver_;
@@ -837,8 +847,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
 
 #if BUILDFLAG(IS_CHROMEOS)
-  raw_ptr<CertVerifierWithTrustAnchors> cert_verifier_with_trust_anchors_ =
-      nullptr;
+  raw_ptr<CertVerifierWithTrustAnchors, DanglingUntriaged>
+      cert_verifier_with_trust_anchors_ = nullptr;
 #endif
 
 #if BUILDFLAG(IS_DIRECTORY_TRANSFER_REQUIRED)
@@ -915,11 +925,15 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   // Whether all external consumers are expected to provide a non-empty
   // NetworkAnonymizationKey with all requests. When set, enabled a variety of
   // DCHECKs on APIs used by external callers.
-  bool require_network_isolation_key_ = false;
+  bool require_network_anonymization_key_ = false;
 
   // Whether Access-Control-Allow-Methods matching in CORS preflight is done
   // according to the spec.
   bool acam_preflight_spec_conformant_ = true;
+
+  // True once the destructor has been called. Used to guard against re-entrant
+  // calls to DestroyURLLoaderFactory().
+  bool is_destructing_ = false;
 
   // Indicating whether
   // https://fetch.spec.whatwg.org/#cors-non-wildcard-request-header-name is
@@ -929,13 +943,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   // CorsURLLoaderFactory assumes that fields owned by the NetworkContext always
   // live longer than the factory.  Therefore we want the factories to be
-  // destroyed before other fields above.  In particular:
-  // - This must be below |url_request_context_| so that the URLRequestContext
-  //   outlives all the URLLoaderFactories and URLLoaders that depend on it;
-  //   for the same reason, it must also be below |network_context_|.
-  // - This must be below |loader_count_per_process_| that is touched by
-  //   CorsURLLoaderFactory::DestroyURLLoader (see also
-  //   https://crbug.com/1174943).
+  // destroyed before other fields above.  This is accomplished by explicitly
+  // clearing `url_loader_factories_` in the destructor.
   std::set<std::unique_ptr<cors::CorsURLLoaderFactory>,
            base::UniquePtrComparator>
       url_loader_factories_;

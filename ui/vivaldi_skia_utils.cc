@@ -9,9 +9,9 @@
 #include "base/base64.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/guid.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
+#include "base/uuid.h"
 #include "skia/ext/image_operations.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -178,7 +178,7 @@ base::FilePath EncodeBitmapToFile(base::FilePath directory,
   base::FilePath base_path(directory);
 
   std::string filename = "QR Code ";
-  filename += base::GenerateGUID();
+  filename += base::Uuid::GenerateRandomV4().AsLowercaseString();
   filename += ext;
 
   base_path = base_path.AppendASCII(filename);

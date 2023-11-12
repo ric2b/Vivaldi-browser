@@ -268,16 +268,11 @@ views::Widget* VideoConferenceTray::GetBubbleWidget() const {
 }
 
 std::u16string VideoConferenceTray::GetAccessibleNameForTray() {
-  // TODO(b/253646076): The following is a temporary fix to pass
-  // https://crrev.com/c/4109611 browsertests and still needs to be replaced
-  // with the proper name.
-  return u"Placeholder";
+  return l10n_util::GetStringUTF16(IDS_ASH_VIDEO_CONFERENCE_ACCESSIBLE_NAME);
 }
 
 std::u16string VideoConferenceTray::GetAccessibleNameForBubble() {
-  // TODO(b/261640628): Replace this placeholder with the appropriate string,
-  // once it is decided.
-  return u"Placeholder2";
+  return GetAccessibleNameForTray();
 }
 
 void VideoConferenceTray::HideBubbleWithView(
@@ -298,6 +293,14 @@ void VideoConferenceTray::AnchorUpdated() {
   if (bubble_) {
     bubble_->bubble_view()->UpdateBubble();
   }
+}
+
+void VideoConferenceTray::OnAnimationEnded() {
+  TrayBackgroundView::OnAnimationEnded();
+
+  // `MaybeShowSpeakOnMuteOptInNudge()` will only attempt to show the nudge if
+  // the tray was made visible.
+  VideoConferenceTrayController::Get()->MaybeShowSpeakOnMuteOptInNudge(this);
 }
 
 void VideoConferenceTray::OnHasMediaAppStateChange() {
@@ -366,6 +369,10 @@ void VideoConferenceTray::UpdateTrayAndIconsState() {
   screen_share_icon_->SetIsCapturing(is_capturing_screen);
 }
 
+IconButton* VideoConferenceTray::GetToggleBubbleButtonForTest() {
+  return toggle_bubble_button_;
+}
+
 void VideoConferenceTray::OnSessionStateChanged(
     session_manager::SessionState state) {
   SetVisiblePreferred(VideoConferenceTrayController::Get()->ShouldShowTray());
@@ -380,20 +387,13 @@ void VideoConferenceTray::ToggleBubble(const ui::Event& event) {
     return;
   }
 
-  TrayBubbleView::InitParams init_params;
-  init_params.delegate = GetWeakPtr();
-  init_params.parent_window = GetBubbleWindowContainer();
-  init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
-  init_params.anchor_rect = GetAnchorBoundsInScreen();
-  init_params.insets = GetTrayBubbleInsets();
-  init_params.shelf_alignment = shelf()->alignment();
-  init_params.preferred_width = kTrayMenuWidth;
-  init_params.close_on_deactivate = true;
-  init_params.translucent = true;
+  VideoConferenceTrayController::Get()->CloseAllVcNudges();
 
   // Create top-level bubble.
   auto bubble_view = std::make_unique<video_conference::BubbleView>(
-      init_params, VideoConferenceTrayController::Get());
+      /*init_params=*/CreateInitParamsForTrayBubble(/*tray=*/this),
+      /*controller=*/VideoConferenceTrayController::Get());
+
   bubble_ = std::make_unique<TrayBubbleWrapper>(this);
   bubble_->ShowBubble(std::move(bubble_view));
 

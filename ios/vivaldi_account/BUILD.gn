@@ -1,7 +1,11 @@
 # Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
 
 source_set("vivaldi_account") {
-  configs += [ "//build/config/compiler:enable_arc" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//third_party/abseil-cpp:absl_include_config",
+  ]
+
   sources = [
     "vivaldi_account_manager_factory.mm",
     "vivaldi_account_manager_factory.h",
@@ -12,5 +16,6 @@ source_set("vivaldi_account") {
     "//ios/chrome/browser/passwords:store_factory",
     "//vivaldi/prefs",
     "//vivaldi/vivaldi_account",
+    "//third_party/boringssl",
   ]
 }

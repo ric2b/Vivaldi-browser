@@ -12,6 +12,8 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item_result.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item_text_index.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_leading_floats.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_line_break_point.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/harfbuzz_shaper.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_spacing.h"
 #include "third_party/blink/renderer/platform/text/text_break_iterator.h"
@@ -23,8 +25,10 @@ class Hyphenation;
 class NGColumnSpannerPath;
 class NGInlineBreakToken;
 class NGInlineItem;
+class NGLineBreakCandidateContext;
 class NGLineInfo;
 class ResolvedTextLayoutAttributesIterator;
+class ShapingLineBreaker;
 
 // The line breaker needs to know which mode its in to properly handle floats.
 enum class NGLineBreakerMode { kContent, kMinContent, kMaxContent };
@@ -41,8 +45,7 @@ class CORE_EXPORT NGLineBreaker {
                 NGLineBreakerMode,
                 const NGConstraintSpace&,
                 const NGLineLayoutOpportunity&,
-                const NGPositionedFloatVector& leading_floats,
-                unsigned handled_leading_floats_index,
+                const NGLeadingFloats& leading_floats,
                 const NGInlineBreakToken*,
                 const NGColumnSpannerPath*,
                 NGExclusionSpace*);
@@ -59,6 +62,19 @@ class CORE_EXPORT NGLineBreaker {
   void NextLine(NGLineInfo*);
 
   bool IsFinished() const { return current_.item_index >= Items().size(); }
+
+  // True if there are items that `NGScoreLineBreaker` doesn't support.
+  // Conditions that can be determined by `CollectInlines` are done by
+  // `NGInlineNode::IsScoreLineBreakDisabled()`, but some conditions can change
+  // withoiut `CollectInlines`. They are determined by this.
+  bool ShouldDisableScoreLineBreak() const { return disable_score_line_break_; }
+
+  void SetLineOpportunity(const NGLineLayoutOpportunity& line_opportunity);
+  // Override the available width to compute line breaks. This is reset after
+  // each `NextLine`.
+  void OverrideAvailableWidth(LayoutUnit available_width);
+  // Specify to break at the `offset` rather than the available width.
+  void SetBreakAt(const NGLineBreakPoint& offset);
 
   // Computing |NGLineBreakerMode::kMinContent| with |MaxSizeCache| caches
   // information that can help computing |kMaxContent|. It is recommended to set
@@ -88,6 +104,16 @@ class CORE_EXPORT NGLineBreaker {
     return trailing_whitespace_;
   }
 
+  // Find break candidates in the `item_result` and append to `context`. See
+  // `NGLineBreakCandidate` and `NGLineBreakCandidateContext` for more details.
+  void AppendCandidates(const NGInlineItemResult& item_result,
+                        const NGLineInfo& line_info,
+                        NGLineBreakCandidateContext& context);
+
+  // True if the argument can break; i.e. has at least one break opportunity.
+  bool CanBreakInside(const NGLineInfo& line_info);
+  bool CanBreakInside(const NGInlineItemResult& item_result);
+
  private:
   const String& Text() const { return text_content_; }
   const HeapVector<NGInlineItem>& Items() const { return items_data_.items; }
@@ -98,6 +124,7 @@ class CORE_EXPORT NGLineBreaker {
                               unsigned end_offset,
                               NGLineInfo*);
   NGInlineItemResult* AddItem(const NGInlineItem&, NGLineInfo*);
+  NGInlineItemResult* AddEmptyItem(const NGInlineItem&, NGLineInfo*);
 
   void BreakLine(NGLineInfo*);
   void PrepareNextLine(NGLineInfo*);
@@ -134,13 +161,18 @@ class CORE_EXPORT NGLineBreaker {
   // Returns true if we should split NGInlineItem before
   // svg_addressable_offset_.
   bool ShouldCreateNewSvgSegment() const;
-  enum BreakResult { kSuccess, kOverflow };
+  enum BreakResult { kSuccess, kOverflow, kBreakAt };
   BreakResult BreakText(NGInlineItemResult*,
                         const NGInlineItem&,
                         const ShapeResult&,
                         LayoutUnit available_width,
                         LayoutUnit available_width_with_hyphens,
                         NGLineInfo*);
+  bool BreakTextAt(NGInlineItemResult*,
+                   const NGInlineItem&,
+                   ShapingLineBreaker& breaker,
+                   unsigned options,
+                   NGLineInfo*);
   bool BreakTextAtPreviousBreakOpportunity(NGInlineItemResult* item_result);
   bool HandleTextForFastMinContent(NGInlineItemResult*,
                                    const NGInlineItem&,
@@ -208,10 +240,7 @@ class CORE_EXPORT NGLineBreaker {
   void ComputeBaseDirection();
   void RecalcClonedBoxDecorations();
 
-  LayoutUnit AvailableWidth() const {
-    DCHECK_EQ(available_width_, ComputeAvailableWidth());
-    return available_width_;
-  }
+  LayoutUnit AvailableWidth() const { return available_width_; }
   LayoutUnit AvailableWidthToFit() const {
     return AvailableWidth().AddEpsilon();
   }
@@ -219,9 +248,7 @@ class CORE_EXPORT NGLineBreaker {
     return AvailableWidthToFit() - position_;
   }
   bool CanFitOnLine() const { return position_ <= AvailableWidthToFit(); }
-  LayoutUnit ComputeAvailableWidth() const;
-
-  void ClearNeedsLayout(const NGInlineItem& item);
+  void UpdateAvailableWidth();
 
   // True if the current line is hyphenated.
   bool HasHyphen() const { return hyphen_index_.has_value(); }
@@ -243,6 +270,7 @@ class CORE_EXPORT NGLineBreaker {
   LineBreakState state_;
   NGInlineItemTextIndex current_;
   unsigned svg_addressable_offset_ = 0;
+  NGLineBreakPoint break_at_;
 
   // |WhitespaceState| of the current end. When a line is broken, this indicates
   // the state of trailing whitespaces.
@@ -284,8 +312,7 @@ class CORE_EXPORT NGLineBreaker {
   // boundaries for 'break-word' after overflow.
   bool override_break_anywhere_ = false;
 
-  // True when breaking at soft hyphens (U+00AD) is allowed.
-  bool enable_soft_hyphen_ = true;
+  bool disable_score_line_break_ = false;
 
   // True when the line should be non-empty if |IsLastLine|..
   bool force_non_empty_if_last_line_ = false;
@@ -343,10 +370,11 @@ class CORE_EXPORT NGLineBreaker {
   };
   absl::optional<TrailingCollapsibleSpace> trailing_collapsible_space_;
 
+  LayoutUnit override_available_width_;
+
   // Keep track of handled float items. See HandleFloat().
-  const NGPositionedFloatVector& leading_floats_;
+  const NGLeadingFloats& leading_floats_;
   unsigned leading_floats_index_ = 0u;
-  unsigned handled_leading_floats_index_;
 
   // Cache for computing |MinMaxSize|. See |MaxSizeCache|.
   MaxSizeCache* max_size_cache_ = nullptr;

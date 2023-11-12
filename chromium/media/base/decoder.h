@@ -54,11 +54,10 @@ enum class VideoDecoderType : int {
   kVda = 14,     // VDAVideoDecoder
   // kChromeOs = 15,  // DEPRECATED, should be kVaapi, kV4L2, or kOutOfProcess
   // instead.
-  kV4L2 = 16,  // V4L2VideoDecoder
-
-  kTesting = 17,  // Never send this to UKM, for tests only.
-
+  kV4L2 = 16,          // V4L2VideoDecoder
+  kTesting = 17,       // Never send this to UKM, for tests only.
   kOutOfProcess = 18,  // OOPVideoDecoder (Linux and ChromeOS)
+  kVideoToolbox = 19,  // VideoToolboxVideoDecoder (Mac)
 
   kVivWMFDecoder,
   kVivVTVideo,

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/file_manager/io_task.h"
 
+#include <type_traits>
 #include <vector>
 
 #include "base/files/file_path.h"
@@ -16,7 +17,67 @@
 
 namespace file_manager::io_task {
 
+std::ostream& operator<<(std::ostream& out, OperationType op) {
+  switch (op) {
+#define PRINT(s)            \
+  case OperationType::k##s: \
+    return out << #s;
+    PRINT(Copy)
+    PRINT(Delete)
+    PRINT(EmptyTrash)
+    PRINT(Extract)
+    PRINT(Move)
+    PRINT(Restore)
+    PRINT(RestoreToDestination)
+    PRINT(Trash)
+    PRINT(Zip)
+#undef PRINT
+  }
+
+  return out << "OperationType("
+             << static_cast<std::underlying_type_t<OperationType>>(op) << ")";
+}
+
+void IOTask::Pause(PauseParams params) {}
+
 void IOTask::Resume(ResumeParams) {}
+
+void IOTask::CompleteWithError(PolicyErrorType policy_error) {}
+
+bool ConflictPauseParams::operator==(const ConflictPauseParams& other) const =
+    default;
+
+bool PolicyPauseParams::operator==(const PolicyPauseParams& other) const =
+    default;
+
+PauseParams::PauseParams() = default;
+
+PauseParams::PauseParams(const PauseParams& other) = default;
+
+PauseParams& PauseParams::operator=(const PauseParams& other) = default;
+
+PauseParams::PauseParams(PauseParams&& other) = default;
+
+PauseParams& PauseParams::operator=(PauseParams&& other) = default;
+
+bool PauseParams::operator==(const PauseParams& other) const {
+  return (conflict_params == other.conflict_params) &&
+         (policy_params == other.policy_params);
+}
+
+PauseParams::~PauseParams() = default;
+
+ResumeParams::ResumeParams() = default;
+
+ResumeParams::ResumeParams(const ResumeParams& other) = default;
+
+ResumeParams& ResumeParams::operator=(const ResumeParams& other) = default;
+
+ResumeParams::ResumeParams(ResumeParams&& other) = default;
+
+ResumeParams& ResumeParams::operator=(ResumeParams&& other) = default;
+
+ResumeParams::~ResumeParams() = default;
 
 EntryStatus::EntryStatus(storage::FileSystemURL file_url,
                          absl::optional<base::File::Error> file_error)
@@ -33,12 +94,25 @@ ProgressStatus::ProgressStatus(ProgressStatus&& other) = default;
 ProgressStatus& ProgressStatus::operator=(ProgressStatus&& other) = default;
 
 bool ProgressStatus::IsPaused() const {
-  return state == State::kPaused;
+  return state == State::kPaused && !policy_error.has_value();
 }
 
 bool ProgressStatus::IsCompleted() const {
   return state == State::kSuccess || state == State::kError ||
          state == State::kCancelled;
+}
+
+bool ProgressStatus::HasWarning() const {
+  // We should show a warning if the task is paused because of policy.
+  return state == State::kPaused && pause_params.policy_params.has_value();
+}
+
+bool ProgressStatus::HasPolicyError() const {
+  return state == State::kError && policy_error.has_value();
+}
+
+bool ProgressStatus::IsScanning() const {
+  return state == State::kScanning;
 }
 
 std::string ProgressStatus::GetSourceName(Profile* profile) const {
@@ -101,7 +175,29 @@ void DummyIOTask::Execute(IOTask::ProgressCallback progress_callback,
       base::BindOnce(&DummyIOTask::DoProgress, weak_ptr_factory_.GetWeakPtr()));
 }
 
+void DummyIOTask::Pause(PauseParams pause_params) {
+  progress_.state = State::kPaused;
+  progress_.pause_params = pause_params;
+}
+
+void DummyIOTask::Resume(ResumeParams resume_params) {
+  progress_.state = State::kInProgress;
+}
+
+void DummyIOTask::Cancel() {
+  progress_.state = State::kCancelled;
+}
+
+void DummyIOTask::CompleteWithError(PolicyErrorType policy_error) {
+  progress_.state = State::kError;
+  progress_.policy_error = policy_error;
+}
+
 void DummyIOTask::DoProgress() {
+  if (progress_.IsPaused()) {
+    return;
+  }
+
   progress_.bytes_transferred = 1;
   progress_callback_.Run(progress_);
 
@@ -117,10 +213,6 @@ void DummyIOTask::DoComplete() {
     source.error.emplace(base::File::FILE_OK);
   }
   std::move(complete_callback_).Run(std::move(progress_));
-}
-
-void DummyIOTask::Cancel() {
-  progress_.state = State::kCancelled;
 }
 
 }  // namespace file_manager::io_task

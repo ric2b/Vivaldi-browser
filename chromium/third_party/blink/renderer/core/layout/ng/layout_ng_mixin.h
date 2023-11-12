@@ -44,10 +44,6 @@ class LayoutNGMixin : public Base {
  protected:
   MinMaxSizes ComputeIntrinsicLogicalWidths() const override;
   NGConstraintSpace ConstraintSpaceForMinMaxSizes() const;
-
-  void UpdateOutOfFlowBlockLayout();
-  const NGLayoutResult* UpdateInFlowBlockLayout();
-  void UpdateMargins();
 };
 
 }  // namespace blink

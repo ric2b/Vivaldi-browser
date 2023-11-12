@@ -12,10 +12,12 @@
 #include "base/memory/raw_ptr.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
+#include "gpu/command_buffer/service/dawn_context_provider.h"
 #include "gpu/command_buffer/service/dxgi_shared_handle_manager.h"
 #include "gpu/command_buffer/service/shared_image/d3d_image_representation.h"
-#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
 #include "gpu/command_buffer/service/shared_image/skia_gl_image_representation.h"
+#include "gpu/command_buffer/service/shared_image/skia_graphite_dawn_image_representation.h"
 #include "third_party/libyuv/include/libyuv/planar_functions.h"
 #include "ui/gl/egl_util.h"
 #include "ui/gl/gl_bindings.h"
@@ -55,12 +57,15 @@ size_t NumPlanes(DXGI_FORMAT dxgi_format) {
     case DXGI_FORMAT_NV12:
     case DXGI_FORMAT_P010:
       return 2;
+    case DXGI_FORMAT_R8_UNORM:
+    case DXGI_FORMAT_R8G8_UNORM:
+    case DXGI_FORMAT_R8G8B8A8_UNORM:
     case DXGI_FORMAT_B8G8R8A8_UNORM:
     case DXGI_FORMAT_R10G10B10A2_UNORM:
     case DXGI_FORMAT_R16G16B16A16_FLOAT:
       return 1;
     default:
-      NOTREACHED();
+      NOTREACHED() << "Unsupported DXGI format: " << dxgi_format;
       return 0;
   }
 }
@@ -308,12 +313,15 @@ std::unique_ptr<D3DImageBacking> D3DImageBacking::Create(
   const bool has_webgpu_usage = !!(usage & SHARED_IMAGE_USAGE_WEBGPU);
   // Keyed mutexes are required for Dawn interop but are not used for XR
   // composition where fences are used instead.
-  DCHECK(!has_webgpu_usage || dxgi_shared_handle_state);
-
+  CHECK(!has_webgpu_usage || dxgi_shared_handle_state);
+  // SHARED_IMAGE_USAGE_VIDEO_DECODE means that this is for D3D11VideoDecoder.
+  const bool has_video_decode_usage =
+      !!(usage & SHARED_IMAGE_USAGE_VIDEO_DECODE);
   std::vector<scoped_refptr<GLTextureHolder>> gl_texture_holders;
-  // Do not cache a GL texture in the backing if it could be owned by WebGPU
-  // since there's no GL context to MakeCurrent in the destructor.
-  if (!has_webgpu_usage) {
+  // Do not cache GL textures in the backing if it could be owned by WebGPU, or
+  // the video decoder, since there could be no GL context to MakeCurrent in the
+  // destructor.
+  if (!has_webgpu_usage && !has_video_decode_usage) {
     for (int plane = 0; plane < format.NumberOfPlanes(); plane++) {
       gfx::Size plane_size = format.GetPlaneSize(plane, size);
       // For legacy multiplanar formats, format() is plane format (eg. RED, RG)
@@ -340,28 +348,6 @@ std::unique_ptr<D3DImageBacking> D3DImageBacking::Create(
   return backing;
 }
 
-std::unique_ptr<D3DImageBacking> D3DImageBacking::CreateFromGLTexture(
-    const Mailbox& mailbox,
-    viz::SharedImageFormat format,
-    const gfx::Size& size,
-    const gfx::ColorSpace& color_space,
-    GrSurfaceOrigin surface_origin,
-    SkAlphaType alpha_type,
-    uint32_t usage,
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
-    scoped_refptr<gles2::TexturePassthrough> gl_texture,
-    size_t array_slice) {
-  DCHECK(gl_texture);
-  GLenum texture_target = gl_texture->target();
-  auto gl_texture_holder = base::MakeRefCounted<GLTextureHolder>(
-      base::PassKey<D3DImageBacking>(), std::move(gl_texture),
-      gl::ScopedEGLImage());
-  return base::WrapUnique(new D3DImageBacking(
-      mailbox, format, size, color_space, surface_origin, alpha_type, usage,
-      std::move(d3d11_texture), {std::move(gl_texture_holder)},
-      /*dxgi_shared_handle_state=*/nullptr, texture_target, array_slice));
-}
-
 // static
 std::vector<std::unique_ptr<SharedImageBacking>>
 D3DImageBacking::CreateFromVideoTexture(
@@ -372,13 +358,13 @@ D3DImageBacking::CreateFromVideoTexture(
     Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
     unsigned array_slice,
     scoped_refptr<DXGISharedHandleState> dxgi_shared_handle_state) {
-  DCHECK(d3d11_texture);
-  DCHECK(SupportsVideoFormat(dxgi_format));
-  DCHECK_EQ(mailboxes.size(), NumPlanes(dxgi_format));
+  CHECK(d3d11_texture);
+  CHECK(SupportsVideoFormat(dxgi_format));
+  CHECK_EQ(mailboxes.size(), NumPlanes(dxgi_format));
 
   // Shared handle and keyed mutex are required for Dawn interop.
   const bool has_webgpu_usage = usage & gpu::SHARED_IMAGE_USAGE_WEBGPU;
-  DCHECK(!has_webgpu_usage || dxgi_shared_handle_state);
+  CHECK(!has_webgpu_usage || dxgi_shared_handle_state);
 
   std::vector<std::unique_ptr<SharedImageBacking>> shared_images(
       NumPlanes(dxgi_format));
@@ -399,26 +385,13 @@ D3DImageBacking::CreateFromVideoTexture(
     // by ANGLE.
     constexpr GLenum kTextureTarget = GL_TEXTURE_EXTERNAL_OES;
 
-    // Do not cache a GL texture in the backing if it could be owned by WebGPU
-    // since there's no GL context to MakeCurrent in the destructor.
-    std::vector<scoped_refptr<GLTextureHolder>> gl_texture_holders;
-    if (!has_webgpu_usage) {
-      // Creating the GL texture doesn't require exclusive access to the
-      // underlying D3D11 texture.
-      auto texture_holder = CreateGLTexture(
-          plane_format, plane_size, kInvalidColorSpace, d3d11_texture,
-          kTextureTarget, array_slice, plane_index);
-      if (!texture_holder) {
-        LOG(ERROR) << "Failed to create GL texture.";
-        return {};
-      }
-      gl_texture_holders.push_back(std::move(texture_holder));
-    }
-
+    // Do not cache GL textures in the backing since it's owned by the video
+    // decoder, and there could be no GL context to MakeCurrent in the
+    // destructor.
     shared_images[plane_index] = base::WrapUnique(new D3DImageBacking(
         mailbox, plane_format, plane_size, kInvalidColorSpace,
         kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage, d3d11_texture,
-        std::move(gl_texture_holders), dxgi_shared_handle_state, kTextureTarget,
+        /*gl_texture_holders=*/{}, dxgi_shared_handle_state, kTextureTarget,
         array_slice, plane_index));
     if (!shared_images[plane_index])
       return {};
@@ -462,9 +435,14 @@ D3DImageBacking::D3DImageBacking(
       swap_chain_(std::move(swap_chain)),
       is_back_buffer_(is_back_buffer) {
   const bool has_webgpu_usage = !!(usage & SHARED_IMAGE_USAGE_WEBGPU);
-  DCHECK(has_webgpu_usage || !gl_texture_holders_.empty());
-  if (d3d11_texture_)
+  const bool has_video_decode_usage =
+      !!(usage & SHARED_IMAGE_USAGE_VIDEO_DECODE);
+  CHECK(has_webgpu_usage || has_video_decode_usage ||
+        !gl_texture_holders_.empty());
+  if (d3d11_texture_) {
     d3d11_texture_->GetDevice(&d3d11_device_);
+    d3d11_texture_->GetDesc(&d3d11_texture_desc_);
+  }
 }
 
 D3DImageBacking::~D3DImageBacking() {
@@ -484,17 +462,10 @@ D3DImageBacking::~D3DImageBacking() {
 
 ID3D11Texture2D* D3DImageBacking::GetOrCreateStagingTexture() {
   if (!staging_texture_) {
-    Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device;
-    DCHECK(d3d11_texture_);
-    d3d11_texture_->GetDevice(&d3d11_device);
-
-    D3D11_TEXTURE2D_DESC texture_desc;
-    d3d11_texture_->GetDesc(&texture_desc);
-
     D3D11_TEXTURE2D_DESC staging_desc = {};
-    staging_desc.Width = texture_desc.Width;
-    staging_desc.Height = texture_desc.Height;
-    staging_desc.Format = texture_desc.Format;
+    staging_desc.Width = d3d11_texture_desc_.Width;
+    staging_desc.Height = d3d11_texture_desc_.Height;
+    staging_desc.Format = d3d11_texture_desc_.Format;
     staging_desc.MipLevels = 1;
     staging_desc.ArraySize = 1;
     staging_desc.SampleDesc.Count = 1;
@@ -502,8 +473,9 @@ ID3D11Texture2D* D3DImageBacking::GetOrCreateStagingTexture() {
     staging_desc.CPUAccessFlags =
         D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
 
-    HRESULT hr = d3d11_device->CreateTexture2D(&staging_desc, nullptr,
-                                               &staging_texture_);
+    CHECK(d3d11_device_);
+    HRESULT hr = d3d11_device_->CreateTexture2D(&staging_desc, nullptr,
+                                                &staging_texture_);
     if (FAILED(hr)) {
       LOG(ERROR) << "Failed to create staging texture. hr=" << std::hex << hr;
       return nullptr;
@@ -530,22 +502,16 @@ void D3DImageBacking::Update(std::unique_ptr<gfx::GpuFence> in_fence) {
 bool D3DImageBacking::UploadFromMemory(const std::vector<SkPixmap>& pixmaps) {
   DCHECK_EQ(pixmaps.size(), static_cast<size_t>(format().NumberOfPlanes()));
 
-  Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device;
-  DCHECK(d3d11_texture_);
-  d3d11_texture_->GetDevice(&d3d11_device);
-
+  CHECK(d3d11_device_);
   Microsoft::WRL::ComPtr<ID3D11DeviceContext> device_context;
-  d3d11_device->GetImmediateContext(&device_context);
+  d3d11_device_->GetImmediateContext(&device_context);
 
-  D3D11_TEXTURE2D_DESC texture_desc;
-  d3d11_texture_->GetDesc(&texture_desc);
-
-  if (texture_desc.CPUAccessFlags & D3D11_CPU_ACCESS_WRITE) {
+  if (d3d11_texture_desc_.CPUAccessFlags & D3D11_CPU_ACCESS_WRITE) {
     // D3D doesn't support mappable+default YUV textures.
     DCHECK(format().is_single_plane());
 
     Microsoft::WRL::ComPtr<ID3D11Device3> device3;
-    HRESULT hr = d3d11_device.As(&device3);
+    HRESULT hr = d3d11_device_.As(&device3);
     if (FAILED(hr)) {
       LOG(ERROR) << "Failed to retrieve ID3D11Device3. hr=" << std::hex << hr;
       return false;
@@ -603,22 +569,16 @@ bool D3DImageBacking::UploadFromMemory(const std::vector<SkPixmap>& pixmaps) {
 }
 
 bool D3DImageBacking::ReadbackToMemory(const std::vector<SkPixmap>& pixmaps) {
-  Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device;
-  DCHECK(d3d11_texture_);
-  d3d11_texture_->GetDevice(&d3d11_device);
-
+  CHECK(d3d11_device_);
   Microsoft::WRL::ComPtr<ID3D11DeviceContext> device_context;
-  d3d11_device->GetImmediateContext(&device_context);
+  d3d11_device_->GetImmediateContext(&device_context);
 
-  D3D11_TEXTURE2D_DESC texture_desc;
-  d3d11_texture_->GetDesc(&texture_desc);
-
-  if (texture_desc.CPUAccessFlags & D3D11_CPU_ACCESS_READ) {
+  if (d3d11_texture_desc_.CPUAccessFlags & D3D11_CPU_ACCESS_READ) {
     // D3D doesn't support mappable+default YUV textures.
     DCHECK(format().is_single_plane());
 
     Microsoft::WRL::ComPtr<ID3D11Device3> device3;
-    HRESULT hr = d3d11_device.As(&device3);
+    HRESULT hr = d3d11_device_.As(&device3);
     if (FAILED(hr)) {
       LOG(ERROR) << "Failed to retrieve ID3D11Device3. hr=" << std::hex << hr;
       return false;
@@ -678,7 +638,6 @@ WGPUTextureUsageFlags D3DImageBacking::GetAllowedDawnUsages(
     WGPUDevice device,
     const WGPUTextureFormat wgpu_format) const {
   // TODO(crbug.com/2709243): Figure out other SI flags, if any.
-  DCHECK(usage() & gpu::SHARED_IMAGE_USAGE_WEBGPU);
   const WGPUTextureUsageFlags kBasicUsage =
       WGPUTextureUsage_CopySrc | WGPUTextureUsage_CopyDst |
       WGPUTextureUsage_TextureBinding | WGPUTextureUsage_RenderAttachment;
@@ -742,14 +701,19 @@ std::unique_ptr<DawnImageRepresentation> D3DImageBacking::ProduceDawn(
         device);
   }
 #endif
-  D3D11_TEXTURE2D_DESC desc;
-  d3d11_texture_->GetDesc(&desc);
-  const WGPUTextureFormat wgpu_format = DXGIToWGPUFormat(desc.Format);
+  const WGPUTextureFormat wgpu_format =
+      DXGIToWGPUFormat(d3d11_texture_desc_.Format);
   if (wgpu_format == WGPUTextureFormat_Undefined) {
-    LOG(ERROR) << "Unsupported DXGI_FORMAT found: " << desc.Format;
+    LOG(ERROR) << "Unsupported DXGI_FORMAT found: "
+               << d3d11_texture_desc_.Format;
     return nullptr;
   }
 
+  // The below usages are not supported for multiplanar formats in Dawn.
+  // TODO(crbug.com/1451784): Use read/write intent instead of format to get
+  // correct usages. This needs support in Skia to loosen TextureUsage
+  // validation. Alternatively, add support in Dawn for multiplanar formats to
+  // be Renderable.
   WGPUTextureUsageFlags allowed_usage =
       GetAllowedDawnUsages(device, wgpu_format);
   if (allowed_usage == WGPUTextureUsage_None) {
@@ -789,18 +753,14 @@ std::unique_ptr<DawnImageRepresentation> D3DImageBacking::ProduceDawn(
   // Persistently open the shared handle by caching it on this backing.
   auto it = dawn_external_image_cache_.find(device);
   if (it == dawn_external_image_cache_.end()) {
-    DCHECK(dxgi_shared_handle_state_);
+    CHECK(dxgi_shared_handle_state_);
     const HANDLE shared_handle = dxgi_shared_handle_state_->GetSharedHandle();
-    DCHECK(base::win::HandleTraits::IsHandleValid(shared_handle));
-
-    D3D11_TEXTURE2D_DESC texture_desc = {};
-    d3d11_texture_->GetDesc(&texture_desc);
+    CHECK(base::win::HandleTraits::IsHandleValid(shared_handle));
+    CHECK(!dxgi_shared_handle_state_->has_keyed_mutex());
 
     ExternalImageDescriptorDXGISharedHandle externalImageDesc;
     externalImageDesc.cTextureDescriptor = &texture_descriptor;
     externalImageDesc.sharedHandle = shared_handle;
-    externalImageDesc.useFenceSynchronization =
-        !(texture_desc.MiscFlags & D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX);
 
     DawnExternalImageState state;
     state.external_image =
@@ -1122,9 +1082,36 @@ D3DImageBacking::ProduceSkiaGanesh(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {
-  return SkiaGLImageRepresentation::Create(
-      ProduceGLTexturePassthrough(manager, tracker), std::move(context_state),
-      manager, this, tracker);
+  auto gl_representation = ProduceGLTexturePassthrough(manager, tracker);
+  if (!gl_representation) {
+    return nullptr;
+  }
+  return SkiaGLImageRepresentation::Create(std::move(gl_representation),
+                                           std::move(context_state), manager,
+                                           this, tracker);
+}
+
+std::unique_ptr<SkiaGraphiteImageRepresentation>
+D3DImageBacking::ProduceSkiaGraphite(
+    SharedImageManager* manager,
+    MemoryTypeTracker* tracker,
+    scoped_refptr<SharedContextState> context_state) {
+#if BUILDFLAG(SKIA_USE_DAWN)
+  auto device = context_state->dawn_context_provider()->GetDevice();
+  wgpu::AdapterProperties adapter_properties;
+  device.GetAdapter().GetProperties(&adapter_properties);
+  auto dawn_representation = ProduceDawn(
+      manager, tracker, device.Get(),
+      static_cast<WGPUBackendType>(adapter_properties.backendType), {});
+  const bool is_yuv_plane =
+      format().is_single_plane() && NumPlanes(d3d11_texture_desc_.Format) > 1;
+  return SkiaGraphiteDawnImageRepresentation::Create(
+      std::move(dawn_representation), context_state,
+      context_state->gpu_main_graphite_recorder(), manager, this, tracker,
+      plane_index_, is_yuv_plane);
+#else
+  NOTREACHED_NORETURN();
+#endif
 }
 
 std::unique_ptr<OverlayImageRepresentation> D3DImageBacking::ProduceOverlay(

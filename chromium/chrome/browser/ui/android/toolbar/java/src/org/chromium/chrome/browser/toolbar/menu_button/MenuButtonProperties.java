@@ -56,7 +56,11 @@ class MenuButtonProperties {
             new WritableObjectPropertyKey<>(true);
     public static final WritableFloatPropertyKey TRANSLATION_X = new WritableFloatPropertyKey();
 
+    // Vivaldi
+    public static final WritableObjectPropertyKey<ShowBadgeProperty> VIVALDI_ATTENTION_BADGE =
+            new WritableObjectPropertyKey(true);
+
     public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {ALPHA, APP_MENU_BUTTON_HELPER,
             CONTENT_DESCRIPTION, IS_CLICKABLE, IS_HIGHLIGHTING, IS_VISIBLE, STATE_SUPPLIER,
-            SHOW_UPDATE_BADGE, THEME, TRANSLATION_X};
+            SHOW_UPDATE_BADGE, THEME, TRANSLATION_X, VIVALDI_ATTENTION_BADGE}; // Vivaldi
 }

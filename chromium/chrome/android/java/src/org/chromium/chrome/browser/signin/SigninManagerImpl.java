@@ -33,7 +33,6 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.signin.services.SigninPreferencesManager;
-import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.signin.base.CoreAccountId;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -47,6 +46,7 @@ import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SigninReason;
 import org.chromium.components.signin.metrics.SignoutDelete;
 import org.chromium.components.signin.metrics.SignoutReason;
+import org.chromium.components.sync.SyncService;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -78,6 +78,7 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager {
     private final AccountTrackerService mAccountTrackerService;
     private final IdentityManager mIdentityManager;
     private final IdentityMutator mIdentityMutator;
+    private final SyncService mSyncService;
     private final ObserverList<SignInStateObserver> mSignInStateObservers = new ObserverList<>();
     private final List<Runnable> mCallbacksWaitingForPendingOperation = new ArrayList<>();
     private boolean mSigninAllowedByPolicy;
@@ -106,13 +107,13 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager {
     @VisibleForTesting
     static SigninManager create(long nativeSigninManagerAndroid,
             AccountTrackerService accountTrackerService, IdentityManager identityManager,
-            IdentityMutator identityMutator) {
+            IdentityMutator identityMutator, SyncService syncService) {
         assert nativeSigninManagerAndroid != 0;
         assert accountTrackerService != null;
         assert identityManager != null;
         assert identityMutator != null;
         final SigninManagerImpl signinManager = new SigninManagerImpl(nativeSigninManagerAndroid,
-                accountTrackerService, identityManager, identityMutator);
+                accountTrackerService, identityManager, identityMutator, syncService);
 
         identityManager.addObserver(signinManager);
         AccountInfoServiceProvider.init(identityManager, accountTrackerService);
@@ -124,12 +125,13 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager {
 
     private SigninManagerImpl(long nativeSigninManagerAndroid,
             AccountTrackerService accountTrackerService, IdentityManager identityManager,
-            IdentityMutator identityMutator) {
+            IdentityMutator identityMutator, SyncService syncService) {
         ThreadUtils.assertOnUiThread();
         mNativeSigninManagerAndroid = nativeSigninManagerAndroid;
         mAccountTrackerService = accountTrackerService;
         mIdentityManager = identityManager;
         mIdentityMutator = identityMutator;
+        mSyncService = syncService;
 
         mSigninAllowedByPolicy =
                 SigninManagerImplJni.get().isSigninAllowedByPolicy(mNativeSigninManagerAndroid);
@@ -346,7 +348,7 @@ class SigninManagerImpl implements IdentityManager.Observer, SigninManager {
             SigninPreferencesManager.getInstance().setLegacySyncAccountEmail(
                     mSignInState.mCoreAccountInfo.getEmail());
 
-            SyncService.get().setSyncRequested();
+            mSyncService.setSyncRequested();
 
             RecordUserAction.record("Signin_Signin_Succeed");
             RecordHistogram.recordEnumeratedHistogram("Signin.SigninCompletedAccessPoint",

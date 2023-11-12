@@ -76,9 +76,8 @@ class WebAppPublisherHelperTest : public testing::Test {
 
     provider_ = WebAppProvider::GetForWebApps(profile());
 
-    publisher_ = std::make_unique<WebAppPublisherHelper>(
-        profile(), provider_, &no_op_delegate_,
-        /*observe_media_requests=*/false);
+    publisher_ = std::make_unique<WebAppPublisherHelper>(profile(), provider_,
+                                                         &no_op_delegate_);
 
     test::AwaitStartWebAppProviderAndSubsystems(profile());
   }
@@ -110,10 +109,9 @@ TEST_F(WebAppPublisherHelperTest, CreateWebApp_Minimal) {
 }
 
 TEST_F(WebAppPublisherHelperTest, CreateWebApp_Random) {
-  for (int seed = 0; seed < 100; ++seed) {
-    const GURL base_url("https://example.com/base_url");
+  for (uint32_t seed = 0; seed < 100; ++seed) {
     std::unique_ptr<WebApp> random_app =
-        test::CreateRandomWebApp(base_url, seed);
+        test::CreateRandomWebApp({.seed = seed});
 
     auto info = std::make_unique<WebAppInstallInfo>();
     info->title = base::UTF8ToUTF16(random_app->untranslated_name());

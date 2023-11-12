@@ -4,10 +4,8 @@
 
 #include "extensions/renderer/ipc_message_sender.h"
 
-#include <map>
 #include <utility>
 
-#include "base/guid.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "content/public/renderer/render_frame.h"
@@ -61,8 +59,6 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
         base::BindOnce(&MainThreadIPCMessageSender::OnResponse,
                        weak_ptr_factory_.GetWeakPtr(), request_id));
   }
-
-  void SendOnRequestResponseReceivedIPC(int request_id) override {}
 
   mojom::EventListenerParamPtr GetEventListenerParam(ScriptContext* context) {
     return !context->GetExtensionID().empty()
@@ -154,10 +150,30 @@ class MainThreadIPCMessageSender : public IPCMessageSender {
       case MessageTarget::EXTENSION: {
         ExtensionMsg_ExternalConnectionInfo info;
         if (extension && !extension->is_hosted_app()) {
-          info.source_endpoint =
-              script_context->context_type() == Feature::CONTENT_SCRIPT_CONTEXT
-                  ? MessagingEndpoint::ForContentScript(extension->id())
-                  : MessagingEndpoint::ForExtension(extension->id());
+          switch (script_context->context_type()) {
+            case Feature::BLESSED_EXTENSION_CONTEXT:
+            case Feature::UNBLESSED_EXTENSION_CONTEXT:
+            case Feature::LOCK_SCREEN_EXTENSION_CONTEXT:
+            case Feature::OFFSCREEN_EXTENSION_CONTEXT:
+              info.source_endpoint =
+                  MessagingEndpoint::ForExtension(extension->id());
+              break;
+            case Feature::CONTENT_SCRIPT_CONTEXT:
+              info.source_endpoint =
+                  MessagingEndpoint::ForContentScript(extension->id());
+              break;
+            case Feature::USER_SCRIPT_CONTEXT:
+              info.source_endpoint =
+                  MessagingEndpoint::ForUserScript(extension->id());
+              break;
+            case Feature::UNSPECIFIED_CONTEXT:
+            case Feature::WEB_PAGE_CONTEXT:
+            case Feature::BLESSED_WEB_PAGE_CONTEXT:
+            case Feature::WEBUI_CONTEXT:
+            case Feature::WEBUI_UNTRUSTED_CONTEXT:
+              NOTREACHED_NORETURN() << "Unexpected Context Encountered: "
+                                    << script_context->GetDebugString();
+          }
         } else {
           info.source_endpoint = MessagingEndpoint::ForWebPage();
         }
@@ -291,22 +307,7 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
     params->worker_thread_id = worker_thread_id;
     params->service_worker_version_id = service_worker_version_id_;
 
-    std::string guid = base::GenerateGUID();
-    request_id_to_guid_[params->request_id] = guid;
-
-    // Keeps the worker alive during extension function call. Balanced in
-    // `SendOnRequestResponseReceivedIPC()`.
-    dispatcher_->IncrementServiceWorkerActivity(service_worker_version_id_,
-                                                guid);
     dispatcher_->RequestWorker(std::move(params));
-  }
-
-  void SendOnRequestResponseReceivedIPC(int request_id) override {
-    auto iter = request_id_to_guid_.find(request_id);
-    DCHECK(iter != request_id_to_guid_.end());
-    dispatcher_->DecrementServiceWorkerActivity(service_worker_version_id_,
-                                                iter->second);
-    request_id_to_guid_.erase(iter);
   }
 
   void SendAddUnfilteredEventListenerIPC(
@@ -500,9 +501,6 @@ class WorkerThreadIPCMessageSender : public IPCMessageSender {
   WorkerThreadDispatcher* const dispatcher_;
   const int64_t service_worker_version_id_;
   absl::optional<ExtensionId> extension_id_;
-
-  // request id -> GUID map for each outstanding requests.
-  std::map<int, std::string> request_id_to_guid_;
 };
 
 }  // namespace

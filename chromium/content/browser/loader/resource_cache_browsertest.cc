@@ -5,6 +5,7 @@
 #include "base/command_line.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
 #include "content/browser/loader/resource_cache_manager.h"
 #include "content/browser/process_lock.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
@@ -93,7 +94,14 @@ class ResourceCacheTest : public ContentBrowserTest {
 
 // Tests that histograms are recorded when there are two renderers that have
 // the same process isolation policy.
-IN_PROC_BROWSER_TEST_F(ResourceCacheTest, RecordHistograms) {
+// TODO(https://crbug.com/1446495): Flaky on Android. Enable this if we run
+// an experiment on Android. No plan to run an experiment on Android for now.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_RecordHistograms DISABLED_RecordHistograms
+#else
+#define MAYBE_RecordHistograms RecordHistograms
+#endif
+IN_PROC_BROWSER_TEST_F(ResourceCacheTest, MAYBE_RecordHistograms) {
   const GURL kUrl = embedded_test_server()->GetURL("/simple_page.html");
   const GURL kScriptUrl = embedded_test_server()->GetURL("/cacheable.js");
 
@@ -128,7 +136,9 @@ IN_PROC_BROWSER_TEST_F(ResourceCacheTest, RecordHistograms) {
 
 // Tests that resource cache hosting renderer migration happens when a hosting
 // renderer has gone.
-IN_PROC_BROWSER_TEST_F(ResourceCacheTest, HostingRendererDisconnected) {
+// TODO(https://crbug.com/1451643): Enable this test when we run an experiment.
+IN_PROC_BROWSER_TEST_F(ResourceCacheTest,
+                       DISABLED_HostingRendererDisconnected) {
   const GURL kUrl = embedded_test_server()->GetURL("/simple_page.html");
   const GURL kScriptUrl = embedded_test_server()->GetURL("/cacheable.js");
 
@@ -184,7 +194,17 @@ IN_PROC_BROWSER_TEST_F(ResourceCacheTest, HostingRendererDisconnected) {
 
 // Tests that same-origin-same-process navigation doesn't change resource cache
 // hosting renderer.
-IN_PROC_BROWSER_TEST_F(ResourceCacheTest, HostingRendererNavigateToSameOrigin) {
+// TODO(https://crbug.com/1446495): Flaky on Android. Enable this if we run
+// an experiment on Android. No plan to run an experiment on Android for now.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_HostingRendererNavigateToSameOrigin \
+  DISABLED_HostingRendererNavigateToSameOrigin
+#else
+#define MAYBE_HostingRendererNavigateToSameOrigin \
+  HostingRendererNavigateToSameOrigin
+#endif
+IN_PROC_BROWSER_TEST_F(ResourceCacheTest,
+                       MAYBE_HostingRendererNavigateToSameOrigin) {
   const GURL kUrl = embedded_test_server()->GetURL("/simple_page.html");
   const GURL kScriptUrl = embedded_test_server()->GetURL("/cacheable.js");
 
@@ -257,8 +277,10 @@ INSTANTIATE_TEST_SUITE_P(All, ResourceCacheBFCacheTest, testing::Bool());
 // active renderer becomes a new host. Once the inactive renderer becomes
 // active, it should use the ResourceCache that is hosted by the second
 // renderer.
+// TODO(https://crbug.com/1434647): Flaky in trybots. Enable this test before
+// starting an experiment.
 IN_PROC_BROWSER_TEST_P(ResourceCacheBFCacheTest,
-                       HostingRendererNavigateToAnotherOriginAndBack) {
+                       DISABLED_HostingRendererNavigateToAnotherOriginAndBack) {
   // Labels for renderers:
   // * R1: RenderFrameHost lives in the first tab, navigated to `kUrl`.
   // * R2: RenderFrameHost lives in the second tab, navigated to `kUrl`.
@@ -346,12 +368,17 @@ IN_PROC_BROWSER_TEST_P(ResourceCacheBFCacheTest,
 
   ASSERT_TRUE(FetchScript(render_frame_host4, kScriptUrl2));
 
-  // Histograms should be recorded twice with a cache hit because R2 and R4
-  // fetched `kScriptUrl2`, in addition to `kScriptUrl` in R1 and R2 above.
+  // If R2 and R4 share the same process, histograms should not be incremented.
+  // If not, histograms should be recorded twice with a cache hit because R2 and
+  // R4 fetched `kScriptUrl2`, in addition to `kScriptUrl` in R1 and R2 above.
   FetchHistogramsFromChildProcesses();
-  histograms.ExpectUniqueSample(kHistogramIsInCacheScript, true, 2);
-  histograms.ExpectTotalCount(kHistogramIPCSendDelay, 2);
-  histograms.ExpectTotalCount(kHistogramIPCRecvDelay, 2);
+  const int kExpectedHistogramCount =
+      render_frame_host2->GetProcess() == render_frame_host4->GetProcess() ? 1
+                                                                           : 2;
+  histograms.ExpectUniqueSample(kHistogramIsInCacheScript, true,
+                                kExpectedHistogramCount);
+  histograms.ExpectTotalCount(kHistogramIPCSendDelay, kExpectedHistogramCount);
+  histograms.ExpectTotalCount(kHistogramIPCRecvDelay, kExpectedHistogramCount);
 }
 
 // TODO(https://crbug.com/141426): Add following tests.

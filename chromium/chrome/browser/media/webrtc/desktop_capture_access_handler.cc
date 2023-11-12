@@ -134,8 +134,7 @@ bool IsMediaTypeAllowed(AllowedScreenCaptureLevel allowed_capture_level,
                         content::DesktopMediaID::Type media_type) {
   switch (media_type) {
     case content::DesktopMediaID::TYPE_NONE:
-      NOTREACHED();
-      return false;
+      NOTREACHED_NORETURN();
     case content::DesktopMediaID::TYPE_SCREEN:
       return allowed_capture_level >= AllowedScreenCaptureLevel::kDesktop;
     case content::DesktopMediaID::TYPE_WINDOW:
@@ -197,7 +196,7 @@ bool IsRequestApproved(content::WebContents* web_contents,
   gfx::NativeWindow parent_window =
       FindParentWindowForWebContents(web_contents);
 #else
-  gfx::NativeWindow parent_window = nullptr;
+  gfx::NativeWindow parent_window = gfx::NativeWindow();
 #endif
   const std::u16string application_name = base::UTF8ToUTF16(
       extension ? extension->name() : request.security_origin.spec());
@@ -417,7 +416,7 @@ void DesktopCaptureAccessHandler::HandleRequest(
             request.requested_video_device_id,
             main_frame->GetProcess()->GetID(), main_frame->GetRoutingID(),
             url::Origin::Create(request.security_origin),
-            /*extension_name=*/nullptr, content::kRegistryStreamTypeDesktop);
+            content::kRegistryStreamTypeDesktop);
   }
 
   // Received invalid device id.
@@ -486,7 +485,8 @@ void DesktopCaptureAccessHandler::ProcessChangeSourceRequest(
             blink::mojom::MediaStreamType::GUM_DESKTOP_VIDEO_CAPTURE);
 
   if (pending_request->request.requested_video_device_id.empty()) {
-    pending_request->picker = picker_factory_->CreatePicker();
+    // Passing nullptr selects the default picker (DesktopMediaPickerViews).
+    pending_request->picker = picker_factory_->CreatePicker(nullptr);
     if (!pending_request->picker) {
       std::move(pending_request->callback)
           .Run(blink::mojom::StreamDevicesSet(),

@@ -7,7 +7,6 @@
 #include <string>
 
 #include "ash/accessibility/accessibility_controller_impl.h"
-#include "ash/public/cpp/desk_template.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -28,7 +27,6 @@
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_highlight_controller.h"
-#include "ash/wm/overview/overview_highlightable_view.h"
 #include "ash/wm/overview/overview_session.h"
 #include "ash/wm/overview/overview_utils.h"
 #include "base/i18n/time_formatting.h"
@@ -57,6 +55,7 @@
 #include "ui/views/metadata/view_factory_internal.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/view_utils.h"
 
 namespace ash {
 namespace {
@@ -127,13 +126,13 @@ SavedDeskItemView::SavedDeskItemView(std::unique_ptr<DeskTemplate> saved_desk)
       saved_desk_->source() == DeskTemplateSource::kPolicy;
   SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
 
+  View* background_view = nullptr;
+  View* box_layout_view = nullptr;
   views::Builder<SavedDeskItemView>(this)
       .SetPreferredSize(kPreferredSize)
       .SetUseDefaultFillLayout(true)
       .SetAccessibleName(saved_desk_name)
       .SetCallback(std::move(launch_template_callback))
-      .SetBackground(views::CreateThemedRoundedRectBackground(
-          cros_tokens::kCrosSysSystemBaseElevated, kSaveDeskCornerRadius))
       .SetBorder(std::make_unique<views::HighlightBorder>(
           kSaveDeskCornerRadius,
           chromeos::features::IsJellyrollEnabled()
@@ -141,8 +140,16 @@ SavedDeskItemView::SavedDeskItemView(std::unique_ptr<DeskTemplate> saved_desk)
               : views::HighlightBorder::Type::kHighlightBorder1))
       // TODO(b/274025495): Update Shadow for SavedDeskItemView.
       .AddChildren(
+          views::Builder<View>()
+              .CopyAddressTo(&background_view)
+              .SetPreferredSize(kPreferredSize)
+              .SetUseDefaultFillLayout(true)
+              .SetBackground(views::CreateThemedRoundedRectBackground(
+                  cros_tokens::kCrosSysSystemBaseElevated,
+                  kSaveDeskCornerRadius)),
           views::Builder<views::FlexLayoutView>()
               .SetOrientation(views::LayoutOrientation::kVertical)
+              .CopyAddressTo(&box_layout_view)
               .SetInteriorMargin(
                   gfx::Insets::VH(kVerticalPaddingDp, kSaveDeskPaddingDp))
               // TODO(richui): Consider splitting some of the children into
@@ -222,12 +229,24 @@ SavedDeskItemView::SavedDeskItemView(std::unique_ptr<DeskTemplate> saved_desk)
           views::Builder<views::View>()
               .CopyAddressTo(&hover_container_)
               .SetUseDefaultFillLayout(true)
-              .SetVisible(false))
+              .SetVisible(true))
       .BuildChildren();
 
-  // We need to ensure that the layer is non-opaque when animating.
   SetPaintToLayer();
+  // We need to ensure that the layer is non-opaque when animating.
   layer()->SetFillsBoundsOpaquely(false);
+
+  // Note this view needs to be set to paint to layer so other view won't
+  // paint over it.
+  box_layout_view->SetPaintToLayer();
+  box_layout_view->layer()->SetFillsBoundsOpaquely(false);
+
+  background_view->SetPaintToLayer();
+  background_view->layer()->SetBackgroundBlur(
+      ColorProvider::kBackgroundBlurSigma);
+  background_view->layer()->SetRoundedCornerRadius(
+      gfx::RoundedCornersF(kSaveDeskCornerRadius));
+  background_view->layer()->SetFillsBoundsOpaquely(false);
 
   const int button_text_id = saved_desk_->type() == DeskTemplateType::kTemplate
                                  ? IDS_ASH_DESKS_TEMPLATES_USE_TEMPLATE_BUTTON
@@ -269,9 +288,12 @@ SavedDeskItemView::SavedDeskItemView(std::unique_ptr<DeskTemplate> saved_desk)
 
   views::FocusRing* focus_ring =
       StyleUtil::SetUpFocusRingForView(this, kFocusRingHaloInset);
-  focus_ring->SetHasFocusPredicate([](views::View* view) {
-    return static_cast<SavedDeskItemView*>(view)->IsViewHighlighted();
-  });
+  focus_ring->SetHasFocusPredicate(
+      base::BindRepeating([](const views::View* view) {
+        const auto* v = views::AsViewClass<SavedDeskItemView>(view);
+        CHECK(v);
+        return v->IsViewHighlighted();
+      }));
   focus_ring->SetColorId(cros_tokens::kCrosSysFocusRing);
 
   SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
@@ -281,6 +303,9 @@ SavedDeskItemView::SavedDeskItemView(std::unique_ptr<DeskTemplate> saved_desk)
 
   hover_container_->layer()->SetFillsBoundsOpaquely(false);
   icon_container_view_->layer()->SetFillsBoundsOpaquely(false);
+
+  hover_container_->layer()->SetOpacity(0.0f);
+  icon_container_view_->layer()->SetOpacity(1.0f);
 }
 
 SavedDeskItemView::~SavedDeskItemView() {
@@ -308,10 +333,8 @@ void SavedDeskItemView::UpdateHoverButtonsVisibility(
   }
 
   if (hover_container_should_be_visible_) {
-    hover_container_->SetVisible(true);
     AnimateHover(hover_container_->layer(), icon_container_view_->layer());
   } else {
-    icon_container_view_->SetVisible(true);
     AnimateHover(icon_container_view_->layer(), hover_container_->layer());
   }
 }
@@ -368,9 +391,6 @@ void SavedDeskItemView::RevertSavedDeskName() {
 void SavedDeskItemView::UpdateSavedDesk(
     const DeskTemplate& updated_saved_desk) {
   saved_desk_ = updated_saved_desk.Clone();
-
-  hover_container_->SetVisible(false);
-  icon_container_view_->SetVisible(true);
 
   auto new_name = saved_desk_->template_name();
   DCHECK(!new_name.empty());
@@ -441,8 +461,6 @@ void SavedDeskItemView::OnViewFocused(views::View* observed_view) {
   should_commit_name_changes_ = true;
 
   // Hide the hover container when we are modifying the saved desk name.
-  hover_container_->SetVisible(false);
-  icon_container_view_->SetVisible(true);
   hover_container_->layer()->SetOpacity(0.0f);
   icon_container_view_->layer()->SetOpacity(1.0f);
 
@@ -570,25 +588,11 @@ void SavedDeskItemView::UpdateSavedDeskName() {
   }
 }
 
-void SavedDeskItemView::OnHoverAnimationEnded() {
-  hover_container_->SetVisible(hover_container_should_be_visible_);
-  icon_container_view_->SetVisible(!hover_container_should_be_visible_);
-}
-
 void SavedDeskItemView::AnimateHover(ui::Layer* layer_to_show,
                                      ui::Layer* layer_to_hide) {
   views::AnimationBuilder()
       .SetPreemptionStrategy(ui::LayerAnimator::IMMEDIATELY_SET_NEW_TARGET)
-      .OnEnded(base::BindOnce(
-          [](base::WeakPtr<SavedDeskItemView> view) {
-            if (view)
-              view->OnHoverAnimationEnded();
-          },
-          weak_ptr_factory_.GetWeakPtr()))
       .Once()
-      .SetOpacity(layer_to_show, 0.0f)
-      .SetOpacity(layer_to_hide, 1.0f)
-      .Then()
       .SetDuration(base::Milliseconds(kFadeDurationMs))
       .SetOpacity(layer_to_show, 1.0f)
       .SetOpacity(layer_to_hide, 0.0f);

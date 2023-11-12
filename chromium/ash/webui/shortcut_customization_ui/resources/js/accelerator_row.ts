@@ -9,6 +9,7 @@ import '../css/shortcut_customization_shared.css.js';
 import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 
+import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -37,7 +38,8 @@ declare global {
  * description of the shortcut along with a list of accelerators.
  * TODO(jimmyxgong): Implement opening a dialog when clicked.
  */
-export class AcceleratorRowElement extends PolymerElement {
+const AcceleratorRowElementBase = I18nMixin(PolymerElement);
+export class AcceleratorRowElement extends AcceleratorRowElementBase {
   static get is(): string {
     return 'accelerator-row';
   }
@@ -89,7 +91,7 @@ export class AcceleratorRowElement extends PolymerElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     if (!this.isLocked) {
-      this.removeEventListener('click', () => this.showDialog());
+      this.removeEventListener('edit-icon-clicked', () => this.showDialog());
     }
   }
 
@@ -98,7 +100,7 @@ export class AcceleratorRowElement extends PolymerElement {
         .then(({isMutable}) => {
           this.isLocked = !isMutable;
           if (!this.isLocked) {
-            this.addEventListener('click', () => this.showDialog());
+            this.addEventListener('edit-icon-clicked', () => this.showDialog());
           }
         });
   }
@@ -134,6 +136,25 @@ export class AcceleratorRowElement extends PolymerElement {
   protected getTextAcceleratorParts(infos: TextAcceleratorInfo[]):
       TextAcceleratorPart[] {
     return TextAcceleratorElement.getTextAcceleratorParts(infos);
+  }
+
+  protected isEmptyList(infos: AcceleratorInfo[]): boolean {
+    return infos.length === 0;
+  }
+
+  // Returns true if it is the first accelerator in the list.
+  protected isFirstAccelerator(index: number): boolean {
+    return index === 0;
+  }
+
+  private onEditIconClicked(): void {
+    this.dispatchEvent(
+        new CustomEvent('edit-icon-clicked', {bubbles: true, composed: true}));
+  }
+
+  protected getTabIndex(): number {
+    // If customization is disabled, this element should not be tab-focusable.
+    return isCustomizationDisabled() ? -1 : 0;
   }
 
   static get template(): HTMLTemplateElement {

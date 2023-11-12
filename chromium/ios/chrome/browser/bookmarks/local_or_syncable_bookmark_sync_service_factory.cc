@@ -7,9 +7,9 @@
 #include "base/no_destructor.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
-#include "ios/chrome/browser/browser_state/browser_state_otr_helper.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/undo/bookmark_undo_service_factory.h"
+#include "ios/chrome/browser/bookmarks/bookmark_undo_service_factory.h"
+#include "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
+#include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 
 #include "ios/sync/file_store_factory.h"
 
@@ -49,8 +49,8 @@ LocalOrSyncableBookmarkSyncServiceFactory::BuildServiceInstanceFor(
       ChromeBrowserState::FromBrowserState(context);
   std::unique_ptr<sync_bookmarks::BookmarkSyncService> bookmark_sync_service(
       new sync_bookmarks::BookmarkSyncService(
-          BookmarkUndoServiceFactory::GetForBrowserStateIfExists(
-              browser_state)));
+          BookmarkUndoServiceFactory::GetForBrowserStateIfExists(browser_state),
+          /*wipe_model_on_stopping_sync_with_clear_data=*/false));
   bookmark_sync_service->SetVivaldiSyncedFileStore(
       SyncedFileStoreFactory::GetForBrowserState(browser_state));
   return bookmark_sync_service;

@@ -75,7 +75,7 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
       assertWithMatcher:grey_notNil()];
 
   // Add the bookmark from the UI.
-  [BookmarkEarlGrey waitForBookmarkModelLoaded:YES];
+  [BookmarkEarlGrey waitForBookmarkModelLoaded];
   [BookmarkEarlGreyUI bookmarkCurrentTabWithTitle:bookmarkTitle];
 
   // Verify the bookmark is set.
@@ -117,6 +117,60 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
   [ChromeEarlGrey closeCurrentTab];
 }
 
+// Test deleting grand parent is reflected in the bookmarks list UI. Regression
+// test for crbug.com/1445457
+- (void)testRemoveGrandParentFolder {
+  [BookmarkEarlGrey setupStandardBookmarks];
+  [BookmarkEarlGreyUI openBookmarks];
+  [BookmarkEarlGreyUI openMobileBookmarks];
+
+  // Enter Folder 1
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Folder 1")]
+      performAction:grey_tap()];
+  // Enter Folder 2
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Folder 2")]
+      performAction:grey_tap()];
+  // Enter Folder 3
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Folder 3")]
+      performAction:grey_tap()];
+
+  // Delete the Folder 1 programmatically in background. This will delete child
+  // Folder 2 and Folder 3 as well.
+  [BookmarkEarlGrey removeBookmarkWithTitle:@"Folder 1"];
+
+  // Verify the empty background appears because Folder 3 is deleted.
+  [BookmarkEarlGreyUI verifyEmptyBackgroundAppears];
+}
+
+// Test deleting grand parent is reflected in the bookmarks folder editor UI.
+// Regression test for crbug.com/1446133
+- (void)testRemoveGrandParentWhileEditingFolder {
+  [BookmarkEarlGrey setupStandardBookmarks];
+  [BookmarkEarlGreyUI openBookmarks];
+  [BookmarkEarlGreyUI openMobileBookmarks];
+
+  // Enter Folder 1
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Folder 1")]
+      performAction:grey_tap()];
+  // Enter Folder 2
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Folder 2")]
+      performAction:grey_tap()];
+  // Enter edit mode with Folder 3
+  [[EarlGrey
+      selectElementWithMatcher:TappableBookmarkNodeWithLabel(@"Folder 3")]
+      performAction:grey_longPress()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          BookmarksContextMenuEditButton()]
+      performAction:grey_tap()];
+
+  // Delete the Folder 1 programmatically in background. This will delete child
+  // Folder 2 and Folder 3 as well.
+  [BookmarkEarlGrey removeBookmarkWithTitle:@"Folder 1"];
+
+  // Verify the empty background appears because Folder 3 is deleted.
+  [BookmarkEarlGreyUI verifyEmptyBackgroundAppears];
+}
+
 // Test to set bookmarks in multiple tabs.
 - (void)testBookmarkMultipleTabs {
   GREYAssertTrue(self.testServer->Start(), @"Server did not start.");
@@ -127,7 +181,7 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
   [ChromeEarlGrey openNewTab];
   [ChromeEarlGrey loadURL:secondURL];
 
-  [BookmarkEarlGrey waitForBookmarkModelLoaded:YES];
+  [BookmarkEarlGrey waitForBookmarkModelLoaded];
   [BookmarkEarlGreyUI bookmarkCurrentTabWithTitle:@"my bookmark"];
   [BookmarkEarlGrey verifyBookmarksWithTitle:@"my bookmark" expectedCount:1];
 }
@@ -853,8 +907,8 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
   // Choose to move the bookmark into a new folder and verify folder creator is
   // visible.
   [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(
-                                   kBookmarkCreateNewFolderCellIdentifier)]
+      selectElementWithMatcher:
+          grey_accessibilityID(kBookmarkCreateNewProfileFolderCellIdentifier)]
       performAction:grey_tap()];
   [[EarlGrey
       selectElementWithMatcher:
@@ -870,8 +924,8 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
           grey_accessibilityID(kBookmarkFolderPickerViewContainerIdentifier)]
       assertWithMatcher:grey_sufficientlyVisible()];
   [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(
-                                   kBookmarkCreateNewFolderCellIdentifier)]
+      selectElementWithMatcher:
+          grey_accessibilityID(kBookmarkCreateNewProfileFolderCellIdentifier)]
       assertWithMatcher:grey_notVisible()];
 
   // Swipe TableView down and verify that we're back to the bookmarks list.
@@ -946,7 +1000,7 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
   [ChromeEarlGrey loadURL:incognitoURL];
 
   // Add the bookmark from the UI.
-  [BookmarkEarlGrey waitForBookmarkModelLoaded:YES];
+  [BookmarkEarlGrey waitForBookmarkModelLoaded];
   NSString* bookmarkTitle = @"Test Page";
   [BookmarkEarlGreyUI bookmarkCurrentTabWithTitle:@"Test Page"];
 
@@ -1034,6 +1088,27 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
                                           kBookmarksHomeTableViewIdentifier)]
       assertWithMatcher:grey_nil()];
+}
+
+// Test to press back button while editing a folder name in the bookmark table
+// view.
+// Related to http://crbug.com/1466119.
+- (void)testPressBackbuttonWhileEditingBookmarkName {
+  // Open the bookmark view.
+  [BookmarkEarlGrey setupStandardBookmarks];
+  [BookmarkEarlGreyUI openBookmarks];
+  [BookmarkEarlGreyUI openMobileBookmarks];
+  [ChromeEarlGreyUI waitForAppToIdle];
+  // Click on "New Folder".
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kBookmarksHomeLeadingButtonIdentifier)]
+      performAction:grey_tap()];
+  // Press the back button.
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(BookmarksNavigationBarBackButton(),
+                                          grey_sufficientlyVisible(), nil)]
+      performAction:grey_tap()];
 }
 
 // TODO(crbug.com/695749): Add egtests for:

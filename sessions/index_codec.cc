@@ -7,9 +7,9 @@
 #include <memory>
 #include <vector>
 
-#include "base/guid.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/uuid.h"
 #include "base/values.h"
 // The next two For Decode that read files() from OS
 #include "browser/sessions/vivaldi_session_service.h"
@@ -60,8 +60,9 @@ void AddToParent(Index_Node* parent, const base::FilePath& directory,
     base::Time modified = info.GetLastModifiedTime();
 
     std::unique_ptr<Index_Node> node =
-        std::make_unique<Index_Node>(base::GenerateGUID(),
-                                     Index_Node::GetNewId());
+        std::make_unique<Index_Node>(
+            base::Uuid::GenerateRandomV4().AsLowercaseString(),
+            Index_Node::GetNewId());
     node->SetFilename(filename);
     node->SetTitle(base::UTF8ToUTF16(title));
     node->SetCreateTime(modified.ToJsTime());
@@ -96,7 +97,7 @@ bool IndexCodec::GetVersion(std::string* version, const base::Value& value) {
 
   for (const auto& session : value.GetList()) {
     if (session.is_dict()) {
-      const std::string* entry = session.FindStringPath("version");
+      const std::string* entry = session.GetDict().FindString("version");
       if (entry) {
         *version = *entry;
         return true;
@@ -130,8 +131,9 @@ bool IndexCodec::Decode(Index_Node* items, Index_Node* backup,
   // node that holds all elements including trash.
   for (const auto& entry : value.GetList()) {
     if (entry.is_dict()) {
-      const std::string* guid = entry.FindStringPath("guid");
-      bool guid_valid = guid && !guid->empty() && base::IsValidGUID(*guid);
+      const std::string* guid = entry.GetDict().FindString("guid");
+      bool guid_valid = guid && !guid->empty() &&
+        base::Uuid::ParseCaseInsensitive(*guid).is_valid();
       if (guid_valid) {
         std::map<std::string, bool>::iterator it = guids_.find(*guid);
         if (it != guids_.end()) {
@@ -146,7 +148,7 @@ bool IndexCodec::Decode(Index_Node* items, Index_Node* backup,
 
         if (*guid == Index_Node::items_node_guid()) {
           bool parsing_ok = true;
-          const base::Value* children = entry.FindPath("children");
+          const base::Value* children = entry.GetDict().Find("children");
           if (children) {
             parsing_ok = DecodeNode(items, *children);
             if (!parsing_ok) {
@@ -186,8 +188,9 @@ bool IndexCodec::DecodeNode(Index_Node* parent,
       }
     }
   } else if (value.is_dict()) {
-    const std::string* guid = value.FindStringPath("guid");
-    bool guid_valid = guid && !guid->empty() && base::IsValidGUID(*guid);
+    const std::string* guid = value.GetDict().FindString("guid");
+    bool guid_valid = guid && !guid->empty() &&
+      base::Uuid::ParseCaseInsensitive(*guid).is_valid();
     if (guid_valid) {
       std::map<std::string, bool>::iterator it = guids_.find(*guid);
       if (it != guids_.end()) {
@@ -208,7 +211,7 @@ bool IndexCodec::DecodeNode(Index_Node* parent,
           ? Index_Node::trash_node_id()
           : Index_Node::autosave_node_id())
       : Index_Node::GetNewId();
-    const int type = value.FindIntKey("type").value_or(
+    const int type = value.GetDict().FindInt("type").value_or(
         is_special_node && *guid == Index_Node::trash_node_guid()
           ? Index_Node::kFolder
           : Index_Node::kNode);
@@ -218,7 +221,7 @@ bool IndexCodec::DecodeNode(Index_Node* parent,
     }
     std::unique_ptr<Index_Node> node = std::make_unique<Index_Node>(
         *guid, id, static_cast<Index_Node::Type>(type));
-    const std::string* title = value.FindStringPath("title");
+    const std::string* title = value.GetDict().FindString("title");
     if (title) {
       node->SetTitle(base::UTF8ToUTF16(*title));
     }
@@ -227,7 +230,7 @@ bool IndexCodec::DecodeNode(Index_Node* parent,
     }
     // An Index_Node::kNode can have children (it is then a container) as well
     // as a regular Index_Node::Folder
-    const base::Value* children = value.FindPath("children");
+    const base::Value* children = value.GetDict().Find("children");
     if (children) {
       if (!DecodeNode(node.get(), *children)) {
         return false;
@@ -243,8 +246,8 @@ bool IndexCodec::DecodeNode(Index_Node* parent,
 
 void IndexCodec::SetNodeFields(Index_Node* node, Index_Node* parent,
                                const base::Value& value) {
-  const std::string* filename = value.FindStringPath("filename");
-  const std::string* container_guid = value.FindStringPath("containerguid");
+  const std::string* filename = value.GetDict().FindString("filename");
+  const std::string* container_guid = value.GetDict().FindString("containerguid");
   const double create_time = value.GetDict().FindDouble("createtime").value_or(0);
   const double modify_time = value.GetDict().FindDouble("modifytime").value_or(0);
   const int windows_count = value.GetDict().FindInt("windowscount").value_or(0);
@@ -299,45 +302,45 @@ base::Value IndexCodec::Encode(Index_Model* model) {
 base::Value IndexCodec::EncodeNode(Index_Node* node) {
   if (node->is_folder() || node->is_container()) {
     base::Value dict(base::Value::Type::DICT);
-    dict.SetKey("guid", base::Value(node->guid()));
-    dict.SetKey("type", base::Value(node->type()));
-    //dict.SetKey("containerguid", base::Value(node->container_guid()));
+    dict.GetDict().Set("guid", base::Value(node->guid()));
+    dict.GetDict().Set("type", base::Value(node->type()));
+    //dict.GetDict().Set("containerguid", base::Value(node->container_guid()));
     if (node->is_container()) {
-      dict.SetKey("filename", base::Value(node->filename()));
-      dict.SetKey("title", base::Value(node->GetTitle()));
-      dict.SetKey("createtime", base::Value(node->create_time()));
-      dict.SetKey("modifytime", base::Value(node->modify_time()));
-      dict.SetKey("windowscount", base::Value(node->windows_count()));
-      dict.SetKey("tabscount", base::Value(node->tabs_count()));
-      dict.SetKey("quarantinecount", base::Value(node->quarantine_count()));
+      dict.GetDict().Set("filename", base::Value(node->filename()));
+      dict.GetDict().Set("title", base::Value(node->GetTitle()));
+      dict.GetDict().Set("createtime", base::Value(node->create_time()));
+      dict.GetDict().Set("modifytime", base::Value(node->modify_time()));
+      dict.GetDict().Set("windowscount", base::Value(node->windows_count()));
+      dict.GetDict().Set("tabscount", base::Value(node->tabs_count()));
+      dict.GetDict().Set("quarantinecount", base::Value(node->quarantine_count()));
       base::Value::List workspaces(node->workspaces().Clone());
-      dict.SetKey("workspaces", base::Value(std::move(workspaces)));
+      dict.GetDict().Set("workspaces", base::Value(std::move(workspaces)));
       base::Value::Dict group_names(node->group_names().Clone());
-      dict.SetKey("groupnames", base::Value(std::move(group_names)));
+      dict.GetDict().Set("groupnames", base::Value(std::move(group_names)));
     }
     base::Value list(base::Value::Type::LIST);
     for (const auto& child : node->children()) {
       list.GetList().Append(EncodeNode(child.get()));
     }
-    dict.SetKey("children", base::Value(std::move(list)));
+    dict.GetDict().Set("children", base::Value(std::move(list)));
     return dict;
   }
 
   base::Value dict(base::Value::Type::DICT);
-  dict.SetKey("guid", base::Value(node->guid()));
-  dict.SetKey("type", base::Value(node->type()));
-  dict.SetKey("containerguid", base::Value(node->container_guid()));
-  dict.SetKey("filename", base::Value(node->filename()));
-  dict.SetKey("title", base::Value(node->GetTitle()));
-  dict.SetKey("createtime", base::Value(node->create_time()));
-  dict.SetKey("modifytime", base::Value(node->modify_time()));
-  dict.SetKey("windowscount", base::Value(node->windows_count()));
-  dict.SetKey("tabscount", base::Value(node->tabs_count()));
-  dict.SetKey("quarantinecount", base::Value(node->quarantine_count()));
+  dict.GetDict().Set("guid", base::Value(node->guid()));
+  dict.GetDict().Set("type", base::Value(node->type()));
+  dict.GetDict().Set("containerguid", base::Value(node->container_guid()));
+  dict.GetDict().Set("filename", base::Value(node->filename()));
+  dict.GetDict().Set("title", base::Value(node->GetTitle()));
+  dict.GetDict().Set("createtime", base::Value(node->create_time()));
+  dict.GetDict().Set("modifytime", base::Value(node->modify_time()));
+  dict.GetDict().Set("windowscount", base::Value(node->windows_count()));
+  dict.GetDict().Set("tabscount", base::Value(node->tabs_count()));
+  dict.GetDict().Set("quarantinecount", base::Value(node->quarantine_count()));
   base::Value::List workspaces(node->workspaces().Clone());
-  dict.SetKey("workspaces", base::Value(std::move(workspaces)));
+  dict.GetDict().Set("workspaces", base::Value(std::move(workspaces)));
   base::Value::Dict group_names(node->group_names().Clone());
-  dict.SetKey("groupnames", base::Value(std::move(group_names)));
+  dict.GetDict().Set("groupnames", base::Value(std::move(group_names)));
 
   return dict;
 }

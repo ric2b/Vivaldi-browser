@@ -11,7 +11,7 @@ import os.path
 import re
 import string
 
-from . import commands
+from signing import commands
 
 
 def _get_identity_hash(identity):
@@ -216,13 +216,15 @@ class NotarizeAndStapleLevel(enum.Enum):
     def should_staple(self):
         return self.value > self.WAIT_NOSTAPLE.value
 
-    @classmethod
-    def valid_strings(cls):
-        return tuple(level.name.lower().replace('_', '-') for level in cls)
+    def __str__(self):
+        return self.name.lower().replace('_', '-')
 
     @classmethod
     def from_string(cls, str):
-        return cls[str.upper().replace('-', '_')]
+        try:
+            return cls[str.upper().replace('-', '_')]
+        except KeyError:
+            raise ValueError(f'Invalid NotarizeAndStapleLevel: {str}')
 
 
 class NotarizationTool(enum.Enum):
@@ -381,11 +383,8 @@ class Distribution(object):
                              self).packaging_basename
 
         return DistributionCodeSignConfig(
-            **pick(base_config, ('identity', 'installer_identity',
-                                 'notary_user', 'notary_password',
-                                 'notary_asc_provider', 'notary_team_id',
-                                 'codesign_requirements_basic',
-                                 'notarization_tool')))
+            **pick(base_config, ('invoker', 'identity', 'installer_identity',
+                                 'codesign_requirements_basic')))
 
 
 class Paths(object):

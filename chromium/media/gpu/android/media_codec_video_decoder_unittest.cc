@@ -1039,13 +1039,10 @@ TEST_P(MediaCodecVideoDecoderVp9Test, ColorSpaceIsIncludedInCodecConfig) {
 TEST_P(MediaCodecVideoDecoderVp9Test, HdrMetadataIsIncludedInCodecConfig) {
   VideoDecoderConfig config = TestVideoConfig::Normal(VideoCodec::kVP9);
   gfx::HDRMetadata hdr_metadata;
-  hdr_metadata.max_frame_average_light_level = 123;
-  hdr_metadata.max_content_light_level = 456;
-  hdr_metadata.color_volume_metadata.primaries = {
-      0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f,
-  };
-  hdr_metadata.color_volume_metadata.luminance_max = 1000;
-  hdr_metadata.color_volume_metadata.luminance_min = 0;
+  hdr_metadata.cta_861_3 = gfx::HdrMetadataCta861_3(123, 456);
+  hdr_metadata.smpte_st_2086 = gfx::HdrMetadataSmpteSt2086(
+      {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f},
+      /*luminance_max=*/1000, /*luminance_min=*/0);
 
   config.set_hdr_metadata(hdr_metadata);
 

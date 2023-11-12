@@ -30,14 +30,14 @@
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/common/chrome_constants.h"
-#include "components/sync/driver/sync_service_impl.h"
+#include "components/sync/service/sync_service_impl.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 namespace web_app {
 
 namespace {
 
-class DisplayModeChangeWaiter : public AppRegistrarObserver {
+class DisplayModeChangeWaiter : public WebAppRegistrarObserver {
  public:
   explicit DisplayModeChangeWaiter(WebAppRegistrar& registrar) {
     observation_.Observe(&registrar);
@@ -55,8 +55,8 @@ class DisplayModeChangeWaiter : public AppRegistrarObserver {
 
  private:
   base::RunLoop run_loop_;
-  base::ScopedObservation<WebAppRegistrar, AppRegistrarObserver> observation_{
-      this};
+  base::ScopedObservation<WebAppRegistrar, WebAppRegistrarObserver>
+      observation_{this};
 };
 
 }  // namespace

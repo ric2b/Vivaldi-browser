@@ -14,6 +14,10 @@
 #include "build/branding_buildflags.h"
 #include "crypto/apple_keychain.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 #ifdef VIVALDI_BUILD
 #undef BUILDFLAG_INTERNAL_GOOGLE_CHROME_BRANDING
 #define BUILDFLAG_INTERNAL_GOOGLE_CHROME_BRANDING() (1)
@@ -55,7 +59,7 @@ std::string AddRandomPasswordToKeychain(const AppleKeychain& keychain,
 
   OSStatus error = keychain.AddGenericPassword(
       service_name.size(), service_name.data(), account_name.size(),
-      account_name.data(), password.size(), password_data, NULL);
+      account_name.data(), password.size(), password_data, /*item=*/nullptr);
 
   if (error != noErr) {
     OSSTATUS_DLOG(ERROR, error) << "Keychain add failed";
@@ -90,7 +94,7 @@ std::string KeychainPassword::GetPassword() const {
   OSStatus error = keychain_.FindGenericPassword(
       GetServiceName().size(), GetServiceName().c_str(),
       GetAccountName().size(), GetAccountName().c_str(), &password_length,
-      &password_data, nullptr);
+      &password_data, /*item=*/nullptr);
 
   if (error == noErr) {
     std::string password =

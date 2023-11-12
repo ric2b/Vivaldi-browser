@@ -20,8 +20,10 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/events/event_constants.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
@@ -159,21 +161,29 @@ bool IsNearZero(const float num) {
   return (std::fabs(num) < 1e-10);
 }
 
+bool IsRepeatedClickTimes(const base::TimeTicks& time_stamp1,
+                          const base::TimeTicks& time_stamp2) {
+  // The new event has been created from the same native event.
+  if (time_stamp1 == time_stamp2) {
+    return false;
+  }
+
+  base::TimeDelta time_difference = time_stamp2 - time_stamp1;
+  return time_difference <= base::Milliseconds(ui::kDoubleClickTimeMs);
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // Event
 
-Event::~Event() {
-  if (delete_native_event_)
-    ReleaseCopiedNativeEvent(native_event_);
-}
+Event::~Event() = default;
 
 void Event::SetNativeEvent(const PlatformEvent& event) {
-  if (delete_native_event_)
-    ReleaseCopiedNativeEvent(native_event_);
-  native_event_ = CopyNativeEvent(event);
-  delete_native_event_ = true;
+  if (!ShouldCopyPlatformEvents()) {
+    return;
+  }
+  native_event_ = event;
 }
 
 const char* Event::GetName() const {
@@ -265,9 +275,7 @@ const TouchEvent* Event::AsTouchEvent() const {
 }
 
 bool Event::HasNativeEvent() const {
-  PlatformEvent null_event;
-  std::memset(&null_event, 0, sizeof(null_event));
-  return !!std::memcmp(&native_event_, &null_event, sizeof(null_event));
+  return IsPlatformEventValid(native_event_);
 }
 
 void Event::StopPropagation() {
@@ -296,7 +304,7 @@ Event::Event(EventType type, base::TimeTicks time_stamp, int flags)
     : type_(type),
       time_stamp_(time_stamp.is_null() ? EventTimeForNow() : time_stamp),
       flags_(flags),
-      native_event_(PlatformEvent()) {
+      native_event_(CreateInvalidPlatformEvent()) {
   if (type_ < ET_LAST)
     latency()->set_source_event_type(EventTypeToLatencySourceEventType(type));
 }
@@ -305,6 +313,8 @@ Event::Event(const PlatformEvent& native_event, EventType type, int flags)
     : type_(type),
       time_stamp_(EventTimeFromNative(native_event)),
       flags_(flags),
+      // Note that the construction of an Event directly from a PlatformEvent
+      // is the only time that ShouldCopyPlatformEvents() is not consulted.
       native_event_(native_event) {
   if (type_ < ET_LAST)
     latency()->set_source_event_type(EventTypeToLatencySourceEventType(type));
@@ -322,8 +332,8 @@ Event::Event(const Event& copy)
       time_stamp_(copy.time_stamp_),
       latency_(copy.latency_),
       flags_(copy.flags_),
-      native_event_(CopyNativeEvent(copy.native_event_)),
-      delete_native_event_(true),
+      native_event_(ShouldCopyPlatformEvents() ? copy.native_event_
+                                               : CreateInvalidPlatformEvent()),
       source_device_id_(copy.source_device_id_),
       properties_(copy.properties_
                       ? std::make_unique<Properties>(*copy.properties_)
@@ -331,15 +341,12 @@ Event::Event(const Event& copy)
 
 Event& Event::operator=(const Event& rhs) {
   if (this != &rhs) {
-    if (delete_native_event_)
-      ReleaseCopiedNativeEvent(native_event_);
-
     type_ = rhs.type_;
     time_stamp_ = rhs.time_stamp_;
     latency_ = rhs.latency_;
     flags_ = rhs.flags_;
-    native_event_ = CopyNativeEvent(rhs.native_event_);
-    delete_native_event_ = true;
+    native_event_ = ShouldCopyPlatformEvents() ? rhs.native_event_
+                                               : CreateInvalidPlatformEvent();
     cancelable_ = rhs.cancelable_;
     phase_ = rhs.phase_;
     result_ = rhs.result_;
@@ -479,7 +486,6 @@ void MouseEvent::InitializeNative() {
 bool MouseEvent::IsRepeatedClickEvent(const MouseEvent& event1,
                                       const MouseEvent& event2) {
   // These values match the Windows defaults.
-  static const int kDoubleClickTimeMS = 500;
   static const int kDoubleClickWidth = 4;
   static const int kDoubleClickHeight = 4;
 
@@ -491,14 +497,9 @@ bool MouseEvent::IsRepeatedClickEvent(const MouseEvent& event1,
       (event2.flags() & ~EF_IS_DOUBLE_CLICK))
     return false;
 
-  // The new event has been created from the same native event.
-  if (event1.time_stamp() == event2.time_stamp())
+  if (!IsRepeatedClickTimes(event1.time_stamp(), event2.time_stamp())) {
     return false;
-
-  base::TimeDelta time_difference = event2.time_stamp() - event1.time_stamp();
-
-  if (time_difference.InMilliseconds() > kDoubleClickTimeMS)
-    return false;
+  }
 
   if (std::abs(event2.x() - event1.x()) > kDoubleClickWidth / 2)
     return false;
@@ -974,7 +975,7 @@ void KeyEvent::ApplyLayout() const {
   // Native Windows character events always have is_char_ == true,
   // so this is a synthetic or native keystroke event.
   // Therefore, perform only the fallback action.
-  if (native_event()) {
+  if (IsPlatformEventValid(native_event())) {
     DCHECK(EventTypeFromNative(native_event()) == ET_KEY_PRESSED ||
            EventTypeFromNative(native_event()) == ET_KEY_RELEASED);
   }
@@ -1072,36 +1073,56 @@ char16_t KeyEvent::GetCharacter() const {
     DomKey::Base utf32_character = key_.ToCharacter();
     char16_t ucs2_character = static_cast<char16_t>(utf32_character);
     DCHECK_EQ(static_cast<DomKey::Base>(ucs2_character), utf32_character);
-    // Check if the control character is down. Note that ALTGR is represented
-    // on Windows as CTRL|ALT, so we need to make sure that is not set.
-    if ((flags() & (EF_ALTGR_DOWN | EF_CONTROL_DOWN)) == EF_CONTROL_DOWN) {
-      // For a control character, key_ contains the corresponding printable
-      // character. To preserve existing behaviour for now, return the control
-      // character here; this will likely change -- see e.g. crbug.com/471488.
-      if (ucs2_character >= 0x20 && ucs2_character <= 0x7E)
-        return ucs2_character & 0x1F;
-      if (ucs2_character == '\r')
+
+    // Check if the control character is down.
+#if BUILDFLAG(IS_WIN)
+    // Note that ALTGR is represented on Windows as CTRL|ALT, so we need to make
+    // sure that is not set.
+    bool is_control_down =
+        (flags() & (EF_ALTGR_DOWN | EF_CONTROL_DOWN)) == EF_CONTROL_DOWN;
+#else
+    bool is_control_down = flags() & EF_CONTROL_DOWN;
+#endif
+    if (is_control_down) {
+      char16_t shifted_character = ucs2_character;
+      // In some operating systems such as Linux, Ctrl + Some Printable
+      // Character gives a control character. This follows caret notation
+      // defined for ASCII control characters where the printable character
+      // follows a caret (^; represents a control press). We retain this
+      // behavior for compatibility.
+      if (!(flags() & EF_SHIFT_DOWN)) {
+        // Note: Software that supports control characters also allow the
+        // "unshifted" version of the printable character. In theory, we should
+        // consult the keyboard layout to retrieve the shifted character but we
+        // only supported US layout for this case in the past, so we only
+        // support this behavior.
+        if (char16_t maybe_character = DomCodeToUsLayoutCharacter(
+                UsLayoutDomKeyToDomCode(key_), EF_SHIFT_DOWN);
+            maybe_character) {
+          shifted_character = maybe_character;
+        }
+      }
+      if (shifted_character >= '@' && shifted_character <= '_') {
+        return shifted_character - '@';
+      }
+      if (shifted_character == '?') {
+        return '\x7f';
+      }
+
+      // In ye olden days, Ctrl + Enter meant soft enter, i.e. new line. Some
+      // applications such as Microsoft Word still carry this behavior. We
+      // retain this behavior.
+      if (ucs2_character == '\r') {
         return '\n';
+      }
     }
+
     return ucs2_character;
   }
-  return 0;
-}
-
-char16_t KeyEvent::GetText() const {
-  if ((flags() & EF_CONTROL_DOWN) != 0) {
-    DomKey key;
-    KeyboardCode key_code;
-    if (DomCodeToControlCharacter(code_, flags(), &key, &key_code))
-      return key.ToCharacter();
-  }
-  return GetUnmodifiedText();
-}
-
-char16_t KeyEvent::GetUnmodifiedText() const {
-  if (!is_char_ && (key_code_ == VKEY_RETURN))
+  if (!is_char_ && key_code_ == ui::VKEY_RETURN) {
     return '\r';
-  return GetCharacter();
+  }
+  return 0;
 }
 
 bool KeyEvent::IsUnicodeKeyCode() const {

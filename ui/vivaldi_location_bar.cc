@@ -5,6 +5,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/passwords/manage_passwords_icon_view.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -14,22 +15,10 @@
 
 using content_settings::PageSpecificContentSettings;
 
-VivaldiLocationBar::VivaldiLocationBar(const VivaldiBrowserWindow& window)
-    : window_(window) {}
+VivaldiLocationBar::VivaldiLocationBar(VivaldiBrowserWindow& window)
+    : LocationBar(window.browser()->command_controller()), window_(window) {}
 
 VivaldiLocationBar::~VivaldiLocationBar() = default;
-
-GURL VivaldiLocationBar::GetDestinationURL() const {
-  return GURL();
-}
-
-WindowOpenDisposition VivaldiLocationBar::GetWindowOpenDisposition() const {
-  return WindowOpenDisposition::UNKNOWN;
-}
-
-ui::PageTransition VivaldiLocationBar::GetPageTransition() const {
-  return ui::PageTransition::PAGE_TRANSITION_LINK;
-}
 
 const OmniboxView* VivaldiLocationBar::GetOmniboxView() const {
   return nullptr;
@@ -39,16 +28,13 @@ OmniboxView* VivaldiLocationBar::GetOmniboxView() {
   return nullptr;
 }
 
+content::WebContents* VivaldiLocationBar::GetWebContents() { return nullptr; }
+
+LocationBarModel* VivaldiLocationBar::GetLocationBarModel() { return nullptr; }
+
+
 LocationBarTesting* VivaldiLocationBar::GetLocationBarForTesting() {
   return nullptr;
-}
-
-base::TimeTicks VivaldiLocationBar::GetMatchSelectionTimestamp() const {
-  return base::TimeTicks();
-}
-
-bool VivaldiLocationBar::IsInputTypedUrlWithoutScheme() const {
-  return false;
 }
 
 void VivaldiLocationBar::UpdateContentSettingsIcons() {

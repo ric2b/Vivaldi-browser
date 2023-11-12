@@ -109,6 +109,7 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   void GenerateMipmap() override;
   void SetDelegatedInkPointRendererSkiaForTest(
       std::unique_ptr<DelegatedInkPointRendererSkia> renderer) override;
+  bool SupportsBGRA() const override;
 
   std::unique_ptr<DelegatedInkHandler> delegated_ink_handler_;
 
@@ -492,7 +493,6 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
 
   bool UsingSkiaForDelegatedInk() const;
   uint32_t debug_tint_modulate_count_ = 0;
-  bool use_real_color_space_for_stream_video_ = false;
 
   // Used to get mailboxes for the root render pass when
   // capabilities().renderer_allocates_images = true.

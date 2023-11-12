@@ -22,7 +22,6 @@
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/timer/timer.h"
-#include "calendar_model.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/compositor/compositor_animation_observer.h"
@@ -44,7 +43,6 @@ namespace ash {
 class CalendarEventListView;
 class CalendarMonthView;
 class IconButton;
-class CalendarSurfaceLayerMask;
 class CalendarView;
 
 // The header of the calendar view, which shows the current month and year.
@@ -72,25 +70,6 @@ class CalendarHeaderView : public views::View {
 
   // The year header which follows the `header_`.
   const raw_ptr<views::Label, ExperimentalAsh> header_year_;
-};
-
-// Container view used for holding the event list view and / or the up next
-// view and animating them together.
-// Calculates the path for the `CalendarSurfaceLayerMask` to use.
-class CalendarSlidingSurface : public views::View {
- public:
-  METADATA_HEADER(CalendarSlidingSurface);
-  explicit CalendarSlidingSurface(CalendarView* calendar_view)
-      : calendar_view_(calendar_view) {}
-  CalendarSlidingSurface(const CalendarSlidingSurface& other) = delete;
-  CalendarSlidingSurface& operator=(const CalendarSlidingSurface& other) =
-      delete;
-  ~CalendarSlidingSurface() override = default;
-
-  SkPath GetPath() const;
-
- private:
-  const raw_ptr<CalendarView, ExperimentalAsh> calendar_view_;
 };
 
 // This view displays a scrollable calendar.
@@ -193,6 +172,7 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   enum LabelType { PREVIOUS, CURRENT, NEXT, NEXTNEXT };
 
   friend class CalendarViewTest;
+  friend class CalendarViewPixelTest;
   friend class CalendarViewAnimationTest;
 
   // Assigns month views and labels based on the current date on screen.
@@ -362,6 +342,17 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   // Removes the `up_next_view_`.
   void RemoveUpNextView();
 
+  // Callback after the animation showing the up next view has ended.
+  void OnShowUpNextAnimationEnded();
+
+  // Animates scrolling the Calendar `scroll_view_` by the given offset. Uses
+  // layer transforms to mimic scrolling and then sets a final scroll position
+  // on the scroll view to give the illusion of animating scrolling.
+  void AnimateScrollByOffset(int offset);
+
+  // Post animation callback for `AnimateScrollByOffset()`.
+  void OnAnimateScrollByOffsetComplete(int offset);
+
   // Used by the `CalendarUpNextView` to open the event list for today's date.
   void OpenEventListForTodaysDate();
 
@@ -374,8 +365,8 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   // that the calendar view can be in.
   void ClipScrollViewHeight(ScrollViewState state_to_change_to);
 
-  // Creates the `CalendarSurfaceLayerMask` if it doesn't already exist.
-  void MaybeCreateLayerMask();
+  // Returns the calculated height of a single visible row.
+  int GetSingleVisibleRowHeight();
 
   // Setters for animation flags.
   void set_should_header_animate(bool should_animate) {
@@ -415,17 +406,13 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   raw_ptr<IconButton, ExperimentalAsh> managed_button_ = nullptr;
   raw_ptr<IconButton, ExperimentalAsh> up_button_ = nullptr;
   raw_ptr<IconButton, ExperimentalAsh> down_button_ = nullptr;
-  raw_ptr<CalendarSlidingSurface, ExperimentalAsh> calendar_sliding_surface_ =
-      nullptr;
+  raw_ptr<views::View, ExperimentalAsh> calendar_sliding_surface_ = nullptr;
   raw_ptr<CalendarEventListView, ExperimentalAsh> event_list_view_ = nullptr;
   // Owned by CalendarView.
   raw_ptr<CalendarUpNextView, ExperimentalAsh> up_next_view_ = nullptr;
   std::map<base::Time, CalendarModel::FetchingStatus> on_screen_month_;
   raw_ptr<CalendarModel, ExperimentalAsh> calendar_model_ =
       Shell::Get()->system_tray_model()->calendar_model();
-
-  // Layer mask that sits over the scrollview and hides the content underneath.
-  std::unique_ptr<CalendarSurfaceLayerMask> calendar_surface_layer_mask_;
 
   // If it `is_resetting_scroll_`, we don't calculate the scroll position and we
   // don't need to check if we need to update the month or not.
@@ -449,6 +436,11 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
 
   // If the Calendar View destructor is being called.
   bool is_destroying_ = false;
+
+  // Set to true if the user has scrolled the Calendar at all, either via the
+  // scroll view directly or used the month arrow buttons, in the lifetime of
+  // the CalendarView.
+  bool user_has_scrolled_ = false;
 
   // Timer that fires when the calendar view is settled on, i.e. finished
   // scrolling to, a currently-visible month

@@ -13,7 +13,8 @@
 
 // static
 SigninManagerFactory* SigninManagerFactory::GetInstance() {
-  return base::Singleton<SigninManagerFactory>::get();
+  static base::NoDestructor<SigninManagerFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -24,14 +25,7 @@ SigninManager* SigninManagerFactory::GetForProfile(Profile* profile) {
 }
 
 SigninManagerFactory::SigninManagerFactory()
-    : ProfileKeyedServiceFactory(
-          "SigninManager",
-          ProfileSelections::Builder()
-              .WithRegular(ProfileSelection::kOriginalOnly)
-              // TODO(crbug.com/1418376): Check if this service is needed in
-              // Guest mode.
-              .WithGuest(ProfileSelection::kOriginalOnly)
-              .Build()) {
+    : ProfileKeyedServiceFactory("SigninManager") {
   DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(ChromeSigninClientFactory::GetInstance());
 }
@@ -41,9 +35,9 @@ SigninManagerFactory::~SigninManagerFactory() = default;
 KeyedService* SigninManagerFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
-  return new SigninManager(profile->GetPrefs(),
-                           IdentityManagerFactory::GetForProfile(profile),
-                           ChromeSigninClientFactory::GetForProfile(profile));
+  return new SigninManager(*profile->GetPrefs(),
+                           *IdentityManagerFactory::GetForProfile(profile),
+                           *ChromeSigninClientFactory::GetForProfile(profile));
 }
 
 bool SigninManagerFactory::ServiceIsCreatedWithBrowserContext() const {

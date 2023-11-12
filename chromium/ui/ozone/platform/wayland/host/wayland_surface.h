@@ -12,6 +12,7 @@
 #include "base/containers/flat_map.h"
 #include "base/files/scoped_file.h"
 #include "base/functional/callback.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -38,6 +39,7 @@ class WaylandOutput;
 class WaylandWindow;
 class WaylandBufferHandle;
 class WaylandZcrColorManagementSurface;
+class WaylandZAuraSurface;
 
 // Wrapper of a wl_surface, owned by a WaylandWindow or a WlSubsurface.
 class WaylandSurface {
@@ -65,6 +67,18 @@ class WaylandSurface {
   const std::vector<uint32_t>& entered_outputs() const {
     return entered_outputs_;
   }
+
+  // Creates a zaura_surface extension object for this surface if it does not
+  // already exist and is supported by the server. Returns the surface
+  // extension.
+  WaylandZAuraSurface* CreateZAuraSurface();
+
+  // Resets the zaura_surface extension object for this surface if it exists.
+  // This may be done for the purposes of unmapping the toplevel surface when
+  // hiding the window (see crrev.com/c/3628350/comment/b6315793_85f0b073).
+  void ResetZAuraSurface();
+
+  WaylandZAuraSurface* zaura_surface() { return zaura_surface_.get(); }
 
   // Requests an explicit release for the next commit.
   void RequestExplicitRelease(ExplicitReleaseCallback callback);
@@ -221,6 +235,11 @@ class WaylandSurface {
   // compositor accelerators, e.g: Alt+Tab, etc.
   void SetKeyboardShortcutsInhibition(bool enabled);
 
+  // Set the trusted damage flag on this surface to be active, if the surface
+  // augmenter protocol is available. This only needs to be set on the root
+  // surface for a window.
+  void EnableTrustedDamageIfPossible();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(WaylandWindowTest,
                            DoesNotCreateSurfaceSyncOnCommitWithoutBuffers);
@@ -360,6 +379,7 @@ class WaylandSurface {
   wl::Object<wp_fractional_scale_v1> fractional_scale_;
   std::unique_ptr<WaylandZcrColorManagementSurface>
       zcr_color_management_surface_;
+  std::unique_ptr<WaylandZAuraSurface> zaura_surface_;
   base::flat_map<zwp_linux_buffer_release_v1*, ExplicitReleaseInfo>
       linux_buffer_releases_;
   ExplicitReleaseCallback next_explicit_release_request_;

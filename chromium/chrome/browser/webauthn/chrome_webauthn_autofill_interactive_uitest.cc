@@ -159,8 +159,8 @@ class WebAuthnAutofillIntegrationTest : public CertVerifierBrowserTest {
     size_t webauthn_entry_count = 0;
     autofill::Suggestion webauthn_entry;
     for (size_t i = 0; i < suggestions.size(); ++i) {
-      if (suggestions[i].frontend_id ==
-          autofill::PopupItemId::POPUP_ITEM_ID_WEBAUTHN_CREDENTIAL) {
+      if (suggestions[i].popup_item_id ==
+          autofill::PopupItemId::kWebauthnCredential) {
         webauthn_entry = suggestions[i];
         suggestion_index = i;
         webauthn_entry_count++;
@@ -207,8 +207,8 @@ class WebAuthnAutofillIntegrationTest : public CertVerifierBrowserTest {
     autofill::Suggestion webauthn_entry;
     for (suggestion_index = 0; suggestion_index < suggestions.size();
          ++suggestion_index) {
-      if (suggestions[suggestion_index].frontend_id ==
-          autofill::PopupItemId::POPUP_ITEM_ID_WEBAUTHN_CREDENTIAL) {
+      if (suggestions[suggestion_index].popup_item_id ==
+          autofill::PopupItemId::kWebauthnCredential) {
         webauthn_entry = suggestions[suggestion_index];
         break;
       }
@@ -238,10 +238,10 @@ class WebAuthnAutofillIntegrationTest : public CertVerifierBrowserTest {
       popup_controller = autofill_client->popup_controller_for_testing();
     }
     for (const auto& suggestion : popup_controller->GetSuggestions()) {
-      EXPECT_NE(suggestion.frontend_id,
-                autofill::POPUP_ITEM_ID_WEBAUTHN_CREDENTIAL);
-      EXPECT_NE(suggestion.frontend_id,
-                autofill::POPUP_ITEM_ID_WEBAUTHN_SIGN_IN_WITH_ANOTHER_DEVICE);
+      EXPECT_NE(suggestion.popup_item_id,
+                autofill::PopupItemId::kWebauthnCredential);
+      EXPECT_NE(suggestion.popup_item_id,
+                autofill::PopupItemId::kWebauthnSignInWithAnotherDevice);
     }
   }
 
@@ -334,20 +334,15 @@ class WebAuthnWindowsAutofillIntegrationTest
     fake_webauthn_api_->InjectDiscoverableCredential(
         kCredentialID1, std::move(rp), std::move(user));
 
-    // Inject the fake Windows platform authenticator.
-    auto device_factory =
-        std::make_unique<device::test::VirtualFidoDeviceFactory>();
-    device_factory->set_win_webauthn_api(fake_webauthn_api_.get());
-    scoped_auth_env_ =
-        std::make_unique<content::ScopedAuthenticatorEnvironmentForTesting>(
-            std::move(device_factory));
+    win_webauthn_api_override_ =
+        std::make_unique<device::WinWebAuthnApi::ScopedOverride>(
+            fake_webauthn_api_.get());
   }
 
   void PostRunTestOnMainThread() override {
     // To avoid dangling raw_ptr's, these objects need to be destroyed before
     // the test class.
-    virtual_device_factory_ = nullptr;
-    scoped_auth_env_.reset();
+    win_webauthn_api_override_.reset();
     WebAuthnAutofillIntegrationTest::PostRunTestOnMainThread();
   }
 
@@ -357,8 +352,8 @@ class WebAuthnWindowsAutofillIntegrationTest
 
  protected:
   std::unique_ptr<device::FakeWinWebAuthnApi> fake_webauthn_api_;
-  std::unique_ptr<content::ScopedAuthenticatorEnvironmentForTesting>
-      scoped_auth_env_;
+  std::unique_ptr<device::WinWebAuthnApi::ScopedOverride>
+      win_webauthn_api_override_;
 };
 
 IN_PROC_BROWSER_TEST_F(WebAuthnWindowsAutofillIntegrationTest, SelectAccount) {

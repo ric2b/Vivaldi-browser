@@ -4,7 +4,7 @@
 
 import 'chrome://cloud-upload/cloud_upload_dialog.js';
 
-import {DialogPage, UserAction} from 'chrome://cloud-upload/cloud_upload.mojom-webui.js';
+import {DialogPage, OperationType, UserAction} from 'chrome://cloud-upload/cloud_upload.mojom-webui.js';
 import {CloudUploadBrowserProxy} from 'chrome://cloud-upload/cloud_upload_browser_proxy.js';
 import {CloudUploadElement} from 'chrome://cloud-upload/cloud_upload_dialog.js';
 import {OfficePwaInstallPageElement} from 'chrome://cloud-upload/office_pwa_install_page.js';
@@ -12,6 +12,7 @@ import {OneDriveUploadPageElement} from 'chrome://cloud-upload/one_drive_upload_
 import {SetupCancelDialogElement} from 'chrome://cloud-upload/setup_cancel_dialog.js';
 import {SignInPageElement} from 'chrome://cloud-upload/sign_in_page.js';
 import {WelcomePageElement} from 'chrome://cloud-upload/welcome_page.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
 import {CloudUploadTestBrowserProxy, ProxyOptions} from './cloud_upload_test_browser_proxy.js';
@@ -128,7 +129,8 @@ suite('<cloud-upload>', () => {
    * the <cloud-upload> component.
    */
   teardown(() => {
-    container.innerHTML = '';
+    assert(window.trustedTypes);
+    container.innerHTML = window.trustedTypes.emptyHTML;
     testProxy.handler.reset();
   });
 
@@ -145,6 +147,7 @@ suite('<cloud-upload>', () => {
       installOfficeWebAppResult: true,
       odfsMounted,
       dialogPage: DialogPage.kOneDriveSetup,
+      operationType: OperationType.kMove,
     });
 
     // Go to the OneDrive upload page.
@@ -167,6 +170,7 @@ suite('<cloud-upload>', () => {
       installOfficeWebAppResult: true,
       odfsMounted,
       dialogPage: DialogPage.kOneDriveSetup,
+      operationType: OperationType.kMove,
     });
 
     // Go to the OneDrive upload page.
@@ -189,6 +193,7 @@ suite('<cloud-upload>', () => {
       installOfficeWebAppResult: true,
       odfsMounted,
       dialogPage: DialogPage.kOneDriveSetup,
+      operationType: OperationType.kMove,
     });
 
     await doWelcomePage(officeWebAppInstalled, odfsMounted);
@@ -209,6 +214,7 @@ suite('<cloud-upload>', () => {
       installOfficeWebAppResult: true,
       odfsMounted,
       dialogPage: DialogPage.kOneDriveSetup,
+      operationType: OperationType.kMove,
     });
 
     await doWelcomePage(officeWebAppInstalled, odfsMounted);
@@ -232,6 +238,7 @@ suite('<cloud-upload>', () => {
           installOfficeWebAppResult: true,
           odfsMounted,
           dialogPage: DialogPage.kOneDriveSetup,
+          operationType: OperationType.kMove,
         });
 
         await doWelcomePage(officeWebAppInstalled, odfsMounted);
@@ -252,6 +259,7 @@ suite('<cloud-upload>', () => {
       installOfficeWebAppResult: true,
       odfsMounted,
       dialogPage: DialogPage.kOneDriveSetup,
+      operationType: OperationType.kMove,
     });
     await doWelcomePage(officeWebAppInstalled, odfsMounted);
 
@@ -284,6 +292,7 @@ suite('<cloud-upload>', () => {
           installOfficeWebAppResult: true,
           odfsMounted,
           dialogPage: DialogPage.kOneDriveSetup,
+          operationType: OperationType.kMove,
         });
 
         // Go to the specified page.
@@ -333,6 +342,7 @@ suite('<cloud-upload>', () => {
           odfsMounted,
           dialogPage: DialogPage.kOneDriveSetup,
           firstTimeSetup: true,
+          operationType: OperationType.kMove,
         });
         // Go to the OneDrive upload page.
         await doWelcomePage(officeWebAppInstalled, odfsMounted);
@@ -362,6 +372,7 @@ suite('<cloud-upload>', () => {
           odfsMounted,
           dialogPage: DialogPage.kOneDriveSetup,
           firstTimeSetup: false,
+          operationType: OperationType.kMove,
         });
         // Go to the OneDrive upload page.
         await doWelcomePage(officeWebAppInstalled, odfsMounted);

@@ -10,7 +10,7 @@
 import '//resources/cr_elements/cr_button/cr_button.js';
 import '//resources/cr_elements/cr_toggle/cr_toggle.js';
 import 'chrome://resources/cr_components/settings_prefs/prefs.js';
-import '../controls/settings_toggle_button.js';
+import '/shared/settings/controls/settings_toggle_button.js';
 import '../people_page/signout_dialog.js';
 // <if expr="not chromeos_ash">
 import '../relaunch_confirmation_dialog.js';
@@ -21,14 +21,15 @@ import '//resources/cr_elements/cr_toast/cr_toast.js';
 
 // </if>
 
+import {CrLinkRowElement} from '//resources/cr_elements/cr_link_row/cr_link_row.js';
 import {CrToastElement} from '//resources/cr_elements/cr_toast/cr_toast.js';
 import {WebUiListenerMixin} from '//resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {SettingsToggleButtonElement} from '/shared/settings/controls/settings_toggle_button.js';
 import {StatusAction, SyncStatus} from '/shared/settings/people_page/sync_browser_proxy.js';
 import {MetricsReporting, PrivacyPageBrowserProxy, PrivacyPageBrowserProxyImpl} from '/shared/settings/privacy_page/privacy_page_browser_proxy.js';
 import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 
-import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {PrivacyPageVisibility} from '../page_visibility.js';
 import {SettingsSignoutDialogElement} from '../people_page/signout_dialog.js';
@@ -42,6 +43,7 @@ export interface SettingsPersonalizationOptionsElement {
     toast: CrToastElement,
     signinAllowedToggle: SettingsToggleButtonElement,
     metricsReportingControl: SettingsToggleButtonElement,
+    metricsReportingLink: CrLinkRowElement,
   };
 }
 
@@ -210,9 +212,17 @@ export class SettingsPersonalizationOptionsElement extends
     return this.pageVisibility.searchPrediction;
   }
 
+  private navigateTo_(url: string): void {
+    window.location.href = url;
+  }
+
   // <if expr="chromeos_ash">
   private onMetricsReportingLinkClick_() {
-    window.location.href = loadTimeData.getString('osSyncSetupSettingsUrl');
+    if (loadTimeData.getBoolean('osDeprecateSyncMetricsToggle')) {
+      this.navigateTo_(loadTimeData.getString('osPrivacySettingsUrl'));
+    } else {
+      this.navigateTo_(loadTimeData.getString('osSyncSetupSettingsUrl'));
+    }
   }
   // </if>
 
@@ -241,7 +251,7 @@ export class SettingsPersonalizationOptionsElement extends
   }
 
   private onUseSpellingServiceLinkClick_() {
-    window.location.href = loadTimeData.getString('osSyncSetupSettingsUrl');
+    this.navigateTo_(loadTimeData.getString('osSyncSetupSettingsUrl'));
   }
   // </if><!-- chromeos -->
   // </if><!-- _google_chrome -->

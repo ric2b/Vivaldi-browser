@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "components/sync/base/client_tag_hash.h"
@@ -42,8 +42,8 @@ class SyncedNoteTrackerEntity;
 // until commit confirmation is received.
 class SyncedNoteTracker {
  public:
-  // Returns a client tag hash given a note GUID.
-  static syncer::ClientTagHash GetClientTagHashFromGUID(const base::GUID& guid);
+  // Returns a client tag hash given a note UUID.
+  static syncer::ClientTagHash GetClientTagHashFromUuid(const base::Uuid& uuid);
 
   // Creates an empty instance with no entities. Never returns null.
   static std::unique_ptr<SyncedNoteTracker> CreateEmpty(
@@ -77,7 +77,7 @@ class SyncedNoteTracker {
       const syncer::ClientTagHash& client_tag_hash) const;
 
   // Convenience function, similar to GetEntityForClientTagHash().
-  const SyncedNoteTrackerEntity* GetEntityForGUID(const base::GUID& guid) const;
+  const SyncedNoteTrackerEntity* GetEntityForUuid(const base::Uuid& uuid) const;
 
   // Returns null if no entity is found.
   const SyncedNoteTrackerEntity* GetEntityForNoteNode(

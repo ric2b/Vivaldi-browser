@@ -44,9 +44,7 @@ class CORE_EXPORT OffscreenCanvas final
   USING_PRE_FINALIZER(OffscreenCanvas, Dispose);
 
  public:
-  static OffscreenCanvas* Create(ExecutionContext*,
-                                 unsigned width,
-                                 unsigned height);
+  static OffscreenCanvas* Create(ScriptState*, unsigned width, unsigned height);
 
   OffscreenCanvas(ExecutionContext*, const gfx::Size&);
   ~OffscreenCanvas() override;
@@ -257,7 +255,6 @@ class CORE_EXPORT OffscreenCanvas final
 
   SkIRect current_frame_damage_rect_;
 
-  bool needs_matrix_clip_restore_ = false;
   bool needs_push_frame_ = false;
   bool inside_worker_raf_ = false;
 

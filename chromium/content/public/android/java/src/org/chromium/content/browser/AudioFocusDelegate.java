@@ -73,7 +73,6 @@ public class AudioFocusDelegate implements AudioManager.OnAudioFocusChangeListen
         // Vivaldi
         if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
             OemLynkcoExtensions.getInstance().requestAudioFocus();
-            return true;
         }
         return requestAudioFocusInternal();
     }
@@ -84,7 +83,6 @@ public class AudioFocusDelegate implements AudioManager.OnAudioFocusChangeListen
         // Vivaldi
         if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
             OemLynkcoExtensions.getInstance().abandonAudioFocus();
-            return;
         }
         AudioManager am = (AudioManager) ContextUtils.getApplicationContext().getSystemService(
                 Context.AUDIO_SERVICE);

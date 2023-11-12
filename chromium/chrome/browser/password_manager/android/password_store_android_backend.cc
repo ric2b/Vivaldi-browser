@@ -26,7 +26,6 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/password_manager/android/password_manager_lifecycle_helper_impl.h"
-#include "chrome/browser/password_manager/android/password_store_android_backend_api_error_codes.h"
 #include "chrome/browser/password_manager/android/password_store_android_backend_bridge_helper.h"
 #include "chrome/browser/password_manager/android/password_store_operation_target.h"
 #include "chrome/browser/password_manager/android/password_sync_controller_delegate_android.h"
@@ -36,6 +35,7 @@
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_eviction_util.h"
+#include "components/password_manager/core/browser/password_store_android_backend_api_error_codes.h"
 #include "components/password_manager/core/browser/password_store_backend.h"
 #include "components/password_manager/core/browser/password_store_backend_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_store_util.h"
@@ -44,9 +44,9 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/user_selectable_type.h"
-#include "components/sync/driver/sync_service.h"
-#include "components/sync/driver/sync_user_settings.h"
 #include "components/sync/model/proxy_model_type_controller_delegate.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_user_settings.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace password_manager {
@@ -209,6 +209,7 @@ SuccessStatus GetSuccessStatusFromError(
     case AndroidBackendErrorType::kGMSVersionNotSupported:
     case AndroidBackendErrorType::kExternalError:
     case AndroidBackendErrorType::kBackendNotAvailable:
+    case AndroidBackendErrorType::kFailedToCreateFacetId:
       return SuccessStatus::kError;
   }
   NOTREACHED();
@@ -349,31 +350,6 @@ void RecordRetryHistograms(PasswordStoreOperation operation,
                                 attempt, kMaxReportedRetryAttempts);
 }
 
-bool HasPromptedTooManyAuthErrors(PrefService* pref_service) {
-  DCHECK(pref_service);
-  // This question only makes sense if auth error prompts are enabled.
-  DCHECK(base::FeatureList::IsEnabled(
-      password_manager::features::kUnifiedPasswordManagerErrorMessages));
-
-  // If there is no limit on how many times an auth error can be shown,
-  // there is no such thing as too many auth error prompts.
-  int max_auth_error_prompts =
-      password_manager::features::kMaxShownUPMErrorsBeforeEviction.Get();
-  if (max_auth_error_prompts < 0) {
-    return false;
-  }
-
-  if (pref_service->GetInteger(
-          password_manager::prefs::kTimesUPMAuthErrorShown) <
-      max_auth_error_prompts) {
-    return false;
-  }
-
-  LOG(ERROR) << "Auth error prompts exceeds limit of "
-             << max_auth_error_prompts;
-  return true;
-}
-
 bool IsUnrecoverableBackendError(AndroidBackendAPIErrorCode api_error_code,
                                  PasswordStoreOperation operation,
                                  PrefService* pref_service) {
@@ -391,17 +367,6 @@ bool IsUnrecoverableBackendError(AndroidBackendAPIErrorCode api_error_code,
           static_cast<int>(api_error_code))) {
     // If the error should not be ignored, it will immediately evict the user
     // with no possibility to recover.
-    return true;
-  }
-
-  // Auth errors require explicit handling and are not recoverable if this
-  // handling is disabled. They are also considered unrecoverable if the client
-  // has been in a broke auth state for too long, verified by the number of auth
-  // error prompts that were shown.
-  if (IsAuthenticationError(api_error_code) &&
-      (!base::FeatureList::IsEnabled(
-           password_manager::features::kUnifiedPasswordManagerErrorMessages) ||
-       HasPromptedTooManyAuthErrors(pref_service))) {
     return true;
   }
 
@@ -967,9 +932,6 @@ void PasswordStoreAndroidBackend::OnCompleteWithLogins(
 
   // Since the API call has succeeded, it's safe to reenable saving.
   prefs_->SetBoolean(prefs::kSavePasswordsSuspendedByError, false);
-  // A successful API call means that the user is no longer in a broken auth
-  // state. Reset the counter.
-  prefs_->SetInteger(password_manager::prefs::kTimesUPMAuthErrorShown, 0);
 
   reply->RecordMetrics(/*error=*/absl::nullopt);
   DCHECK(reply->Holds<LoginsOrErrorReply>());
@@ -990,9 +952,6 @@ void PasswordStoreAndroidBackend::OnLoginsChanged(JobId job_id,
 
   // Since the API call has succeeded, it's safe to reenable saving.
   prefs_->SetBoolean(prefs::kSavePasswordsSuspendedByError, false);
-  // A successful API all means that the user is no longer in a broken auth
-  // state. Reset the counter.
-  prefs_->SetInteger(password_manager::prefs::kTimesUPMAuthErrorShown, 0);
 
   main_task_runner_->PostTask(
       FROM_HERE,
@@ -1068,16 +1027,9 @@ void PasswordStoreAndroidBackend::OnError(JobId job_id,
     if (password_manager::IsUnrecoverableBackendError(api_error_code, operation,
                                                       prefs_)) {
       if (!password_manager_upm_eviction::IsCurrentUserEvicted(prefs_)) {
-        if (base::FeatureList::IsEnabled(
-                password_manager::features::kShowUPMErrorNotification)) {
-          bridge_helper_->ShowErrorNotification();
-        }
         password_manager_upm_eviction::EvictCurrentUser(api_error, prefs_);
       }
-    } else if (IsAuthenticationError(api_error_code) &&
-               base::FeatureList::IsEnabled(
-                   password_manager::features::
-                       kUnifiedPasswordManagerErrorMessages)) {
+    } else if (IsAuthenticationError(api_error_code)) {
       // Auth error specific handling is only triggered if the error is
       // considered recoverable.
       prefs_->SetBoolean(prefs::kSavePasswordsSuspendedByError, true);

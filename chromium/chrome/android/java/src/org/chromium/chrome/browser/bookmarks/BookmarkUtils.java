@@ -8,7 +8,8 @@ import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Color;
+import android.content.res.ColorStateList;
+import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Handler;
@@ -16,7 +17,6 @@ import android.os.LocaleList;
 import android.provider.Browser;
 import android.text.TextUtils;
 
-import androidx.annotation.ColorRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -35,6 +35,7 @@ import org.chromium.chrome.browser.app.bookmarks.BookmarkActivity;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkAddEditFolderActivity;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkEditActivity;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkFolderSelectActivity;
+import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
@@ -44,6 +45,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
@@ -52,6 +54,8 @@ import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
+import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.feature_engagement.EventConstants;
@@ -65,9 +69,11 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 // Vivaldi
+import android.graphics.Color;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -114,7 +120,18 @@ public class BookmarkUtils {
             callback.onResult(existingBookmarkItem.getId());
             return;
         }
-
+        /*
+         Vivaldi: Use Bookmarks folder, not Mobile folder as default save location
+         */
+        if (ChromeApplicationImpl.isVivaldi()) {
+            BookmarkId newBookmarkId = addBookmarkInternal(activity, bookmarkModel, tab.getTitle(),
+                    tab.getOriginalUrl(),
+                    fromExplicitTrackUi ? bookmarkModel.getDefaultFolder() : null, bookmarkType);
+            showSaveFlow(activity, bottomSheetController, fromExplicitTrackUi, newBookmarkId,
+                    /*wasBookmarkMoved=*/false, /*isNewBookmark=*/true);
+            callback.onResult(newBookmarkId);
+            return;
+        }
         BookmarkId newBookmarkId = addBookmarkInternal(activity, bookmarkModel, tab.getTitle(),
                 tab.getOriginalUrl(),
                 fromExplicitTrackUi ? bookmarkModel.getMobileFolderId() : null, bookmarkType);
@@ -255,7 +272,7 @@ public class BookmarkUtils {
     }
 
     /**
-     * Add all selected tabs from TabSelectionEditorV2 as bookmarks. This logic depends on the
+     * Add all selected tabs from TabSelectionEditor as bookmarks. This logic depends on the
      * snackbar workflow above. Currently there is no support for adding the selected tabs or newly
      * created folder directly to the reading list.
      * @param activity The current activity.
@@ -496,7 +513,8 @@ public class BookmarkUtils {
      * Saves the last used url to preference. The saved url will be later queried by
      * {@link #getLastUsedUrl(Context)}
      */
-    static void setLastUsedUrl(Context context, String url) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+    public static void setLastUsedUrl(Context context, String url) {
         SharedPreferencesManager.getInstance().writeString(
                 ChromePreferenceKeys.BOOKMARKS_LAST_USED_URL, url);
     }
@@ -573,32 +591,31 @@ public class BookmarkUtils {
      * @param type The bookmark type of the folder.
      * @return A {@link Drawable} to use for displaying bookmark folders.
      */
-    public static Drawable getFolderIcon(Context context, @BookmarkType int type) {
+    public static Drawable getFolderIcon(
+            Context context, @BookmarkType int type, @BookmarkRowDisplayPref int displayPref) {
+        ColorStateList tint = getFolderIconTint(context, type);
         if (type == BookmarkType.READING_LIST) {
-            return UiUtils.getTintedDrawable(
-                    context, R.drawable.ic_reading_list_folder_24dp, getFolderIconTint(type));
+            return UiUtils.getTintedDrawable(context, R.drawable.ic_reading_list_folder_24dp, tint);
         }
-        return UiUtils.getTintedDrawable(
-                context, R.drawable.ic_folder_blue_24dp, getFolderIconTint(type));
+
+        return UiUtils.getTintedDrawable(context,
+                displayPref == BookmarkRowDisplayPref.VISUAL ? R.drawable.ic_folder_outline_24dp
+                                                             : R.drawable.ic_folder_blue_24dp,
+                tint);
     }
 
     /**
-     * @param type The bookmark type.
+     * @param context {@link Context} used to retrieve the drawable.
+     * @param type The bookmark type of the folder.
      * @return The tint used on the bookmark folder icon.
      */
-    public static @ColorRes int getFolderIconTint(@BookmarkType int type) {
-        return R.color.default_icon_color_tint_list;
-    }
+    public static ColorStateList getFolderIconTint(Context context, @BookmarkType int type) {
+        if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()
+                && type == BookmarkType.READING_LIST) {
+            return ColorStateList.valueOf(SemanticColorUtils.getDefaultIconColorAccent1(context));
+        }
 
-    /**
-     * Retrieve the save flow start icon for the given bookmark.
-     *
-     * @param bookmarkId The {@link BookmarkId} to get the start icon for.
-     * @return The start icon associated with the given bookmarkId.
-     */
-    public static Drawable getSaveFlowStartIconForBookmark(BookmarkId bookmarkId) {
-        // TODO(crbug.com/1243383): Add start icon for price tracking.
-        return null;
+        return ColorStateList.valueOf(context.getColor(R.color.default_icon_color_tint_list));
     }
 
     /**
@@ -687,20 +704,102 @@ public class BookmarkUtils {
         return ReadingListUtils.isSwappableReadingListItem(node.getId()) || node.isReorderable();
     }
 
-    /** Allows strings to be landed for translation. */
-    private void fakeFunctiontoAllowStringMerge() {
-        int id = R.string.price_tracking_save_flow_notification_switch_subtitle_error;
-        id = R.string.disable_price_tracking_menu_item;
-        id = R.string.price_tracking_bookmarks_filter_title;
-        id = R.string.tracked_products_empty_list_title;
-        id = R.string.price_tracking_disabled_snackbar;
-        id = R.string.price_tracking_enabled_snackbar;
-        id = R.string.price_tracking_error_snackbar;
-        id = R.string.price_tracking_error_snackbar_action;
-        id = R.string.iph_price_tracking_menu_item;
-        id = R.string.iph_price_tracking_menu_item_accessibility;
-        id = R.string.iph_shopping_list_save_flow;
-        id = R.string.iph_shopping_list_save_flow_accessibility;
+    /**
+     * Gets the display count for folders.
+     * @param id The bookmark to get the description for, must be a folder.
+     * @param bookmarkModel The bookmark model to get info on the bookmark.
+     */
+    public static int getChildCountForDisplay(BookmarkId id, BookmarkModel bookmarkModel) {
+        if (id.getType() == BookmarkType.READING_LIST) {
+            return bookmarkModel.getUnreadCount(id);
+        } else {
+            return bookmarkModel.getTotalBookmarkCount(id);
+        }
+    }
+
+    /**
+     * Returns the description to use for the folder in bookamrks manager.
+     * @param id The bookmark to get the description for, must be a folder.
+     * @param bookmarkModel The bookmark model to get info on the bookmark.
+     * @param resources Android resources object to get strings.
+     */
+    public static String getFolderDescriptionText(
+            BookmarkId id, BookmarkModel bookmarkModel, Resources resources) {
+        int count = getChildCountForDisplay(id, bookmarkModel);
+        if (id.getType() == BookmarkType.READING_LIST) {
+            return (count > 0) ? resources.getQuantityString(
+                           R.plurals.reading_list_unread_page_count, count, count)
+                               : resources.getString(R.string.reading_list_no_unread_pages);
+        } else {
+            return (count > 0)
+                    ? resources.getQuantityString(R.plurals.bookmarks_count, count, count)
+                    : resources.getString(R.string.no_bookmarks);
+        }
+    }
+
+    /** Returns the RoundedIconGenerator with the appropriate size. */
+    public static RoundedIconGenerator getRoundedIconGenerator(
+            Context context, @BookmarkRowDisplayPref int displayPref) {
+        Resources res = context.getResources();
+        boolean visual = displayPref == BookmarkRowDisplayPref.VISUAL;
+        int displayIconSize = getFaviconDisplaySize(res, displayPref);
+
+        return visual
+                ? new RoundedIconGenerator(displayIconSize, displayIconSize, displayIconSize / 2,
+                        context.getColor(R.color.default_favicon_background_color),
+                        getDisplayTextSize(res))
+                : FaviconUtils.createCircularIconGenerator(context);
+    }
+
+    /** Returns the size to use when fetching favicons. */
+    public static int getFaviconFetchSize(Resources resources) {
+        return resources.getDimensionPixelSize(R.dimen.default_favicon_min_size);
+    }
+
+    /** Returns the size to use when displaying an image. */
+    public static int getImageIconSize(
+            Resources resources, @BookmarkRowDisplayPref int displayPref) {
+        if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
+            return displayPref == BookmarkRowDisplayPref.VISUAL
+                    ? resources.getDimensionPixelSize(
+                            R.dimen.improved_bookmark_start_image_size_visual)
+                    : resources.getDimensionPixelSize(
+                            R.dimen.improved_bookmark_start_image_size_compact);
+        }
+
+        return BookmarkFeatures.isLegacyBookmarksVisualRefreshEnabled()
+                ? resources.getDimensionPixelSize(R.dimen.list_item_v2_start_icon_width_compact)
+                : resources.getDimensionPixelSize(R.dimen.list_item_start_icon_width);
+    }
+
+    /** Returns the size to use when displaying the favicon. */
+    public static int getFaviconDisplaySize(
+            Resources resources, @BookmarkRowDisplayPref int displayPref) {
+        return resources.getDimensionPixelSize(R.dimen.bookmark_favicon_display_size);
+    }
+
+    /** Returns whether the given folder can have a new folder added to it. */
+    public static boolean canAddSubfolder(BookmarkModel bookmarkModel, BookmarkId folder) {
+        return !Objects.equals(folder, bookmarkModel.getReadingListFolder())
+                && !Objects.equals(folder, bookmarkModel.getPartnerFolderId());
+    }
+
+    /** Returns whether the given folder can have a new folder added to it. */
+    public static boolean shouldShowImagesForFolder(
+            BookmarkModel bookmarkModel, BookmarkId folder) {
+        return !bookmarkModel.getTopLevelFolderIds(/*getSpecial=*/true, /*getNormal=*/true)
+                        .contains(folder);
+    }
+
+    private static int getDisplayTextSize(Resources resources) {
+        if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
+            return resources.getDimensionPixelSize(R.dimen.circular_monogram_text_size);
+        }
+
+        return BookmarkFeatures.isLegacyBookmarksVisualRefreshEnabled()
+                ? resources.getDimensionPixelSize(
+                        R.dimen.bookmark_refresh_circular_monogram_text_size)
+                : resources.getDimensionPixelSize(R.dimen.circular_monogram_text_size);
     }
 
     private static Locale getLocale(Activity activity) {

@@ -454,8 +454,9 @@ public class AutofillProvider {
         mDatalistSuggestions = new AutofillSuggestion[datalistValues.length];
         for (int i = 0; i < mDatalistSuggestions.length; i++) {
             mDatalistSuggestions[i] = new AutofillSuggestion(datalistValues[i], datalistLabels[i],
-                    /* itemTag= */ "", DropdownItem.NO_ICON, false /* isIconAtLeft */, i,
-                    false /* isDeletable */, false /* isMultilineLabel */, false /* isBoldLabel */,
+                    /* itemTag= */ "", DropdownItem.NO_ICON, false /* isIconAtLeft */,
+                    PopupItemId.DATALIST_ENTRY, false /* isDeletable */,
+                    false /* isMultilineLabel */, false /* isBoldLabel */,
                     /* featureForIPH= */ "");
         }
         if (mWebContentsAccessibility == null) {
@@ -501,7 +502,7 @@ public class AutofillProvider {
 
     private void onDatalistPopupDismissed() {
         ViewAndroidDelegate delegate = mWebContents.getViewAndroidDelegate();
-        delegate.removeView(mAnchorView);
+        if (delegate != null) delegate.removeView(mAnchorView);
         mAnchorView = null;
     }
 

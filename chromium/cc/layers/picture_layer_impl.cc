@@ -1409,9 +1409,7 @@ bool PictureLayerImpl::ShouldAdjustRasterScale() const {
       float maximum_animation_scale =
           layer_tree_impl()->property_trees()->MaximumAnimationToScreenScale(
               transform_tree_index());
-      if (!base::FeatureList::IsEnabled(
-              features::kAvoidRasterDuringElasticOverscroll) ||
-          (maximum_animation_scale != raster_contents_scale_.x() ||
+      if ((maximum_animation_scale != raster_contents_scale_.x() ||
            maximum_animation_scale != raster_contents_scale_.y())) {
         return true;
       }
@@ -2116,6 +2114,9 @@ void PictureLayerImpl::SetPaintWorkletInputs(
     // Attempt to re-use an existing PaintRecord if possible.
     new_records[input] = std::make_pair(
         paint_image_id, std::move(paint_worklet_records_[input].second));
+    // The move constructor of absl::optional does not clear the source to
+    // nullopt.
+    paint_worklet_records_[input].second = absl::nullopt;
   }
   paint_worklet_records_.swap(new_records);
 

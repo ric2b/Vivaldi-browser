@@ -15,6 +15,7 @@ import {AcceleratorLookupManager} from './accelerator_lookup_manager.js';
 import {getTemplate} from './input_key.html.js';
 
 const META_KEY = 'meta';
+const LWIN_KEY = 'Meta';
 
 /**
  * Refers to the state of an 'input-key' item.
@@ -41,7 +42,7 @@ export const keyToIconNameMap: {[key: string]: string|undefined} = {
   'BrowserBack': 'back',
   'BrowserForward': 'forward',
   'BrowserRefresh': 'refresh',
-  'BrowserSearch': 'search',
+  'BrowserSearch': 'browser-search',
   'EmojiPicker': 'emoji-picker',
   'KeyboardBacklightToggle': 'keyboard-brightness-toggle',
   'KeyboardBrightnessUp': 'keyboard-brightness-up',
@@ -57,7 +58,7 @@ export const keyToIconNameMap: {[key: string]: string|undefined} = {
   'MediaTrackPrevious': 'last-track',
   'MicrophoneMuteToggle': 'microphone-mute',
   'ModeChange': 'globe',
-  'OpenLauncher': 'open-launcher',
+  'ViewAllApps': 'view-all-apps',
   'Power': 'power',
   'PrintScreen': 'screenshot',
   'PrivacyScreenToggle': 'electronic-privacy-screen',
@@ -137,10 +138,13 @@ export class InputKeyElement extends InputKeyElementBase {
   }
 
   private getIconIdForKey(): string|null {
-    const hasLauncherButton = this.lookupManager.getHasLauncherButton();
-    if (this.key === META_KEY) {
-      // 'meta' key should always be the modifier key.
+    // If the key is 'LWIN', then set it as a modifier key.
+    if (this.key === LWIN_KEY) {
       this.keyState = KeyInputState.MODIFIER_SELECTED;
+    }
+    // For 'META_KEY' and 'LWIN' key, return launcher/search icon.
+    if (this.key === META_KEY || this.key === LWIN_KEY) {
+      const hasLauncherButton = this.lookupManager.getHasLauncherButton();
       return hasLauncherButton ? 'shortcut-customization-keys:launcher' :
                                  'shortcut-customization-keys:search';
     }
@@ -157,9 +161,9 @@ export class InputKeyElement extends InputKeyElementBase {
    *     search button.
    */
   static getAriaLabelStringId(key: string, hasLauncherButton: boolean): string {
-    if (key === META_KEY) {
+    if (key === META_KEY || key === LWIN_KEY) {
       return hasLauncherButton ? 'iconLabelOpenLauncher' :
-                                 'iconLabelBrowserSearch';
+                                 'iconLabelOpenSearch';
     }
     return `iconLabel${key}`;  // e.g. iconLabelArrowUp
   }

@@ -14,8 +14,6 @@ anchorScroll
 animation
 animationComposition
 animationDelay
-animationDelayEnd
-animationDelayStart
 animationDirection
 animationDuration
 animationFillMode
@@ -346,6 +344,8 @@ placeContent
 placeItems
 placeSelf
 pointerEvents
+popoverHideDelay
+popoverShowDelay
 position
 positionFallback
 prefix
@@ -387,10 +387,20 @@ scrollPaddingTop
 scrollSnapAlign
 scrollSnapStop
 scrollSnapType
+scrollStart
+scrollStartBlock
+scrollStartInline
+scrollStartTarget
+scrollStartTargetBlock
+scrollStartTargetInline
+scrollStartTargetX
+scrollStartTargetY
+scrollStartX
+scrollStartY
 scrollTimeline
-scrollTimelineAttachment
 scrollTimelineAxis
 scrollTimelineName
+scrollbarColor
 scrollbarGutter
 scrollbarWidth
 setProperty
@@ -444,6 +454,7 @@ textTransform
 textUnderlineOffset
 textUnderlinePosition
 textWrap
+timelineScope
 toggle
 toggleGroup
 toggleRoot
@@ -467,7 +478,6 @@ userSelect
 vectorEffect
 verticalAlign
 viewTimeline
-viewTimelineAttachment
 viewTimelineAxis
 viewTimelineInset
 viewTimelineName
@@ -632,6 +642,7 @@ whiteSpaceCollapse
 widows
 width
 willChange
+wordBoundaryDetection
 wordBreak
 wordSpacing
 wordWrap

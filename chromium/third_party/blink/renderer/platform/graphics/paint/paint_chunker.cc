@@ -6,7 +6,7 @@
 
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_display_item.h"
 #include "third_party/blink/renderer/platform/graphics/paint/scrollbar_display_item.h"
-#include "third_party/skia/include/core/SkColorFilter.h"
+#include "ui/gfx/color_utils.h"
 
 namespace blink {
 
@@ -195,7 +195,8 @@ bool PaintChunker::AddRegionCaptureDataToCurrentChunk(
 
 void PaintChunker::AddSelectionToCurrentChunk(
     absl::optional<PaintedSelectionBound> start,
-    absl::optional<PaintedSelectionBound> end) {
+    absl::optional<PaintedSelectionBound> end,
+    String debug_info) {
   // We should have painted the selection when calling this method.
   DCHECK(chunks_);
   DCHECK(!chunks_->empty());
@@ -203,14 +204,25 @@ void PaintChunker::AddSelectionToCurrentChunk(
   auto& chunk = chunks_->back();
 
 #if DCHECK_IS_ON()
+  gfx::Rect bounds_rect = chunk.bounds;
+
+  // In rare cases in the wild, the bounds_rect is 1 pixel off from the
+  // edge_rect below. We were unable to find the root cause, or to reproduce
+  // this locally, so we're relaxing the DCHECK. See https://crbug.com/1441243.
+  bounds_rect.Outset(1);
+
   if (start) {
     gfx::Rect edge_rect = gfx::BoundingRect(start->edge_start, start->edge_end);
-    DCHECK(chunk.bounds.Contains(edge_rect));
+    DCHECK(bounds_rect.Contains(edge_rect))
+        << bounds_rect.ToString() << " does not contain "
+        << edge_rect.ToString() << ", original bounds: " << debug_info;
   }
 
   if (end) {
     gfx::Rect edge_rect = gfx::BoundingRect(end->edge_start, end->edge_end);
-    DCHECK(chunk.bounds.Contains(edge_rect));
+    DCHECK(bounds_rect.Contains(edge_rect))
+        << bounds_rect.ToString() << " does not contain "
+        << edge_rect.ToString() << ", original bounds: " << debug_info;
   }
 #endif
 
@@ -286,11 +298,10 @@ void PaintChunker::ProcessBackgroundColorCandidate(const DisplayItem& item) {
       if (chunk.background_color.area >= min_background_area &&
           !item_background_color.color.isOpaque()) {
         chunk.background_color.area = item_background_color.area;
-        if (auto filter = SkColorFilters::Blend(
-                item_background_color.color, nullptr, SkBlendMode::kSrcOver)) {
-          chunk.background_color.color = filter->filterColor4f(
-              chunk.background_color.color, nullptr, nullptr);
-        }
+        chunk.background_color.color =
+            SkColor4f::FromColor(color_utils::GetResultingPaintColor(
+                item_background_color.color.toSkColor(),
+                chunk.background_color.color.toSkColor()));
       } else {
         chunk.background_color = item_background_color;
       }

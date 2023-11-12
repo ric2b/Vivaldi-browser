@@ -84,6 +84,7 @@ const char* const kKnownSettings[] = {
     kDeviceDisplayResolution,
     kDeviceDockMacAddressSource,
     kDeviceEncryptedReportingPipelineEnabled,
+    kDeviceHindiInscriptLayoutEnabled,
     kDeviceHostnameTemplate,
     kDeviceHostnameUserConfigurable,
     kDeviceLoginScreenInputMethods,
@@ -1285,6 +1286,15 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
                                  base::Value(container.enabled()));
     }
   }
+
+  if (policy.has_device_hindi_inscript_layout_enabled()) {
+    const em::DeviceHindiInscriptLayoutEnabledProto& container(
+        policy.device_hindi_inscript_layout_enabled());
+    if (container.has_enabled()) {
+      new_values_cache->SetValue(kDeviceHindiInscriptLayoutEnabled,
+                                 base::Value(container.enabled()));
+    }
+  }
 }
 
 void DecodeLogUploadPolicies(const em::ChromeDeviceSettingsProto& policy,
@@ -1341,7 +1351,7 @@ DeviceSettingsProvider::~DeviceSettingsProvider() {
 }
 
 // static
-bool DeviceSettingsProvider::IsDeviceSetting(const std::string& name) {
+bool DeviceSettingsProvider::IsDeviceSetting(base::StringPiece name) {
   return base::Contains(kKnownSettings, name);
 }
 
@@ -1363,7 +1373,8 @@ void DeviceSettingsProvider::DoSet(const std::string& path,
   // Make sure that either the current user is the device owner or the
   // device doesn't have an owner yet.
   if (!(device_settings_service_->HasPrivateOwnerKey() ||
-        ownership_status_ == DeviceSettingsService::OWNERSHIP_NONE)) {
+        ownership_status_ ==
+            DeviceSettingsService::OwnershipStatus::kOwnershipNone)) {
     LOG(WARNING) << "Changing settings from non-owner, setting=" << path;
 
     // Revert UI change.
@@ -1416,8 +1427,10 @@ void DeviceSettingsProvider::OwnershipStatusChanged() {
   // cache to device settings proper. It is important that writing only happens
   // in this case, as during normal operation, the contents of the cache should
   // never overwrite actual device settings.
-  if (new_ownership_status == DeviceSettingsService::OWNERSHIP_TAKEN &&
-      ownership_status_ == DeviceSettingsService::OWNERSHIP_NONE) {
+  if (new_ownership_status ==
+          DeviceSettingsService::OwnershipStatus::kOwnershipTaken &&
+      ownership_status_ ==
+          DeviceSettingsService::OwnershipStatus::kOwnershipNone) {
     if (device_settings_service_->HasPrivateOwnerKey()) {
       // There shouldn't be any pending writes, since the cache writes are all
       // immediate.
@@ -1572,7 +1585,7 @@ bool DeviceSettingsProvider::MitigateMissingPolicy() {
   return true;
 }
 
-const base::Value* DeviceSettingsProvider::Get(const std::string& path) const {
+const base::Value* DeviceSettingsProvider::Get(base::StringPiece path) const {
   if (IsDeviceSetting(path)) {
     const base::Value* value;
     if (values_cache_.GetValue(path, &value))
@@ -1592,14 +1605,16 @@ DeviceSettingsProvider::PrepareTrustedValues(base::OnceClosure* callback) {
   return status;
 }
 
-bool DeviceSettingsProvider::HandlesSetting(const std::string& path) const {
+bool DeviceSettingsProvider::HandlesSetting(base::StringPiece path) const {
   return IsDeviceSetting(path);
 }
 
 DeviceSettingsProvider::TrustedStatus
 DeviceSettingsProvider::RequestTrustedEntity() {
-  if (ownership_status_ == DeviceSettingsService::OWNERSHIP_NONE)
+  if (ownership_status_ ==
+      DeviceSettingsService::OwnershipStatus::kOwnershipNone) {
     return TRUSTED;
+  }
   return trusted_status_;
 }
 

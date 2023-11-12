@@ -42,11 +42,11 @@ TEST(NinjaActionTargetWriter, ActionNoSources) {
   Err err;
   TestWithScope setup;
 
-  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  Target target(setup.settings(), Label(SourceDir("//foo++/"), "bar"));
   target.set_output_type(Target::ACTION);
 
-  target.action_values().set_script(SourceFile("//foo/script.py"));
-  target.config_values().inputs().push_back(SourceFile("//foo/included.txt"));
+  target.action_values().set_script(SourceFile("//foo++/script.py"));
+  target.config_values().inputs().push_back(SourceFile("//foo++/included.txt"));
 
   target.action_values().outputs() =
       SubstitutionList::MakeForTest("//out/Debug/foo.out");
@@ -61,14 +61,14 @@ TEST(NinjaActionTargetWriter, ActionNoSources) {
   NinjaActionTargetWriter writer(&target, out);
   writer.Run();
 
-  const char* expected = R"(rule __foo_bar___rule
-  command = /usr/bin/python ../../foo/script.py
-  description = ACTION //foo:bar()
+  const char* expected = R"(rule __foo___bar___rule
+  command = /usr/bin/python ../../foo++/script.py
+  description = ACTION //foo++:bar()
   restat = 1
 
-build foo.out: __foo_bar___rule | ../../foo/script.py ../../foo/included.txt
+build foo.out: __foo___bar___rule | ../../foo++/script.py ../../foo++/included.txt
 
-build obj/foo/bar.stamp: stamp foo.out
+build obj/foo++/bar.stamp: stamp foo.out
 )";
   EXPECT_EQ(expected, out.str()) << expected << "--" << out.str();
 }

@@ -146,16 +146,21 @@ BruschettaInstallerView::BruschettaInstallerView(Profile* profile,
       gfx::Insets::TLBR(kProgressBarTopMargin - kProgressBarHeight, 0, 0, 0));
   upper_container_view->AddChildView(progress_bar_.get());
 
-  for (const auto& it : bruschetta::GetInstallableConfigs(profile_)) {
-    const auto& label =
-        it.second.Find(bruschetta::prefs::kPolicyNameKey)->GetString();
-    const auto& config_name = it.first;
+  {
+    std::vector<bruschetta::InstallableConfig> configs =
+        bruschetta::GetInstallableConfigs(profile_).extract();
+    bruschetta::SortInstallableConfigs(&configs);
+    for (const auto& [config_name, config_dict] : configs) {
+      const auto& label =
+          config_dict.Find(bruschetta::prefs::kPolicyNameKey)->GetString();
 
-    auto* radio_button = radio_button_container_->AddChildView(
-        std::make_unique<views::RadioButton>(base::UTF8ToUTF16(label)));
+      auto* radio_button = radio_button_container_->AddChildView(
+          std::make_unique<views::RadioButton>(base::UTF8ToUTF16(label)));
 
-    radio_buttons_.emplace(config_name, radio_button);
+      radio_buttons_.emplace(config_name, radio_button);
+    }
   }
+
   DCHECK(radio_button_container_->children().size() > 0);
   static_cast<views::RadioButton*>(radio_button_container_->children()[0])
       ->SetChecked(true);
@@ -256,6 +261,11 @@ void BruschettaInstallerView::OnInstallationEnded() {
   observation_.Reset();
   installer_.reset();
   GetWidget()->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
+
+  if (finish_callback_) {
+    std::move(finish_callback_)
+        .Run(bruschetta::BruschettaInstallResult::kSuccess);
+  }
 }
 
 bool BruschettaInstallerView::ShouldShowCloseButton() const {
@@ -291,11 +301,11 @@ std::u16string BruschettaInstallerView::GetSecondaryMessage() const {
         case InstallerState::kInstallStarted:
           // We don't really spend any time in the InstallStarted state, the
           // real first step is installing DLC so fall through to that.
-        case InstallerState::kDlcInstall:
+        case InstallerState::kToolsDlcInstall:
+        case InstallerState::kFirmwareDlcInstall:
           return l10n_util::GetStringUTF16(
               IDS_BRUSCHETTA_INSTALLER_INSTALLING_DLC_MESSAGE);
         case InstallerState::kBootDiskDownload:
-        case InstallerState::kFirmwareDownload:
         case InstallerState::kPflashDownload:
         case InstallerState::kOpenFiles:
           return l10n_util::GetStringUTF16(
@@ -429,6 +439,10 @@ void BruschettaInstallerView::UninstallBruschettaFinished(bool success) {
     state_ = State::kFailed;
   }
   OnStateUpdated();
+
+  if (finish_callback_) {
+    std::move(finish_callback_).Run(error_);
+  }
 }
 
 BEGIN_METADATA(BruschettaInstallerView, views::DialogDelegateView)

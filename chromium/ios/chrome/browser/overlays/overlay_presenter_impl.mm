@@ -11,7 +11,7 @@
 #import "ios/chrome/browser/overlays/public/overlay_presenter_observer.h"
 #import "ios/chrome/browser/overlays/public/overlay_request.h"
 #import "ios/chrome/browser/overlays/public/overlay_request_support.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -520,19 +520,36 @@ void OverlayPresenterImpl::OverlayPresentationContextDidMoveToWindow(
 
 #pragma mark - WebStateListObserver
 
-void OverlayPresenterImpl::WebStateInsertedAt(WebStateList* web_state_list,
-                                              web::WebState* web_state,
-                                              int index,
-                                              bool activating) {
-  WebStateAddedToBrowser(web_state);
-}
-
-void OverlayPresenterImpl::WebStateReplacedAt(WebStateList* web_state_list,
-                                              web::WebState* old_web_state,
-                                              web::WebState* new_web_state,
-                                              int index) {
-  WebStateRemovedFromBrowser(old_web_state);
-  WebStateAddedToBrowser(new_web_state);
+void OverlayPresenterImpl::WebStateListChanged(
+    WebStateList* web_state_list,
+    const WebStateListChange& change,
+    const WebStateSelection& selection) {
+  switch (change.type()) {
+    case WebStateListChange::Type::kSelectionOnly:
+      // TODO(crbug.com/1442546): Move the implementation from
+      // WebStateActivatedAt() to here. Note that here is reachable only when
+      // `reason` == ActiveWebStateChangeReason::Activated.
+      break;
+    case WebStateListChange::Type::kDetach:
+      // Do nothing when a WebState is detached.
+      break;
+    case WebStateListChange::Type::kMove:
+      // Do nothing when a WebState is moved.
+      break;
+    case WebStateListChange::Type::kReplace: {
+      const WebStateListChangeReplace& replace_change =
+          change.As<WebStateListChangeReplace>();
+      WebStateRemovedFromBrowser(replace_change.replaced_web_state());
+      WebStateAddedToBrowser(replace_change.inserted_web_state());
+      break;
+    }
+    case WebStateListChange::Type::kInsert: {
+      const WebStateListChangeInsert& insert_change =
+          change.As<WebStateListChangeInsert>();
+      WebStateAddedToBrowser(insert_change.inserted_web_state());
+      break;
+    }
+  }
 }
 
 void OverlayPresenterImpl::WillDetachWebStateAt(WebStateList* web_state_list,

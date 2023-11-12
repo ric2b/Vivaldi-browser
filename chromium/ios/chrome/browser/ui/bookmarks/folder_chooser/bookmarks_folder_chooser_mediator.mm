@@ -8,10 +8,8 @@
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/common/bookmark_features.h"
 #import "ios/chrome/browser/bookmarks/bookmark_model_bridge_observer.h"
-#import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_observer_bridge.h"
 #import "ios/chrome/browser/sync/sync_observer_bridge.h"
-#import "ios/chrome/browser/sync/sync_setup_service.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_ui_constants.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/bookmarks/folder_chooser/bookmarks_folder_chooser_consumer.h"
@@ -43,12 +41,10 @@ using bookmarks::BookmarkNode;
   // being edited (moved to a folder). This set may contain nodes from both the
   // `_profileBookmarkModel` and `_accountBookmarkModel`.
   std::set<const BookmarkNode*> _editedNodes;
-  // Authentication service to get signin status.
-  AuthenticationService* _authService;
   // Observer for signin status changes.
   std::unique_ptr<AuthenticationServiceObserverBridge> _authServiceBridge;
-  // Sync setup service indicates if the cloud slashed icon should be shown.
-  SyncSetupService* _syncSetupService;
+  // Sync service.
+  syncer::SyncService* _syncService;
   // Observer for sync service status changes.
   std::unique_ptr<SyncObserverBridge> _syncObserverBridge;
 
@@ -64,7 +60,6 @@ using bookmarks::BookmarkNode;
             accountBookmarkModel:(BookmarkModel*)accountBookmarkModel
                      editedNodes:(std::set<const BookmarkNode*>)editedNodes
            authenticationService:(AuthenticationService*)authService
-                syncSetupService:(SyncSetupService*)syncSetupService
                      syncService:(syncer::SyncService*)syncService {
   DCHECK(profileBookmarkModel);
   DCHECK(profileBookmarkModel->loaded());
@@ -92,10 +87,9 @@ using bookmarks::BookmarkNode;
                parentDataSource:self];
     }
     _editedNodes = std::move(editedNodes);
-    _authService = authService;
     _authServiceBridge = std::make_unique<AuthenticationServiceObserverBridge>(
         authService, self);
-    _syncSetupService = syncSetupService;
+    _syncService = syncService;
     _syncObserverBridge.reset(new SyncObserverBridge(self, syncService));
   }
   return self;
@@ -109,10 +103,13 @@ using bookmarks::BookmarkNode;
   _accountDataSource.consumer = nil;
   _accountDataSource = nil;
   _editedNodes.clear();
-  _authService = nullptr;
-  _authServiceBridge = nullptr;
-  _syncSetupService = nullptr;
+  _authServiceBridge.reset();
+  _syncService = nullptr;
   _syncObserverBridge = nullptr;
+}
+
+- (void)dealloc {
+  DCHECK(!_profileDataSource);
 }
 
 - (const std::set<const BookmarkNode*>&)editedNodes {
@@ -131,12 +128,11 @@ using bookmarks::BookmarkNode;
 }
 
 - (BOOL)shouldDisplayCloudIconForProfileBookmarks {
-  return bookmark_utils_ios::ShouldDisplayCloudSlashIconForProfileModel(
-      _syncSetupService);
+  return bookmark_utils_ios::IsAccountBookmarkStorageOptedIn(_syncService);
 }
 
 - (BOOL)shouldShowAccountBookmarks {
-  return bookmark_utils_ios::IsAccountBookmarkModelAvailable(_authService);
+  return bookmark_utils_ios::IsAccountBookmarkStorageOptedIn(_syncService);
 }
 
 #pragma mark - BookmarksFolderChooserMutator

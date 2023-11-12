@@ -19,7 +19,6 @@ import androidx.browser.customtabs.CustomTabsService;
 import androidx.browser.customtabs.CustomTabsServiceConnection;
 import androidx.browser.customtabs.CustomTabsSession;
 import androidx.browser.customtabs.CustomTabsSessionToken;
-import androidx.test.InstrumentationRegistry;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.SmallTest;
 
@@ -32,7 +31,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -103,7 +101,6 @@ public class CustomTabsConnectionTest {
      */
     @Test
     @SmallTest
-    @DisabledTest
     public void testCanWarmup() throws Exception {
         CustomTabsTestUtils.warmUpAndWait();
         CustomTabsTestUtils.warmUpAndWait();
@@ -409,7 +406,6 @@ public class CustomTabsConnectionTest {
      */
     @Test
     @SmallTest
-    @DisabledTest
     public void testNoMayLaunchUrlWithInvalidScheme() throws Exception {
         assertWarmupAndMayLaunchUrl(null, INVALID_SCHEME_URL, false);
     }
@@ -602,7 +598,7 @@ public class CustomTabsConnectionTest {
         final AtomicReference<CustomTabsClient> clientReference = new AtomicReference<>(null);
         final CallbackHelper waitForConnection = new CallbackHelper();
         CustomTabsClient.bindCustomTabsService(ApplicationProvider.getApplicationContext(),
-                InstrumentationRegistry.getTargetContext().getPackageName(),
+                ApplicationProvider.getApplicationContext().getPackageName(),
                 new CustomTabsServiceConnection() {
                     @Override
                     public void onServiceDisconnected(ComponentName name) {}

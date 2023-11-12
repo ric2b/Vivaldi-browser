@@ -5,7 +5,7 @@
 
 #import "Foundation/Foundation.h"
 
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_consumer.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_source_item.h"

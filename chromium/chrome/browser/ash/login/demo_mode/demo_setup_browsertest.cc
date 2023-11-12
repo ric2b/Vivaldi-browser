@@ -24,7 +24,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
-#include "chrome/browser/ash/login/demo_mode/demo_setup_test_utils.h"
+#include "chrome/browser/ash/login/demo_mode/demo_mode_test_utils.h"
 #include "chrome/browser/ash/login/mock_network_state_helper.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
 #include "chrome/browser/ash/login/screens/demo_setup_screen.h"
@@ -422,6 +422,7 @@ class DemoSetupArcSupportedTest : public DemoSetupTestBase {
 
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
                        ShowConfirmationDialogAndProceed) {
+  WaitForOobeUI();
   IsConfirmationDialogHidden();
 
   InvokeDemoModeWithAccelerator();
@@ -434,6 +435,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
 
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
                        ShowConfirmationDialogAndCancel) {
+  WaitForOobeUI();
   IsConfirmationDialogHidden();
 
   InvokeDemoModeWithAccelerator();
@@ -446,6 +448,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
 }
 
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, InvokeWithTaps) {
+  WaitForOobeUI();
   // Use fake time to avoid flakiness.
   SetFakeTimeForMultiTapDetector(base::Time::UnixEpoch());
   IsConfirmationDialogHidden();
@@ -711,7 +714,9 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, OfflineDemoModeUnavailable) {
   test::OobeJS().ExpectDisabledPath(kNetworkNextButton);
 }
 
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, ClickNetworkOnNetworkScreen) {
+// Flaky. https://crbug.com/1453362.
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
+                       DISABLED_ClickNetworkOnNetworkScreen) {
   TriggerDemoModeOnWelcomeScreen();
   test::WaitForNetworkSelectionScreen();
 
@@ -753,7 +758,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, BackOnNetworkScreen) {
   test::WaitForNetworkSelectionScreen();
 
   test::OobeJS().ClickOnPath(kNetworkBackButton);
-  OobeScreenWaiter(WelcomeView::kScreenId).Wait();
+  test::WaitForWelcomeScreen();
 }
 
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, BackOnTermsScreen) {
@@ -798,7 +803,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, BackOnErrorScreen) {
   test::OobeJS().ExpectEnabledPath(kDemoSetupErrorDialogBack);
   test::OobeJS().ClickOnPath(kDemoSetupErrorDialogBack);
 
-  OobeScreenWaiter(WelcomeView::kScreenId).Wait();
+  test::WaitForWelcomeScreen();
 }
 
 // TODO(crbug.com/1399073): Flaky on ChromeOS.

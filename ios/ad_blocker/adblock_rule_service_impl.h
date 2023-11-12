@@ -62,7 +62,9 @@ class RuleServiceImpl : public RuleService, public RuleManager::Observer {
                               RuleManager::ExceptionsList list) override;
 
  private:
-  void OnStateLoaded(RuleServiceStorage::LoadResult load_result);
+  struct LoadData;
+
+  void OnStateLoaded(std::unique_ptr<LoadData> load_data);
 
   void OnRulesIndexChanged(RuleGroup group,
                            RuleService::IndexBuildResult build_result);
@@ -84,6 +86,8 @@ class RuleServiceImpl : public RuleService, public RuleManager::Observer {
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 
   base::ObserverList<RuleService::Observer> observers_;
+
+  base::WeakPtrFactory<RuleServiceImpl> weak_ptr_factory_{this};
 };
 
 }  // namespace adblock_filter

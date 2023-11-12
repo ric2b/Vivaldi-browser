@@ -10,6 +10,11 @@
 #import "ios/chrome/browser/ui/orchestrator/toolbar_animatee.h"
 #import "ios/chrome/common/material_timing.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -33,6 +38,17 @@
 - (void)transitionToStateOmniboxFocused:(BOOL)omniboxFocused
                         toolbarExpanded:(BOOL)toolbarExpanded
                                animated:(BOOL)animated {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    if (toolbarExpanded) {
+      return [self updateUIToExpandedState:animated
+                            omniboxFocused:omniboxFocused];
+    } else {
+      return [self updateUIToContractedState:animated
+                              omniboxFocused:omniboxFocused];
+    }
+  } // End Vivaldi
+
   // If a new transition is requested while one is ongoing, we don't want
   // to start the new one immediately. However, we do want the omnibox to end
   // up in whatever state was requested last. Therefore, we cache the last
@@ -78,7 +94,7 @@
     // call to `animationFinished` after the toolbar animations finished was
     // interrupted and cleanup still needs to occur.
     if (self.inProgressAnimationCount == 0 && self.isAnimating) {
-      [self animationFinished];
+      [self cleanupAfterAnimations];
     }
   });
 }
@@ -331,6 +347,10 @@
 
 - (void)animationFinished {
   self.inProgressAnimationCount -= 1;
+  [self cleanupAfterAnimations];
+}
+
+- (void)cleanupAfterAnimations {
   // Make sure all the animations have been queued and finished.
   if (!self.areOmniboxChangesQueued || self.inProgressAnimationCount > 0) {
     return;
@@ -348,6 +368,84 @@
                                  animated:NO];
   }
   self.stateChangedDuringAnimation = NO;
+}
+
+#pragma mark: VIVALDI
+- (void)updateUIToExpandedState:(BOOL)animated
+                 omniboxFocused:(BOOL)omniboxFocused {
+  void (^expansion)() = ^{
+    [self.toolbarAnimatee expandLocationBar];
+    [self.toolbarAnimatee showCancelButton];
+    [self.locationBarAnimatee setSteadyViewFaded:omniboxFocused];
+    [self.locationBarAnimatee setEditViewFaded:!omniboxFocused];
+    [self.editViewAnimatee setLeadingIconFaded:!omniboxFocused];
+    [self.editViewAnimatee setClearButtonFaded:!omniboxFocused];
+  };
+
+  void (^hideControls)() = ^{
+    [self.toolbarAnimatee hideControlButtons];
+  };
+
+  if (animated) {
+    [UIView animateWithDuration:vPrimaryToolbarAnimationDuration
+                          delay:0
+         usingSpringWithDamping:vPrimaryToolbarAnimationDamping
+          initialSpringVelocity:vPrimaryToolbarAnimationSpringVelocity
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:expansion
+                     completion:^(BOOL finished) {
+      [self animationFinished];
+    }];
+    [UIView animateWithDuration:kMaterialDuration2
+                          delay:0
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:hideControls
+                     completion:^(BOOL finished) {
+      [self animationFinished];
+    }];
+  } else {
+    expansion();
+    hideControls();
+  }
+}
+
+- (void)updateUIToContractedState:(BOOL)animated
+                   omniboxFocused:(BOOL)omniboxFocused {
+  void (^contraction)() = ^{
+    [self.toolbarAnimatee contractLocationBar];
+    [self.toolbarAnimatee hideCancelButton];
+    [self.locationBarAnimatee setSteadyViewFaded:omniboxFocused];
+    [self.locationBarAnimatee setEditViewFaded:!omniboxFocused];
+    [self.editViewAnimatee setLeadingIconFaded:!omniboxFocused];
+    [self.editViewAnimatee setClearButtonFaded:!omniboxFocused];
+  };
+
+  void (^showControls)() = ^{
+    [self.toolbarAnimatee showControlButtons];
+  };
+
+  if (animated) {
+    [UIView animateWithDuration:vPrimaryToolbarAnimationDuration
+                          delay:0
+         usingSpringWithDamping:vPrimaryToolbarAnimationDamping
+          initialSpringVelocity:vPrimaryToolbarAnimationSpringVelocity
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:contraction
+                     completion:^(BOOL finished) {
+      [self animationFinished];
+    }];
+
+    [UIView animateWithDuration:kMaterialDuration2
+                          delay:0
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:showControls
+                     completion:^(BOOL finished) {
+      [self animationFinished];
+    }];
+  } else {
+    contraction();
+    showControls();
+  }
 }
 
 @end

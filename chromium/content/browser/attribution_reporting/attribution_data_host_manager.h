@@ -11,10 +11,10 @@
 #include "components/attribution_reporting/registration_type.mojom-forward.h"
 #include "content/browser/attribution_reporting/attribution_beacon_id.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "services/network/public/cpp/attribution_reporting_runtime_features.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/conversions/attribution_data_host.mojom-forward.h"
-#include "third_party/blink/public/mojom/conversions/attribution_reporting.mojom-forward.h"
 
 namespace attribution_reporting {
 class SuitableOrigin;
@@ -70,7 +70,6 @@ class AttributionDataHostManager
   virtual void NotifyNavigationRegistrationStarted(
       const blink::AttributionSrcToken& attribution_src_token,
       const attribution_reporting::SuitableOrigin& source_origin,
-      blink::mojom::AttributionNavigationType nav_type,
       bool is_within_fenced_frame,
       GlobalRenderFrameHostId render_frame_id,
       int64_t navigation_id) = 0;
@@ -81,16 +80,18 @@ class AttributionDataHostManager
   // initiator render frame for obtaining the page access report.
   // `is_final_response` indicates whether this is a redirect or a final
   // response.
-  virtual void NotifyNavigationRegistrationData(
+  //
+  // Returns true if there was Attribution Reporting relevant response headers.
+  virtual bool NotifyNavigationRegistrationData(
       const blink::AttributionSrcToken& attribution_src_token,
       const net::HttpResponseHeaders* headers,
       attribution_reporting::SuitableOrigin reporting_origin,
       const attribution_reporting::SuitableOrigin& source_origin,
       AttributionInputEvent input_event,
-      blink::mojom::AttributionNavigationType nav_type,
       bool is_within_fenced_frame,
       GlobalRenderFrameHostId render_frame_id,
       int64_t navigation_id,
+      network::AttributionReportingRuntimeFeatures,
       bool is_final_response) = 0;
 
   // Notifies the manager that a fenced frame reporting beacon was initiated
@@ -118,6 +119,7 @@ class AttributionDataHostManager
   // be sent.
   virtual void NotifyFencedFrameReportingBeaconData(
       BeaconId beacon_id,
+      network::AttributionReportingRuntimeFeatures,
       url::Origin reporting_origin,
       const net::HttpResponseHeaders* headers,
       bool is_final_response) = 0;

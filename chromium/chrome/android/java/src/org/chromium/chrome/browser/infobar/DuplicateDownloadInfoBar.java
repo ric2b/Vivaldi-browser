@@ -28,7 +28,6 @@ import org.chromium.build.BuildConfig;
  * being downloaded.
  */
 public class DuplicateDownloadInfoBar extends ConfirmInfoBar {
-    private static final String TAG = "DuplicateDownloadInfoBar";
     private final String mFilePath;
     private final boolean mIsOfflinePage;
     private final String mPageUrl;

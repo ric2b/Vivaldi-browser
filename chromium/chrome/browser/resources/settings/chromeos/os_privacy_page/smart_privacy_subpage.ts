@@ -11,9 +11,9 @@ import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import 'chrome://resources/polymer/v3_0/iron-media-query/iron-media-query.js';
 import '/shared/settings/controls/extension_controlled_indicator.js';
-import '../../controls/settings_slider.js';
-import '../../settings_shared.css.js';
-import '../../settings_vars.css.js';
+import '/shared/settings/controls/settings_slider.js';
+import '../settings_shared.css.js';
+import '../settings_vars.css.js';
 import '../os_settings_page/os_settings_animated_pages.js';
 import '../os_settings_page/os_settings_subpage.js';
 
@@ -24,9 +24,8 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
-import {Route} from '../router.js';
+import {Route, routes} from '../router.js';
 
 import {getTemplate} from './smart_privacy_subpage.html.js';
 

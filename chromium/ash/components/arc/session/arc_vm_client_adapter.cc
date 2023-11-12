@@ -169,6 +169,11 @@ std::vector<std::string> GenerateUpgradeProps(
         upgrade_params.priority_app_lmk_delay_second));
   }
 
+  if (upgrade_params.enable_lmk_perceptible_min_state_update) {
+    result.push_back(base::StringPrintf(
+        "%s.arc.lmk.perceptible_min_state_update=1", prefix.c_str()));
+  }
+
   return result;
 }
 
@@ -194,32 +199,6 @@ void AppendParamsFromStartParams(
               BINARY_TRANSLATION_TYPE_NDK_TRANSLATION);
       break;
   }
-
-  std::string log_profile_name;
-  switch (start_params.usap_profile) {
-    case StartParams::UsapProfile::DEFAULT:
-      request.set_usap_profile(
-          vm_tools::concierge::StartArcVmRequest::USAP_PROFILE_DEFAULT);
-      log_profile_name = "default low-memory";
-      break;
-    case StartParams::UsapProfile::M4G:
-      request.set_usap_profile(
-          vm_tools::concierge::StartArcVmRequest::USAP_PROFILE_4G);
-      log_profile_name = "high-memory 4G";
-      break;
-    case StartParams::UsapProfile::M8G:
-      request.set_usap_profile(
-          vm_tools::concierge::StartArcVmRequest::USAP_PROFILE_8G);
-      log_profile_name = "high-memory 8G";
-      break;
-    case StartParams::UsapProfile::M16G:
-      request.set_usap_profile(
-          vm_tools::concierge::StartArcVmRequest::USAP_PROFILE_16G);
-      log_profile_name = "high-memory 16G";
-      break;
-  }
-  VLOG(1) << "Applied " << log_profile_name << " USAP profile";
-
   *request.mutable_mini_instance_request() =
       ArcClientAdapter::ConvertStartParamsToStartArcMiniInstanceRequest(
           start_params);
@@ -327,10 +306,6 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
   // Request guest memory locking, if configured.
   request.set_lock_guest_memory(base::FeatureList::IsEnabled(kLockGuestMemory));
 
-  // Add update_o4c_list_via_a2c2.
-  request.set_update_o4c_list_via_a2c2(
-      base::FeatureList::IsEnabled(kArcUpdateO4CListViaA2C2));
-
   // Controls whether WebView Zygote is lazily initialized in ARC.
   request.set_enable_web_view_zygote_lazy_init(
       base::FeatureList::IsEnabled(arc::kEnableLazyWebViewInit));
@@ -405,12 +380,14 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
     request.set_mglru_reclaim_swappiness(0);
   }
 
-  request.set_enable_consumer_auto_update_toggle(base::FeatureList::IsEnabled(
-      ash::features::kConsumerAutoUpdateToggleAllowed));
   if (base::FeatureList::IsEnabled(kVmMemoryPSIReports))
     request.set_vm_memory_psi_period(kVmMemoryPSIReportsPeriod.Get());
   else
     request.set_vm_memory_psi_period(-1);
+
+  request.set_enable_vmm_swap(
+      base::FeatureList::IsEnabled(kVmmSwapPolicy) ||
+      base::FeatureList::IsEnabled(kVmmSwapKeyboardShortcut));
 
   auto orientation = display::PanelOrientation::kNormal;
   if (auto* screen = display::Screen::GetScreen()) {

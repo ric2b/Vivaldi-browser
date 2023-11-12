@@ -21,6 +21,7 @@ RustTool::RustTool(const char* n) : Tool(n) {
   set_lib_dir_switch("-Lnative=");
   set_lib_switch("-l");
   set_linker_arg("-Clink-arg=");
+  set_dynamic_link_switch("-Clink-arg=-Bdynamic");
 }
 
 RustTool::~RustTool() = default;
@@ -115,6 +116,13 @@ bool RustTool::InitTool(Scope* scope, Toolchain* toolchain, Err* err) {
   if (!ReadString(scope, "rust_sysroot", &rust_sysroot_, err)) {
     return false;
   }
+
+  if (MayLink()) {
+    if (!ReadString(scope, "dynamic_link_switch", &dynamic_link_switch_, err)) {
+      return false;
+    }
+  }
+
   return true;
 }
 

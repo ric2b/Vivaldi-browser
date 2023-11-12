@@ -748,10 +748,6 @@ void LayerTreeImpl::PullLayerTreePropertiesFrom(CommitState& commit_state) {
   // Transfer page transition directives.
   for (auto& request : commit_state.view_transition_requests)
     AddViewTransitionRequest(std::move(request));
-
-  SetVisualUpdateDurations(
-      commit_state.previous_surfaces_visual_update_duration,
-      commit_state.visual_update_duration);
 }
 
 void LayerTreeImpl::PushPropertyTreesTo(LayerTreeImpl* target_tree) {
@@ -882,9 +878,6 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
 
   for (auto& request : TakeViewTransitionRequests())
     target_tree->AddViewTransitionRequest(std::move(request));
-
-  target_tree->SetVisualUpdateDurations(
-      previous_surfaces_visual_update_duration_, visual_update_duration_);
 }
 
 void LayerTreeImpl::HandleTickmarksVisibilityChange() {
@@ -959,8 +952,10 @@ void LayerTreeImpl::SetTransformMutated(ElementId element_id,
   DCHECK_EQ(1u,
             property_trees()->transform_tree().element_id_to_node_index().count(
                 element_id));
-  if (IsSyncTree() || IsRecycleTree())
+  if (!base::FeatureList::IsEnabled(features::kNoPreserveLastMutation) &&
+      (IsSyncTree() || IsRecycleTree())) {
     element_id_to_transform_animations_[element_id] = transform;
+  }
   if (property_trees()->transform_tree_mutable().OnTransformAnimated(element_id,
                                                                      transform))
     set_needs_update_draw_properties();
@@ -970,8 +965,10 @@ void LayerTreeImpl::SetOpacityMutated(ElementId element_id, float opacity) {
   DCHECK_EQ(1u,
             property_trees()->effect_tree().element_id_to_node_index().count(
                 element_id));
-  if (IsSyncTree() || IsRecycleTree())
+  if (!base::FeatureList::IsEnabled(features::kNoPreserveLastMutation) &&
+      (IsSyncTree() || IsRecycleTree())) {
     element_id_to_opacity_animations_[element_id] = opacity;
+  }
   if (property_trees()->effect_tree_mutable().OnOpacityAnimated(element_id,
                                                                 opacity))
     set_needs_update_draw_properties();
@@ -982,8 +979,10 @@ void LayerTreeImpl::SetFilterMutated(ElementId element_id,
   DCHECK_EQ(1u,
             property_trees()->effect_tree().element_id_to_node_index().count(
                 element_id));
-  if (IsSyncTree() || IsRecycleTree())
+  if (!base::FeatureList::IsEnabled(features::kNoPreserveLastMutation) &&
+      (IsSyncTree() || IsRecycleTree())) {
     element_id_to_filter_animations_[element_id] = filters;
+  }
   if (property_trees()->effect_tree_mutable().OnFilterAnimated(element_id,
                                                                filters))
     set_needs_update_draw_properties();
@@ -995,8 +994,10 @@ void LayerTreeImpl::SetBackdropFilterMutated(
   DCHECK_EQ(1u,
             property_trees()->effect_tree().element_id_to_node_index().count(
                 element_id));
-  if (IsSyncTree() || IsRecycleTree())
+  if (!base::FeatureList::IsEnabled(features::kNoPreserveLastMutation) &&
+      (IsSyncTree() || IsRecycleTree())) {
     element_id_to_backdrop_filter_animations_[element_id] = backdrop_filters;
+  }
   if (property_trees()->effect_tree_mutable().OnBackdropFilterAnimated(
           element_id, backdrop_filters))
     set_needs_update_draw_properties();
@@ -1097,67 +1098,70 @@ void LayerTreeImpl::UpdatePropertyTreeAnimationFromMainThread() {
   // This code is assumed to only run on the sync tree; the node updates are
   // then synced when the tree is activated. See http://crbug.com/916512
   DCHECK(IsSyncTree());
-
-  auto& effect_tree = property_trees_.effect_tree_mutable();
-  auto element_id_to_opacity = element_id_to_opacity_animations_.begin();
-  while (element_id_to_opacity != element_id_to_opacity_animations_.end()) {
-    const ElementId id = element_id_to_opacity->first;
-    EffectNode* node = effect_tree.FindNodeFromElementId(id);
-    if (!node || !node->is_currently_animating_opacity ||
-        node->opacity == element_id_to_opacity->second) {
-      element_id_to_opacity_animations_.erase(element_id_to_opacity++);
-      continue;
-    }
-    node->opacity = element_id_to_opacity->second;
-    effect_tree.set_needs_update(true);
-    ++element_id_to_opacity;
-  }
-
-  auto element_id_to_filter = element_id_to_filter_animations_.begin();
-  while (element_id_to_filter != element_id_to_filter_animations_.end()) {
-    const ElementId id = element_id_to_filter->first;
-    EffectNode* node = effect_tree.FindNodeFromElementId(id);
-    if (!node || !node->is_currently_animating_filter ||
-        node->filters == element_id_to_filter->second) {
-      element_id_to_filter_animations_.erase(element_id_to_filter++);
-      continue;
-    }
-    node->filters = element_id_to_filter->second;
-    effect_tree.set_needs_update(true);
-    ++element_id_to_filter;
-  }
-
-  auto element_id_to_backdrop_filter =
-      element_id_to_backdrop_filter_animations_.begin();
-  while (element_id_to_backdrop_filter !=
-         element_id_to_backdrop_filter_animations_.end()) {
-    const ElementId id = element_id_to_backdrop_filter->first;
-    EffectNode* node = effect_tree.FindNodeFromElementId(id);
-    if (!node || !node->is_currently_animating_backdrop_filter ||
-        node->backdrop_filters == element_id_to_backdrop_filter->second) {
-      element_id_to_backdrop_filter_animations_.erase(
-          element_id_to_backdrop_filter++);
-      continue;
-    }
-    node->backdrop_filters = element_id_to_backdrop_filter->second;
-    effect_tree.set_needs_update(true);
-    ++element_id_to_backdrop_filter;
-  }
-
   auto& transform_tree = property_trees_.transform_tree_mutable();
-  auto element_id_to_transform = element_id_to_transform_animations_.begin();
-  while (element_id_to_transform != element_id_to_transform_animations_.end()) {
-    const ElementId id = element_id_to_transform->first;
-    TransformNode* node = transform_tree.FindNodeFromElementId(id);
-    if (!node || !node->is_currently_animating ||
-        node->local == element_id_to_transform->second) {
-      element_id_to_transform_animations_.erase(element_id_to_transform++);
-      continue;
+
+  if (!base::FeatureList::IsEnabled(features::kNoPreserveLastMutation)) {
+    auto& effect_tree = property_trees_.effect_tree_mutable();
+    auto element_id_to_opacity = element_id_to_opacity_animations_.begin();
+    while (element_id_to_opacity != element_id_to_opacity_animations_.end()) {
+      const ElementId id = element_id_to_opacity->first;
+      EffectNode* node = effect_tree.FindNodeFromElementId(id);
+      if (!node || !node->is_currently_animating_opacity ||
+          node->opacity == element_id_to_opacity->second) {
+        element_id_to_opacity_animations_.erase(element_id_to_opacity++);
+        continue;
+      }
+      node->opacity = element_id_to_opacity->second;
+      effect_tree.set_needs_update(true);
+      ++element_id_to_opacity;
     }
-    node->local = element_id_to_transform->second;
-    node->needs_local_transform_update = true;
-    transform_tree.set_needs_update(true);
-    ++element_id_to_transform;
+
+    auto element_id_to_filter = element_id_to_filter_animations_.begin();
+    while (element_id_to_filter != element_id_to_filter_animations_.end()) {
+      const ElementId id = element_id_to_filter->first;
+      EffectNode* node = effect_tree.FindNodeFromElementId(id);
+      if (!node || !node->is_currently_animating_filter ||
+          node->filters == element_id_to_filter->second) {
+        element_id_to_filter_animations_.erase(element_id_to_filter++);
+        continue;
+      }
+      node->filters = element_id_to_filter->second;
+      effect_tree.set_needs_update(true);
+      ++element_id_to_filter;
+    }
+
+    auto element_id_to_backdrop_filter =
+        element_id_to_backdrop_filter_animations_.begin();
+    while (element_id_to_backdrop_filter !=
+           element_id_to_backdrop_filter_animations_.end()) {
+      const ElementId id = element_id_to_backdrop_filter->first;
+      EffectNode* node = effect_tree.FindNodeFromElementId(id);
+      if (!node || !node->is_currently_animating_backdrop_filter ||
+          node->backdrop_filters == element_id_to_backdrop_filter->second) {
+        element_id_to_backdrop_filter_animations_.erase(
+            element_id_to_backdrop_filter++);
+        continue;
+      }
+      node->backdrop_filters = element_id_to_backdrop_filter->second;
+      effect_tree.set_needs_update(true);
+      ++element_id_to_backdrop_filter;
+    }
+
+    auto element_id_to_transform = element_id_to_transform_animations_.begin();
+    while (element_id_to_transform !=
+           element_id_to_transform_animations_.end()) {
+      const ElementId id = element_id_to_transform->first;
+      TransformNode* node = transform_tree.FindNodeFromElementId(id);
+      if (!node || !node->is_currently_animating ||
+          node->local == element_id_to_transform->second) {
+        element_id_to_transform_animations_.erase(element_id_to_transform++);
+        continue;
+      }
+      node->local = element_id_to_transform->second;
+      node->needs_local_transform_update = true;
+      transform_tree.set_needs_update(true);
+      ++element_id_to_transform;
+    }
   }
 
   for (auto iter : transform_tree.element_id_to_node_index())
@@ -1405,7 +1409,6 @@ void LayerTreeImpl::SetDeviceScaleFactor(float device_scale_factor) {
   set_needs_update_draw_properties();
   if (IsActiveTree())
     host_impl_->SetViewportDamage(GetDeviceViewport());
-  host_impl_->SetNeedUpdateGpuRasterizationStatus();
 }
 
 void LayerTreeImpl::SetLocalSurfaceIdFromParent(
@@ -1844,7 +1847,7 @@ const LayerTreeDebugState& LayerTreeImpl::debug_state() const {
   return host_impl_->debug_state();
 }
 
-viz::ContextProvider* LayerTreeImpl::context_provider() const {
+viz::RasterContextProvider* LayerTreeImpl::context_provider() const {
   return host_impl_->layer_tree_frame_sink()->context_provider();
 }
 
@@ -1965,10 +1968,6 @@ void LayerTreeImpl::DidAnimateScrollOffset() {
 
 bool LayerTreeImpl::use_gpu_rasterization() const {
   return host_impl_->use_gpu_rasterization();
-}
-
-GpuRasterizationStatus LayerTreeImpl::GetGpuRasterizationStatus() const {
-  return host_impl_->gpu_rasterization_status();
 }
 
 bool LayerTreeImpl::create_low_res_tiling() const {
@@ -2840,6 +2839,7 @@ void LayerTreeImpl::GetViewportSelection(
                                 : nullptr,
       device_scale_factor() * painted_device_scale_factor());
   if (selection->start.type() == gfx::SelectionBound::CENTER ||
+      selection->start.type() == gfx::SelectionBound::HIDDEN ||
       selection->start.type() == gfx::SelectionBound::EMPTY) {
     selection->end = selection->start;
   } else {
@@ -2955,19 +2955,6 @@ bool LayerTreeImpl::HasViewTransitionSaveRequest() const {
 
 bool LayerTreeImpl::IsReadyToActivate() const {
   return host_impl_->IsReadyToActivate();
-}
-
-void LayerTreeImpl::ClearVisualUpdateDurations() {
-  previous_surfaces_visual_update_duration_ = base::TimeDelta();
-  visual_update_duration_ = base::TimeDelta();
-}
-
-void LayerTreeImpl::SetVisualUpdateDurations(
-    base::TimeDelta previous_surfaces_visual_update_duration,
-    base::TimeDelta visual_update_duration) {
-  previous_surfaces_visual_update_duration_ =
-      previous_surfaces_visual_update_duration;
-  visual_update_duration_ = visual_update_duration;
 }
 
 void LayerTreeImpl::RequestImplSideInvalidationForRerasterTiling() {

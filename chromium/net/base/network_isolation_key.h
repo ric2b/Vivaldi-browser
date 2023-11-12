@@ -18,8 +18,7 @@ class Origin;
 }
 
 namespace network::mojom {
-class FrameSiteEnabledNetworkIsolationKeyDataView;
-class CrossSiteFlagEnabledNetworkIsolationKeyDataView;
+class NonEmptyNetworkIsolationKeyDataView;
 }
 
 namespace net {
@@ -35,10 +34,7 @@ class NET_EXPORT NetworkIsolationKey {
   class SerializationPasskey {
    private:
     friend struct mojo::StructTraits<
-        network::mojom::FrameSiteEnabledNetworkIsolationKeyDataView,
-        NetworkIsolationKey>;
-    friend struct mojo::StructTraits<
-        network::mojom::CrossSiteFlagEnabledNetworkIsolationKeyDataView,
+        network::mojom::NonEmptyNetworkIsolationKeyDataView,
         NetworkIsolationKey>;
     SerializationPasskey() = default;
     ~SerializationPasskey() = default;
@@ -50,14 +46,6 @@ class NET_EXPORT NetworkIsolationKey {
     CookiePartitionKeyPasskey() = default;
     ~CookiePartitionKeyPasskey() = default;
   };
-
-  // This constructor is used for deserialization when `GetMode()` returns
-  // `kCrossSiteFlagEnabled`.
-  NetworkIsolationKey(SerializationPasskey,
-                      SchemefulSite top_frame_site,
-                      SchemefulSite frame_site,
-                      bool is_cross_site,
-                      absl::optional<base::UnguessableToken> nonce);
 
   // Full constructor.  When a request is initiated by the top frame, it must
   // also populate the |frame_site| parameter when calling this constructor.
@@ -99,17 +87,6 @@ class NET_EXPORT NetworkIsolationKey {
   // Creates a new key using |top_frame_site_| and |new_frame_site|.
   NetworkIsolationKey CreateWithNewFrameSite(
       const SchemefulSite& new_frame_site) const;
-
-  // Intended for temporary use in locations that should be using main frame and
-  // frame origin, but are currently only using frame origin, because the
-  // creating object may be shared across main frame objects. Having a special
-  // constructor for these methods makes it easier to keep track of locating
-  // callsites that need to have their NetworkIsolationKey filled in.
-  static NetworkIsolationKey ToDoUseTopFrameOriginAsWell(
-      const url::Origin& incorrectly_used_frame_origin) {
-    return NetworkIsolationKey(incorrectly_used_frame_origin,
-                               incorrectly_used_frame_origin);
-  }
 
   // Compare keys for equality, true if all enabled fields are equal.
   bool operator==(const NetworkIsolationKey& other) const {
@@ -220,14 +197,6 @@ class NET_EXPORT NetworkIsolationKey {
       CookiePartitionKeyPasskey) const {
     CHECK(!IsEmpty());
     return frame_site_;
-  }
-
-  // Same as above but for the is-cross-site bit.
-  const absl::optional<bool>& GetIsCrossSiteForSerialization(
-      SerializationPasskey) const {
-    CHECK(!IsEmpty());
-    CHECK_EQ(GetMode(), Mode::kCrossSiteFlagEnabled);
-    return is_cross_site_;
   }
 
   // Getter for the nonce.

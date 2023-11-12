@@ -35,7 +35,8 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ui/base/device_form_factor.h"
 
 using ui::GetDeviceFormFactor;
@@ -55,14 +56,20 @@ using vivaldi::IsVivaldiRunning;
 @property(nonatomic, assign) CGFloat previousFullscreenProgress;
 // Pan Gesture Recognizer for the view revealing pan gesture handler.
 @property(nonatomic, weak) UIPanGestureRecognizer* panGestureRecognizer;
+
+// Vivaldi
+@property(nonatomic, assign) ATBSettingType atbSettingType;
+// End Vivaldi
+
 @end
 
 @implementation PrimaryToolbarViewController
 
-@synthesize delegate = _delegate;
-@synthesize isNTP = _isNTP;
-@synthesize previousFullscreenProgress = _previousFullscreenProgress;
 @dynamic view;
+
+// Vivaldi
+@synthesize atbSettingType = _atbSettingType;
+// End Vivaldi
 
 #pragma mark - Public
 
@@ -183,46 +190,30 @@ using vivaldi::IsVivaldiRunning;
   // set to topLayoutGuide after the view creation on iOS 10.
   [self.view setUp];
 
-  self.view.locationBarHeight.constant =
-      [self locationBarHeightForFullscreenProgress:1];
-
-  if (IsVivaldiRunning()) {
-    self.view.locationBarContainer.layer.cornerRadius =
-      vNTPSearchBarCornerRadius;
-  } else {
-  self.view.locationBarContainer.layer.cornerRadius =
-      self.view.locationBarHeight.constant / 2;
-  } // End Vivaldi
-
+  [self.layoutGuideCenter referenceView:self.view.locationBarContainer
+                              underName:kOmniboxGuide];
   self.view.locationBarBottomConstraint.constant =
       [self verticalMarginForLocationBarForFullscreenProgress:1];
-
-  [self.view.collapsedToolbarButton addTarget:self
-                                       action:@selector(exitFullscreen)
-                             forControlEvents:UIControlEventTouchUpInside];
-  UIHoverGestureRecognizer* hoverGestureRecognizer =
-      [[UIHoverGestureRecognizer alloc]
-          initWithTarget:self
-                  action:@selector(exitFullscreen)];
-  [self.view.collapsedToolbarButton
-      addGestureRecognizer:hoverGestureRecognizer];
-}
-
-- (void)viewDidLoad {
-  [super viewDidLoad];
-  [self updateLayoutForPreviousTraitCollection:nil];
-}
-
-- (void)didMoveToParentViewController:(UIViewController*)parent {
-  [super didMoveToParentViewController:parent];
-  UIView* omniboxView = self.view.locationBarContainer;
-  [NamedGuide guideWithName:kOmniboxGuide view:omniboxView].constrainedView =
-      omniboxView;
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  [self updateLayoutForPreviousTraitCollection:previousTraitCollection];
+  self.view.locationBarBottomConstraint.constant =
+      [self verticalMarginForLocationBarForFullscreenProgress:
+                self.previousFullscreenProgress];
+
+  if (!ShowThumbStripInTraitCollection(self.traitCollection)) {
+    self.view.topCornersRounded = NO;
+  }
+  [self.delegate
+      viewControllerTraitCollectionDidChange:previousTraitCollection];
+
+  // Vivaldi
+  [self.view redrawToolbarButtons];
+  if (!_atbSettingType)
+    return;
+  [self.view updateVivaldiShieldState:_atbSettingType];
+  // End Vivaldi
 }
 
 #pragma mark - UIResponder
@@ -243,13 +234,6 @@ using vivaldi::IsVivaldiRunning;
 }
 
 #pragma mark - Property accessors
-
-- (void)setLocationBarViewController:
-    (UIViewController*)locationBarViewController {
-  [self addChildViewController:locationBarViewController];
-  [locationBarViewController didMoveToParentViewController:self];
-  self.view.locationBarView = locationBarViewController.view;
-}
 
 - (void)setIsNTP:(BOOL)isNTP {
   if (isNTP == _isNTP)
@@ -283,50 +267,32 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - FullscreenUIElement
 
 - (void)updateForFullscreenProgress:(CGFloat)progress {
+  [super updateForFullscreenProgress:progress];
+
+  self.previousFullscreenProgress = progress;
+
   CGFloat alphaValue = fmax(progress * 2 - 1, 0);
+
+  // Note: (prio@vivaldi.com): We will use the same alpha computation for tab
+  // strip and fake status bar view from BVC so that at the time of scrolling
+  // all the related views fade in sync.
+  if (IsVivaldiRunning())
+    alphaValue = fmax((progress - 0.85) / 0.15, 0);
+  // End Vivaldi
+
   self.view.leadingStackView.alpha = alphaValue;
   self.view.trailingStackView.alpha = alphaValue;
-  self.view.locationBarHeight.constant =
-      [self locationBarHeightForFullscreenProgress:progress];
 
   if (IsVivaldiRunning()) {
     self.view.locationBarContainer.layer.cornerRadius =
       vNTPSearchBarCornerRadius;
-  } else {
-  self.view.locationBarContainer.layer.cornerRadius =
-      self.view.locationBarHeight.constant / 2;
+    self.view.locationBarContainer.backgroundColor =
+      [[UIColor colorNamed:vSearchbarBackgroundColor]
+        colorWithAlphaComponent:alphaValue];
   } // End Vivaldi
 
   self.view.locationBarBottomConstraint.constant =
       [self verticalMarginForLocationBarForFullscreenProgress:progress];
-  self.previousFullscreenProgress = progress;
-
-  self.view.collapsedToolbarButton.hidden = progress > 0.05;
-
-  if (IsVivaldiRunning()) {
-    self.view.locationBarContainer.backgroundColor =
-      self.view.locationBarContainer.backgroundColor = UIColor.clearColor;
-  } else {
-  self.view.locationBarContainer.backgroundColor =
-      [self.buttonFactory.toolbarConfiguration
-          locationBarBackgroundColorWithVisibility:alphaValue];
-  } // End Vivaldi
-}
-
-- (void)updateForFullscreenEnabled:(BOOL)enabled {
-  if (!enabled)
-    [self updateForFullscreenProgress:1.0];
-}
-
-- (void)animateFullscreenWithAnimator:(FullscreenAnimator*)animator {
-  CGFloat finalProgress = animator.finalProgress;
-  // Using the animator doesn't work as the animation doesn't trigger a relayout
-  // of the constraints (see crbug.com/978462, crbug.com/950994).
-  [UIView animateWithDuration:animator.duration
-                   animations:^{
-                     [self updateForFullscreenProgress:finalProgress];
-                     [self.view layoutIfNeeded];
-                   }];
 }
 
 #pragma mark - ToolbarAnimatee
@@ -335,11 +301,6 @@ using vivaldi::IsVivaldiRunning;
   [self deactivateViewLocationBarConstraints];
   [NSLayoutConstraint activateConstraints:self.view.expandedConstraints];
   [self.view layoutIfNeeded];
-
-  if (IsVivaldiRunning()) {
-    self.view.locationBarContainer.backgroundColor = UIColor.clearColor;
-  } // End Vivaldi
-
 }
 
 - (void)contractLocationBar {
@@ -351,11 +312,6 @@ using vivaldi::IsVivaldiRunning;
     [NSLayoutConstraint activateConstraints:self.view.contractedConstraints];
   }
   [self.view layoutIfNeeded];
-
-  if (IsVivaldiRunning()) {
-    self.view.locationBarContainer.backgroundColor = UIColor.clearColor;
-  } // End Vivaldi
-
 }
 
 - (void)showCancelButton {
@@ -370,50 +326,29 @@ using vivaldi::IsVivaldiRunning;
   for (ToolbarButton* button in self.view.allButtons) {
     button.alpha = 1;
   }
+
+  // Vivaldi
+  [self.view handleToolbarButtonVisibility:YES];
+  // End Vivaldi
+
 }
 
 - (void)hideControlButtons {
   for (ToolbarButton* button in self.view.allButtons) {
     button.alpha = 0;
   }
+
+  // Vivaldi
+  [self.view handleToolbarButtonVisibility:NO];
+  // End Vivaldi
+
 }
 
 #pragma mark - Private
 
-- (void)updateLayoutForPreviousTraitCollection:
-    (UITraitCollection*)previousTraitCollection {
-  [self.delegate
-      viewControllerTraitCollectionDidChange:previousTraitCollection];
-  self.view.locationBarBottomConstraint.constant =
-      [self verticalMarginForLocationBarForFullscreenProgress:
-                self.previousFullscreenProgress];
-  if (previousTraitCollection.preferredContentSizeCategory !=
-      self.traitCollection.preferredContentSizeCategory) {
-    self.view.locationBarHeight.constant = [self
-        locationBarHeightForFullscreenProgress:self.previousFullscreenProgress];
-    self.view.locationBarContainer.layer.cornerRadius =
-        self.view.locationBarHeight.constant / 2;
-  }
-  if (!ShowThumbStripInTraitCollection(self.traitCollection)) {
-    self.view.topCornersRounded = NO;
-  }
-}
-
 - (CGFloat)clampedFontSizeMultiplier {
   return ToolbarClampedFontSizeMultiplier(
       self.traitCollection.preferredContentSizeCategory);
-}
-
-// Returns the desired height of the location bar, based on the fullscreen
-// `progress`.
-- (CGFloat)locationBarHeightForFullscreenProgress:(CGFloat)progress {
-  CGFloat expandedHeight =
-      LocationBarHeight(self.traitCollection.preferredContentSizeCategory);
-  CGFloat collapsedHeight =
-      ToolbarCollapsedHeight(self.traitCollection.preferredContentSizeCategory);
-  CGFloat expandedCollapsedDelta = expandedHeight - collapsedHeight;
-
-  return AlignValueToPixel(collapsedHeight + expandedCollapsedDelta * progress);
 }
 
 // Returns the vertical margin to the location bar based on fullscreen
@@ -440,12 +375,6 @@ using vivaldi::IsVivaldiRunning;
   [NSLayoutConstraint deactivateConstraints:self.view.expandedConstraints];
 }
 
-// Exits fullscreen.
-- (void)exitFullscreen {
-  [self.delegate exitFullscreen];
-}
-
-
 #pragma mark: - Vivaldi
 #pragma mark: - Toolbar Consumer
 - (void)setShareMenuEnabled:(BOOL)enabled {
@@ -453,6 +382,7 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)updateVivaldiShieldState:(ATBSettingType)setting {
+  _atbSettingType = setting;
   [self.view updateVivaldiShieldState:setting];
 }
 

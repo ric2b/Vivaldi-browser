@@ -18,7 +18,8 @@ bool SupportMultiOutput(SegmentResultProvider::SegmentResult* result) {
 }
 
 // Collects training data after model execution.
-void CollectTrainingData(Config* config, ExecutionService* execution_service) {
+void CollectTrainingData(const Config* config,
+                         ExecutionService* execution_service) {
   // The execution service and training data collector might be null in testing.
   if (execution_service && execution_service->training_data_collector()) {
     for (const auto& segment : config->segments) {
@@ -32,11 +33,11 @@ void CollectTrainingData(Config* config, ExecutionService* execution_service) {
 }  // namespace
 
 ResultRefreshManager::ResultRefreshManager(
-    const std::vector<std::unique_ptr<Config>>& configs,
-    std::unique_ptr<CachedResultWriter> cached_result_writer,
+    const ConfigHolder* config_holder,
+    CachedResultWriter* cached_result_writer,
     const PlatformOptions& platform_options)
-    : configs_(configs),
-      cached_result_writer_(std::move(cached_result_writer)),
+    : config_holder_(config_holder),
+      cached_result_writer_(cached_result_writer),
       platform_options_(platform_options) {}
 
 ResultRefreshManager::~ResultRefreshManager() = default;
@@ -47,7 +48,7 @@ void ResultRefreshManager::RefreshModelResults(
     ExecutionService* execution_service) {
   result_providers_ = std::move(result_providers);
 
-  for (const auto& config : *configs_) {
+  for (const auto& config : config_holder_->configs()) {
     if (config->on_demand_execution ||
         metadata_utils::ConfigUsesLegacyOutput(config.get())) {
       continue;
@@ -61,7 +62,7 @@ void ResultRefreshManager::RefreshModelResults(
 
 void ResultRefreshManager::GetCachedResultOrRunModel(
     SegmentResultProvider* segment_result_provider,
-    Config* config,
+    const Config* config,
     ExecutionService* execution_service) {
   auto result_options =
       std::make_unique<SegmentResultProvider::GetResultOptions>();
@@ -82,25 +83,24 @@ void ResultRefreshManager::GetCachedResultOrRunModel(
   segment_result_provider->GetSegmentResult(std::move(result_options));
 }
 
-void ResultRefreshManager::OnGetCachedResultOrRunModel(
-    SegmentResultProvider* segment_result_provider,
-    Config* config,
-    ExecutionService* execution_service,
-    std::unique_ptr<SegmentResultProvider::SegmentResult> result) {
-  SegmentResultProvider::ResultState result_state =
-      result ? result->state : SegmentResultProvider::ResultState::kUnknown;
-
-  if (!SupportMultiOutput(result.get())) {
-    stats::RecordSegmentSelectionFailure(
-        *config,
-        stats::SegmentationSelectionFailureReason::kMultiOutputNotSupported);
+void ResultRefreshManager::OnModelUpdated(proto::SegmentInfo* segment_info,
+                                          ExecutionService* execution_service) {
+  const Config* config =
+      config_holder_->GetConfigForSegmentId(segment_info->segment_id());
+  if (config->segmentation_key.empty()) {
     return;
   }
+  GetCachedResultOrRunModel(result_providers_[config->segmentation_key].get(),
+                            config, execution_service);
+}
 
-  stats::RecordSegmentSelectionFailure(
-      *config, stats::GetSuccessOrFailureReason(result_state));
+void ResultRefreshManager::OnGetCachedResultOrRunModel(
+    SegmentResultProvider* segment_result_provider,
+    const Config* config,
+    ExecutionService* execution_service,
+    std::unique_ptr<SegmentResultProvider::SegmentResult> result) {
+  SegmentResultProvider::ResultState result_state = result->state;
 
-  proto::PredictionResult pred_result = result->result;
   // If the model result is available either from database or running the
   // model, update prefs if expired.
   bool unexpired_score_from_db =
@@ -112,17 +112,31 @@ void ResultRefreshManager::OnGetCachedResultOrRunModel(
        (result_state ==
         SegmentResultProvider::ResultState::kDefaultModelScoreUsed));
 
-  if (unexpired_score_from_db || expired_score_and_run_model) {
-    stats::RecordClassificationResultComputed(*config, pred_result);
+  bool success = (unexpired_score_from_db || expired_score_and_run_model);
 
-    proto::ClientResult client_result =
-        metadata_utils::CreateClientResultFromPredResult(pred_result,
-                                                         base::Time::Now());
-    cached_result_writer_->UpdatePrefsIfExpired(config, client_result,
-                                                platform_options_);
-
-    CollectTrainingData(config, execution_service);
+  if (!success) {
+    stats::RecordSegmentSelectionFailure(
+        *config, stats::GetSuccessOrFailureReason(result_state));
+    return;
   }
+
+  if (!SupportMultiOutput(result.get())) {
+    stats::RecordSegmentSelectionFailure(
+        *config,
+        stats::SegmentationSelectionFailureReason::kMultiOutputNotSupported);
+    return;
+  }
+
+  proto::PredictionResult pred_result = result->result;
+  stats::RecordClassificationResultComputed(*config, pred_result);
+
+  proto::ClientResult client_result =
+      metadata_utils::CreateClientResultFromPredResult(pred_result,
+                                                       base::Time::Now());
+  cached_result_writer_->UpdatePrefsIfExpired(config, client_result,
+                                              platform_options_);
+
+  CollectTrainingData(config, execution_service);
 }
 
 }  // namespace segmentation_platform

@@ -100,6 +100,13 @@ class GPUMappedDOMArrayBuffer : public DOMArrayBuffer {
     CHECK(result && IsDetached());
   }
 
+  // Due to an unusual non-owning backing these array buffers can't be shared
+  // for internal use.
+  bool ShareNonSharedForInternalUse(ArrayBufferContents& result) override {
+    result.Detach();
+    return false;
+  }
+
   void Trace(Visitor* visitor) const override {
     DOMArrayBuffer::Trace(visitor);
     visitor->Trace(owner_);
@@ -190,17 +197,18 @@ ScriptPromise GPUBuffer::mapAsync(ScriptState* script_state,
   return MapAsyncImpl(script_state, mode, offset, size, exception_state);
 }
 
-DOMArrayBuffer* GPUBuffer::getMappedRange(v8::Isolate* isolate,
+DOMArrayBuffer* GPUBuffer::getMappedRange(ScriptState* script_state,
                                           uint64_t offset,
                                           ExceptionState& exception_state) {
-  return GetMappedRangeImpl(isolate, offset, absl::nullopt, exception_state);
+  return GetMappedRangeImpl(script_state, offset, absl::nullopt,
+                            exception_state);
 }
 
-DOMArrayBuffer* GPUBuffer::getMappedRange(v8::Isolate* isolate,
+DOMArrayBuffer* GPUBuffer::getMappedRange(ScriptState* script_state,
                                           uint64_t offset,
                                           uint64_t size,
                                           ExceptionState& exception_state) {
-  return GetMappedRangeImpl(isolate, offset, size, exception_state);
+  return GetMappedRangeImpl(script_state, offset, size, exception_state);
 }
 
 void GPUBuffer::unmap(v8::Isolate* isolate) {
@@ -273,7 +281,7 @@ ScriptPromise GPUBuffer::MapAsyncImpl(ScriptState* script_state,
   return promise;
 }
 
-DOMArrayBuffer* GPUBuffer::GetMappedRangeImpl(v8::Isolate* isolate,
+DOMArrayBuffer* GPUBuffer::GetMappedRangeImpl(ScriptState* script_state,
                                               uint64_t offset,
                                               absl::optional<uint64_t> size,
                                               ExceptionState& exception_state) {
@@ -326,8 +334,8 @@ DOMArrayBuffer* GPUBuffer::GetMappedRangeImpl(v8::Isolate* isolate,
       GetHandle(), range_offset, range_size);
 
   if (!map_data_const) {
-    // TODO: have explanatory error messages here (or just leave them to the
-    // asynchronous error reporting).
+    // Ensure that GPU process error messages are bubbled back to the renderer process.
+    EnsureFlush(ToEventLoop(script_state));
     exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
                                       "getMappedRange failed");
     return nullptr;
@@ -355,7 +363,8 @@ DOMArrayBuffer* GPUBuffer::GetMappedRangeImpl(v8::Isolate* isolate,
       const_cast<uint8_t*>(static_cast<const uint8_t*>(map_data_const));
 
   mapped_ranges_.push_back(std::make_pair(range_offset, range_end));
-  return CreateArrayBufferForMappedData(isolate, map_data, range_size);
+  return CreateArrayBufferForMappedData(script_state->GetIsolate(), map_data,
+                                        range_size);
 }
 
 void GPUBuffer::OnMapAsyncCallback(ScriptPromiseResolver* resolver,
@@ -364,9 +373,9 @@ void GPUBuffer::OnMapAsyncCallback(ScriptPromiseResolver* resolver,
     case WGPUBufferMapAsyncStatus_Success:
       resolver->Resolve();
       break;
-    case WGPUBufferMapAsyncStatus_Error:
+    case WGPUBufferMapAsyncStatus_ValidationError:
       resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kOperationError, "Could not mapAsync"));
+          DOMExceptionCode::kOperationError, "Buffer is invalid"));
       break;
     case WGPUBufferMapAsyncStatus_Unknown:
       resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -385,6 +394,18 @@ void GPUBuffer::OnMapAsyncCallback(ScriptPromiseResolver* resolver,
       resolver->Reject(MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kAbortError,
           "Buffer is unmapped before the mapping is resolved"));
+      break;
+    case WGPUBufferMapAsyncStatus_MappingAlreadyPending:
+      resolver->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kOperationError, "A mapping is already pending"));
+      break;
+    case WGPUBufferMapAsyncStatus_OffsetOutOfRange:
+      resolver->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kOperationError, "The offset is out of range"));
+      break;
+    case WGPUBufferMapAsyncStatus_SizeOutOfRange:
+      resolver->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kOperationError, "The size is out of range"));
       break;
     default:
       NOTREACHED();

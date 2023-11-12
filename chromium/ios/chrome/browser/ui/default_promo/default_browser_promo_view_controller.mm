@@ -45,27 +45,16 @@ using vivaldi::IsVivaldiRunning;
   self.titleString = GetDefaultBrowserPromoTitle();
 
   if (IsVivaldiRunning()) {
-    self.subtitleString =
-        IsInModifiedStringsGroup()
-            ? l10n_util::GetNSString(IDS_IOS_DEFAULT_BROWSER_LEARN_MORE_MESSAGE)
-            : l10n_util::GetNSString(
-                IDS_VIVALDI_IOS_DEFAULT_BROWSER_NON_MODAL_DESCRIPTION);
+    self.subtitleString = l10n_util::GetNSString(
+      IDS_VIVALDI_IOS_DEFAULT_BROWSER_NON_MODAL_DESCRIPTION);
   } else {
   self.subtitleString =
-      IsInModifiedStringsGroup()
-          ? l10n_util::GetNSString(IDS_IOS_DEFAULT_BROWSER_LEARN_MORE_MESSAGE)
-          : l10n_util::GetNSString(IDS_IOS_DEFAULT_BROWSER_DESCRIPTION);
+      l10n_util::GetNSString(IDS_IOS_DEFAULT_BROWSER_DESCRIPTION);
   } // End Vivaldi
 
   self.primaryActionString = l10n_util::GetNSString(IDS_IOS_OPEN_SETTINGS);
   self.secondaryActionString =
       l10n_util::GetNSString(IDS_IOS_DEFAULT_BROWSER_SECONDARY_BUTTON_TEXT);
-  if (IsInRemindMeLaterGroup() &&
-      !ShouldShowRemindMeLaterDefaultBrowserFullscreenPromo()) {
-    // Show the Remind Me Later button if the user is in the correct experiment.
-    self.tertiaryActionString = l10n_util::GetNSString(
-        IDS_IOS_DEFAULT_BROWSER_REMIND_ME_LATER_BUTTON_TEXT);
-  }
   self.dismissBarButtonSystemItem = UIBarButtonSystemItemCancel;
   [super loadView];
 }

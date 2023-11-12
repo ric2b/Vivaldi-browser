@@ -21,14 +21,14 @@
 #import "components/session_proto_db/session_proto_db.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/commerce/session_proto_db_factory.h"
 #import "ios/chrome/browser/commerce/shopping_service_factory.h"
-#import "ios/chrome/browser/main/browser_list.h"
-#import "ios/chrome/browser/main/browser_list_factory.h"
-#import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/coordinator/scene/test/fake_scene_state.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
+#import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/url_loading/fake_url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_notifier_browser_agent.h"
 #import "ios/web/public/test/web_task_environment.h"
@@ -173,9 +173,8 @@ class CommercePushNotificationClientTest : public PlatformTest {
     shopping_service_ = static_cast<commerce::MockShoppingService*>(
         commerce::ShoppingServiceFactory::GetForBrowserState(
             chrome_browser_state_.get()));
-    app_state_ = [[AppState alloc] initWithBrowserLauncher:nil
-                                        startupInformation:nil
-                                       applicationDelegate:nil];
+    app_state_ = [[AppState alloc] initWithStartupInformation:nil];
+
     scene_state_foreground_ =
         [[FakeSceneState alloc] initWithAppState:app_state_
                                     browserState:chrome_browser_state_.get()];
@@ -211,10 +210,13 @@ class CommercePushNotificationClientTest : public PlatformTest {
     return commerce_push_notification_client_.urls_delayed_for_loading_;
   }
 
-  void OnBrowserReady() { commerce_push_notification_client_.OnBrowserReady(); }
+  void OnSceneActiveForegroundBrowserReady() {
+    commerce_push_notification_client_.OnSceneActiveForegroundBrowserReady();
+  }
 
-  Browser* GetCommercePushClientActiveBrowser() {
-    return commerce_push_notification_client_.GetActiveBrowser();
+  Browser* GetSceneLevelForegroundActiveBrowser() {
+    return commerce_push_notification_client_
+        .GetSceneLevelForegroundActiveBrowser();
   }
 
  protected:
@@ -322,7 +324,7 @@ TEST_F(CommercePushNotificationClientTest, TestBrowserInitialization) {
   CommercePushNotificationClient* commerce_push_notification_client =
       GetCommercePushNotificationClient();
   browser_list_->AddBrowser(GetBrowser());
-  commerce_push_notification_client->OnBrowserReady();
+  commerce_push_notification_client->OnSceneActiveForegroundBrowserReady();
   EXPECT_EQ(0u, GetUrlsDelayedForLoading().size());
 
   // Check PriceDropNotification Destination URL loaded.
@@ -335,7 +337,7 @@ TEST_F(CommercePushNotificationClientTest, TestBrowserInitialization) {
 TEST_F(CommercePushNotificationClientTest,
        TestBackgroundBrowserNotUsedWhenForegroundAvailable) {
   browser_list_->AddBrowser(GetBackgroundBrowser());
-  Browser* browser = GetCommercePushClientActiveBrowser();
+  Browser* browser = GetSceneLevelForegroundActiveBrowser();
   // When active foregrounded and active backgrounded browser is availalbe,
   // should choose foregrounded browser.
   EXPECT_EQ(SceneActivationLevelForegroundActive,
@@ -349,10 +351,6 @@ TEST_F(CommercePushNotificationClientTest, TestBackgroundFallback) {
   browser_list_->RemoveBrowser(GetBrowser());
   // Add backgrounded browser
   browser_list_->AddBrowser(GetBackgroundBrowser());
-  Browser* browser = GetCommercePushClientActiveBrowser();
-  // Only option is backgronuded browser
-  EXPECT_EQ(SceneActivationLevelBackground,
-            SceneStateBrowserAgent::FromBrowser(browser)
-                ->GetSceneState()
-                .activationLevel);
+  // Background browser not used.
+  EXPECT_EQ(nullptr, GetSceneLevelForegroundActiveBrowser());
 }

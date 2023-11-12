@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
@@ -107,6 +108,8 @@ void AddKerberosAddAccountDialogStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_KERBEROS_CONFIG_ERROR_KRB5_FAILED_TO_PARSE},
       {"kerberosConfigErrorTooManyNestedGroups",
        IDS_SETTINGS_KERBEROS_CONFIG_ERROR_TOO_MANY_NESTED_GROUPS},
+      {"kerberosConfigErrorLineTooLong",
+       IDS_SETTINGS_KERBEROS_CONFIG_ERROR_LINE_TOO_LONG},
       {"addKerberosAccountRefreshButtonLabel",
        IDS_SETTINGS_ADD_KERBEROS_ACCOUNT_REFRESH_BUTTON_LABEL},
       {"addKerberosAccount", IDS_SETTINGS_ADD_KERBEROS_ACCOUNT},
@@ -120,6 +123,11 @@ void AddKerberosAddAccountDialogStrings(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "kerberosRememberPasswordEnabled",
       local_state->GetBoolean(::prefs::kKerberosRememberPasswordEnabled));
+
+  // Whether the 'Remember password' checkbox should be checked by default.
+  html_source->AddBoolean(
+      "kerberosRememberPasswordByDefault",
+      features::IsKerberosRememberPasswordByDefaultEnabled());
 
   // Prefilled domain if policy is enabled. Note that Kerberos
   // domains should be in all uppercase.

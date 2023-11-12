@@ -7,7 +7,7 @@
 #import "base/metrics/user_metrics.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/signin/public/identity_manager/primary_account_mutator.h"
-#import "components/sync/driver/sync_service.h"
+#import "components/sync/service/sync_service.h"
 #import "components/unified_consent/unified_consent_metrics.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/ui/authentication/signin/advanced_settings_signin/advanced_settings_signin_navigation_controller.h"
@@ -69,6 +69,7 @@ using unified_consent::metrics::RecordSyncSetupDataTypesHistrogam;
       // Canceling from the advanced sync settings view is not possible.
       NOTREACHED();
       break;
+    case SigninCoordinatorResultDisabled:
     case SigninCoordinatorResultInterrupted:
       RecordAction(
           UserMetricsAction("Signin_Signin_AbortAdvancedSyncSettings"));

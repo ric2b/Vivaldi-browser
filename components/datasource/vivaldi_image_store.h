@@ -7,11 +7,11 @@
 #include <string>
 
 #include "base/files/file_path.h"
-#include "base/guid.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_piece.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/uuid.h"
 #include "content/public/browser/url_data_source.h"
 
 class Profile;
@@ -24,6 +24,9 @@ namespace content {
 class BrowserContext;
 }
 
+namespace vivaldi {
+class ThumbnailCaptureContents;
+}
 class VivaldiImageStoreHolder;
 
 // This is used to setup and control the mapping between local images and the
@@ -162,7 +165,7 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
 
   // Capture the url and store the resulting image as a thumbnail for the given
   // bookmark.
-  static void CaptureBookmarkThumbnail(content::BrowserContext* browser_context,
+  static ::vivaldi::ThumbnailCaptureContents* CaptureBookmarkThumbnail(content::BrowserContext* browser_context,
                                        int64_t bookmark_id,
                                        const GURL& url,
                                        StoreImageCallback ui_thread_callback);
@@ -220,10 +223,10 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
   // Custom bookmark thumbnails have to be moved to the synced file store,
   // so that they can be synced.
   void MigrateCustomBookmarkThumbnailsOnFileThread(
-      std::vector<std::pair<base::GUID, std::string>> ids_to_migrate);
+      std::vector<std::pair<base::Uuid, std::string>> ids_to_migrate);
 
   void FinishCustomBookmarkThumbnailMigrationOnUIThread(
-      base::GUID bookmark_guid,
+    base::Uuid bookmark_uuid,
       std::vector<uint8_t> content);
 
   scoped_refptr<base::RefCountedMemory> GetDataForIdOnFileThread(

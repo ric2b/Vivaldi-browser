@@ -406,7 +406,7 @@ void NavigationSimulatorImpl::InitializeFromStartedRequest(
 
   if (!browser_initiated_ && request_->GetInitiatorFrameToken().has_value()) {
     SetInitiatorFrame(RenderFrameHostImpl::FromFrameToken(
-        request_->GetInitiatorProcessID(),
+        request_->GetInitiatorProcessId(),
         request_->GetInitiatorFrameToken().value()));
   }
 
@@ -1336,7 +1336,6 @@ bool NavigationSimulatorImpl::SimulateRendererInitiatedStart() {
           nullptr /* trust_token_params */, impression_,
           base::TimeTicks() /* renderer_before_unload_start */,
           base::TimeTicks() /* renderer_before_unload_end */,
-          absl::nullopt /* web_bundle_token */,
           has_user_gesture_
               ? blink::mojom::NavigationInitiatorActivationAndAdStatus::
                     kStartedWithTransientActivationFromNonAd

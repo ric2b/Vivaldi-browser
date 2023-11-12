@@ -417,8 +417,11 @@ void ExtensionInstallDialogView::ResizeWidget() {
 
 void ExtensionInstallDialogView::VisibilityChanged(views::View* starting_from,
                                                    bool is_visible) {
-  if (is_visible) {
-    DCHECK(!install_result_timer_);
+  // VisibilityChanged() might spuriously fire more than once on some platforms,
+  // for example, when Widget::Show() and Widget::Activate() are called
+  // sequentially. Timers should be started only at the first notification of
+  // visibility change.
+  if (is_visible && !install_result_timer_) {
     install_result_timer_ = base::ElapsedTimer();
 
     if (!install_button_enabled_) {
@@ -643,33 +646,8 @@ void ExtensionInstallDialogView::CreateContents() {
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL)));
 
   std::vector<ExtensionInfoSection> sections;
-  if (prompt_->ShouldShowPermissions()) {
-    bool has_permissions = prompt_->GetPermissionCount() > 0;
-    if (has_permissions) {
-      AddPermissions(prompt_.get(), sections, content_width);
-    } else {
-      sections.push_back(
-          {l10n_util::GetStringUTF16(IDS_EXTENSION_NO_SPECIAL_PERMISSIONS),
-           nullptr});
-    }
-  }
-
-  if (prompt_->GetRetainedFileCount()) {
-    std::vector<std::u16string> details;
-    for (size_t i = 0; i < prompt_->GetRetainedFileCount(); ++i) {
-      details.push_back(prompt_->GetRetainedFile(i));
-    }
-    sections.push_back({prompt_->GetRetainedFilesHeading(),
-                        std::make_unique<ExpandableContainerView>(details)});
-  }
-
-  if (prompt_->GetRetainedDeviceCount()) {
-    std::vector<std::u16string> details;
-    for (size_t i = 0; i < prompt_->GetRetainedDeviceCount(); ++i) {
-      details.push_back(prompt_->GetRetainedDeviceMessageString(i));
-    }
-    sections.push_back({prompt_->GetRetainedDevicesHeading(),
-                        std::make_unique<ExpandableContainerView>(details)});
+  if (prompt_->GetPermissionCount() > 0) {
+    AddPermissions(prompt_.get(), sections, content_width);
   }
 
   if (sections.empty() &&

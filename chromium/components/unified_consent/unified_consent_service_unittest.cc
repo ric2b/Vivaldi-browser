@@ -15,7 +15,7 @@
 #include "build/chromeos_buildflags.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/sync/base/sync_prefs.h"
-#include "components/sync/driver/sync_user_settings.h"
+#include "components/sync/service/sync_user_settings.h"
 #include "components/sync/test/test_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/unified_consent/pref_names.h"
@@ -42,7 +42,7 @@ class TestSyncService : public syncer::TestSyncService {
   }
 
  private:
-  raw_ptr<syncer::SyncServiceObserver> observer_ = nullptr;
+  raw_ptr<syncer::SyncServiceObserver, DanglingUntriaged> observer_ = nullptr;
 };
 
 }  // namespace

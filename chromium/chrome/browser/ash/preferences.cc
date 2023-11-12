@@ -13,6 +13,8 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/public/ash_interfaces.h"
 #include "ash/public/cpp/ash_prefs.h"
+#include "ash/shell.h"
+#include "ash/system/geolocation/geolocation_controller.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -33,6 +35,7 @@
 #include "chrome/browser/ash/login/hid_detection_revamp_field_trial.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
+#include "chrome/browser/ash/night_light/night_light_client.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/system/input_device_settings.h"
@@ -159,9 +162,6 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kChromadToCloudMigrationEnabled, false);
   registry->RegisterBooleanPref(prefs::kLoginScreenWebUILazyLoading, false);
   registry->RegisterBooleanPref(::prefs::kConsumerAutoUpdateToggle, true);
-  registry->RegisterBooleanPref(::prefs::kHindiInscriptLayoutEnabled, false);
-  registry->RegisterBooleanPref(::prefs::kDeviceHindiInscriptLayoutEnabled,
-                                false);
 
   RegisterLocalStatePrefs(registry);
   ash::hid_detection_revamp_field_trial::RegisterLocalStatePrefs(registry);
@@ -293,6 +293,10 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kAssistPredictiveWritingEnabled, true);
   registry->RegisterBooleanPref(prefs::kEmojiSuggestionEnabled, true);
   registry->RegisterBooleanPref(prefs::kEmojiSuggestionEnterpriseAllowed, true);
+  registry->RegisterBooleanPref(
+      prefs::kManagedPhysicalKeyboardAutocorrectAllowed, true);
+  registry->RegisterBooleanPref(
+      prefs::kManagedPhysicalKeyboardPredictiveWritingAllowed, true);
   registry->RegisterDictionaryPref(
       ::prefs::kLanguageInputMethodSpecificSettings);
   registry->RegisterBooleanPref(prefs::kLastUsedImeShortcutReminderDismissed,
@@ -350,6 +354,14 @@ void Preferences::RegisterProfilePrefs(
   // device.
   registry->RegisterBooleanPref(prefs::kSendFunctionKeys, false);
 
+  registry->RegisterIntegerPref(prefs::kAltEventRemappedToRightClick, 0);
+  registry->RegisterIntegerPref(prefs::kSearchEventRemappedToRightClick, 0);
+  registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackDelete, 0);
+  registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackEnd, 0);
+  registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackHome, 0);
+  registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackPageUp, 0);
+  registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackPageDown, 0);
+
   // Don't sync the note-taking app; it may not be installed on other devices.
   registry->RegisterStringPref(::prefs::kNoteTakingAppId, std::string());
   registry->RegisterBooleanPref(::prefs::kRestoreLastLockScreenNote, true);
@@ -391,9 +403,7 @@ void Preferences::RegisterProfilePrefs(
       g_browser_process->local_state()
               ->GetAllPrefStoresInitializationStatus() ==
           PrefService::INITIALIZATION_STATUS_WAITING ||
-      system::InputDeviceSettings::Get()->ForceKeyboardDrivenUINavigation() ||
-      !system::TimeZoneResolverManager::
-          IfServiceShouldBeRunningForSigninScreen()) {
+      system::InputDeviceSettings::Get()->ForceKeyboardDrivenUINavigation()) {
     allow_time_zone_resolve_by_default = false;
   }
 
@@ -466,6 +476,10 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterInt64Pref(::prefs::kHatsBatteryLifeCycleEndTs, 0);
 
   registry->RegisterBooleanPref(::prefs::kHatsBatteryLifeIsSelected, false);
+
+  registry->RegisterInt64Pref(::prefs::kHatsPeripheralsCycleEndTs, 0);
+
+  registry->RegisterBooleanPref(::prefs::kHatsPeripheralsIsSelected, false);
 
   registry->RegisterBooleanPref(::prefs::kHatsPrivacyHubBaselineIsSelected,
                                 false);
@@ -577,6 +591,18 @@ void Preferences::RegisterProfilePrefs(
                               0);
   registry->RegisterBooleanPref(::prefs::kHatsOsSettingsSearchSurveyIsSelected,
                                 false);
+
+  // Borealis HaTS survey prefs for game satisfaction.
+  registry->RegisterInt64Pref(::prefs::kHatsBorealisGamesSurveyCycleEndTs, 0);
+  registry->RegisterBooleanPref(::prefs::kHatsBorealisGamesSurveyIsSelected,
+                                false);
+
+  registry->RegisterBooleanPref(prefs::kShowDisplaySizeScreenEnabled, true);
+
+  registry->RegisterDictionaryPref(::prefs::kTotalUniqueOsSettingsChanged);
+
+  registry->RegisterBooleanPref(::prefs::kHasResetFirst7DaysSettingsUsedCount,
+                                false);
 }
 
 void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
@@ -651,7 +677,7 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
   consumer_auto_update_toggle_pref_.Init(::prefs::kConsumerAutoUpdateToggle,
                                          g_browser_process->local_state(),
                                          callback);
-
+  // TODO(zauri): change to BooleanPrefMember
   pref_change_registrar_.Init(prefs);
   pref_change_registrar_.Add(ash::prefs::kUserGeolocationAllowed, callback);
   pref_change_registrar_.Add(::prefs::kUserTimezone, callback);
@@ -1104,31 +1130,36 @@ void Preferences::ApplyPreferences(ApplyReason reason,
 
   // TODO(b/277061508): Move this logic inside
   // GeolocationPrivacySwitchController.
-  if (pref_name == ash::prefs::kUserGeolocationAllowed &&
-      reason != REASON_ACTIVE_USER_CHANGED) {
-    const bool user_disabled_geolocation =
-        !prefs_->GetBoolean(ash::prefs::kUserGeolocationAllowed);
-    const system::TimeZoneResolverManager::TimeZoneResolveMethod
-        automatic_timezone_setting =
-            system::TimeZoneResolverManager::TimeZoneResolveMethodFromInt(
-                prefs_->GetInteger(
-                    ::prefs::kResolveTimezoneByGeolocationMethod));
-    const bool precise_timezone_resolution_selected =
-        automatic_timezone_setting ==
-            system::TimeZoneResolverManager::TimeZoneResolveMethod::
-                SEND_WIFI_ACCESS_POINTS ||
-        automatic_timezone_setting ==
-            system::TimeZoneResolverManager::TimeZoneResolveMethod::
-                SEND_ALL_LOCATION_INFO;
-    // `kUserGeolocationAllowed` pref controls the precise location access. If
-    // the user had Wi-Fi based timezone resolving active, we silently fall it
-    // back to the IP-based resolution.
-    if (user_disabled_geolocation && precise_timezone_resolution_selected) {
-      prefs_->SetInteger(
-          ::prefs::kResolveTimezoneByGeolocationMethod,
-          static_cast<int>(
-              system::TimeZoneResolverManager::TimeZoneResolveMethod::IP_ONLY));
+  if (reason == REASON_INITIALIZATION ||
+      (pref_name == ash::prefs::kUserGeolocationAllowed &&
+       reason == REASON_PREF_CHANGED)) {
+    const bool system_geolocation_permission_enabled =
+        prefs_->GetBoolean(ash::prefs::kUserGeolocationAllowed);
+
+    const bool automatic_timezone_selected = prefs_->GetBoolean(
+        ::prefs::kResolveTimezoneByGeolocationMigratedToMethod);
+
+    // Fall back to static timezone when system geolocation access is disabled.
+    if (!system_geolocation_permission_enabled && automatic_timezone_selected) {
+      prefs_->SetBoolean(::prefs::kResolveTimezoneByGeolocationMigratedToMethod,
+                         false);
+      prefs_->SetInteger(::prefs::kResolveTimezoneByGeolocationMethod,
+                         static_cast<int>(system::TimeZoneResolverManager::
+                                              TimeZoneResolveMethod::DISABLED));
     }
+
+    ash::system::TimeZoneResolverManager* timezone_resolver_manager =
+        g_browser_process->platform_part()->GetTimezoneResolverManager();
+    GeolocationController* geolocation_controller =
+        ash::Shell::Get()->geolocation_controller();
+    NightLightClient* night_light_client = ash::NightLightClient::Get();
+
+    timezone_resolver_manager->OnSystemGeolocationPermissionChanged(
+        system_geolocation_permission_enabled);
+    geolocation_controller->OnSystemGeolocationPermissionChanged(
+        system_geolocation_permission_enabled);
+    night_light_client->OnSystemGeolocationPermissionChanged(
+        system_geolocation_permission_enabled);
   }
 
   if (pref_name == ::prefs::kUserTimezone &&
@@ -1136,11 +1167,12 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     system::UpdateSystemTimezone(ProfileHelper::Get()->GetProfileByUser(user_));
   }
 
-  if (pref_name == ::prefs::kResolveTimezoneByGeolocationMethod &&
-      reason != REASON_ACTIVE_USER_CHANGED) {
-    if (pref_name == ::prefs::kResolveTimezoneByGeolocationMethod &&
-        !prefs_->FindPreference(::prefs::kResolveTimezoneByGeolocationMethod)
-             ->IsDefaultValue()) {
+  if (reason == REASON_INITIALIZATION ||
+      (pref_name == ::prefs::kResolveTimezoneByGeolocationMethod &&
+       reason != REASON_ACTIVE_USER_CHANGED)) {
+    if (prefs_->GetInteger(::prefs::kResolveTimezoneByGeolocationMethod) !=
+        static_cast<int>(
+            system::TimeZoneResolverManager::TimeZoneResolveMethod::DISABLED)) {
       prefs_->SetBoolean(::prefs::kResolveTimezoneByGeolocationMigratedToMethod,
                          true);
     }

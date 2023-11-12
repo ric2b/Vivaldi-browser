@@ -38,7 +38,7 @@ const std::string& AsString(const std::string& value) {
   return value;
 }
 
-const std::string& AsString(const base::GUID& value) {
+const std::string& AsString(const base::Uuid& value) {
   return value.AsLowercaseString();
 }
 
@@ -74,7 +74,7 @@ base::Value::Dict SerializeFileInfo(const SyncedFileData& file_data) {
   file_info.Set(kHasContentLocally, file_data.has_content_locally);
   file_info.Set(kMimeType, file_data.mimetype);
   file_info.Set(kLocalReferences,
-                SerializeReferences<base::GUID>(file_data.local_references));
+                SerializeReferences<base::Uuid>(file_data.local_references));
   file_info.Set(kSyncReferences,
                 SerializeReferences<std::string>(file_data.sync_references));
 
@@ -85,9 +85,9 @@ template <typename T>
 struct ReferenceConverter {};
 
 template <>
-struct ReferenceConverter<base::GUID> {
-  static base::GUID Convert(const std::string& guid) {
-    return base::GUID::ParseLowercase(guid);
+struct ReferenceConverter<base::Uuid> {
+  static base::Uuid Convert(const std::string& uuid) {
+    return base::Uuid::ParseLowercase(uuid);
   }
 };
 
@@ -155,7 +155,7 @@ absl::optional<SyncedFileData> LoadFileInfo(
     return absl::nullopt;
 
   file_data.local_references =
-      LoadReferences<base::GUID>(*local_references_dict);
+      LoadReferences<base::Uuid>(*local_references_dict);
 
   const base::Value::Dict* sync_references_dict =
       file_info.FindDict(kSyncReferences);

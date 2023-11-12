@@ -17,19 +17,21 @@
 #include "build/build_config.h"
 #include "cc/mojo_embedder/mojo_embedder_export.h"
 #include "cc/trees/layer_tree_frame_sink.h"
-#include "components/power_scheduler/power_mode_voter.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_timing_details_map.h"
-#include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/common/surfaces/surface_id.h"
+#include "gpu/ipc/client/client_shared_image_interface.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "mojo/public/cpp/bindings/direct_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace cc {
 
@@ -73,12 +75,21 @@ class CC_MOJO_EMBEDDER_EXPORT AsyncLayerTreeFrameSink
     UnboundMessagePipes pipes;
     bool wants_animate_only_begin_frames = false;
     base::PlatformThreadId io_thread_id = base::kInvalidThreadId;
+    base::PlatformThreadId main_thread_id = base::kInvalidThreadId;
+
+    // If `true`, the CompositorFrameSinkClient receiver will receive IPC
+    // directly to the thread on which the AsyncLayerTreeFrameSink lives, rather
+    // than hopping through the I/O thread first. Only usable if the
+    // AsyncLayerTreeFrameSink lives on a thread which uses an IO message pump.
+    bool use_direct_client_receiver = false;
   };
 
-  AsyncLayerTreeFrameSink(scoped_refptr<viz::ContextProvider> context_provider,
-                          scoped_refptr<RasterContextProviderWrapper>
-                              worker_context_provider_wrapper,
-                          InitParams* params);
+  AsyncLayerTreeFrameSink(
+      scoped_refptr<viz::RasterContextProvider> context_provider,
+      scoped_refptr<RasterContextProviderWrapper>
+          worker_context_provider_wrapper,
+      std::unique_ptr<gpu::ClientSharedImageInterface> shared_image_interface,
+      InitParams* params);
   AsyncLayerTreeFrameSink(const AsyncLayerTreeFrameSink&) = delete;
   ~AsyncLayerTreeFrameSink() override;
 
@@ -123,6 +134,7 @@ class CC_MOJO_EMBEDDER_EXPORT AsyncLayerTreeFrameSink
   void OnMojoConnectionError(uint32_t custom_reason,
                              const std::string& description);
 
+  const bool use_direct_client_receiver_;
   bool begin_frames_paused_ = false;
   bool needs_begin_frames_ = false;
   viz::LocalSurfaceId local_surface_id_;
@@ -130,6 +142,7 @@ class CC_MOJO_EMBEDDER_EXPORT AsyncLayerTreeFrameSink
   std::unique_ptr<viz::SyntheticBeginFrameSource> synthetic_begin_frame_source_;
 #if BUILDFLAG(IS_ANDROID)
   base::PlatformThreadId io_thread_id_;
+  base::PlatformThreadId main_thread_id_;
 #endif
 
   // Message pipes that will be bound when BindToClient() is called.
@@ -143,7 +156,12 @@ class CC_MOJO_EMBEDDER_EXPORT AsyncLayerTreeFrameSink
   // point to message pipe we want to use. It must be declared last and cleared
   // first.
   raw_ptr<viz::mojom::CompositorFrameSink> compositor_frame_sink_ptr_ = nullptr;
-  mojo::Receiver<viz::mojom::CompositorFrameSinkClient> client_receiver_{this};
+
+  using ClientReceiver = mojo::Receiver<viz::mojom::CompositorFrameSinkClient>;
+  using DirectClientReceiver =
+      mojo::DirectReceiver<viz::mojom::CompositorFrameSinkClient>;
+  absl::variant<absl::monostate, ClientReceiver, DirectClientReceiver>
+      client_receiver_;
 
   THREAD_CHECKER(thread_checker_);
   const bool wants_animate_only_begin_frames_;
@@ -153,8 +171,6 @@ class CC_MOJO_EMBEDDER_EXPORT AsyncLayerTreeFrameSink
   viz::LocalSurfaceId last_submitted_local_surface_id_;
   float last_submitted_device_scale_factor_ = 1.f;
   gfx::Size last_submitted_size_in_pixels_;
-
-  power_scheduler::FrameProductionPowerModeVoter power_mode_voter_;
 
   base::WeakPtrFactory<AsyncLayerTreeFrameSink> weak_factory_{this};
 };

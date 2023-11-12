@@ -17,12 +17,6 @@ namespace {
 // In order - Top, Leading, Bottom, Trailing
 const UIEdgeInsets deleteTextButtonPadding =
     UIEdgeInsetsMake(0.0, 8.0, 12.0, 12.0);
-// Padding for the underline view on the textview
-// In order - Top, Leading, Bottom, Trailing
-const UIEdgeInsets underlinePadding = UIEdgeInsetsMake(2.0, 0.0, 0.0, 0.0);
-// Size for the underline
-// In order - Width, Height
-const CGSize underlineSize = CGSizeMake(0.0, 1.0);
 }
 
 @interface VivaldiTextView()<UITextViewDelegate>
@@ -31,14 +25,12 @@ const CGSize underlineSize = CGSizeMake(0.0, 1.0);
 // Textview text clear button
 @property(nonatomic,weak) UIButton* deleteTextButton;
 
-@property(nonatomic,weak) UIView* underlineView;
 @end
 
 @implementation VivaldiTextView
 
 @synthesize textView = _textView;
 @synthesize deleteTextButton = _deleteTextButton;
-@synthesize underlineView = _underlineView;
 
 #pragma mark - INITIALIZER
 - (instancetype)init {
@@ -62,7 +54,7 @@ const CGSize underlineSize = CGSizeMake(0.0, 1.0);
   [self addSubview:textView];
   [textView anchorTop:self.topAnchor
               leading:self.leadingAnchor
-               bottom:nil
+               bottom:self.bottomAnchor
              trailing:self.trailingAnchor];
 
   // Delete Text Button
@@ -83,19 +75,6 @@ const CGSize underlineSize = CGSizeMake(0.0, 1.0);
                       padding:deleteTextButtonPadding];
   // Hide the delete text button initially
   [deleteTextButton setAlpha:0];
-
-  // Bottom underline
-  UIView* underlineView = [UIView new];
-  underlineView.backgroundColor = UIColor.quaternaryLabelColor;
-  _underlineView = underlineView;
-
-  [self addSubview:underlineView];
-  [underlineView anchorTop:textView.bottomAnchor
-                   leading:self.leadingAnchor
-                    bottom:self.bottomAnchor
-                  trailing:self.trailingAnchor
-                   padding:underlinePadding
-                      size:underlineSize];
 }
 
 #pragma mark - ACTIONS

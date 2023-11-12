@@ -22,7 +22,9 @@ public class DropdownCommonProperties {
     public static final WritableIntPropertyKey TOP_MARGIN = new WritableIntPropertyKey();
     /** The bottom margin of the suggestion. */
     public static final WritableIntPropertyKey BOTTOM_MARGIN = new WritableIntPropertyKey();
+    /** Whether a divider should be shown at the bottom of the suggestion. */
+    public static final WritableBooleanPropertyKey SHOW_DIVIDER = new WritableBooleanPropertyKey();
 
-    public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {
-            BG_TOP_CORNER_ROUNDED, BG_BOTTOM_CORNER_ROUNDED, TOP_MARGIN, BOTTOM_MARGIN};
+    public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {BG_TOP_CORNER_ROUNDED,
+            BG_BOTTOM_CORNER_ROUNDED, SHOW_DIVIDER, TOP_MARGIN, BOTTOM_MARGIN};
 }

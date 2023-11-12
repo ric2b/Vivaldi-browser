@@ -7,7 +7,7 @@
 
 #import "ios/chrome/browser/app_launcher/app_launcher_tab_helper.h"
 #import "ios/chrome/browser/app_launcher/app_launcher_tab_helper_delegate.h"
-#import "ios/chrome/browser/main/browser_user_data.h"
+#import "ios/chrome/browser/shared/model/browser/browser_user_data.h"
 #import "ios/chrome/browser/tabs/tab_helper_delegate_installer.h"
 
 class OverlayRequestQueue;
@@ -33,7 +33,8 @@ class AppLauncherBrowserAgent
     // AppLauncherTabHelperDelegate:
     void LaunchAppForTabHelper(AppLauncherTabHelper* tab_helper,
                                const GURL& url,
-                               bool link_transition) override;
+                               bool link_transition,
+                               base::OnceClosure completion) override;
     void ShowRepeatedAppLaunchAlert(
         AppLauncherTabHelper* tab_helper,
         base::OnceCallback<void(bool)> completion) override;

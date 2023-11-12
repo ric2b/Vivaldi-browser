@@ -7,6 +7,7 @@
 #include <memory>
 #include <unordered_set>
 
+#include "base/feature_list.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
@@ -14,6 +15,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/common/bookmark_metrics.h"
+#include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/pref_names.h"
 #include "components/commerce/core/shopping_service.h"
 #include "components/commerce/core/subscriptions/commerce_subscription.h"
@@ -67,7 +69,8 @@ void UpdateBookmarksForSubscriptionsResult(
       // If being untracked and the bookmark was created by price tracking
       // rather than by explicitly bookmarking, delete the bookmark.
       bool should_delete_node = false;
-      if (!enabled && specifics->bookmark_created_by_price_tracking()) {
+      if (!enabled && specifics->bookmark_created_by_price_tracking() &&
+          !base::FeatureList::IsEnabled(kShoppingListTrackByDefault)) {
         // If there is more than one bookmark with the specified cluster ID,
         // don't delete the bookmark.
         should_delete_node =
@@ -382,15 +385,17 @@ bool PopulateOrUpdateBookmarkMetaIfNeeded(
     changed = true;
   }
 
-  if (specifics->offer_id() != info.offer_id) {
-    specifics->set_offer_id(info.offer_id);
+  if (info.offer_id.has_value() &&
+      specifics->offer_id() != info.offer_id.value()) {
+    specifics->set_offer_id(info.offer_id.value());
     changed = true;
   }
 
   // Only update the cluster ID if it was previously empty. Having this value
   // change would cause serious problems elsewhere.
-  if (!specifics->has_product_cluster_id()) {
-    specifics->set_product_cluster_id(info.product_cluster_id);
+  if (info.product_cluster_id.has_value() &&
+      !specifics->has_product_cluster_id()) {
+    specifics->set_product_cluster_id(info.product_cluster_id.value());
     changed = true;
   }
   // Consider adding a DCHECK for old and new cluster ID equality in the else
@@ -425,6 +430,26 @@ CommerceSubscription BuildUserSubscriptionForClusterId(uint64_t cluster_id) {
   return CommerceSubscription(
       SubscriptionType::kPriceTrack, IdentifierType::kProductClusterId,
       base::NumberToString(cluster_id), ManagementType::kUserManaged);
+}
+
+bool CanTrackPrice(const ProductInfo& info) {
+  return info.product_cluster_id.has_value();
+}
+
+bool CanTrackPrice(const absl::optional<ProductInfo>& info) {
+  return info.has_value() && CanTrackPrice(info.value());
+}
+
+bool CanTrackPrice(const power_bookmarks::ShoppingSpecifics& specifics) {
+  return specifics.has_product_cluster_id();
+}
+
+const std::u16string& GetBookmarkParentNameOrDefault(
+    bookmarks::BookmarkModel* model,
+    const GURL& url) {
+  const bookmarks::BookmarkNode* node =
+      model->GetMostRecentlyAddedUserNodeForURL(url);
+  return node ? node->parent()->GetTitle() : model->other_node()->GetTitle();
 }
 
 }  // namespace commerce

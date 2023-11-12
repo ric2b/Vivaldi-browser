@@ -8,10 +8,15 @@ import {microTask, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer
 import {recordLoadDuration, recordOccurence, recordPerdecage} from '../metrics_utils.js';
 import {WindowProxy} from '../window_proxy.js';
 
-import {Module, ModuleHeight} from './module_descriptor.js';
+import {ModuleDescriptor} from './module_descriptor.js';
 import {getTemplate} from './module_wrapper.html.js';
 
 /** @fileoverview Element that implements the common module UI. */
+
+export interface ModuleInstance {
+  element: HTMLElement;
+  descriptor: ModuleDescriptor;
+}
 
 export interface ModuleWrapperElement {
   $: {
@@ -38,14 +43,13 @@ export class ModuleWrapperElement extends PolymerElement {
     };
   }
 
-  module: Module;
+  module: ModuleInstance;
+  private modulesRedesignedEnabled_: boolean;
 
-  private onModuleChange_(_newValue: Module, oldValue?: Module) {
+  private onModuleChange_(
+      _newValue: ModuleInstance, oldValue?: ModuleInstance) {
     assert(!oldValue);
     this.$.moduleElement.appendChild(this.module.element);
-    if (this.module.descriptor.height !== ModuleHeight.DYNAMIC) {
-      this.style.height = `${this.module.descriptor.height}px`;
-    }
 
     // Log at most one usage per module per NTP page load. This is possible,
     // if a user opens a link in a new tab.

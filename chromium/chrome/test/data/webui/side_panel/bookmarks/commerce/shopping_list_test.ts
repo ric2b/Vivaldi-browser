@@ -9,8 +9,8 @@ import 'chrome://bookmarks-side-panel.top-chrome/bookmarks_list.js';
 import {ActionSource} from 'chrome://bookmarks-side-panel.top-chrome/bookmarks.mojom-webui.js';
 import {BookmarksApiProxyImpl} from 'chrome://bookmarks-side-panel.top-chrome/bookmarks_api_proxy.js';
 import {ACTION_BUTTON_TRACK_IMAGE, ACTION_BUTTON_UNTRACK_IMAGE, LOCAL_STORAGE_EXPAND_STATUS_KEY, ShoppingListElement} from 'chrome://bookmarks-side-panel.top-chrome/commerce/shopping_list.js';
-import {ShoppingListApiProxyImpl} from 'chrome://bookmarks-side-panel.top-chrome/commerce/shopping_list_api_proxy.js';
-import {BookmarkProductInfo} from 'chrome://bookmarks-side-panel.top-chrome/shopping_list.mojom-webui.js';
+import {ShoppingListApiProxyImpl} from 'chrome://bookmarks-side-panel.top-chrome/shared/commerce/shopping_list_api_proxy.js';
+import {BookmarkProductInfo} from 'chrome://bookmarks-side-panel.top-chrome/shared/shopping_list.mojom-webui.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {fakeMetricsPrivate, MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
@@ -32,22 +32,26 @@ suite('SidePanelShoppingListTest', () => {
       bookmarkId: BigInt(3),
       info: {
         title: 'Product Foo',
+        clusterTitle: 'Product Cluster Foo',
         domain: 'foo.com',
         imageUrl: {url: 'chrome://resources/images/error.svg'},
         productUrl: {url: 'https://foo.com/product'},
         currentPrice: '$12',
         previousPrice: '$34',
+        clusterId: BigInt(12345),
       },
     },
     {
       bookmarkId: BigInt(4),
       info: {
         title: 'Product bar',
+        clusterTitle: 'Product Cluster bar',
         domain: 'bar.com',
         imageUrl: {url: ''},
         productUrl: {url: 'https://foo.com/product'},
         currentPrice: '$15',
         previousPrice: '',
+        clusterId: BigInt(12345),
       },
     },
   ];
@@ -284,11 +288,13 @@ suite('SidePanelShoppingListTest', () => {
       bookmarkId: BigInt(5),
       info: {
         title: 'Product Baz',
+        clusterTitle: 'Product Cluster Baz',
         domain: 'baz.com',
         imageUrl: {url: 'https://baz.com/image'},
         productUrl: {url: 'https://baz.com/product'},
         currentPrice: '$56',
         previousPrice: '$78',
+        clusterId: BigInt(12345),
       },
     };
 
@@ -307,7 +313,7 @@ suite('SidePanelShoppingListTest', () => {
     }
 
     shoppingListApi.getCallbackRouterRemote().priceUntrackedForBookmark(
-        newProduct.bookmarkId);
+        newProduct);
     await flushTasks();
     checkActionButtonStatus(actionButtons[0]!, true);
     checkActionButtonStatus(actionButtons[1]!, true);
@@ -330,7 +336,7 @@ suite('SidePanelShoppingListTest', () => {
     checkActionButtonStatus(actionButtonA, true);
 
     shoppingListApi.getCallbackRouterRemote().priceUntrackedForBookmark(
-        product.bookmarkId);
+        product);
     await flushTasks();
     checkActionButtonStatus(actionButtonA, false);
 
@@ -351,11 +357,13 @@ suite('SidePanelShoppingListTest', () => {
       bookmarkId: BigInt(3),
       info: {
         title: 'Product Baz',
+        clusterTitle: 'Product Cluster Baz',
         domain: 'baz.com',
         imageUrl: {url: 'chrome://resources/images/error.svg'},
         productUrl: {url: 'https://baz.com/product'},
         currentPrice: '$56',
         previousPrice: '$78',
+        clusterId: BigInt(12345),
       },
     };
     shoppingListApi.getCallbackRouterRemote().priceTrackedForBookmark(
@@ -389,7 +397,7 @@ suite('SidePanelShoppingListTest', () => {
 
   test('ShowErrorToastWhenTrackAndUntrackFailed', async () => {
     shoppingListApi.getCallbackRouterRemote().operationFailedForBookmark(
-        products[0]!.bookmarkId, true);
+        products[0]!, true);
     await flushTasks();
 
     assertTrue(shoppingList.$.errorToast.open);
@@ -399,7 +407,7 @@ suite('SidePanelShoppingListTest', () => {
     assertFalse(shoppingList.$.errorToast.open);
 
     shoppingListApi.getCallbackRouterRemote().operationFailedForBookmark(
-        products[1]!.bookmarkId, false);
+        products[1]!, false);
     await flushTasks();
 
     assertTrue(shoppingList.$.errorToast.open);

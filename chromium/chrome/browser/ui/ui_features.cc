@@ -41,13 +41,20 @@ BASE_FEATURE(kChromeWhatsNewUI,
 // with submenu to manage extensions and visit chrome web store.
 BASE_FEATURE(kExtensionsMenuInAppMenu,
              "ExtensionsMenuInAppMenu",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if !defined(ANDROID)
 // Enables "Access Code Cast" UI.
 BASE_FEATURE(kAccessCodeCastUI,
              "AccessCodeCastUI",
              base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+// Enables camera preview in permission bubble and site settings.
+BASE_FEATURE(kCameraMicPreview,
+             "CameraMicPreview",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 // Enables displaying the submenu to open a link with a different profile if
@@ -66,38 +73,6 @@ BASE_FEATURE(kEvDetailsInPageInfo,
 BASE_FEATURE(kGetTheMostOutOfChrome,
              "GetTheMostOutOfChrome",
              base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
-
-#if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-// This feature controls whether the user can be shown the Chrome for iOS promo
-// when saving/updating their passwords.
-BASE_FEATURE(kIOSPromoPasswordBubble,
-             "IOSPromoPasswordBubble",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// This array lists the different activation params that can be passed in the
-// experiment config, with their corresponding string.
-constexpr base::FeatureParam<IOSPromoPasswordBubbleActivation>::Option
-    kIOSPromoPasswordBubbleActivationOptions[] = {
-        {IOSPromoPasswordBubbleActivation::kContextualDirect,
-         "contextual-direct"},
-        {IOSPromoPasswordBubbleActivation::kContextualIndirect,
-         "contextual-indirect"},
-        {IOSPromoPasswordBubbleActivation::kNonContextualDirect,
-         "non-contextual-direct"},
-        {IOSPromoPasswordBubbleActivation::kNonContextualIndirect,
-         "non-contextual-indirect"},
-        {IOSPromoPasswordBubbleActivation::kAlwaysShowWithPasswordBubbleDirect,
-         "always-show-direct"},
-        {IOSPromoPasswordBubbleActivation::
-             kAlwaysShowWithPasswordBubbleIndirect,
-         "always-show-indirect"}};
-
-constexpr base::FeatureParam<IOSPromoPasswordBubbleActivation>
-    kIOSPromoPasswordBubbleActivationParam{
-        &kIOSPromoPasswordBubble, "activation",
-        IOSPromoPasswordBubbleActivation::kContextualDirect,
-        &kIOSPromoPasswordBubbleActivationOptions};
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -196,24 +171,15 @@ BASE_FEATURE(kTabGroupsCollapseFreezing,
              "TabGroupsCollapseFreezing",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Directly controls the "new" badge (as opposed to old "master switch"; see
-// https://crbug.com/1169907 for master switch deprecation and
-// https://crbug.com/968587 for the feature itself)
-// https://crbug.com/1173792
-BASE_FEATURE(kTabGroupsNewBadgePromo,
-             "TabGroupsNewBadgePromo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables users to explicitly save and recall tab groups.
 // https://crbug.com/1223929
 BASE_FEATURE(kTabGroupsSave,
              "TabGroupsSave",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables users to explicitly save and recall tab groups.
-// https://crbug.com/1223929
-BASE_FEATURE(kTabGroupsSaveSyncIntegration,
-             "TabGroupsSaveSyncIntegration",
+// Enables configuring tab hover card image previews in the settings.
+BASE_FEATURE(kTabHoverCardImageSettings,
+             "TabHoverCardImageSettings",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables preview images in tab-hover cards.
@@ -236,7 +202,6 @@ const char kTabHoverCardImagesCrossfadePreviewAtParameterName[] =
     "crossfade_preview_at";
 const char kTabHoverCardAdditionalMaxWidthDelay[] =
     "additional_max_width_delay";
-const char kTabHoverCardAlternateFormat[] = "alternate_format";
 
 BASE_FEATURE(kTabSearchChevronIcon,
              "TabSearchChevronIcon",

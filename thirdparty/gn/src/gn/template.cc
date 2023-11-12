@@ -12,6 +12,8 @@
 #include "gn/parse_tree.h"
 #include "gn/scope.h"
 #include "gn/scope_per_file_provider.h"
+#include "gn/settings.h"
+#include "gn/trace.h"
 #include "gn/value.h"
 #include "gn/variables.h"
 
@@ -33,6 +35,9 @@ Value Template::Invoke(Scope* scope,
   // simple values only.
   if (!EnsureNotProcessingImport(invocation, scope, err))
     return Value();
+
+  ScopedTrace trace(TraceItem::TRACE_FILE_EXECUTE_TEMPLATE, template_name);
+  trace.SetToolchain(scope->settings()->toolchain_label());
 
   // First run the invocation's block. Need to allocate the scope on the heap
   // so we can pass ownership to the template.

@@ -127,6 +127,10 @@ class FeatureTilesContainerViewTest : public AshTestBase,
     return container()->CalculateRowsFromHeight(height);
   }
 
+  void AdjustRowsForMediaViewVisibility(int height) {
+    container()->AdjustRowsForMediaViewVisibility(true, height);
+  }
+
   int GetRowCount() { return container()->row_count(); }
 
   int GetPageCount() { return container()->page_count(); }
@@ -177,6 +181,23 @@ TEST_F(FeatureTilesContainerViewTest, DisplayableRows) {
   EXPECT_EQ(kFeatureTileMinRows, CalculateRowsFromHeight(0));
 }
 
+TEST_F(FeatureTilesContainerViewTest,
+       DisplayableRowsIsLessWhenMediaViewIsShowing) {
+  int row_height = kFeatureTileHeight;
+  // Set height to equivalent of max+1 rows.
+  const int max_height = (kFeatureTileMaxRows + 1) * row_height;
+
+  // Expect default to cap at `kFeatureTileMaxRows`.
+  EXPECT_EQ(kFeatureTileMaxRows, CalculateRowsFromHeight(max_height));
+
+  AdjustRowsForMediaViewVisibility(max_height);
+
+  // Expect height to be capped at `kFeatureTileMaxRowsWhenMediaViewIsShowing`
+  // when media view is showing.
+  EXPECT_EQ(kFeatureTileMaxRowsWhenMediaViewIsShowing,
+            CalculateRowsFromHeight(max_height));
+}
+
 // Tests that rows are dynamically added by adding `FeatureTile` elements to the
 // container.
 TEST_F(FeatureTilesContainerViewTest, FeatureTileRows) {
@@ -190,7 +211,7 @@ TEST_F(FeatureTilesContainerViewTest, FeatureTileRows) {
   EXPECT_EQ(1, GetRowCount());
   EXPECT_EQ(2, GetVisibleCount());
 
-  // Expect one other row by adding a primary and two compact tiles.
+  // Add one primary, and two compact tiles. This should create a second row.
   std::vector<std::unique_ptr<FeatureTile>> one_primary_two_compact_tiles;
   one_primary_two_compact_tiles.push_back(mock_controller->CreateTile());
   one_primary_two_compact_tiles.push_back(
@@ -201,7 +222,7 @@ TEST_F(FeatureTilesContainerViewTest, FeatureTileRows) {
   EXPECT_EQ(2, GetRowCount());
   EXPECT_EQ(5, GetVisibleCount());
 
-  // Expect one other row by adding a single primary tile.
+  // Add one primary tile, this should result in a third row.
   std::vector<std::unique_ptr<FeatureTile>> one_primary_tile;
   one_primary_tile.push_back(mock_controller->CreateTile());
   container()->AddTiles(std::move(one_primary_tile));

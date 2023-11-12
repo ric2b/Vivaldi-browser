@@ -11,12 +11,13 @@
 #include <utility>
 #include <vector>
 
+#include "base/apple/bridging.h"
+#include "base/apple/bundle_locations.h"
 #include "base/file_version_info.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/mac/authorization_util.h"
-#include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_logging.h"
 #include "base/memory/ref_counted.h"
@@ -38,11 +39,15 @@
 
 #include "app/vivaldi_version_constants.h"
 
-namespace {
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace ksr = keystone_registration;
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+
+namespace {
 
 // Functions to handle the brand file.
 //
@@ -83,56 +88,9 @@ NSString* SystemBrandFilePath(version_info::Channel channel) {
       stringByStandardizingPath];
 }
 
-#endif
-
-// Adaptor for scheduling an Objective-C method call in ThreadPool.
-class PerformBridge : public base::RefCountedThreadSafe<PerformBridge> {
- public:
-
-  // Call |sel| on |target| with |arg| in a WorkerPool thread.
-  // |target| and |arg| are retained, |arg| may be |nil|.
-  static void PostPerform(id target, SEL sel, id arg) {
-    DCHECK(target);
-    DCHECK(sel);
-
-    scoped_refptr<PerformBridge> op = new PerformBridge(target, sel, arg);
-    base::ThreadPool::PostTask(
-        FROM_HERE,
-        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
-         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-        base::BindOnce(&PerformBridge::Run, op.get()));
-  }
-
-  // Convenience for the no-argument case.
-  static void PostPerform(id target, SEL sel) {
-    PostPerform(target, sel, nil);
-  }
-
- private:
-  // Allow RefCountedThreadSafe<> to delete.
-  friend class base::RefCountedThreadSafe<PerformBridge>;
-
-  PerformBridge(id target, SEL sel, id arg)
-      : target_([target retain]),
-        sel_(sel),
-        arg_([arg retain]) {
-  }
-
-  ~PerformBridge() {}
-
-  // Happens on a WorkerPool thread.
-  void Run() {
-    @autoreleasepool {
-      [target_ performSelector:sel_ withObject:arg_];
-    }
-  }
-
-  base::scoped_nsobject<id> target_;
-  SEL sel_;
-  base::scoped_nsobject<id> arg_;
-};
-
 }  // namespace
+
+#endif
 
 @interface KeystoneGlue (Private)
 
@@ -240,7 +198,37 @@ NSString* const kVersionKey = @"KSVersion";
 
 }  // namespace
 
-@implementation KeystoneGlue
+@implementation KeystoneGlue {
+  // Data for Keystone registration.
+  NSString* __strong _productID;
+  NSString* __strong _appPath;
+  NSString* __strong _url;
+  NSString* __strong _version;
+  std::string _channel;  // Logically: dev, beta, or stable.
+
+  // Cached location of the brand file.
+  NSString* __strong _brandFile;
+
+  // And the Keystone registration itself, with the active timer.
+  KSRegistration* __strong _registration;
+  NSTimer* __strong _timer;
+  BOOL _registrationActive;
+  Class _ksUnsignedReportingAttributeClass;
+
+  // The most recent kAutoupdateStatusNotification notification posted.
+  NSNotification* __strong _recentNotification;
+
+  // The authorization object, when it needs to persist because it's being
+  // carried across threads.
+  base::mac::ScopedAuthorizationRef _authorization;
+
+  // YES if a synchronous promotion operation is in progress (promotion during
+  // installation).
+  BOOL _synchronousPromotion;
+
+  // YES if an update was ever successfully installed by -installUpdate.
+  BOOL _updateSuccessfullyInstalled;
+}
 
 + (KeystoneGlue*)defaultKeystoneGlue {
   static bool sTriedCreatingDefaultKeystoneGlue = false;
@@ -252,7 +240,6 @@ NSString* const kVersionKey = @"KSVersion";
     sDefaultKeystoneGlue = [[KeystoneGlue alloc] init];
     [sDefaultKeystoneGlue loadParameters];
     if (![sDefaultKeystoneGlue loadKeystoneRegistration]) {
-      [sDefaultKeystoneGlue release];
       sDefaultKeystoneGlue = nil;
     }
   }
@@ -261,7 +248,7 @@ NSString* const kVersionKey = @"KSVersion";
 
 - (instancetype)init {
   if ((self = [super init])) {
-    NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
+    NSNotificationCenter* center = NSNotificationCenter.defaultCenter;
 
     [center addObserver:self
                selector:@selector(registrationComplete:)
@@ -288,30 +275,45 @@ NSString* const kVersionKey = @"KSVersion";
 }
 
 - (void)dealloc {
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
-  [super dealloc];
+  [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
 - (NSDictionary*)infoDictionary {
-  // Use base::mac::OuterBundle() to get the Chrome app's own bundle identifier
-  // and path, not the framework's.  For auto-update, the application is
-  // what's significant here: it's used to locate the outermost part of the
+  // Use base::apple::OuterBundle() to get the Chrome app's own bundle
+  // identifier and path, not the framework's.  For auto-update, the application
+  // is what's significant here: it's used to locate the outermost part of the
   // application for the existence checker and other operations that need to
   // see the entire application bundle.
-  return [base::mac::OuterBundle() infoDictionary];
+  return base::apple::OuterBundle().infoDictionary;
+}
+
+- (NSString*)productID {
+  return _productID;
+}
+
+- (NSString*)url {
+  return _url;
+}
+
+- (NSString*)version {
+  return _version;
+}
+
+- (NSTimer*)timer {
+  return _timer;
 }
 
 - (void)loadParameters {
-  NSBundle* appBundle = base::mac::OuterBundle();
-  NSDictionary* infoDictionary = [self infoDictionary];
+  NSBundle* appBundle = base::apple::OuterBundle();
+  NSDictionary* infoDictionary = self.infoDictionary;
 
   NSString* productID =
       base::mac::ObjCCast<NSString>(infoDictionary[@"KSProductID"]);
   if (productID == nil) {
-    productID = [appBundle bundleIdentifier];
+    productID = appBundle.bundleIdentifier;
   }
 
-  NSString* appPath = [appBundle bundlePath];
+  NSString* appPath = appBundle.bundlePath;
   NSString* url = base::mac::ObjCCast<NSString>(infoDictionary[@"KSUpdateURL"]);
   NSString* version =
       base::mac::ObjCCast<NSString>(infoDictionary[kVersionKey]);
@@ -333,10 +335,10 @@ NSString* const kVersionKey = @"KSVersion";
         << "-channel name modification has side effect";
   }
 
-  _productID.reset([productID copy]);
-  _appPath.reset([appPath copy]);
-  _url.reset([url copy]);
-  _version.reset([version copy]);
+  _productID = [productID copy];
+  _appPath = [appPath copy];
+  _url = [url copy];
+  _version = [version copy];
   _channel = channel;
 }
 
@@ -345,16 +347,17 @@ NSString* const kVersionKey = @"KSVersion";
 - (NSString*)brandFilePath {
   DCHECK(_version != nil) << "-loadParameters must be called first";
 
-  if (_brandFile)
+  if (_brandFile) {
     return _brandFile;
+  }
 
-  NSFileManager* fm = [NSFileManager defaultManager];
+  NSFileManager* fm = NSFileManager.defaultManager;
   version_info::Channel channel = chrome::GetChannelByName(_channel);
   NSString* userBrandFile = UserBrandFilePath(channel);
   NSString* systemBrandFile = SystemBrandFilePath(channel);
 
   // Default to none.
-  _brandFile.reset(@"", base::scoped_policy::RETAIN);
+  _brandFile = @"";
 
   // Only a side-by-side capable Chromium can have an independent brand code.
 
@@ -369,7 +372,7 @@ NSString* const kVersionKey = @"KSVersion";
     // any, should remain intact.
 
     if ([fm fileExistsAtPath:userBrandFile]) {
-      [fm removeItemAtPath:userBrandFile error:NULL];
+      [fm removeItemAtPath:userBrandFile error:nil];
     }
   } else {
     // If there is a system brand file, use it.
@@ -377,11 +380,11 @@ NSString* const kVersionKey = @"KSVersion";
       // System
 
       // Use the system file that is there.
-      _brandFile.reset(systemBrandFile, base::scoped_policy::RETAIN);
+      _brandFile = systemBrandFile;
 
       // Clean up any old user level file.
       if ([fm fileExistsAtPath:userBrandFile]) {
-        [fm removeItemAtPath:userBrandFile error:NULL];
+        [fm removeItemAtPath:userBrandFile error:nil];
       }
 
     } else {
@@ -411,16 +414,16 @@ NSString* const kVersionKey = @"KSVersion";
           if (![fm createDirectoryAtPath:userBrandFileDirectory
                   withIntermediateDirectories:YES
                                    attributes:nil
-                                        error:NULL]) {
+                                        error:nil]) {
             LOG(ERROR) << "Failed to create the directory for the brand file";
           }
         }
         if ([storedBrandDict writeToFile:userBrandFile atomically:YES]) {
-          _brandFile.reset(userBrandFile, base::scoped_policy::RETAIN);
+          _brandFile = userBrandFile;
         }
       } else if (storedBrandID) {
         // Had stored brand, use it.
-        _brandFile.reset(userBrandFile, base::scoped_policy::RETAIN);
+        _brandFile = userBrandFile;
       }
     }
   }
@@ -431,27 +434,32 @@ NSString* const kVersionKey = @"KSVersion";
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 - (BOOL)loadKeystoneRegistration {
-  if (!_productID || !_appPath || !_url || !_version)
+  if (!_productID || !_appPath || !_url || !_version) {
     return NO;
+  }
 
   // Load the KeystoneRegistration framework bundle if present.  It lives
-  // inside the framework, so use base::mac::FrameworkBundle();
-  NSString* ksrPath =
-      [[base::mac::FrameworkBundle() privateFrameworksPath]
-          stringByAppendingPathComponent:@"KeystoneRegistration.framework"];
+  // inside the framework, so use base::apple::FrameworkBundle();
+  NSString* ksrPath = [base::apple::FrameworkBundle().privateFrameworksPath
+      stringByAppendingPathComponent:@"KeystoneRegistration.framework"];
   NSBundle* ksrBundle = [NSBundle bundleWithPath:ksrPath];
   [ksrBundle load];
 
   // Harness the KSRegistration class.
   Class ksrClass = [ksrBundle classNamed:@"KSRegistration"];
   KSRegistration* ksr = [ksrClass registrationWithProductID:_productID];
-  if (!ksr)
+  if (!ksr) {
     return NO;
+  }
 
-  _registration.reset([ksr retain]);
+  _registration = ksr;
   _ksUnsignedReportingAttributeClass =
       [ksrBundle classNamed:@"KSUnsignedReportingAttribute"];
   return YES;
+}
+
+- (void)setKeystoneRegistration:(KSRegistration*)registration {
+  _registration = registration;
 }
 
 - (NSString*)appInfoPlistPath {
@@ -462,7 +470,7 @@ NSString* const kVersionKey = @"KSVersion";
 }
 
 - (NSDictionary*)keystoneParameters {
-  NSNumber* xcType = [NSNumber numberWithInt:ksr::kKSPathExistenceChecker];
+  NSNumber* xcType = @(ksr::kKSPathExistenceChecker);
   NSNumber* preserveTTToken = @YES;
   NSString* appInfoPlistPath = [self appInfoPlistPath];
   NSString* brandKey = kBrandKey;
@@ -471,7 +479,7 @@ NSString* const kVersionKey = @"KSVersion";
   brandPath = [self brandFilePath];
 #endif
 
-  if ([brandPath length] == 0) {
+  if (brandPath.length == 0) {
     // Brand path and brand key must be cleared together or ksadmin seems
     // to throw an error.
     brandKey = @"";
@@ -489,8 +497,8 @@ NSString* const kVersionKey = @"KSVersion";
     ksr::KSRegistrationVersionPathKey : appInfoPlistPath,
     ksr::KSRegistrationVersionKeyKey : kVersionKey,
     ksr::KSRegistrationExistenceCheckerTypeKey : xcType,
-    ksr::KSRegistrationExistenceCheckerStringKey : _appPath.get(),
-    ksr::KSRegistrationServerURLStringKey : _url.get(),
+    ksr::KSRegistrationExistenceCheckerStringKey : _appPath,
+    ksr::KSRegistrationServerURLStringKey : _url,
     ksr::KSRegistrationPreserveTrustedTesterTokenKey : preserveTTToken,
     ksr::KSRegistrationTagKey : tagValue,
     ksr::KSRegistrationTagPathKey : appInfoPlistPath,
@@ -539,13 +547,13 @@ NSString* const kVersionKey = @"KSVersion";
 }
 
 - (void)registrationComplete:(NSNotification*)notification {
-  NSDictionary* userInfo = [notification userInfo];
+  NSDictionary* userInfo = notification.userInfo;
   NSNumber* status =
       base::mac::ObjCCast<NSNumber>(userInfo[ksr::KSRegistrationStatusKey]);
   NSString* errorMessages = base::mac::ObjCCast<NSString>(
       userInfo[ksr::KSRegistrationUpdateCheckRawErrorMessagesKey]);
 
-  if ([status boolValue]) {
+  if (status.boolValue) {
     if ([self needsPromotion]) {
       [self updateStatus:kAutoupdateNeedsPromotion
                  version:nil
@@ -565,6 +573,7 @@ NSString* const kVersionKey = @"KSVersion";
 
 - (void)stopTimer {
   [_timer invalidate];
+  _timer = nil;
 }
 
 - (void)markActive:(NSTimer*)timer {
@@ -592,7 +601,7 @@ NSString* const kVersionKey = @"KSVersion";
 }
 
 - (void)checkForUpdateComplete:(NSNotification*)notification {
-  NSDictionary* userInfo = [notification userInfo];
+  NSDictionary* userInfo = notification.userInfo;
   NSNumber* error = base::mac::ObjCCast<NSNumber>(
       userInfo[ksr::KSRegistrationUpdateCheckErrorKey]);
   NSNumber* status =
@@ -600,11 +609,11 @@ NSString* const kVersionKey = @"KSVersion";
   NSString* errorMessages = base::mac::ObjCCast<NSString>(
       userInfo[ksr::KSRegistrationUpdateCheckRawErrorMessagesKey]);
 
-  if ([error boolValue]) {
+  if (error.boolValue) {
     [self updateStatus:kAutoupdateCheckFailed
                version:nil
                  error:errorMessages];
-  } else if ([status boolValue]) {
+  } else if (status.boolValue) {
     // If an update is known to be available, go straight to
     // -updateStatus:version:.  It doesn't matter what's currently on disk.
     NSString* version =
@@ -637,7 +646,7 @@ NSString* const kVersionKey = @"KSVersion";
 }
 
 - (void)installUpdateComplete:(NSNotification*)notification {
-  NSDictionary* userInfo = [notification userInfo];
+  NSDictionary* userInfo = notification.userInfo;
   NSNumber* successfulInstall = base::mac::ObjCCast<NSNumber>(
       userInfo[ksr::KSUpdateCheckSuccessfullyInstalledKey]);
   NSString* errorMessages = base::mac::ObjCCast<NSString>(
@@ -645,9 +654,9 @@ NSString* const kVersionKey = @"KSVersion";
 
   // http://crbug.com/160308 and b/7517358: when using system Keystone and on
   // a user ticket, KSUpdateCheckSuccessfulKey will be NO even when an update
-  // was installed correctly, so don't check it. It should be redudnant when
+  // was installed correctly, so don't check it. It should be redundant when
   // KSUpdateCheckSuccessfullyInstalledKey is checked.
-  if (![successfulInstall intValue]) {
+  if (!successfulInstall.intValue) {
     [self updateStatus:kAutoupdateInstallFailed
                version:nil
                  error:errorMessages];
@@ -670,14 +679,19 @@ NSString* const kVersionKey = @"KSVersion";
 
 // Runs on the main thread.
 - (void)determineUpdateStatusAsync {
-  DCHECK([NSThread isMainThread]);
+  DCHECK(NSThread.isMainThread);
 
-  PerformBridge::PostPerform(self, @selector(determineUpdateStatus));
+  base::ThreadPool::PostTask(FROM_HERE,
+                             {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+                              base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+                             base::BindOnce(^{
+                               [self determineUpdateStatus];
+                             }));
 }
 
 // Runs on a thread managed by WorkerPool.
 - (void)determineUpdateStatus {
-  DCHECK(![NSThread isMainThread]);
+  DCHECK(!NSThread.isMainThread);
 
   NSString* version = [self currentlyInstalledVersion];
 
@@ -688,7 +702,7 @@ NSString* const kVersionKey = @"KSVersion";
 
 // Runs on the main thread.
 - (void)determineUpdateStatusForVersion:(NSString*)version {
-  DCHECK([NSThread isMainThread]);
+  DCHECK(NSThread.isMainThread);
 
   AutoupdateStatus status;
   if (_updateSuccessfullyInstalled) {
@@ -725,14 +739,13 @@ NSString* const kVersionKey = @"KSVersion";
 - (void)updateStatus:(AutoupdateStatus)status
              version:(NSString*)version
                error:(NSString*)error {
-  NSNumber* statusNumber = [NSNumber numberWithInt:status];
   NSMutableDictionary* dictionary =
-      [NSMutableDictionary dictionaryWithObject:statusNumber
+      [NSMutableDictionary dictionaryWithObject:@(status)
                                          forKey:kAutoupdateStatusStatus];
-  if ([version length]) {
+  if (version.length) {
     dictionary[kAutoupdateStatusVersion] = version;
   }
-  if ([error length]) {
+  if (error.length) {
     dictionary[kAutoupdateStatusErrorMessages] = error;
   }
 
@@ -740,20 +753,20 @@ NSString* const kVersionKey = @"KSVersion";
       [NSNotification notificationWithName:kAutoupdateStatusNotification
                                     object:self
                                   userInfo:dictionary];
-  _recentNotification.reset([notification retain]);
+  _recentNotification = notification;
 
-  [[NSNotificationCenter defaultCenter] postNotification:notification];
+  [NSNotificationCenter.defaultCenter postNotification:notification];
 }
 
 - (NSNotification*)recentNotification {
-  return [[_recentNotification retain] autorelease];
+  return _recentNotification;
 }
 
 - (AutoupdateStatus)recentStatus {
-  NSDictionary* dictionary = [_recentNotification userInfo];
+  NSDictionary* dictionary = _recentNotification.userInfo;
   NSNumber* status =
       base::mac::ObjCCastStrict<NSNumber>(dictionary[kAutoupdateStatusStatus]);
-  return static_cast<AutoupdateStatus>([status intValue]);
+  return static_cast<AutoupdateStatus>(status.intValue);
 }
 
 - (BOOL)asyncOperationPending {
@@ -792,7 +805,7 @@ NSString* const kVersionKey = @"KSVersion";
 }
 
 - (BOOL)isOnReadOnlyFilesystem {
-  const char* appPathC = [_appPath fileSystemRepresentation];
+  const char* appPathC = _appPath.fileSystemRepresentation;
   struct statfs statfsBuf;
 
   if (statfs(appPathC, &statfsBuf) != 0) {
@@ -813,7 +826,7 @@ NSString* const kVersionKey = @"KSVersion";
 // tests can pick it up.
 + (BOOL)isValidSystemKeystone:(NSDictionary*)systemKeystonePlistContents
             comparedToBundled:(NSDictionary*)bundledKeystonePlistContents {
-  NSString* versionKey = base::mac::CFToNSCast(kCFBundleVersionKey);
+  NSString* versionKey = base::apple::CFToNSPtrCast(kCFBundleVersionKey);
 
   // If the bundled version is missing or broken, this question is irrelevant.
   NSString* bundledKeystoneVersionString =
@@ -877,9 +890,9 @@ NSString* const kVersionKey = @"KSVersion";
   // file operations, such as Snow Leopard's Finder's copy operation when
   // authenticating, may actually result in different ownership being applied
   // to files and directories.
-  NSFileManager* fileManager = [NSFileManager defaultManager];
-  NSString* executablePath = [base::mac::OuterBundle() executablePath];
-  NSString* frameworkPath = [base::mac::FrameworkBundle() bundlePath];
+  NSFileManager* fileManager = NSFileManager.defaultManager;
+  NSString* executablePath = base::apple::OuterBundle().executablePath;
+  NSString* frameworkPath = base::apple::FrameworkBundle().bundlePath;
   return ![fileManager isWritableFileAtPath:_appPath] ||
          ![fileManager isWritableFileAtPath:executablePath] ||
          ![fileManager isWritableFileAtPath:frameworkPath];
@@ -911,7 +924,8 @@ NSString* const kVersionKey = @"KSVersion";
       IDS_PROMOTE_AUTHENTICATION_PROMPT,
       l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
   base::mac::ScopedAuthorizationRef authorization =
-      base::mac::AuthorizationCreateToRunAsRoot(base::mac::NSToCFCast(prompt));
+      base::mac::AuthorizationCreateToRunAsRoot(
+          base::apple::NSToCFPtrCast(prompt));
   if (!authorization) {
     return;
   }
@@ -955,18 +969,17 @@ NSString* const kVersionKey = @"KSVersion";
   // preflight now does, and then the preflight script can be removed instead.
   // However, preflight operation (and promotion) should only be asynchronous if
   // the synchronous parameter is NO.
-  NSString* preflightPath =
-      [base::mac::FrameworkBundle()
-          pathForResource:@"keystone_promote_preflight"
-                   ofType:@"sh"];
-  const char* preflightPathC = [preflightPath fileSystemRepresentation];
+  NSString* preflightPath = [base::apple::FrameworkBundle()
+      pathForResource:@"keystone_promote_preflight"
+               ofType:@"sh"];
+  const char* preflightPathC = preflightPath.fileSystemRepresentation;
 
   // This is typically a once per machine operation, so it is not worth caching
   // the type of brand file (user vs system). Figure it out here:
   version_info::Channel channel = chrome::GetChannelByName(_channel);
   NSString* userBrandFile = UserBrandFilePath(channel);
   NSString* systemBrandFile = SystemBrandFilePath(channel);
-  const char* arguments[] = {NULL, NULL, NULL};
+  const char* arguments[] = {nullptr, nullptr, nullptr};
   BOOL userBrand = NO;
   if ([_brandFile isEqualToString:userBrandFile]) {
     // Running with user level brand file, promote to the system level.
@@ -1010,10 +1023,9 @@ NSString* const kVersionKey = @"KSVersion";
   // If the brand file is user level, update parameters to point to the new
   // system level file during promotion.
   if (userBrand) {
-    NSMutableDictionary* tempParameters =
-        [[parameters mutableCopy] autorelease];
+    NSMutableDictionary* tempParameters = [parameters mutableCopy];
     tempParameters[ksr::KSRegistrationBrandPathKey] = systemBrandFile;
-    _brandFile.reset(systemBrandFile, base::scoped_policy::RETAIN);
+    _brandFile = systemBrandFile;
     parameters = tempParameters;
   }
 
@@ -1038,11 +1050,11 @@ NSString* const kVersionKey = @"KSVersion";
 }
 
 - (void)promotionComplete:(NSNotification*)notification {
-  NSDictionary* userInfo = [notification userInfo];
+  NSDictionary* userInfo = notification.userInfo;
   NSNumber* status =
       base::mac::ObjCCast<NSNumber>(userInfo[ksr::KSRegistrationStatusKey]);
 
-  if ([status boolValue]) {
+  if (status.boolValue) {
     if (_synchronousPromotion) {
       // Short-circuit: if performing a synchronous promotion, the promotion
       // came from the installer, which already set the permissions properly.
@@ -1069,31 +1081,33 @@ NSString* const kVersionKey = @"KSVersion";
   // NSBundle is not documented as being thread-safe.  Do NSBundle operations
   // on the main thread before jumping over to a WorkerPool-managed
   // thread to run the tool.
-  DCHECK([NSThread isMainThread]);
+  DCHECK(NSThread.isMainThread);
 
-  SEL selector = @selector(changePermissionsForPromotionWithTool:);
-  NSString* toolPath =
-      [base::mac::FrameworkBundle()
-          pathForResource:@"keystone_promote_postflight"
-                   ofType:@"sh"];
+  NSString* toolPath = [base::apple::FrameworkBundle()
+      pathForResource:@"keystone_promote_postflight"
+               ofType:@"sh"];
 
-  PerformBridge::PostPerform(self, selector, toolPath);
+  base::ThreadPool::PostTask(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::BindOnce(^{
+        [self changePermissionsForPromotionWithTool:toolPath];
+      }));
 }
 
 - (void)changePermissionsForPromotionWithTool:(NSString*)toolPath {
-  const char* toolPathC = [toolPath fileSystemRepresentation];
+  DCHECK(!NSThread.isMainThread);
 
-  const char* appPathC = [_appPath fileSystemRepresentation];
-  const char* arguments[] = {appPathC, NULL};
+  const char* toolPathC = toolPath.fileSystemRepresentation;
+
+  const char* appPathC = _appPath.fileSystemRepresentation;
+  const char* arguments[] = {appPathC, nullptr};
 
   int exit_status;
   OSStatus status = base::mac::ExecuteWithPrivilegesAndWait(
-      _authorization,
-      toolPathC,
-      kAuthorizationFlagDefaults,
-      arguments,
-      NULL,  // pipe
-      &exit_status);
+      _authorization, toolPathC, kAuthorizationFlagDefaults, arguments,
+      /*pipe=*/nullptr, &exit_status);
   if (status != errAuthorizationSuccess) {
     OSSTATUS_LOG(ERROR, status)
         << "AuthorizationExecuteWithPrivileges postflight";
@@ -1115,7 +1129,7 @@ NSString* const kVersionKey = @"KSVersion";
 
 - (void)setAppPath:(NSString*)appPath {
   if (appPath != _appPath) {
-    _appPath.reset([appPath copy]);
+    _appPath = appPath;
   }
 }
 
@@ -1129,14 +1143,13 @@ NSString* const kVersionKey = @"KSVersion";
   NSString* wantFullInstallerContents =
       [NSString stringWithContentsOfFile:wantFullInstallerPath
                                 encoding:NSUTF8StringEncoding
-                                   error:NULL];
+                                   error:nil];
   if (!wantFullInstallerContents) {
     return NO;
   }
 
-  NSString* wantFullInstallerVersion =
-      [wantFullInstallerContents stringByTrimmingCharactersInSet:
-          [NSCharacterSet newlineCharacterSet]];
+  NSString* wantFullInstallerVersion = [wantFullInstallerContents
+      stringByTrimmingCharactersInSet:NSCharacterSet.newlineCharacterSet];
   return [wantFullInstallerVersion isEqualToString:_version];
 }
 
@@ -1166,8 +1179,9 @@ std::string BrandCodeInternal() {
   KeystoneGlue* keystone_glue = [KeystoneGlue defaultKeystoneGlue];
   NSString* brand_path = [keystone_glue brandFilePath];
 
-  if (![brand_path length])
+  if (!brand_path.length) {
     return std::string();
+  }
 
   NSDictionary* dict =
       [NSDictionary dictionaryWithContentsOfFile:brand_path];

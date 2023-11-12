@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <string>
+#include <tuple>
 #include <utility>
 
 #include "base/check.h"
@@ -126,7 +127,7 @@ bool SwapGoogleUpdate(UpdaterScope scope,
 
   const absl::optional<base::FilePath> target_path =
       GetGoogleUpdateExePath(scope);
-  if (!target_path) {
+  if (!target_path || !base::CreateDirectory(target_path->DirName())) {
     return false;
   }
   list->AddCopyTreeWorkItem(updater_path, *target_path, temp_path,
@@ -190,19 +191,22 @@ bool UninstallGoogleUpdate(UpdaterScope scope,
         }));
   }
 
-  // Delete the GoogleUpdate tasks.
+  // Delete the GoogleUpdate tasks. This is a best-effort operation.
   scoped_refptr<TaskScheduler> task_scheduler(
       TaskScheduler::CreateInstance(scope, /*use_task_subfolders=*/false));
-  task_scheduler->ForEachTaskWithPrefix(
-      IsSystemInstall(scope) ? kLegacyTaskNamePrefixSystem
-                             : kLegacyTaskNamePrefixUser,
-      base::BindRepeating(
-          [](scoped_refptr<TaskScheduler> task_scheduler,
-             const std::wstring& task_name) {
-            VLOG(2) << __func__ << ": Deleting legacy task: " << task_name;
-            task_scheduler->DeleteTask(task_name.c_str());
-          },
-          task_scheduler));
+  if (task_scheduler) {
+    task_scheduler->ForEachTaskWithPrefix(
+        IsSystemInstall(scope) ? kLegacyTaskNamePrefixSystem
+                               : kLegacyTaskNamePrefixUser,
+        base::BindRepeating(
+            [](scoped_refptr<TaskScheduler> task_scheduler,
+               const std::wstring& task_name) {
+              VLOG(2) << __func__ << ": Deleting legacy task: " << task_name;
+              bool is_deleted = task_scheduler->DeleteTask(task_name);
+              VLOG_IF(2, !is_deleted) << "Legacy task was not deleted.";
+            },
+            task_scheduler));
+  }
 
   // Keep only `GoogleUpdate.exe` and nothing else under `\Google\Update`.
   const absl::optional<base::FilePath> google_update_exe =
@@ -246,10 +250,10 @@ HRESULT IsCOMCallerAllowed() {
     return S_OK;
   }
 
-  HResultOr<bool> result = IsCOMCallerAdmin();
+  const HResultOr<bool> result = IsCOMCallerAdmin();
   if (!result.has_value()) {
     HRESULT hr = result.error();
-    LOG(ERROR) << __func__ << ": IsCOMCallerAdmin failed: " << std::hex << hr;
+    LOG(ERROR) << "IsCOMCallerAdmin failed: " << std::hex << hr;
     return hr;
   }
 
@@ -267,7 +271,7 @@ ComServerApp::~ComServerApp() = default;
 void ComServerApp::Stop() {
   VLOG(2) << __func__ << ": COM server is shutting down.";
   UnregisterClassObjects();
-  main_task_runner_->PostTask(FROM_HERE, base::BindOnce([]() {
+  main_task_runner_->PostTask(FROM_HERE, base::BindOnce([] {
                                 scoped_refptr<ComServerApp> this_server =
                                     AppServerSingletonInstance();
                                 this_server->update_service_ = nullptr;
@@ -310,16 +314,14 @@ void ComServerApp::TaskStarted() {
       Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::GetModule()
           .IncrementObjectCount();
   VLOG(2) << "Starting task, Microsoft::WRL::Module count: " << count;
+  AppServer::TaskStarted();
 }
 
-void ComServerApp::TaskCompleted() {
-  main_task_runner_->PostDelayedTask(
-      FROM_HERE, base::BindOnce(&ComServerApp::AcknowledgeTaskCompletion, this),
-      external_constants()->ServerKeepAliveTime());
+bool ComServerApp::ShutdownIfIdleAfterTask() {
+  return false;
 }
 
-void ComServerApp::AcknowledgeTaskCompletion() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+void ComServerApp::OnDelayedTaskComplete() {
   const auto count =
       Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::GetModule()
           .DecrementObjectCount();
@@ -346,7 +348,6 @@ void ComServerApp::ActiveDutyInternal(
 }
 
 void ComServerApp::Start(base::OnceCallback<HRESULT()> register_callback) {
-  main_task_runner_ = base::SequencedTaskRunner::GetCurrentDefault();
   CreateWRLModule();
   HRESULT hr = std::move(register_callback).Run();
   if (FAILED(hr)) {
@@ -399,20 +400,17 @@ bool ComServerApp::SwapInNewVersion() {
     StopProcessesUnderPath(target->DirName(), base::Seconds(45));
   }
 
-  const bool succeeded = list->Do();
-  if (succeeded) {
-    LOG_IF(ERROR,
-           UninstallGoogleUpdate(updater_scope(), temp_dir->GetPath(),
-                                 UpdaterScopeToHKeyRoot(updater_scope())));
-
-    // TODO(crbug.com/1425609) - revert the CL that introduced this logging
-    // after the bug is resolved.
-    for (const auto& clsid : GetServers(false, updater_scope())) {
-      LogClsidEntries(clsid);
-    }
+  if (!list->Do()) {
+    return false;
   }
 
-  return succeeded;
+  LOG_IF(ERROR, UninstallGoogleUpdate(updater_scope(), temp_dir->GetPath(),
+                                      UpdaterScopeToHKeyRoot(updater_scope())));
+  if (!IsSystemInstall(updater_scope())) {
+    LOG_IF(ERROR, DeleteLegacyEntriesPerUser());
+  }
+
+  return true;
 }
 
 bool ComServerApp::MigrateLegacyUpdaters(
@@ -470,6 +468,30 @@ bool ComServerApp::MigrateLegacyUpdaters(
       if (client_state_key.ReadValueDW(kRegValueDateOfLastRollcall,
                                        &date_last_rollcall) == ERROR_SUCCESS) {
         registration.dlrc = DaynumFromDWORD(date_last_rollcall);
+      }
+
+      base::win::RegKey cohort_key;
+      if (cohort_key.Open(root, GetAppCohortKey(app_id).c_str(),
+                          Wow6432(KEY_READ)) == ERROR_SUCCESS) {
+        std::wstring cohort;
+        if (cohort_key.ReadValue(nullptr, &cohort) == ERROR_SUCCESS) {
+          registration.cohort = base::SysWideToUTF8(cohort);
+
+          std::wstring cohort_name;
+          if (cohort_key.ReadValue(kRegValueCohortName, &cohort_name) ==
+              ERROR_SUCCESS) {
+            registration.cohort_name = base::SysWideToUTF8(cohort_name);
+          }
+
+          std::wstring cohort_hint;
+          if (cohort_key.ReadValue(kRegValueCohortHint, &cohort_hint) ==
+              ERROR_SUCCESS) {
+            registration.cohort_hint = base::SysWideToUTF8(cohort_hint);
+          }
+          VLOG(2) << "Cohort values: " << registration.cohort << ", "
+                  << registration.cohort_name << ", "
+                  << registration.cohort_hint;
+        }
       }
     }
 

@@ -68,6 +68,11 @@ const CGFloat kFaviconBadgeSideLength = 24;
 @property(nonatomic, strong) UIView* imageContainerView;
 @property(nonatomic, strong) NSLayoutConstraint* imageViewAspectRatioConstraint;
 @property(nonatomic, strong) UIScrollView* scrollView;
+@property(nonatomic, strong) GradientView* gradientView;
+@property(nonatomic, assign) CGFloat customGradientViewHeight;
+@property(nonatomic, strong) NSLayoutConstraint* gradientViewHeightConstraint;
+@property(nonatomic, strong)
+    NSLayoutConstraint* scrollViewBottomAnchorConstraint;
 @end
 
 @implementation ConfirmationAlertViewController
@@ -89,6 +94,8 @@ const CGFloat kFaviconBadgeSideLength = 24;
   self = [super initWithNibName:nil bundle:nil];
   if (self) {
     _customSpacingAfterImage = kStackViewSpacingAfterIllustration;
+    _customGradientViewHeight = kGradientHeight;
+    _customScrollViewBottomInsets = kScrollViewBottomInsets;
     _customSpacing = kStackViewSpacing;
     _showsVerticalScrollIndicator = YES;
     _scrollEnabled = YES;
@@ -108,18 +115,24 @@ const CGFloat kFaviconBadgeSideLength = 24;
     [self.view addSubview:self.navigationBar];
   }
 
-  if (self.imageEnclosedWithShadowAndBadge) {
-    // The image view is set within the helper method.
-    self.imageContainerView = [self createImageContainerViewWithShadowAndBadge];
-  } else {
-    // The image container and the image view are the same.
-    self.imageView = [self createImageView];
-    self.imageContainerView = self.imageView;
+  if (self.image) {
+    if (self.imageEnclosedWithShadowAndBadge ||
+        self.imageEnclosedWithShadowWithoutBadge) {
+      // The image view is set within the helper method.
+      self.imageContainerView =
+          [self createImageContainerViewWithShadowAndBadge];
+    } else {
+      // The image container and the image view are the same.
+      self.imageView = [self createImageView];
+      self.imageContainerView = self.imageView;
+    }
   }
 
   NSMutableArray* stackSubviews = [[NSMutableArray alloc] init];
 
-  [stackSubviews addObject:self.imageContainerView];
+  if (self.image) {
+    [stackSubviews addObject:self.imageContainerView];
+  }
 
   if (self.titleString.length) {
     UILabel* title = [self createTitleLabel];
@@ -164,8 +177,9 @@ const CGFloat kFaviconBadgeSideLength = 24;
   // horizontal scroll.
   [NSLayoutConstraint activateConstraints:@[
     [stackView.topAnchor constraintEqualToAnchor:self.scrollView.topAnchor],
-    [stackView.bottomAnchor constraintEqualToAnchor:self.scrollView.bottomAnchor
-                                           constant:-kScrollViewBottomInsets]
+    [stackView.bottomAnchor
+        constraintEqualToAnchor:self.scrollView.bottomAnchor
+                       constant:-self.customScrollViewBottomInsets]
   ]];
 
   // Scroll View constraints to the height of its content. This allows to center
@@ -245,24 +259,28 @@ const CGFloat kFaviconBadgeSideLength = 24;
     ]];
     scrollViewBottomAnchor = actionStackView.topAnchor;
 
-    GradientView* gradientView = [self createGradientView];
-    [self.view addSubview:gradientView];
+    self.gradientView = [self createGradientView];
+    [self.view addSubview:self.gradientView];
 
     [NSLayoutConstraint activateConstraints:@[
-      [gradientView.bottomAnchor
+      [self.gradientView.bottomAnchor
           constraintEqualToAnchor:actionStackView.topAnchor],
-      [gradientView.leadingAnchor
+      [self.gradientView.leadingAnchor
           constraintEqualToAnchor:self.scrollView.leadingAnchor],
-      [gradientView.trailingAnchor
+      [self.gradientView.trailingAnchor
           constraintEqualToAnchor:self.scrollView.trailingAnchor],
-      [gradientView.heightAnchor constraintEqualToConstant:kGradientHeight],
     ]];
+    self.gradientViewHeightConstraint = [self.gradientView.heightAnchor
+        constraintEqualToConstant:self.customGradientViewHeight];
+    self.gradientViewHeightConstraint.active = YES;
   }
 
+  self.scrollViewBottomAnchorConstraint = [self.scrollView.bottomAnchor
+      constraintLessThanOrEqualToAnchor:scrollViewBottomAnchor
+                               constant:-kScrollViewBottomInsets];
+  self.scrollViewBottomAnchorConstraint.active = YES;
+
   [NSLayoutConstraint activateConstraints:@[
-    [self.scrollView.bottomAnchor
-        constraintLessThanOrEqualToAnchor:scrollViewBottomAnchor
-                                 constant:-kScrollViewBottomInsets],
     [self.scrollView.leadingAnchor
         constraintEqualToAnchor:self.view.leadingAnchor],
     [self.scrollView.trailingAnchor
@@ -297,7 +315,7 @@ const CGFloat kFaviconBadgeSideLength = 24;
     centerYConstraint.active = YES;
   }
 
-  if (!self.imageHasFixedSize) {
+  if (!self.imageHasFixedSize || self.image) {
     // Constrain the image to the scroll view size and its aspect ratio.
     [self.imageView
         setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
@@ -384,6 +402,22 @@ const CGFloat kFaviconBadgeSideLength = 24;
   // Do nothing by default. Subclasses can override this.
 }
 
+- (void)updateCustomGradientViewHeight:(CGFloat)height {
+  self.customGradientViewHeight = height;
+  self.gradientViewHeightConstraint.active = NO;
+  self.gradientViewHeightConstraint = [self.gradientView.heightAnchor
+      constraintEqualToConstant:self.customGradientViewHeight];
+  self.gradientViewHeightConstraint.active = YES;
+}
+
+- (void)changeScrollViewBottomAnchorConstant:(CGFloat)constant {
+  self.scrollViewBottomAnchorConstraint.constant = constant;
+}
+
+- (void)resetScrollViewBottomAnchorConstant {
+  [self changeScrollViewBottomAnchorConstant:-kScrollViewBottomInsets];
+}
+
 #pragma mark - Private
 
 // Handle taps on the dismiss button.
@@ -430,7 +464,7 @@ const CGFloat kFaviconBadgeSideLength = 24;
   UINavigationBar* navigationBar = [[UINavigationBar alloc] init];
   navigationBar.translucent = NO;
   [navigationBar setShadowImage:[[UIImage alloc] init]];
-  [navigationBar setBarTintColor:[UIColor colorNamed:kBackgroundColor]];
+  [navigationBar setBarTintColor:[UIColor colorNamed:kPrimaryBackgroundColor]];
 
   UINavigationItem* navigationItem = [[UINavigationItem alloc] init];
   if (self.helpButtonAvailable) {
@@ -523,12 +557,20 @@ const CGFloat kFaviconBadgeSideLength = 24;
   [containerView addSubview:frameView];
   [containerView addSubview:faviconBadgeView];
 
+  if (self.imageEnclosedWithShadowWithoutBadge) {
+    [faviconBadgeView setHidden:YES];
+  }
+
+  CGFloat faviconSideLength = self.customFaviconSideLength > 0
+                                  ? self.customFaviconSideLength
+                                  : kFaviconSideLength;
+
   [NSLayoutConstraint activateConstraints:@[
     // Size constraints.
     [frameView.widthAnchor constraintEqualToConstant:kFaviconFrameSideLength],
     [frameView.heightAnchor constraintEqualToConstant:kFaviconFrameSideLength],
-    [faviconView.widthAnchor constraintEqualToConstant:kFaviconSideLength],
-    [faviconView.heightAnchor constraintEqualToConstant:kFaviconSideLength],
+    [faviconView.widthAnchor constraintEqualToConstant:faviconSideLength],
+    [faviconView.heightAnchor constraintEqualToConstant:faviconSideLength],
     [faviconBadgeView.widthAnchor
         constraintEqualToConstant:kFaviconBadgeSideLength],
     [faviconBadgeView.heightAnchor

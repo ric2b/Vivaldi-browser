@@ -180,8 +180,9 @@ bool HitTestCulledInlineAncestors(
     if (auto* parent_layout_inline = DynamicTo<LayoutInline>(parent)) {
       if (parent_layout_inline->HitTestCulledInline(result, hit_test_location,
                                                     fallback_accumulated_offset,
-                                                    &parent_cursor))
+                                                    parent_cursor)) {
         return true;
+      }
     }
   }
 
@@ -1556,6 +1557,8 @@ void NGBoxFragmentPainter::PaintInlineItems(const PaintInfo& paint_info,
         NOTREACHED();
         cursor->MoveToNext();
         break;
+      case NGFragmentItem::kInvalid:
+        NOTREACHED_NORETURN();
     }
   }
 }

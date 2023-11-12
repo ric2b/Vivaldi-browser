@@ -21,6 +21,7 @@
 #include "chrome/browser/metrics/first_web_contents_profiler_base.h"
 #include "chrome/browser/new_tab_page/chrome_colors/chrome_colors_service.h"
 #include "chrome/browser/new_tab_page/chrome_colors/generated_colors_info.h"
+#include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -175,10 +176,7 @@ void OpenOnSelectProfileTargetUrl(Browser* browser) {
   } else if (target_page_url.spec() == ProfilePicker::kTaskManagerUrl) {
     chrome::OpenTaskManager(browser);
   } else {
-    NavigateParams params(
-        GetSingletonTabNavigateParams(browser, target_page_url));
-    params.path_behavior = NavigateParams::RESPECT;
-    ShowSingletonTabOverwritingNTP(browser, &params);
+    ShowSingletonTabOverwritingNTP(browser, target_page_url);
   }
 }
 
@@ -402,6 +400,10 @@ void ProfilePickerHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "getProfileStatistics",
       base::BindRepeating(&ProfilePickerHandler::HandleGetProfileStatistics,
+                          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "closeProfileStatistics",
+      base::BindRepeating(&ProfilePickerHandler::HandleCloseProfileStatistics,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "selectNewAccount",
@@ -900,6 +902,16 @@ void ProfilePickerHandler::HandleRemoveProfile(const base::Value::List& args) {
   RecordProfilePickerAction(ProfilePickerAction::kDeleteProfile);
   webui::DeleteProfileAtPath(*profile_path,
                              ProfileMetrics::DELETE_PROFILE_USER_MANAGER);
+
+  DCHECK(profile_statistics_keep_alive_);
+  profile_statistics_keep_alive_.reset();
+}
+
+void ProfilePickerHandler::HandleCloseProfileStatistics(
+    const base::Value::List& args) {
+  CHECK_EQ(0U, args.size());
+  DCHECK(profile_statistics_keep_alive_);
+  profile_statistics_keep_alive_.reset();
 }
 
 void ProfilePickerHandler::HandleGetProfileStatistics(
@@ -929,6 +941,9 @@ void ProfilePickerHandler::GatherProfileStatistics(Profile* profile) {
   if (!profile) {
     return;
   }
+
+  profile_statistics_keep_alive_ = std::make_unique<ScopedProfileKeepAlive>(
+      profile, ProfileKeepAliveOrigin::kProfileStatistics);
 
   ProfileStatisticsFactory::GetForProfile(profile)->GatherStatistics(
       base::BindRepeating(&ProfilePickerHandler::OnProfileStatisticsReceived,
@@ -1361,7 +1376,8 @@ void ProfilePickerHandler::OnAccountRemoved(
   UpdateAvailableAccounts();
 }
 
-void ProfilePickerHandler::OnReauthDialogClosed() {
+void ProfilePickerHandler::OnReauthDialogClosed(
+    const account_manager::AccountUpsertionResult& result) {
   // After the reauth screen is closed, we can now reuse the profile picker
   // account list to select an account.
   FireWebUIListener("reauth-dialog-closed", base::Value());

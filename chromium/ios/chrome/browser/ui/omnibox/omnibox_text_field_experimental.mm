@@ -14,10 +14,10 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/grit/components_scaled_resources.h"
 #import "components/omnibox/browser/autocomplete_input.h"
-#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
-#import "ios/chrome/browser/flags/system_flags.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/util/animation_util.h"
 #import "ios/chrome/browser/shared/ui/util/dynamic_type_util.h"
 #import "ios/chrome/browser/shared/ui/util/reversed_animation.h"
@@ -37,6 +37,10 @@
 #import "ui/gfx/image/image.h"
 #import "ui/gfx/ios/NSString+CrStringDrawing.h"
 #import "ui/gfx/scoped_cg_context_save_gstate_mac.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -349,6 +353,16 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 #pragma mark - Properties
 
 - (UIFont*)largerFont {
+
+  // Note: (prio@vivaldi.com): Use same font as steady view to have a smoother
+  // transition when steady view is tapped.
+  if (vivaldi::IsVivaldiRunning())
+    return PreferredFontForTextStyleWithMaxCategory(
+        UIFontTextStyleSubheadline,
+        self.traitCollection.preferredContentSizeCategory,
+        UIContentSizeCategoryAccessibilityExtraLarge);
+  // End Vivaldi
+
   return PreferredFontForTextStyleWithMaxCategory(
       UIFontTextStyleBody, self.traitCollection.preferredContentSizeCategory,
       UIContentSizeCategoryAccessibilityExtraLarge);

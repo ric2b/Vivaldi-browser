@@ -16,7 +16,7 @@
 namespace cc {
 namespace {
 
-constexpr char kTracingCategory[] = "cc,benchmark,input,event_latency";
+constexpr char kTracingCategory[] = "cc,benchmark,input,input.scrolling";
 constexpr base::TimeDelta high_latency_threshold = base::Milliseconds(90);
 
 constexpr perfetto::protos::pbzero::EventLatency::EventType ToProtoEnum(
@@ -51,6 +51,7 @@ constexpr perfetto::protos::pbzero::EventLatency::EventType ToProtoEnum(
     CASE(kGesturePinchEnd, GESTURE_PINCH_END);
     CASE(kGesturePinchUpdate, GESTURE_PINCH_UPDATE);
     CASE(kInertialGestureScrollUpdate, INERTIAL_GESTURE_SCROLL_UPDATE);
+    CASE(kMouseMoved, MOUSE_MOVED_EVENT);
   }
 }
 

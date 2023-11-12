@@ -31,9 +31,9 @@ const NGLayoutResult* NGReplacedLayoutAlgorithm::Layout() {
           .block_size;
   container_builder_.SetIntrinsicBlockSize(intrinsic_block_size);
 
-  if (Node().IsMedia() &&
-      RuntimeEnabledFeatures::LayoutMediaNGContainerEnabled())
+  if (Node().IsMedia()) {
     LayoutMediaChildren();
+  }
 
   return container_builder_.ToBoxFragment();
 }
@@ -60,10 +60,6 @@ MinMaxSizesResult NGReplacedLayoutAlgorithm::ComputeMinMaxSizes(
 }
 
 void NGReplacedLayoutAlgorithm::LayoutMediaChildren() {
-  LayoutMedia* layout_media = To<LayoutMedia>(Node().GetLayoutBox());
-  if (auto* video = DynamicTo<LayoutVideo>(layout_media))
-    video->UpdatePlayer(/* is_in_layout */ true);
-
   WritingModeConverter converter(ConstraintSpace().GetWritingDirection(),
                                  container_builder_.Size());
   LogicalRect logical_new_rect(
@@ -75,8 +71,10 @@ void NGReplacedLayoutAlgorithm::LayoutMediaChildren() {
   for (NGLayoutInputNode child = Node().FirstChild(); child;
        child = child.NextSibling()) {
     LayoutUnit width = new_rect.Width();
-    if (child.GetDOMNode()->IsMediaControls())
-      width = layout_media->ComputePanelWidth(new_rect);
+    if (child.GetDOMNode()->IsMediaControls()) {
+      width =
+          To<LayoutMedia>(Node().GetLayoutBox())->ComputePanelWidth(new_rect);
+    }
 
     NGConstraintSpaceBuilder space_builder(ConstraintSpace().GetWritingMode(),
                                            child.Style().GetWritingDirection(),

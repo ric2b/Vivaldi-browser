@@ -5,6 +5,7 @@
 // API for integration testing. To be used on test images with a test component
 // extension.
 [platforms=("chromeos"),
+ modernised_enums,
  implemented_in="chrome/browser/ash/extensions/autotest_private/autotest_private_api.h"]
 namespace autotestPrivate {
 
@@ -77,8 +78,8 @@ namespace autotestPrivate {
     Minimized,
     Maximized,
     Fullscreen,
-    LeftSnapped,
-    RightSnapped,
+    PrimarySnapped,
+    SecondarySnapped,
     PIP,
     Floated
   };
@@ -90,8 +91,8 @@ namespace autotestPrivate {
     WMEventMaximize,
     WMEventMinimize,
     WMEventFullscreen,
-    WMEventSnapLeft,
-    WMEventSnapRight,
+    WMEventSnapPrimary,
+    WMEventSnapSecondary,
     WMEventFloat
   };
 
@@ -273,10 +274,12 @@ namespace autotestPrivate {
   // A mapping of crosapi::BrowserManager::State
   enum LacrosState {
     NotInitialized,
+    Reloading,
     Mounting,
     Unavailable,
     Stopped,
     CreatingLogFile,
+    PreLaunched,
     Starting,
     Running,
     Terminating
@@ -441,6 +444,7 @@ namespace autotestPrivate {
     ShelfItemStatus status;
     boolean showsTooltip;
     boolean pinnedByPolicy;
+    boolean pinStateForcedByType;
     boolean hasNotification;
   };
 
@@ -812,6 +816,8 @@ namespace autotestPrivate {
 
   // Callback invoked when the temporary directory was removed.
   callback RemoveFuseboxTempDirCallback = void();
+
+  callback IsFeatureEnabledCallback = void(boolean enabled);
 
   interface Functions {
     // Must be called to allow autotestPrivateAPI events to be fired.
@@ -1476,6 +1482,13 @@ namespace autotestPrivate {
         long timeout,
         VoidCallback callback);
 
+    // Waits for ambient video to successfully start playback.
+    // |timeout|: the timeout in seconds.
+    // |callback|: Called when the operation has completed.
+    [supportsPromises] static void waitForAmbientVideo(
+        long timeout,
+        VoidCallback callback);
+
     // Disables the automation feature. Note that the event handlers and caches
     // of automation nodes still remain in the test extension and so the next
     // automation.getDesktop will miss initialization. The caller should ensure
@@ -1508,15 +1521,17 @@ namespace autotestPrivate {
         VoidCallback callback);
 
     // Starts collection of ui::LoginEventRecorder data.
-    static void startLoginEventRecorderDataCollection(VoidCallback callback);
+    [supportsPromises] static void startLoginEventRecorderDataCollection(
+        VoidCallback callback);
 
     // Stops ui::LoginEventRecorder data collection and reports all the
     // collected data.
-    static void getLoginEventRecorderLoginEvents(
+    [supportsPromises] static void getLoginEventRecorderLoginEvents(
         GetLoginEventRecorderLoginEventsCallback callback);
 
     // Adds login event to test LoginEventRecorderDataCollection API.
-    static void addLoginEventForTesting(VoidCallback callback);
+    [supportsPromises] static void addLoginEventForTesting(
+        VoidCallback callback);
 
     // Force auto theme mode in dark mode or light mode for testing.
     [supportsPromises] static void forceAutoThemeMode(boolean darkModeEnabled, VoidCallback callback);
@@ -1553,6 +1568,19 @@ namespace autotestPrivate {
     // Ends frame counting in viz and return the collected data.
     [supportsPromises] static void stopFrameCounting(
         StopFrameCountingCallback  callback);
+
+    // Install a bruschetta VM.
+    [supportsPromises] static void installBruschetta(
+      DOMString vm_name, VoidCallback callback);
+
+    // Delete a bruschetta VM.
+    [supportsPromises] static void removeBruschetta(
+      DOMString vm_name, VoidCallback callback);
+
+    // Returns whether a base::Feature is enabled. The state may change because
+    // a Chrome uprev into ChromeOS changed the default feature state.
+    [supportsPromises] static void isFeatureEnabled(
+      DOMString feature_name, IsFeatureEnabledCallback callback);
   };
 
   interface Events {

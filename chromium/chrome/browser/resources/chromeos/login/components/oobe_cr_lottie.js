@@ -7,7 +7,7 @@
  */
 
 import '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
-import '//resources/cr_elements/cr_lottie/cr_lottie.js';
+import '//resources/cros_components/lottie_renderer/lottie-renderer.js';
 import './oobe_icons.html.js';
 
 import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -25,7 +25,8 @@ const OobeCrLottieBase = mixinBehaviors([OobeI18nBehavior], PolymerElement);
 
 /**
  * @typedef {{
- *   animation:  CrLottieElement,
+ *   animation: LottieRenderer,
+ *   container: HTMLElement,
  * }}
  */
 OobeCrLottieBase.$;
@@ -50,29 +51,70 @@ export class OobeCrLottie extends OobeCrLottieBase {
 
       animationUrl: {
         type: String,
+        observer: 'onUrlChanged_',
         value: '',
       },
+
+      preload: {
+        type: Boolean,
+        value: false,
+      },
     };
+  }
+
+  constructor() {
+    super();
+    this.animationPlayer = null;
   }
 
   ready() {
     super.ready();
     this.addEventListener('click', this.onClick_);
-    this.addEventListener('cr-lottie-initialized', this.onInitialized_);
+    // Preload the player so that the first frame is shown.
+    if (this.preload) {
+      this.createPlayer(/*autoplay=*/false);
+    }
   }
 
   onClick_() {
     this.playing = !this.playing;
   }
 
-  onInitialized_(e) {
-    e.stopPropagation();
-    traceOobeLottieExecution();
+  /**
+   *
+   * @param {?boolean} autoplay
+   * @suppress {missingProperties}
+   */
+  createPlayer(autoplay = true) {
+    this.animationPlayer = document.createElement('cros-lottie-renderer');
+    this.animationPlayer.id = 'animation';
+    this.animationPlayer.setAttribute('asset-url', this.animationUrl);
+    this.animationPlayer.autoplay = autoplay;
+    this.$.container.insertBefore(this.animationPlayer, this.$.playPauseIcon);
+  }
+
+  // Update the URL on the player if one exists, otherwise it will be updated
+  // when an instance is created.
+  onUrlChanged_() {
+    if (this.animationUrl && this.animationPlayer) {
+      this.animationPlayer.setAttribute('asset-url', this.animationUrl);
+    }
   }
 
   onPlayingChanged_() {
-    if (this.$) {
-      this.$.animation.setPlay(this.playing);
+    if (this.animationPlayer) {
+      if (this.playing) {
+        this.animationPlayer.play();
+      } else {
+        this.animationPlayer.pause();
+      }
+    } else {
+      if (this.playing) {
+        // Create a player, it will autoplay.
+        this.createPlayer(/*autoplay=*/true);
+      } else {
+        // Nothing to do.
+      }
     }
   }
 

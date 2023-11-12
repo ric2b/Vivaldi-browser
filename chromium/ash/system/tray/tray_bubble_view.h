@@ -108,12 +108,15 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
     // `tray_bubble_view`'s destructor can be called well after it's
     // corresponding tray has been cleaned up.
     base::WeakPtr<Delegate> delegate = nullptr;
-    gfx::NativeWindow parent_window = nullptr;
+    gfx::NativeWindow parent_window = gfx::NativeWindow();
     raw_ptr<View, ExperimentalAsh> anchor_view = nullptr;
     AnchorMode anchor_mode = AnchorMode::kView;
     // Only used if anchor_mode == AnchorMode::kRect.
     gfx::Rect anchor_rect;
     bool is_anchored_to_status_area = true;
+    // If true, the bubble will be anchored to the corner of the shelf, near the
+    // status area button.
+    bool anchor_to_shelf_corner = false;
     ShelfAlignment shelf_alignment = ShelfAlignment::kBottom;
     int preferred_width = 0;
     int max_height = 0;
@@ -123,6 +126,10 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
     int corner_radius = kBubbleCornerRadius;
     absl::optional<gfx::Insets> insets;
     absl::optional<gfx::Insets> margin;
+    // If the view has a large corner radius(e.g. slider bubble), we should
+    // paint the shadow on texture layer since `SystemShadowOnNinePatchLayer`
+    // has geometry limitations. See `SystemShadowOnTextureLayer` for details.
+    bool has_large_corner_radius = false;
     bool has_shadow = true;
     SystemShadow::Type shadow_type = kBubbleShadowType;
     // Use half opaque widget instead of fully opaque.
@@ -181,6 +188,10 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
   // area.
   virtual bool IsAnchoredToStatusArea() const;
 
+  // True if the bubble is anchored to the corner of the shelf, near the status
+  // area button.
+  bool IsAnchoredToShelfCorner() const;
+
   // Stops rerouting key events to this view. If this view is not currently
   // rerouting events, then this function will be idempotent.
   void StopReroutingEvents();
@@ -200,6 +211,8 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
   // views::BubbleDialogDelegateView:
   void OnWidgetClosing(views::Widget* widget) override;
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& bounds) override;
   ui::LayerType GetLayerType() const override;
 
   // views::View:

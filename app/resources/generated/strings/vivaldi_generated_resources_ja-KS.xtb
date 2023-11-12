@@ -23,6 +23,7 @@
 <translation id="1257336506558170607">選んだ証明書エクスポートする</translation>
 <translation id="1297175357211070620">送るとこ</translation>
 <translation id="1303101771013849280">ブックマークHTMLファイル</translation>
+<translation id="1358741672408003399">スペルと文法</translation>
 <translation id="1430915738399379752">印刷</translation>
 <translation id="1451375123200651445">ウェブページ、単一ファイル</translation>
 <translation id="1465176863081977902">オーディオアドレスをコピー (&amp;C)</translation>
@@ -33,6 +34,7 @@
 <translation id="15662109988763471">そのプリンターは使われへんようになってるか、ちゃんとインストールされてへんかも。プリンター確認するか、別のプリンターも試してみて。</translation>
 <translation id="1588438908519853928">通常</translation>
 <translation id="1588870296199743671">このプログラムでリンク開くわ...</translation>
+<translation id="1589055389569595240">スペルと文法出す</translation>
 <translation id="159359590073980872">画像キャッシュ</translation>
 <translation id="1601560923496285236">適用</translation>
 <translation id="1603914832182249871">(プライベート)</translation>
@@ -56,7 +58,6 @@
 <translation id="1925021887439448749">カスタムウェブアドレス入れて</translation>
 <translation id="1932098463447129402">開始時刻</translation>
 <translation id="1936931585862840749">何部刷るか数（1～<ph name="MAX_COPIES" />）で言うて。</translation>
-<translation id="1994173015038366702">サイトURL</translation>
 <translation id="2019718679933488176">オーディオをおニューのタブで開く (&amp;O)</translation>
 <translation id="2050339315714019657">縦向き</translation>
 <translation id="2076269580855484719">このプラグイン表示せえへん</translation>
@@ -72,7 +73,6 @@
 <translation id="219008588003277019">ネイティブクライアントモジュール: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">プレーンテキストとして貼り付ける</translation>
 <translation id="2249605167705922988">例えば 1-5, 8, 11-13</translation>
-<translation id="225240747099314620">保護されたコンテンツへの識別子を許可する（コンピューター再起動せなあかんかもしれへん）</translation>
 <translation id="2280486287150724112">右側の余裕</translation>
 <translation id="2282146716419988068">GPUプロセス</translation>
 <translation id="2301382460326681002">拡張機能のルートフォルダーが無効や。</translation>
@@ -83,7 +83,6 @@
 <translation id="2348176352564285430">アプリ: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">拡張機能のフォルダーどれにするん</translation>
 <translation id="2379281330731083556">システムダイアログ使うて印刷... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="2381756643783702095">送信する前に確認する（その方がええやろ）</translation>
 <translation id="241082044617551207">不明なプラグイン</translation>
 <translation id="2423578206845792524">芸名付けて画像保存するわ... (&amp;V)</translation>
 <translation id="2439110203301358333">パソコンにある他所のプログラムが、Vivaldiの動きに影響するかもしれへん拡張機能追加したわ。</translation>
@@ -106,7 +105,7 @@
 <translation id="2719936478972253983">ブロックされたCookie</translation>
 <translation id="2721037002783622288"><ph name="SEARCH_ENGINE" /> で画像検索 (&amp;S)</translation>
 <translation id="2738771556149464852">終了時刻</translation>
-<translation id="2783321960289401138">ショートカット作るわ...</translation>
+<translation id="2749881179542288782">スペルと文法チェック</translation>
 <translation id="2785873697295365461">ファイル記述子</translation>
 <translation id="2809586584051668049">、他<ph name="NUMBER_ADDITIONAL_DISABLED" />件</translation>
 <translation id="2825758591930162672">サブジェクトの公開鍵</translation>
@@ -115,7 +114,6 @@
 <translation id="2881076733170862447">拡張機能クリックしたとき</translation>
 <translation id="2889064240420137087">このプログラムでリンク開くわ...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" />はこのプリンターと通信できへんかったわ。プリンターほんまに接続されてるか確認して、また試してみて。</translation>
-<translation id="2913331724188855103">サイトに Cookie データの保存と読み取りを許可する（許可してやったらどうや）</translation>
 <translation id="2916745397441987255">拡張機能を検索</translation>
 <translation id="2931157624143513983">印刷可能領域に合わして</translation>
 <translation id="2932085390869194046">ええ感じのパスワードこしらえて...</translation>
@@ -124,7 +122,6 @@
 <translation id="2972581237482394796">さっきのなしにする (&amp;R)</translation>
 <translation id="2993517869960930405">アプリ情報</translation>
 <translation id="3003623123441819449">CSSキャッシュ</translation>
-<translation id="3008272652534848354">許可設定リセット</translation>
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3021678814754966447">フレームのソース出す (&amp;V)</translation>
 <translation id="3036546437875325427">Flash有効にする</translation>
@@ -160,14 +157,11 @@
 <translation id="3393582007140394275">画面キャストできへんわ。</translation>
 <translation id="345693547134384690">さらのタブで画像を開く (&amp;I)</translation>
 <translation id="3493881266323043047">有効期間</translation>
-<translation id="3494769164076977169">サイトが何個も一気にファイルを自動的にダウンロードしようしたら確認する（その方がええやろ）</translation>
-<translation id="3505030558724226696">デバイスのアクセス取り消す</translation>
 <translation id="3511307672085573050">リンクのアドレスをコピー (&amp;E)</translation>
 <translation id="354068948465830244">サイトデータ読み取ったり変えたりできるで</translation>
 <translation id="3560034655160545939">スペルチェック (&amp;S)</translation>
 <translation id="3587482841069643663">全部</translation>
 <translation id="3627588569887975815">プライベートウィンドウでリンク開く (&amp;G)</translation>
-<translation id="3627879631695760395">「<ph name="APP" />」インストールするわ...</translation>
 <translation id="3678156199662914018">拡張機能: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> 画面共有リクエスト</translation>
 <translation id="3708684582558000260">閉じたサイトにはデータの送受信させへん</translation>
@@ -176,7 +170,6 @@
 <translation id="3760460896538743390">バックグラウンドページ調べる (&amp;B)</translation>
 <translation id="3797900183766075808"><ph name="SEARCH_ENGINE" />で「<ph name="SEARCH_TERMS" />」探す (&amp;S)</translation>
 <translation id="3798449238516105146">バージョン</translation>
-<translation id="3800806661949714323">全部出す（その方がええやろ）</translation>
 <translation id="3810973564298564668">管理</translation>
 <translation id="3838085852053358637">拡張機能、読み込めまれへんかったわ</translation>
 <translation id="383891835335927981">拡大縮小を設定したサイトないわ</translation>
@@ -191,11 +184,11 @@
 <translation id="3936390757709632190">オーディオをおニューのタブで開く (&amp;O)</translation>
 <translation id="3943582379552582368">戻るわ (&amp;B)</translation>
 <translation id="3948116654032448504"><ph name="SEARCH_ENGINE" /> で画像検索 (&amp;S)</translation>
-<translation id="3955193568934677022">保護されたコンテンツの再生をサイトに許可する（許可してやったらどうや）</translation>
 <translation id="3979395879372752341">さらの拡張機能が追加されたで (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">ハイライトしたとこに行くリンクコピー</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">辞書に入れとく (&amp;A)</translation>
+<translation id="4058793769387728514">ドキュメントチェック</translation>
 <translation id="407520071244661467">倍率</translation>
 <translation id="4079140982534148664">拡張スペルチェック使う</translation>
 <translation id="4087089424473531098">拡張機能作ったで:
@@ -226,6 +219,7 @@
 <translation id="4423376891418188461">設定おじゃんにする</translation>
 <translation id="4478664379124702289">芸名付けてリンク先保存するわ... (&amp;K)</translation>
 <translation id="4520385623207007473">使うてるCookie</translation>
+<translation id="4580596421317071374">パスワード、このデバイスの <ph name="GOOGLE_PASSWORD_MANAGER" /> に保存されてるわ。</translation>
 <translation id="4593021220803146968"><ph name="URL" />に行く (&amp;G)</translation>
 <translation id="4595560905247879544">アプリと拡張機能は管理者(<ph name="CUSTODIAN_NAME" />)しか変えられへんねん。</translation>
 <translation id="4613271546271159013">さらのタブ開いたときに出るページが拡張機能に変更されたわ。</translation>
@@ -241,7 +235,7 @@
 <translation id="4839303808932127586">芸名付けて動画保存するわ... (&amp;V)</translation>
 <translation id="4840096453115567876">プライベートモードやめる？</translation>
 <translation id="488785315393301722">詳細を表示</translation>
-<translation id="4907306957610201395">権限のカテゴリー</translation>
+<translation id="4895799941222633551">ショートカット作る(&amp;S)...</translation>
 <translation id="4912643508233590958">アイドル状態から起きた</translation>
 <translation id="49265687513387605">画面キャストできへんわ。画面共有始めるんかを確認するメッセージで同意したかどうか確認してちょうだい。</translation>
 <translation id="4927753642311223124">ここ、なんも見るもんないで。</translation>
@@ -250,7 +244,6 @@
 <translation id="4988526792673242964">ページ</translation>
 <translation id="49896407730300355">反時計回りに回転 (&amp;O)</translation>
 <translation id="4989966318180235467">バックグラウンドページ調べる (&amp;B)</translation>
-<translation id="5000922062037820727">ブロック（そうした方がええやろ）</translation>
 <translation id="5027562294707732951">拡張機能を追加</translation>
 <translation id="5039804452771397117">許可</translation>
 <translation id="5057110919553308744">拡張機能クリックしたとき</translation>
@@ -280,10 +273,10 @@
 <translation id="5370819323174483825">もっかい読み込む (&amp;R)</translation>
 <translation id="5390743329570580756">送信先</translation>
 <translation id="5398572795982417028">ページ範囲が上限超えてるわ。<ph name="MAXIMUM_PAGE" />が上限やねん。</translation>
+<translation id="5423753908060469325">ショートカット作る(&amp;S)...</translation>
 <translation id="5425042808445046667">ダウンロード続ける</translation>
 <translation id="5427459444770871191">時計回りに回転 (&amp;C)</translation>
 <translation id="5431318178759467895">カラー</translation>
-<translation id="5483785310822538350">ファイルとデバイスのアクセス取り消す</translation>
 <translation id="5485102783864353244">アプリを追加</translation>
 <translation id="5486561344817861625">ブラウザー再起動のシミュレート</translation>
 <translation id="5487521232677179737">データ消す</translation>
@@ -296,7 +289,6 @@
 <translation id="5614553682702429503">パスワード保存しとく？</translation>
 <translation id="5623842676595125836">ログ</translation>
 <translation id="5627086634964711283">この拡張機能な、ホームボタンクリックする時に表示されるページも制御するで。</translation>
-<translation id="563535393368633106">アクセスする前に確認する（その方がええやろ）</translation>
 <translation id="5638309510554459422"><ph name="BEGIN_LINK" />Chrome ウェブストア<ph name="END_LINK" />で拡張機能とかテーマ探せるで</translation>
 <translation id="5677928146339483299">ブロックしてるで</translation>
 <translation id="5707185214361380026">拡張機能、読み込めまれへんかったわ：</translation>
@@ -348,7 +340,6 @@
 <translation id="6315493146179903667">全部前に持ってくる</translation>
 <translation id="6326855256003666642">キープアライブカウント</translation>
 <translation id="6374469231428023295">もっかいやる</translation>
-<translation id="6385543213911723544">サイトはCookieデータの保存と読み込みができるで</translation>
 <translation id="6398765197997659313">全画面やんぴ</translation>
 <translation id="6406303162637086258">ブラウザー再起動のシミュレート</translation>
 <translation id="6445450263907939268">この変更いらんねやったら、前の設定復元してもうてもええで。</translation>
@@ -368,13 +359,12 @@
 <translation id="6787839852456839824">キーボードショートカット</translation>
 <translation id="6798954102094737107">プラグイン: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">変更したやつそのままにする</translation>
-<translation id="6817174620439930047">サイトがシステムエクスクルーシブメッセージを使ってMIDIデバイスにアクセスするときに確認する（その方がええやろ）</translation>
 <translation id="6824564591481349393">メールアドレスをコピー (&amp;E)</translation>
 <translation id="6840155290835956714">送信する前に確認する</translation>
 <translation id="6886871292305414135">さらのタブでリンク開く (&amp;T)</translation>
 <translation id="6892812721183419409"><ph name="USER" /> としてリンク開く</translation>
 <translation id="6900284862687837908">バックグラウンドアプリ: <ph name="BACKGROUND_APP_URL" /></translation>
-<translation id="6904344821472985372">ファイルアクセス権取り消す</translation>
+<translation id="6916590542764765824">拡張機能管理</translation>
 <translation id="6945221475159498467">選択</translation>
 <translation id="6955446738988643816">ポップアップ調べる</translation>
 <translation id="6970856801391541997">指定したページを印刷</translation>
@@ -385,15 +375,16 @@
 <translation id="7070484045139057854">サイトデータ読み取ったり変えたりできるで</translation>
 <translation id="708060913198414444">音声のアドレスをコピー (&amp;O)</translation>
 <translation id="7121728544325372695">スマートダッシュ</translation>
+<translation id="7144856456372460176"><ph name="APP" />インストール (&amp;I)...</translation>
 <translation id="7175353351958621980">ロード元:</translation>
 <translation id="7186088072322679094">ツールバーに残す</translation>
 <translation id="7287143125007575591">アクセス拒否されたわ。</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
+<translation id="7339785458027436441">入力中にスペルチェック</translation>
 <translation id="73786666777299047">Chrome ウェブストア開く</translation>
 <translation id="7385854874724088939">印刷うまい事いかんかったわ。プリンター確認してからもっかいやってみて。</translation>
 <translation id="7412226954991670867">GPUメモリ</translation>
 <translation id="7421925624202799674">ページのソース出す (&amp;V)</translation>
-<translation id="7423098979219808738">最初に確認する</translation>
 <translation id="7427348830195639090">バックグラウンドページ: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">このプリンター選んだら、そこに書いてる拡張機能にプリンターへのアクセスが許可されるで:</translation>
 <translation id="749028671485790643">ユーザー <ph name="VALUE" /></translation>
@@ -448,7 +439,6 @@
 <translation id="8261378640211443080">この拡張機能、<ph name="IDS_EXTENSION_WEB_STORE_TITLE" />で提供されてへんで。あんたの知らんうちに入れ込まれたっていうこと、ないかな。</translation>
 <translation id="8351419472474436977">この拡張機能にプロキシー設定が制御されてるわ。オンラインでやること、この拡張機能に変更、遮断、傍受される可能性あるで。ほんまにそれでええか、胸に手ぇ当てて考えてみてな。</translation>
 <translation id="8382913212082956454">メールアドレスをコピー (&amp;E)</translation>
-<translation id="8413385045638830869">最初に確認する（そのほうがええやろ）</translation>
 <translation id="8434480141477525001">NaClデバッグポート</translation>
 <translation id="8449008133205184768">ペーストしてスタイル合わせる</translation>
 <translation id="8477384620836102176">&amp; 全般</translation>
@@ -457,7 +447,6 @@
 <translation id="8523493869875972733">変更したやつそのままにする</translation>
 <translation id="8546306075665861288">画像キャッシュ</translation>
 <translation id="8569682776816196752">送信先が見つからへんわ</translation>
-<translation id="857943718398505171">ええよ（許可してやったらどうや）</translation>
 <translation id="8584280235376696778">動画をおニューのタブで開く (&amp;O)</translation>
 <translation id="8605428685123651449">SQLiteメモリー</translation>
 <translation id="8615618338313291042">プライベートアプリ: <ph name="APP_NAME" /></translation>
@@ -488,7 +477,6 @@
 <translation id="9056810968620647706">マッチ数ゼロやったわ。</translation>
 <translation id="9084064520949870008">ウィンドウとして開く</translation>
 <translation id="9137916601698928395"><ph name="USER" />としてリンク開く</translation>
-<translation id="91568222606626347">ショートカット作るわ...</translation>
 <translation id="916607977885256133">ピクチャー イン ピクチャー</translation>
 <translation id="9170848237812810038">やんぴ (&amp;U)</translation>
 <translation id="9215293857209265904">「<ph name="EXTENSION_NAME" />」が追加されたで</translation>

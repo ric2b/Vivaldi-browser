@@ -30,12 +30,18 @@ struct PromiseApp {
   explicit PromiseApp(const apps::PackageId& package_id);
   ~PromiseApp();
 
+  bool operator==(const PromiseApp&) const;
+
   PackageId package_id;
 
   absl::optional<std::string> name;
   absl::optional<float> progress;
   PromiseStatus status = PromiseStatus::kUnknown;
-  bool should_show = true;
+
+  // Hide the promise app from the Launcher/ Shelf by default. Only show
+  // it when we have enough information about the installing package (e.g. name,
+  // icon).
+  absl::optional<bool> should_show;
 
   std::unique_ptr<PromiseApp> Clone() const;
 };
@@ -43,6 +49,20 @@ struct PromiseApp {
 std::ostream& operator<<(std::ostream& out, const PromiseApp& promise_app);
 
 using PromiseAppPtr = std::unique_ptr<PromiseApp>;
+
+class PromiseAppIcon {
+ public:
+  PromiseAppIcon();
+  ~PromiseAppIcon();
+  PromiseAppIcon(const PromiseAppIcon&) = delete;
+  PromiseAppIcon& operator=(const PromiseAppIcon&) = delete;
+
+  gfx::ImageSkia icon;
+  absl::optional<int> width_in_pixels;
+  bool is_masking_allowed;
+};
+
+using PromiseAppIconPtr = std::unique_ptr<PromiseAppIcon>;
 
 }  // namespace apps
 

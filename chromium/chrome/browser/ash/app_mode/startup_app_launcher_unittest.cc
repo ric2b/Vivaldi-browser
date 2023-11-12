@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "ash/test/ash_test_helper.h"
 #include "base/check.h"
 #include "base/command_line.h"
@@ -54,7 +55,6 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
-#include "chromeos/ash/components/standalone_browser/browser_support.h"
 #include "chromeos/crosapi/mojom/chrome_app_kiosk_service.mojom-forward.h"
 #include "chromeos/crosapi/mojom/chrome_app_kiosk_service.mojom-shared.h"
 #include "components/account_id/account_id.h"
@@ -72,10 +72,11 @@
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "test_kiosk_extension_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
-using ash::standalone_browser::BrowserSupport;
+using extensions::Extension;
 
 namespace ash {
 
@@ -118,9 +119,6 @@ class TestAppLaunchDelegate : public KioskAppLauncher::NetworkDelegate,
   KioskAppLaunchError::Error launch_error() const { return launch_error_; }
 
   void set_network_ready(bool network_ready) { network_ready_ = network_ready; }
-  void set_showing_network_config_screen(bool showing) {
-    showing_network_config_screen_ = showing;
-  }
 
   void ClearLaunchStateChanges() {
     while (!launch_state_changes_.IsEmpty()) {
@@ -141,9 +139,6 @@ class TestAppLaunchDelegate : public KioskAppLauncher::NetworkDelegate,
     SetLaunchState(LaunchState::kInitializingNetwork);
   }
   bool IsNetworkReady() const override { return network_ready_; }
-  bool IsShowingNetworkConfigScreen() const override {
-    return showing_network_config_screen_;
-  }
 
   // `KioskAppLauncher::Observer`:
   void OnAppInstalling() override {
@@ -166,7 +161,6 @@ class TestAppLaunchDelegate : public KioskAppLauncher::NetworkDelegate,
   KioskAppLaunchError::Error launch_error_ = KioskAppLaunchError::Error::kNone;
 
   bool network_ready_ = false;
-  bool showing_network_config_screen_ = false;
 
   base::test::RepeatingTestFuture<LaunchState> launch_state_changes_;
 };
@@ -235,7 +229,7 @@ class TestKioskLoaderVisitor
     return pending_update_urls_;
   }
 
-  bool FinishPendingInstall(const extensions::Extension* extension) {
+  bool FinishPendingInstall(const Extension* extension) {
     if (!pending_crx_files_.count(extension->id()) &&
         !pending_update_urls_.count(extension->id())) {
       return false;
@@ -375,11 +369,10 @@ void InitAppWindow(extensions::AppWindow* app_window, const gfx::Rect& bounds) {
 }
 
 extensions::AppWindow* CreateAppWindow(Profile* profile,
-                                       const TestKioskExtensionBuilder& builder,
+                                       const Extension& app,
                                        gfx::Rect bounds = {}) {
   extensions::AppWindow* app_window = new extensions::AppWindow(
-      profile, std::make_unique<ChromeAppDelegate>(profile, true),
-      builder.Build().get());
+      profile, std::make_unique<ChromeAppDelegate>(profile, true), &app);
   InitAppWindow(app_window, bounds);
   return app_window;
 }
@@ -434,40 +427,34 @@ class ScopedKioskAppManagerOverrides : public KioskAppManager::Overrides {
         kAccountsPrefDeviceLocalAccountAutoLoginDelay, 0);
   }
 
-  [[nodiscard]] AssertionResult DownloadPrimaryApp(
-      const TestKioskExtensionBuilder& app_builder) {
-    return DownloadPrimaryApp(app_builder.extension_id(),
-                              app_builder.version());
-  }
-
-  [[nodiscard]] AssertionResult DownloadPrimaryApp(const std::string& app_id,
-                                                   const std::string& version) {
+  [[nodiscard]] AssertionResult DownloadPrimaryApp(const Extension& app) {
     if (!external_cache_) {
       return AssertionFailure() << "External cache not initialized";
     }
 
-    if (!external_cache_->pending_downloads().count(app_id)) {
-      return AssertionFailure() << "Download not pending: " << app_id;
+    if (!external_cache_->pending_downloads().count(app.id())) {
+      return AssertionFailure() << "Download not pending: " << app.id();
     }
 
     if (!external_cache_->SimulateExtensionDownloadFinished(
-            app_id, GetExtensionPath(app_id), version, /*is_update=*/false)) {
+            app.id(), GetExtensionPath(app.id()), app.VersionString(),
+            /*is_update=*/false)) {
       return AssertionFailure() << " Finish download attempt failed";
     }
 
     return AssertionSuccess();
   }
 
-  [[nodiscard]] AssertionResult PrecachePrimaryApp(const std::string& app_id,
-                                                   const std::string& version) {
+  [[nodiscard]] AssertionResult PrecachePrimaryApp(
+      const extensions::Extension& app) {
     if (!external_cache_) {
       return AssertionFailure() << "External cache not initialized";
     }
 
     base::test::TestFuture<const std::string&, bool> future;
     external_cache_->PutExternalExtension(
-        app_id, base::FilePath(GetExtensionPath(app_id)), version,
-        future.GetCallback());
+        app.id(), base::FilePath(GetExtensionPath(app.id())),
+        app.VersionString(), future.GetCallback());
 
     if (!std::get<1>(future.Get())) {
       return AssertionFailure() << "Precaching extension failed";
@@ -510,6 +497,22 @@ class ScopedKioskAppManagerOverrides : public KioskAppManager::Overrides {
   raw_ptr<chromeos::TestExternalCache, ExperimentalAsh> external_cache_;
   bool kiosk_app_session_initialized_ = false;
 };
+
+TestKioskExtensionBuilder PrimaryAppBuilder() {
+  return std::move(
+      TestKioskExtensionBuilder(extensions::Manifest::TYPE_PLATFORM_APP,
+                                kTestPrimaryAppId)
+          .set_version("1.0"));
+}
+
+TestKioskExtensionBuilder ExtensionBuilder() {
+  return TestKioskExtensionBuilder(extensions::Manifest::TYPE_EXTENSION,
+                                   kTestPrimaryAppId);
+}
+
+TestKioskExtensionBuilder SecondaryAppBuilder(const std::string& id) {
+  return TestKioskExtensionBuilder(extensions::Manifest::TYPE_PLATFORM_APP, id);
+}
 
 }  // namespace
 
@@ -578,29 +581,17 @@ class StartupAppLauncherNoCreateTest
     return kiosk_app_manager_overrides_;
   }
 
-  [[nodiscard]] AssertionResult DownloadPrimaryApp(
-      const TestKioskExtensionBuilder& app_builder) {
-    return kiosk_app_manager_overrides_.DownloadPrimaryApp(app_builder);
+  [[nodiscard]] AssertionResult DownloadPrimaryApp(const Extension& app) {
+    return kiosk_app_manager_overrides_.DownloadPrimaryApp(app);
   }
 
-  [[nodiscard]] AssertionResult DownloadPrimaryApp(const std::string& app_id,
-                                                   const std::string& version) {
-    return kiosk_app_manager_overrides_.DownloadPrimaryApp(app_id, version);
-  }
-
-  [[nodiscard]] AssertionResult FinishPrimaryAppInstall(
-      const TestKioskExtensionBuilder& app_builder) {
-    const std::string& id = app_builder.extension_id();
+  [[nodiscard]] AssertionResult FinishPrimaryAppInstall(const Extension& app) {
+    const std::string& id = app.id();
     if (!external_apps_loader_handler_->pending_crx_files().count(id)) {
-      return AssertionFailure() << "App install not peding: " << id;
+      return AssertionFailure() << "App install not pending: " << id;
     }
 
-    scoped_refptr<const extensions::Extension> app = app_builder.Build();
-    if (!app) {
-      return AssertionFailure() << "App builder failed: " << id;
-    }
-
-    if (!external_apps_loader_handler_->FinishPendingInstall(app.get())) {
+    if (!external_apps_loader_handler_->FinishPendingInstall(&app)) {
       return AssertionFailure() << "Finish install attempt failed: " << id;
     }
 
@@ -608,14 +599,14 @@ class StartupAppLauncherNoCreateTest
   }
 
   [[nodiscard]] AssertionResult DownloadAndInstallPrimaryApp(
-      const TestKioskExtensionBuilder& app_builder) {
+      const Extension& app) {
     AssertionResult download_result =
-        kiosk_app_manager_overrides_.DownloadPrimaryApp(app_builder);
+        kiosk_app_manager_overrides_.DownloadPrimaryApp(app);
     if (!download_result) {
       return download_result;
     }
 
-    AssertionResult install_result = FinishPrimaryAppInstall(app_builder);
+    AssertionResult install_result = FinishPrimaryAppInstall(app);
     if (!install_result) {
       return install_result;
     }
@@ -624,19 +615,14 @@ class StartupAppLauncherNoCreateTest
   }
 
   [[nodiscard]] AssertionResult FinishSecondaryExtensionInstall(
-      const TestKioskExtensionBuilder& builder) {
-    const std::string& id = builder.extension_id();
+      const Extension& extension) {
+    const std::string& id = extension.id();
     if (!external_apps_loader_handler_->pending_update_urls().count(id)) {
       return AssertionFailure()
              << "Secondary extension install not pending: " << id;
     }
 
-    scoped_refptr<const extensions::Extension> extension = builder.Build();
-    if (!extension) {
-      return AssertionFailure() << "Extension builder failed: " << id;
-    }
-
-    if (!external_apps_loader_handler_->FinishPendingInstall(extension.get())) {
+    if (!external_apps_loader_handler_->FinishPendingInstall(&extension)) {
       return AssertionFailure() << "Finish install attempt failed: " << id;
     }
 
@@ -670,13 +656,32 @@ class StartupAppLauncherNoCreateTest
     provider->VisitRegisteredExtension();
   }
 
- protected:
+  auto CreateStartupAppLauncher() {
+    return CreateStartupAppLauncherInternal(/*should_skip_install=*/false);
+  }
+
+  auto CreateStartupAppLauncherForSessionRestore() {
+    return CreateStartupAppLauncherInternal(/*should_skip_install=*/true);
+  }
+
+  void PreinstallApp(const Extension& app) { service()->AddExtension(&app); }
+
   TestAppLaunchDelegate startup_launch_delegate_;
 
   std::unique_ptr<AppLaunchTracker> app_launch_tracker_;
   std::unique_ptr<TestKioskLoaderVisitor> external_apps_loader_handler_;
 
  private:
+  std::unique_ptr<KioskAppLauncher> CreateStartupAppLauncherInternal(
+      bool should_skip_install) {
+    std::unique_ptr<KioskAppLauncher> startup_app_launcher =
+        std::make_unique<StartupAppLauncher>(profile(), kTestPrimaryAppId,
+                                             should_skip_install,
+                                             &startup_launch_delegate_);
+    startup_app_launcher->AddObserver(&startup_launch_delegate_);
+    return startup_app_launcher;
+  }
+
   AshTestHelper ash_test_helper_;
   base::test::ScopedCommandLine command_line_;
 
@@ -694,15 +699,31 @@ TEST_F(StartupAppLauncherNoCreateTest, ExtensionDownloadBackoffReduced) {
   ASSERT_TRUE(external_cache());
   EXPECT_FALSE(external_cache()->backoff_policy().has_value());
 
-  auto startup_app_launcher = std::make_unique<StartupAppLauncher>(
-      profile(), kTestPrimaryAppId, /*should_skip_install=*/false,
-      &startup_launch_delegate_);
+  auto startup_app_launcher = CreateStartupAppLauncher();
 
   ASSERT_TRUE(external_cache()->backoff_policy().has_value());
   EXPECT_EQ(external_cache()->backoff_policy()->maximum_backoff_ms, 3000);
 
   startup_app_launcher.reset();
   EXPECT_FALSE(external_cache()->backoff_policy().has_value());
+}
+
+TEST_F(StartupAppLauncherNoCreateTest, AppNotKioskEnabledOnSessionRestore) {
+  PreinstallApp(*PrimaryAppBuilder().set_kiosk_enabled(false).Build());
+  auto startup_app_launcher = CreateStartupAppLauncherForSessionRestore();
+
+  startup_app_launcher->Initialize();
+
+  EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
+            LaunchState::kReadyToLaunch);
+
+  startup_app_launcher->LaunchApp();
+
+  EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
+            LaunchState::kLaunchFailed);
+
+  EXPECT_EQ(startup_launch_delegate_.launch_error(),
+            KioskAppLaunchError::Error::kUnableToLaunch);
 }
 
 // Tests with `StartupAppLauncher` object created.
@@ -712,10 +733,7 @@ class StartupAppLauncherTest : public StartupAppLauncherNoCreateTest {
   void SetUp() override {
     StartupAppLauncherNoCreateTest::SetUp();
 
-    startup_app_launcher_ = std::make_unique<StartupAppLauncher>(
-        profile(), kTestPrimaryAppId, /*should_skip_install=*/false,
-        &startup_launch_delegate_);
-    startup_app_launcher_->AddObserver(&startup_launch_delegate_);
+    startup_app_launcher_ = CreateStartupAppLauncher();
   }
 
   void TearDown() override {
@@ -743,14 +761,13 @@ TEST_F(StartupAppLauncherTest, PrimaryAppLaunchFlow) {
   EXPECT_TRUE(external_apps_loader_handler_->pending_crx_files().empty());
   EXPECT_TRUE(external_apps_loader_handler_->pending_update_urls().empty());
 
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  ASSERT_TRUE(DownloadPrimaryApp(primary_app_builder));
+  scoped_refptr<const Extension> primary_app = PrimaryAppBuilder().Build();
+  ASSERT_TRUE(DownloadPrimaryApp(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
 
-  ASSERT_TRUE(FinishPrimaryAppInstall(primary_app_builder));
+  ASSERT_TRUE(FinishPrimaryAppInstall(*primary_app));
 
   EXPECT_TRUE(external_apps_loader_handler_->pending_update_urls().empty());
   EXPECT_TRUE(external_apps_loader_handler_->pending_crx_files().empty());
@@ -759,7 +776,7 @@ TEST_F(StartupAppLauncherTest, PrimaryAppLaunchFlow) {
             LaunchState::kReadyToLaunch);
 
   startup_app_launcher_->LaunchApp();
-  CreateAppWindow(profile(), primary_app_builder);
+  CreateAppWindow(profile(), *primary_app);
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchSucceeded);
@@ -769,12 +786,9 @@ TEST_F(StartupAppLauncherTest, PrimaryAppLaunchFlow) {
 }
 
 TEST_F(StartupAppLauncherTest, OfflineLaunchWithPrimaryAppPreInstalled) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.set_version("1.0");
-  scoped_refptr<const extensions::Extension> primary_app =
-      primary_app_builder.Build();
-  service()->AddExtension(primary_app.get());
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder().set_version("1.0").Build();
+  PreinstallApp(*primary_app);
 
   startup_app_launcher_->Initialize();
 
@@ -789,14 +803,15 @@ TEST_F(StartupAppLauncherTest, OfflineLaunchWithPrimaryAppPreInstalled) {
   // it's ready should be ignored - i.e. startup app launcher should not attempt
   // to relaunch the app, nor request the update installation.
   startup_app_launcher_->ContinueWithNetworkReady();
-  ASSERT_TRUE(DownloadPrimaryApp(kTestPrimaryAppId, "1.1"));
+  ASSERT_TRUE(
+      DownloadPrimaryApp(*PrimaryAppBuilder().set_version("1.1").Build()));
 
   EXPECT_TRUE(external_apps_loader_handler_->pending_crx_files().empty());
   EXPECT_TRUE(external_apps_loader_handler_->pending_update_urls().empty());
   EXPECT_TRUE(startup_launch_delegate_.ExpectNoLaunchStateChanges());
 
   startup_app_launcher_->LaunchApp();
-  CreateAppWindow(profile(), primary_app_builder);
+  CreateAppWindow(profile(), *primary_app);
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchSucceeded);
@@ -807,12 +822,9 @@ TEST_F(StartupAppLauncherTest, OfflineLaunchWithPrimaryAppPreInstalled) {
 
 TEST_F(StartupAppLauncherTest,
        OfflineLaunchWithPrimaryAppPreInstalled_UpdateFoundAfterLaunch) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.set_version("1.0");
-  scoped_refptr<const extensions::Extension> primary_app =
-      primary_app_builder.Build();
-  service()->AddExtension(primary_app.get());
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder().set_version("1.0").Build();
+  PreinstallApp(*primary_app);
 
   startup_app_launcher_->Initialize();
 
@@ -824,7 +836,7 @@ TEST_F(StartupAppLauncherTest,
             LaunchState::kReadyToLaunch);
 
   startup_app_launcher_->LaunchApp();
-  CreateAppWindow(profile(), primary_app_builder);
+  CreateAppWindow(profile(), *primary_app);
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchSucceeded);
@@ -837,7 +849,8 @@ TEST_F(StartupAppLauncherTest,
   // it's ready should be ignored - i.e. startup app launcher should not attempt
   // to relaunch the app, nor request the update installation.
   startup_app_launcher_->ContinueWithNetworkReady();
-  ASSERT_TRUE(DownloadPrimaryApp(kTestPrimaryAppId, "1.1"));
+  ASSERT_TRUE(
+      DownloadPrimaryApp(*PrimaryAppBuilder().set_version("1.1").Build()));
 
   EXPECT_TRUE(external_apps_loader_handler_->pending_crx_files().empty());
   EXPECT_TRUE(external_apps_loader_handler_->pending_update_urls().empty());
@@ -873,7 +886,7 @@ TEST_F(StartupAppLauncherTest, PrimaryAppDownloadFailure) {
 TEST_F(StartupAppLauncherTest, PrimaryAppCrxInstallFailure) {
   InitializeLauncherWithNetworkReady();
 
-  ASSERT_TRUE(DownloadPrimaryApp(kTestPrimaryAppId, "1.0"));
+  ASSERT_TRUE(DownloadPrimaryApp(*PrimaryAppBuilder().Build()));
   startup_launch_delegate_.ClearLaunchStateChanges();
 
   ASSERT_TRUE(
@@ -889,15 +902,14 @@ TEST_F(StartupAppLauncherTest, PrimaryAppCrxInstallFailure) {
 TEST_F(StartupAppLauncherTest, PrimaryAppNotKioskEnabled) {
   InitializeLauncherWithNetworkReady();
 
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.set_kiosk_enabled(false);
-  ASSERT_TRUE(DownloadPrimaryApp(primary_app_builder));
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder().set_kiosk_enabled(false).Build();
+  ASSERT_TRUE(DownloadPrimaryApp(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
 
-  ASSERT_TRUE(FinishPrimaryAppInstall(primary_app_builder));
+  ASSERT_TRUE(FinishPrimaryAppInstall(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchFailed);
@@ -909,14 +921,13 @@ TEST_F(StartupAppLauncherTest, PrimaryAppNotKioskEnabled) {
 TEST_F(StartupAppLauncherTest, PrimaryAppIsExtension) {
   InitializeLauncherWithNetworkReady();
 
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_EXTENSION,
-                                                kTestPrimaryAppId);
-  ASSERT_TRUE(DownloadPrimaryApp(primary_app_builder));
+  scoped_refptr<const Extension> primary_app = ExtensionBuilder().Build();
+  ASSERT_TRUE(DownloadPrimaryApp(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
 
-  ASSERT_TRUE(FinishPrimaryAppInstall(primary_app_builder));
+  ASSERT_TRUE(FinishPrimaryAppInstall(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchFailed);
@@ -928,33 +939,32 @@ TEST_F(StartupAppLauncherTest, PrimaryAppIsExtension) {
 TEST_F(StartupAppLauncherTest, LaunchWithSecondaryApps) {
   InitializeLauncherWithNetworkReady();
 
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.AddSecondaryExtension(kSecondaryAppId);
-  primary_app_builder.AddSecondaryExtensionWithEnabledOnLaunch(
-      kExtraSecondaryAppId, false);
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder()
+          .AddSecondaryExtension(kSecondaryAppId)
+          .AddSecondaryExtensionWithEnabledOnLaunch(kExtraSecondaryAppId, false)
+          .Build();
 
-  ASSERT_TRUE(DownloadPrimaryApp(primary_app_builder));
+  ASSERT_TRUE(DownloadPrimaryApp(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
 
-  ASSERT_TRUE(FinishPrimaryAppInstall(primary_app_builder));
+  ASSERT_TRUE(FinishPrimaryAppInstall(*primary_app));
 
-  TestKioskExtensionBuilder secondary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                  kSecondaryAppId);
-  secondary_app_builder.set_kiosk_enabled(false);
-  ASSERT_TRUE(FinishSecondaryExtensionInstall(secondary_app_builder));
+  scoped_refptr<const Extension> secondary_app =
+      SecondaryAppBuilder(kSecondaryAppId).set_kiosk_enabled(false).Build();
+  ASSERT_TRUE(FinishSecondaryExtensionInstall(*secondary_app));
 
-  TestKioskExtensionBuilder disabled_secondary_app_builder(
-      Manifest::TYPE_PLATFORM_APP, kExtraSecondaryAppId);
-  ASSERT_TRUE(FinishSecondaryExtensionInstall(disabled_secondary_app_builder));
+  scoped_refptr<const Extension> disabled_secondary_app =
+      SecondaryAppBuilder(kExtraSecondaryAppId).Build();
+  ASSERT_TRUE(FinishSecondaryExtensionInstall(*disabled_secondary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kReadyToLaunch);
 
   startup_app_launcher_->LaunchApp();
-  CreateAppWindow(profile(), primary_app_builder);
+  CreateAppWindow(profile(), *primary_app);
 
   EXPECT_TRUE(registry()->enabled_extensions().Contains(kTestPrimaryAppId));
   EXPECT_TRUE(registry()->enabled_extensions().Contains(kSecondaryAppId));
@@ -978,26 +988,24 @@ TEST_F(StartupAppLauncherTest, LaunchWithSecondaryApps) {
 TEST_F(StartupAppLauncherTest, LaunchWithSecondaryExtension) {
   InitializeLauncherWithNetworkReady();
 
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.AddSecondaryExtension(kSecondaryAppId);
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder().AddSecondaryExtension(kSecondaryAppId).Build();
 
-  ASSERT_TRUE(DownloadPrimaryApp(primary_app_builder));
+  ASSERT_TRUE(DownloadPrimaryApp(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
 
-  ASSERT_TRUE(FinishPrimaryAppInstall(primary_app_builder));
+  ASSERT_TRUE(FinishPrimaryAppInstall(*primary_app));
 
-  TestKioskExtensionBuilder secondary_extension_builder(
-      Manifest::TYPE_EXTENSION, kSecondaryAppId);
-  secondary_extension_builder.set_kiosk_enabled(false);
-  ASSERT_TRUE(FinishSecondaryExtensionInstall(secondary_extension_builder));
+  scoped_refptr<const Extension> secondary_extension =
+      SecondaryAppBuilder(kSecondaryAppId).set_kiosk_enabled(false).Build();
+  ASSERT_TRUE(FinishSecondaryExtensionInstall(*secondary_extension));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kReadyToLaunch);
   startup_app_launcher_->LaunchApp();
-  CreateAppWindow(profile(), primary_app_builder);
+  CreateAppWindow(profile(), *primary_app);
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchSucceeded);
@@ -1008,20 +1016,14 @@ TEST_F(StartupAppLauncherTest, LaunchWithSecondaryExtension) {
 }
 
 TEST_F(StartupAppLauncherTest, OfflineWithPrimaryAndSecondaryAppInstalled) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.set_version("1.0");
-  primary_app_builder.AddSecondaryExtension(kSecondaryAppId);
-  scoped_refptr<const extensions::Extension> primary_app =
-      primary_app_builder.Build();
-  service()->AddExtension(primary_app.get());
-
-  TestKioskExtensionBuilder secondary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                  kSecondaryAppId);
-  secondary_app_builder.set_kiosk_enabled(false);
-  scoped_refptr<const extensions::Extension> secondary_app =
-      secondary_app_builder.Build();
-  service()->AddExtension(secondary_app.get());
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder()
+          .set_version("1.0")
+          .AddSecondaryExtension(kSecondaryAppId)
+          .Build();
+  PreinstallApp(*primary_app);
+  PreinstallApp(
+      *SecondaryAppBuilder(kSecondaryAppId).set_kiosk_enabled(false).Build());
 
   startup_app_launcher_->Initialize();
 
@@ -1036,14 +1038,15 @@ TEST_F(StartupAppLauncherTest, OfflineWithPrimaryAndSecondaryAppInstalled) {
   // it's ready should be ignored - i.e. startup app launcher should not attempt
   // to relaunch the app, nor request the update installation.
   startup_app_launcher_->ContinueWithNetworkReady();
-  ASSERT_TRUE(DownloadPrimaryApp(kTestPrimaryAppId, "1.1"));
+  ASSERT_TRUE(
+      DownloadPrimaryApp(*PrimaryAppBuilder().set_version("1.1").Build()));
 
   EXPECT_TRUE(external_apps_loader_handler_->pending_crx_files().empty());
   EXPECT_TRUE(external_apps_loader_handler_->pending_update_urls().empty());
   EXPECT_TRUE(startup_launch_delegate_.ExpectNoLaunchStateChanges());
 
   startup_app_launcher_->LaunchApp();
-  CreateAppWindow(profile(), primary_app_builder);
+  CreateAppWindow(profile(), *primary_app);
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchSucceeded);
@@ -1054,27 +1057,22 @@ TEST_F(StartupAppLauncherTest, OfflineWithPrimaryAndSecondaryAppInstalled) {
 }
 
 TEST_F(StartupAppLauncherTest, OfflineInstallPreCachedExtension) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.set_version("1.0");
-  scoped_refptr<const extensions::Extension> primary_app =
-      primary_app_builder.Build();
+  scoped_refptr<const Extension> primary_app = PrimaryAppBuilder().Build();
 
-  ASSERT_TRUE(kiosk_app_manager_overrides().PrecachePrimaryApp(
-      kTestPrimaryAppId, "1.0"));
+  ASSERT_TRUE(kiosk_app_manager_overrides().PrecachePrimaryApp(*primary_app));
 
   startup_app_launcher_->Initialize();
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
 
-  ASSERT_TRUE(FinishPrimaryAppInstall(primary_app_builder));
+  ASSERT_TRUE(FinishPrimaryAppInstall(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kReadyToLaunch);
 
   startup_app_launcher_->LaunchApp();
-  CreateAppWindow(profile(), primary_app_builder);
+  CreateAppWindow(profile(), *primary_app);
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchSucceeded);
@@ -1082,28 +1080,23 @@ TEST_F(StartupAppLauncherTest, OfflineInstallPreCachedExtension) {
 
 TEST_F(StartupAppLauncherTest,
        OfflineInstallPreCachedExtensionNotOfflineEnabled) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.set_version("1.0");
-  primary_app_builder.set_offline_enabled(false);
-  scoped_refptr<const extensions::Extension> primary_app =
-      primary_app_builder.Build();
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder().set_offline_enabled(false).Build();
 
-  ASSERT_TRUE(kiosk_app_manager_overrides().PrecachePrimaryApp(
-      kTestPrimaryAppId, "1.0"));
+  ASSERT_TRUE(kiosk_app_manager_overrides().PrecachePrimaryApp(*primary_app));
 
   startup_app_launcher_->Initialize();
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
 
-  ASSERT_TRUE(FinishPrimaryAppInstall(primary_app_builder));
+  ASSERT_TRUE(FinishPrimaryAppInstall(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kReadyToLaunch);
 
   startup_app_launcher_->LaunchApp();
-  CreateAppWindow(profile(), primary_app_builder);
+  CreateAppWindow(profile(), *primary_app);
 
   // When trying to launch app we should realize that the app is not offline
   // enabled and request a network connection.
@@ -1113,7 +1106,7 @@ TEST_F(StartupAppLauncherTest,
   startup_launch_delegate_.set_network_ready(true);
   startup_app_launcher_->ContinueWithNetworkReady();
 
-  ASSERT_TRUE(DownloadPrimaryApp(primary_app_builder));
+  ASSERT_TRUE(DownloadPrimaryApp(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
@@ -1121,7 +1114,7 @@ TEST_F(StartupAppLauncherTest,
             LaunchState::kReadyToLaunch);
 
   startup_app_launcher_->LaunchApp();
-  CreateAppWindow(profile(), primary_app_builder);
+  CreateAppWindow(profile(), *primary_app);
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchSucceeded);
@@ -1129,24 +1122,23 @@ TEST_F(StartupAppLauncherTest,
 
 TEST_F(StartupAppLauncherTest,
        OfflineInstallPreCachedExtensionWithSecondaryApps) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.set_version("1.0");
-  primary_app_builder.set_offline_enabled(true);
-  primary_app_builder.AddSecondaryExtension(kSecondaryAppId);
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder()
+          .set_offline_enabled(true)
+          .AddSecondaryExtension(kSecondaryAppId)
+          .Build();
 
-  TestKioskExtensionBuilder secondary_extension_builder(
-      Manifest::TYPE_PLATFORM_APP, kSecondaryAppId);
+  scoped_refptr<const Extension> secondary_extension =
+      SecondaryAppBuilder(kSecondaryAppId).Build();
 
-  ASSERT_TRUE(kiosk_app_manager_overrides().PrecachePrimaryApp(
-      kTestPrimaryAppId, "1.0"));
+  ASSERT_TRUE(kiosk_app_manager_overrides().PrecachePrimaryApp(*primary_app));
 
   startup_app_launcher_->Initialize();
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
 
-  ASSERT_TRUE(FinishPrimaryAppInstall(primary_app_builder));
+  ASSERT_TRUE(FinishPrimaryAppInstall(*primary_app));
 
   ASSERT_TRUE(
       external_apps_loader_handler_->FailPendingInstall(kSecondaryAppId));
@@ -1159,18 +1151,18 @@ TEST_F(StartupAppLauncherTest,
   startup_launch_delegate_.set_network_ready(true);
   startup_app_launcher_->ContinueWithNetworkReady();
 
-  ASSERT_TRUE(DownloadPrimaryApp(primary_app_builder));
+  ASSERT_TRUE(DownloadPrimaryApp(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
 
-  ASSERT_TRUE(FinishSecondaryExtensionInstall(secondary_extension_builder));
+  ASSERT_TRUE(FinishSecondaryExtensionInstall(*secondary_extension));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kReadyToLaunch);
 
   startup_app_launcher_->LaunchApp();
-  CreateAppWindow(profile(), primary_app_builder);
+  CreateAppWindow(profile(), *primary_app);
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchSucceeded);
@@ -1178,11 +1170,7 @@ TEST_F(StartupAppLauncherTest,
 
 TEST_F(StartupAppLauncherTest,
        OfflineInstallUncachedExtensionShouldForceNetwork) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.set_version("1.0");
-  scoped_refptr<const extensions::Extension> primary_app =
-      primary_app_builder.Build();
+  scoped_refptr<const Extension> primary_app = PrimaryAppBuilder().Build();
 
   startup_app_launcher_->Initialize();
 
@@ -1194,18 +1182,18 @@ TEST_F(StartupAppLauncherTest,
   startup_launch_delegate_.set_network_ready(true);
   startup_app_launcher_->ContinueWithNetworkReady();
 
-  ASSERT_TRUE(DownloadPrimaryApp(primary_app_builder));
+  ASSERT_TRUE(DownloadPrimaryApp(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
 
-  ASSERT_TRUE(FinishPrimaryAppInstall(primary_app_builder));
+  ASSERT_TRUE(FinishPrimaryAppInstall(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kReadyToLaunch);
 
   startup_app_launcher_->LaunchApp();
-  CreateAppWindow(profile(), primary_app_builder);
+  CreateAppWindow(profile(), *primary_app);
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchSucceeded);
@@ -1214,20 +1202,20 @@ TEST_F(StartupAppLauncherTest,
 TEST_F(StartupAppLauncherTest, IgnoreSecondaryAppsSecondaryApps) {
   InitializeLauncherWithNetworkReady();
 
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.AddSecondaryExtension(kSecondaryAppId);
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder().AddSecondaryExtension(kSecondaryAppId).Build();
 
-  ASSERT_TRUE(DownloadAndInstallPrimaryApp(primary_app_builder));
+  ASSERT_TRUE(DownloadAndInstallPrimaryApp(*primary_app));
 
   startup_launch_delegate_.ClearLaunchStateChanges();
 
-  TestKioskExtensionBuilder secondary_extension_builder(
-      Manifest::TYPE_PLATFORM_APP, kSecondaryAppId);
-  secondary_extension_builder.set_kiosk_enabled(true);
-  secondary_extension_builder.AddSecondaryExtension(kExtraSecondaryAppId);
+  scoped_refptr<const Extension> secondary_extension =
+      SecondaryAppBuilder(kSecondaryAppId)
+          .set_kiosk_enabled(true)
+          .AddSecondaryExtension(kExtraSecondaryAppId)
+          .Build();
 
-  ASSERT_TRUE(FinishSecondaryExtensionInstall(secondary_extension_builder));
+  ASSERT_TRUE(FinishSecondaryExtensionInstall(*secondary_extension));
 
   EXPECT_TRUE(external_apps_loader_handler_->pending_crx_files().empty());
   EXPECT_TRUE(external_apps_loader_handler_->pending_update_urls().empty());
@@ -1235,7 +1223,7 @@ TEST_F(StartupAppLauncherTest, IgnoreSecondaryAppsSecondaryApps) {
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kReadyToLaunch);
   startup_app_launcher_->LaunchApp();
-  CreateAppWindow(profile(), primary_app_builder);
+  CreateAppWindow(profile(), *primary_app);
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchSucceeded);
@@ -1249,11 +1237,10 @@ TEST_F(StartupAppLauncherTest, IgnoreSecondaryAppsSecondaryApps) {
 TEST_F(StartupAppLauncherTest, SecondaryAppCrxInstallFailureTriggersRetry) {
   InitializeLauncherWithNetworkReady();
 
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.AddSecondaryExtension(kSecondaryAppId);
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder().AddSecondaryExtension(kSecondaryAppId).Build();
 
-  ASSERT_TRUE(DownloadAndInstallPrimaryApp(primary_app_builder));
+  ASSERT_TRUE(DownloadAndInstallPrimaryApp(*primary_app));
   startup_launch_delegate_.ClearLaunchStateChanges();
 
   ASSERT_EQ(std::set<std::string>({kSecondaryAppId}),
@@ -1267,17 +1254,16 @@ TEST_F(StartupAppLauncherTest, SecondaryAppCrxInstallFailureTriggersRetry) {
 
   startup_app_launcher_->ContinueWithNetworkReady();
 
-  ASSERT_TRUE(DownloadPrimaryApp(primary_app_builder));
+  ASSERT_TRUE(DownloadPrimaryApp(*primary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
 
   ASSERT_EQ(std::set<std::string>({kSecondaryAppId}),
             external_apps_loader_handler_->pending_update_urls());
-  TestKioskExtensionBuilder secondary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                  kSecondaryAppId);
-  secondary_app_builder.set_kiosk_enabled(false);
-  ASSERT_TRUE(FinishSecondaryExtensionInstall(secondary_app_builder));
+  scoped_refptr<const Extension> secondary_app =
+      SecondaryAppBuilder(kSecondaryAppId).set_kiosk_enabled(false).Build();
+  ASSERT_TRUE(FinishSecondaryExtensionInstall(*secondary_app));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kReadyToLaunch);
@@ -1285,37 +1271,26 @@ TEST_F(StartupAppLauncherTest, SecondaryAppCrxInstallFailureTriggersRetry) {
 
 TEST_F(StartupAppLauncherTest,
        SecondaryAppEnabledOnLaunchOverridesInstalledAppState) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.AddSecondaryExtensionWithEnabledOnLaunch(kSecondaryAppId,
-                                                               false);
-  primary_app_builder.AddSecondaryExtensionWithEnabledOnLaunch(
-      kExtraSecondaryAppId, true);
-  primary_app_builder.set_version("1.0");
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder()
+          .AddSecondaryExtensionWithEnabledOnLaunch(kSecondaryAppId, false)
+          .AddSecondaryExtensionWithEnabledOnLaunch(kExtraSecondaryAppId, true)
+          .Build();
 
   // Add the secondary app that should be disabled on startup - make it enabled
   // initially, so the test can verify the app gets disabled regardless of the
   // initial state.
-  TestKioskExtensionBuilder disabled_secondary_app_builder(
-      Manifest::TYPE_PLATFORM_APP, kSecondaryAppId);
-  scoped_refptr<const extensions::Extension> disabled_secondary_app =
-      disabled_secondary_app_builder.Build();
-  service()->AddExtension(disabled_secondary_app.get());
+  PreinstallApp(*SecondaryAppBuilder(kSecondaryAppId).Build());
 
   // Add the secondary app that should be enabled on startup - make it disabled
   // initially, so the test can verify the app gets enabled regardless of the
   // initial state.
-  TestKioskExtensionBuilder enabled_secondary_app_builder(
-      Manifest::TYPE_PLATFORM_APP, kExtraSecondaryAppId);
-
-  scoped_refptr<const extensions::Extension> enabled_secondary_app =
-      enabled_secondary_app_builder.Build();
-  service()->AddExtension(enabled_secondary_app.get());
-  service()->DisableExtension(enabled_secondary_app->id(),
+  PreinstallApp(*SecondaryAppBuilder(kExtraSecondaryAppId).Build());
+  service()->DisableExtension(kExtraSecondaryAppId,
                               extensions::disable_reason::DISABLE_USER_ACTION);
 
   InitializeLauncherWithNetworkReady();
-  ASSERT_TRUE(DownloadAndInstallPrimaryApp(primary_app_builder));
+  ASSERT_TRUE(DownloadAndInstallPrimaryApp(*primary_app));
 
   EXPECT_TRUE(external_apps_loader_handler_->pending_crx_files().empty());
   EXPECT_TRUE(external_apps_loader_handler_->pending_update_urls().empty());
@@ -1334,29 +1309,20 @@ TEST_F(StartupAppLauncherTest,
 
 TEST_F(StartupAppLauncherTest,
        KeepInstalledAppStateWithNoEnabledOnLaunchProperty) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.AddSecondaryExtension(kSecondaryAppId);
-  primary_app_builder.AddSecondaryExtension(kExtraSecondaryAppId);
-  primary_app_builder.set_version("1.0");
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder()
+          .AddSecondaryExtension(kSecondaryAppId)
+          .AddSecondaryExtension(kExtraSecondaryAppId)
+          .Build();
 
-  TestKioskExtensionBuilder enabled_secondary_app_builder(
-      Manifest::TYPE_PLATFORM_APP, kSecondaryAppId);
-  scoped_refptr<const extensions::Extension> enabled_secondary_app =
-      enabled_secondary_app_builder.Build();
-  service()->AddExtension(enabled_secondary_app.get());
+  PreinstallApp(*SecondaryAppBuilder(kSecondaryAppId).Build());
 
-  TestKioskExtensionBuilder disabled_secondary_app_builder(
-      Manifest::TYPE_PLATFORM_APP, kExtraSecondaryAppId);
-
-  scoped_refptr<const extensions::Extension> disabled_secondary_app =
-      disabled_secondary_app_builder.Build();
-  service()->AddExtension(disabled_secondary_app.get());
-  service()->DisableExtension(disabled_secondary_app->id(),
+  PreinstallApp(*SecondaryAppBuilder(kExtraSecondaryAppId).Build());
+  service()->DisableExtension(kExtraSecondaryAppId,
                               extensions::disable_reason::DISABLE_USER_ACTION);
 
   InitializeLauncherWithNetworkReady();
-  ASSERT_TRUE(DownloadAndInstallPrimaryApp(primary_app_builder));
+  ASSERT_TRUE(DownloadAndInstallPrimaryApp(*primary_app));
 
   EXPECT_TRUE(external_apps_loader_handler_->pending_crx_files().empty());
   EXPECT_TRUE(external_apps_loader_handler_->pending_update_urls().empty());
@@ -1375,30 +1341,24 @@ TEST_F(StartupAppLauncherTest,
 
 TEST_F(StartupAppLauncherTest,
        DoNotEnableSecondayAppsDisabledForNonUserActionReason) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.AddSecondaryExtensionWithEnabledOnLaunch(kSecondaryAppId,
-                                                               true);
-  primary_app_builder.set_version("1.0");
+  scoped_refptr<const Extension> primary_app =
+      PrimaryAppBuilder()
+          .AddSecondaryExtensionWithEnabledOnLaunch(kSecondaryAppId, true)
+          .Build();
 
   // Add the secondary app that should be enabled on startup - make it disabled
   // initially, so the test can verify the app gets enabled regardless of the
   // initial state.
-  TestKioskExtensionBuilder secondary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                  kSecondaryAppId);
-
+  PreinstallApp(*SecondaryAppBuilder(kSecondaryAppId).Build());
   // Disable the secodnary app for a reason different than user action - that
   // disable reason should not be overriden during the kiosk launch.
-  scoped_refptr<const extensions::Extension> secondary_app =
-      secondary_app_builder.Build();
-  service()->AddExtension(secondary_app.get());
   service()->DisableExtension(
-      secondary_app->id(),
+      kSecondaryAppId,
       extensions::disable_reason::DISABLE_USER_ACTION |
           extensions::disable_reason::DISABLE_BLOCKED_BY_POLICY);
 
   InitializeLauncherWithNetworkReady();
-  ASSERT_TRUE(DownloadAndInstallPrimaryApp(primary_app_builder));
+  ASSERT_TRUE(DownloadAndInstallPrimaryApp(*primary_app));
 
   EXPECT_TRUE(external_apps_loader_handler_->pending_crx_files().empty());
   EXPECT_TRUE(external_apps_loader_handler_->pending_update_urls().empty());
@@ -1418,30 +1378,22 @@ TEST_F(StartupAppLauncherTest,
 }
 
 TEST_F(StartupAppLauncherTest, PrimaryAppUpdatesToDisabledOnLaunch) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.AddSecondaryExtension(kSecondaryAppId);
-  primary_app_builder.set_version("1.0");
-  primary_app_builder.set_offline_enabled(false);
-  scoped_refptr<const extensions::Extension> primary_app =
-      primary_app_builder.Build();
-  service()->AddExtension(primary_app.get());
+  PreinstallApp(*PrimaryAppBuilder()
+                     .AddSecondaryExtension(kSecondaryAppId)
+                     .set_version("1.0")
+                     .set_offline_enabled(false)
+                     .Build());
+  PreinstallApp(*SecondaryAppBuilder(kSecondaryAppId).Build());
 
-  TestKioskExtensionBuilder secondary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                  kSecondaryAppId);
-  scoped_refptr<const extensions::Extension> secondary_app =
-      secondary_app_builder.Build();
-  service()->AddExtension(secondary_app.get());
-
-  TestKioskExtensionBuilder primary_app_update(Manifest::TYPE_PLATFORM_APP,
-                                               kTestPrimaryAppId);
-  primary_app_update.AddSecondaryExtensionWithEnabledOnLaunch(kSecondaryAppId,
-                                                              false);
-  primary_app_update.set_version("1.1");
+  scoped_refptr<const Extension> primary_app_update =
+      PrimaryAppBuilder()
+          .AddSecondaryExtensionWithEnabledOnLaunch(kSecondaryAppId, false)
+          .set_version("1.1")
+          .Build();
 
   InitializeLauncherWithNetworkReady();
-  ASSERT_TRUE(DownloadPrimaryApp(primary_app_update));
-  ASSERT_TRUE(FinishPrimaryAppInstall(primary_app_update));
+  ASSERT_TRUE(DownloadPrimaryApp(*primary_app_update));
+  ASSERT_TRUE(FinishPrimaryAppInstall(*primary_app_update));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
@@ -1457,33 +1409,25 @@ TEST_F(StartupAppLauncherTest, PrimaryAppUpdatesToDisabledOnLaunch) {
 }
 
 TEST_F(StartupAppLauncherTest, PrimaryAppUpdatesToEnabledOnLaunch) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.AddSecondaryExtensionWithEnabledOnLaunch(kSecondaryAppId,
-                                                               false);
-  primary_app_builder.set_version("1.0");
-  primary_app_builder.set_offline_enabled(false);
-  scoped_refptr<const extensions::Extension> primary_app =
-      primary_app_builder.Build();
-  service()->AddExtension(primary_app.get());
-
-  TestKioskExtensionBuilder secondary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                  kSecondaryAppId);
-  scoped_refptr<const extensions::Extension> secondary_app =
-      secondary_app_builder.Build();
-  service()->AddExtension(secondary_app.get());
-  service()->DisableExtension(secondary_app->id(),
+  PreinstallApp(
+      *PrimaryAppBuilder()
+           .AddSecondaryExtensionWithEnabledOnLaunch(kSecondaryAppId, false)
+           .set_version("1.0")
+           .set_offline_enabled(false)
+           .Build());
+  PreinstallApp(*SecondaryAppBuilder(kSecondaryAppId).Build());
+  service()->DisableExtension(kSecondaryAppId,
                               extensions::disable_reason::DISABLE_USER_ACTION);
 
-  TestKioskExtensionBuilder primary_app_update(Manifest::TYPE_PLATFORM_APP,
-                                               kTestPrimaryAppId);
-  primary_app_update.AddSecondaryExtensionWithEnabledOnLaunch(kSecondaryAppId,
-                                                              true);
-  primary_app_update.set_version("1.1");
+  scoped_refptr<const Extension> primary_app_update =
+      PrimaryAppBuilder()
+          .AddSecondaryExtensionWithEnabledOnLaunch(kSecondaryAppId, true)
+          .set_version("1.1")
+          .Build();
 
   InitializeLauncherWithNetworkReady();
-  ASSERT_TRUE(DownloadPrimaryApp(primary_app_update));
-  ASSERT_TRUE(FinishPrimaryAppInstall(primary_app_update));
+  ASSERT_TRUE(DownloadPrimaryApp(*primary_app_update));
+  ASSERT_TRUE(FinishPrimaryAppInstall(*primary_app_update));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kInstallingApp);
@@ -1496,42 +1440,23 @@ TEST_F(StartupAppLauncherTest, PrimaryAppUpdatesToEnabledOnLaunch) {
 }
 
 TEST_F(StartupAppLauncherTest, SecondaryExtensionStateOnSessionRestore) {
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  primary_app_builder.AddSecondaryExtensionWithEnabledOnLaunch(kSecondaryAppId,
-                                                               false);
-  primary_app_builder.AddSecondaryExtensionWithEnabledOnLaunch(
-      kExtraSecondaryAppId, true);
-  primary_app_builder.set_version("1.0");
-  scoped_refptr<const extensions::Extension> primary_app =
-      primary_app_builder.Build();
-  service()->AddExtension(primary_app.get());
+  PreinstallApp(
+      *PrimaryAppBuilder()
+           .AddSecondaryExtensionWithEnabledOnLaunch(kSecondaryAppId, false)
+           .AddSecondaryExtensionWithEnabledOnLaunch(kExtraSecondaryAppId, true)
+           .Build());
 
   // Add the secondary app that should be disabled on launch - make it enabled
   // initially, and let test verify it remains enabled during the launch.
-  TestKioskExtensionBuilder disabled_secondary_app_builder(
-      Manifest::TYPE_PLATFORM_APP, kSecondaryAppId);
-  scoped_refptr<const extensions::Extension> disabled_secondary_app =
-      disabled_secondary_app_builder.Build();
-  service()->AddExtension(disabled_secondary_app.get());
+  PreinstallApp(*SecondaryAppBuilder(kSecondaryAppId).Build());
 
   // Add the secondary app that should be enabled on launch - make it disabled
   // initially, and let test verify the app remains disabled during the launch.
-  TestKioskExtensionBuilder enabled_secondary_app_builder(
-      Manifest::TYPE_PLATFORM_APP, kExtraSecondaryAppId);
-
-  scoped_refptr<const extensions::Extension> enabled_secondary_app =
-      enabled_secondary_app_builder.Build();
-  service()->AddExtension(enabled_secondary_app.get());
-  service()->DisableExtension(enabled_secondary_app->id(),
+  PreinstallApp(*SecondaryAppBuilder(kExtraSecondaryAppId).Build());
+  service()->DisableExtension(kExtraSecondaryAppId,
                               extensions::disable_reason::DISABLE_USER_ACTION);
 
-  // This matches the delegate settings during session restart (e.g. after a
-  // browser process crash).
-  startup_app_launcher_ = std::make_unique<StartupAppLauncher>(
-      profile(), kTestPrimaryAppId, /*should_skip_install=*/true,
-      &startup_launch_delegate_);
-  startup_app_launcher_->AddObserver(&startup_launch_delegate_);
+  startup_app_launcher_ = CreateStartupAppLauncherForSessionRestore();
 
   startup_launch_delegate_.set_network_ready(true);
   startup_app_launcher_->Initialize();
@@ -1582,8 +1507,12 @@ class StartupAppLauncherUsingLacrosTest : public testing::Test {
   StartupAppLauncherUsingLacrosTest()
       : fake_user_manager_(new FakeChromeUserManager()),
         scoped_user_manager_(base::WrapUnique(fake_user_manager_.get())) {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kChromeKioskEnableLacros);
+    scoped_feature_list_.InitWithFeatures(
+        {ash::features::kLacrosSupport, ash::features::kLacrosPrimary,
+         ash::features::kLacrosOnly,
+         ash::features::kLacrosProfileMigrationForceOff,
+         ::features::kChromeKioskEnableLacros},
+        {});
   }
 
   void SetUp() override {
@@ -1619,8 +1548,8 @@ class StartupAppLauncherUsingLacrosTest : public testing::Test {
     return kiosk_app_manager_overrides_.external_cache();
   }
 
-  ScopedKioskAppManagerOverrides& kiosk_app_manager_overrides() {
-    return kiosk_app_manager_overrides_;
+  [[nodiscard]] AssertionResult DownloadPrimaryApp(const Extension& app) {
+    return kiosk_app_manager_overrides_.DownloadPrimaryApp(app);
   }
 
   FakeChromeKioskLaunchController& chrome_kiosk_launch_controller() {
@@ -1650,10 +1579,7 @@ class StartupAppLauncherUsingLacrosTest : public testing::Test {
     EXPECT_EQ(std::set<std::string>({kTestPrimaryAppId}),
               external_cache()->pending_downloads());
 
-    TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                  kTestPrimaryAppId);
-    ASSERT_TRUE(
-        kiosk_app_manager_overrides().DownloadPrimaryApp(primary_app_builder));
+    ASSERT_TRUE(DownloadPrimaryApp(*PrimaryAppBuilder().Build()));
 
     EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
               LaunchState::kInstallingApp);
@@ -1694,33 +1620,9 @@ class StartupAppLauncherUsingLacrosTest : public testing::Test {
   std::unique_ptr<KioskAppManager> kiosk_app_manager_;
   std::unique_ptr<KioskAppLauncher> startup_app_launcher_;
 
-  base::AutoReset<bool> set_lacros_enabled_ =
-      BrowserSupport::SetLacrosEnabledForTest(true);
-  base::AutoReset<absl::optional<bool>> set_lacros_primary_ =
-      crosapi::browser_util::SetLacrosPrimaryBrowserForTest(true);
   base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<crosapi::CrosapiManager> crosapi_manager_;
 };
-
-TEST_F(StartupAppLauncherUsingLacrosTest, InstallFlowShouldLaunchLacros) {
-  CreateStartupAppLauncher();
-  InitializeLauncherWithNetworkReady();
-
-  ASSERT_TRUE(external_cache());
-  EXPECT_EQ(std::set<std::string>({kTestPrimaryAppId}),
-            external_cache()->pending_downloads());
-
-  TestKioskExtensionBuilder primary_app_builder(Manifest::TYPE_PLATFORM_APP,
-                                                kTestPrimaryAppId);
-  ASSERT_TRUE(
-      kiosk_app_manager_overrides().DownloadPrimaryApp(primary_app_builder));
-
-  EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
-            LaunchState::kInstallingApp);
-
-  // Validate that lacros is indeed running
-  EXPECT_TRUE(fake_browser_manager().IsRunning());
-}
 
 TEST_F(StartupAppLauncherUsingLacrosTest,
        ShouldRespectInstallSuccessFromCrosapi) {
@@ -1770,12 +1672,4 @@ TEST_F(StartupAppLauncherUsingLacrosTest,
             KioskAppLaunchError::Error::kUnableToLaunch);
 }
 
-TEST_F(StartupAppLauncherUsingLacrosTest, SkippingInstallShouldLaunchLacros) {
-  CreateStartupAppLauncher(/*should_skip_install=*/true);
-  launcher().Initialize();
-  EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
-            LaunchState::kReadyToLaunch);
-
-  EXPECT_TRUE(fake_browser_manager().IsRunning());
-}
 }  // namespace ash

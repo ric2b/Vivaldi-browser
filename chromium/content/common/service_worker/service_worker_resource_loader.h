@@ -7,6 +7,7 @@
 
 #include "base/check_op.h"
 #include "base/metrics/histogram_macros.h"
+#include "content/common/content_export.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 
 namespace content {
@@ -19,7 +20,7 @@ namespace content {
 // To implement feature RaceNetworkRequest (crbug.com/1420517), we store into
 // this common class whether the response came from the ServiceWorker fetch
 // handler or from a direct network request.
-class ServiceWorkerResourceLoader {
+class CONTENT_EXPORT ServiceWorkerResourceLoader {
  public:
   // Indicates where the response comes from.
   // These values are persisted to logs. Entries should not be renumbered and
@@ -34,11 +35,12 @@ class ServiceWorkerResourceLoader {
   ServiceWorkerResourceLoader();
   virtual ~ServiceWorkerResourceLoader();
 
-  FetchResponseFrom fetch_response_from() { return fetch_response_from_; }
+  void RecordFetchResponseFrom();
 
-  void SetFetchResponseFrom(FetchResponseFrom fetch_response_from);
-  void reset_fetch_response_from() {
-    fetch_response_from_ = FetchResponseFrom::kNoResponseYet;
+  FetchResponseFrom commit_responsibility() { return commit_responsibility_; }
+  void SetCommitResponsibility(FetchResponseFrom fetch_response_from);
+  void reset_commit_responsibility() {
+    commit_responsibility_ = FetchResponseFrom::kNoResponseYet;
   }
 
   // Tells if the class is main resource's class or not.
@@ -69,7 +71,7 @@ class ServiceWorkerResourceLoader {
       const network::mojom::URLResponseHeadPtr& response_head) = 0;
 
  private:
-  FetchResponseFrom fetch_response_from_ = FetchResponseFrom::kNoResponseYet;
+  FetchResponseFrom commit_responsibility_ = FetchResponseFrom::kNoResponseYet;
 };
 }  // namespace content
 

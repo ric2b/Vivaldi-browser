@@ -7,9 +7,9 @@
 #include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "components/sync/base/user_selectable_type.h"
-#include "components/sync/driver/sync_service_observer.h"
-#include "components/sync/driver/sync_service.h"
 #include "components/sync/protocol/sync_protocol_error.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_service_observer.h"
 
 class Profile;
 
@@ -54,7 +54,6 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
   enum CycleStatus {
     NOT_SYNCED = 0,
     SUCCESS,
-    IN_PROGRESS,
     AUTH_ERROR,
     SERVER_ERROR,
     NETWORK_ERROR,

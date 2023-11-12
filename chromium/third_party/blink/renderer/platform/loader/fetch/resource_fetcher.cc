@@ -145,6 +145,7 @@ const std::string ResourceTypeName(ResourceType type) {
     RESOURCE_TYPE_NAME(Manifest)          // 12
     RESOURCE_TYPE_NAME(SpeculationRules)  // 13
     RESOURCE_TYPE_NAME(Mock)              // 14
+    RESOURCE_TYPE_NAME(Dictionary)        // 15
   }
 }
 
@@ -173,6 +174,7 @@ ResourceLoadPriority TypeToPriority(ResourceType type) {
       return ResourceLoadPriority::kLow;
     case ResourceType::kLinkPrefetch:
     case ResourceType::kSpeculationRules:
+    case ResourceType::kDictionary:
       return ResourceLoadPriority::kVeryLow;
   }
 
@@ -396,6 +398,8 @@ mojom::blink::RequestContextType ResourceFetcher::DetermineRequestContext(
       return mojom::blink::RequestContextType::SUBRESOURCE;
     case ResourceType::kSpeculationRules:
       return mojom::blink::RequestContextType::SUBRESOURCE;
+    case ResourceType::kDictionary:
+      return mojom::blink::RequestContextType::SUBRESOURCE;
   }
   NOTREACHED();
   return mojom::blink::RequestContextType::SUBRESOURCE;
@@ -427,6 +431,7 @@ network::mojom::RequestDestination ResourceFetcher::DetermineRequestDestination(
     case ResourceType::kRaw:
     case ResourceType::kLinkPrefetch:
     case ResourceType::kMock:
+    case ResourceType::kDictionary:
       return network::mojom::RequestDestination::kEmpty;
   }
   NOTREACHED();
@@ -716,9 +721,10 @@ bool ResourceFetcher::ShouldDeferResource(ResourceType type,
   if (type == ResourceType::kFont && !params.IsLinkPreload())
     return true;
 
-  // Defer loading images either when:
-  // - images are disabled
-  // - instructed to defer loading images from network
+  // Defer loading images when:
+  // - images are disabled.
+  // - image loading is disabled and the image is not a data url.
+  // - instructed to defer loading images from network.
   if (type == ResourceType::kImage &&
       (ShouldDeferImageLoad(params.Url()) ||
        params.GetImageRequestBehavior() ==
@@ -790,6 +796,7 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
     if (!resource_timing_report_timer_.IsActive())
       resource_timing_report_timer_.StartOneShot(base::TimeDelta(), FROM_HERE);
   }
+  resource->SetIsLoadedFromMemoryCache();
 }
 
 Resource* ResourceFetcher::CreateResourceForStaticData(
@@ -928,11 +935,6 @@ void ResourceFetcher::UpdateMemoryCacheStats(
     RecordResourceHistogram("Preload.", factory.GetType(), policy);
   } else {
     RecordResourceHistogram("", factory.GetType(), policy);
-
-    // Log metrics to evaluate effectiveness of the memory cache if it was
-    // partitioned by the top-frame site.
-    if (same_top_frame_site_resource_cached)
-      RecordResourceHistogram("PerTopFrameSite.", factory.GetType(), policy);
   }
 
   // Aims to count Resource only referenced from MemoryCache (i.e. what would be
@@ -1088,7 +1090,8 @@ absl::optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
     // Add the "Sec-Purpose: prefetch;prerender" header to requests issued from
     // prerendered pages. Add "Purpose: prefetch" as well for compatibility
     // concerns (See https://github.com/WICG/nav-speculation/issues/133).
-    resource_request.SetHttpHeaderField("Sec-Purpose", "prefetch;prerender");
+    resource_request.SetHttpHeaderField(http_names::kSecPurpose,
+                                        AtomicString("prefetch;prerender"));
     resource_request.SetPurposeHeader("prefetch");
   }
 
@@ -1255,7 +1258,11 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   bool is_data_url = resource_request.Url().ProtocolIsData();
   bool is_static_data = is_data_url || archive_;
   bool is_stale_revalidation = params.IsStaleRevalidation();
-  if (!is_stale_revalidation && is_static_data) {
+  bool should_defer = ShouldDeferResource(resource_type, params);
+  // MHTML archives do not load from the network and must load immediately. Data
+  // urls can also load immediately, except in cases when they should be
+  // deferred.
+  if (!is_stale_revalidation && (archive_ || (is_data_url && !should_defer))) {
     resource = CreateResourceForStaticData(params, factory);
     if (resource) {
       policy =
@@ -1301,9 +1308,6 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
       }
     }
   }
-
-  // Use factory.GetType() since resource can be nullptr here.
-  bool should_defer = ShouldDeferResource(factory.GetType(), params);
 
   UpdateMemoryCacheStats(
       resource, MapToPolicyForMetrics(policy, resource, should_defer), params,
@@ -1471,7 +1475,7 @@ void ResourceFetcher::InitializeRevalidation(
     if (revalidating_request.GetCacheMode() ==
         mojom::blink::FetchCacheMode::kValidateCache) {
       revalidating_request.SetHttpHeaderField(http_names::kCacheControl,
-                                              "max-age=0");
+                                              AtomicString("max-age=0"));
     }
   }
   if (!last_modified.empty()) {
@@ -1496,6 +1500,7 @@ std::unique_ptr<URLLoader> ResourceFetcher::CreateURLLoader(
   if (!base::FeatureList::IsEnabled(
           blink::features::kKeepAliveInBrowserMigration) &&
       request.GetKeepalive()) {
+    base::UmaHistogramBoolean("Blink.Fetch.KeepAlive.Total", true);
     // Set the `task_runner` to the `AgentGroupScheduler`'s task-runner for
     // keepalive fetches because we want it to keep running even after the
     // frame is detached. It's pretty fragile to do that with the
@@ -1508,8 +1513,18 @@ std::unique_ptr<URLLoader> ResourceFetcher::CreateURLLoader(
             frame_scheduler->GetAgentGroupScheduler()->DefaultTaskRunner();
       }
     }
+  } else if (request.GetRequestContext() ==
+                 mojom::blink::RequestContextType::IMAGE &&
+             base::FeatureList::IsEnabled(
+                 features::kMainThreadHighPriorityImageLoading)) {
+    if (auto* frame_or_worker_scheduler = GetFrameOrWorkerScheduler()) {
+      if (auto* frame_scheduler =
+              frame_or_worker_scheduler->ToFrameScheduler()) {
+        task_runner = frame_scheduler->GetTaskRunner(
+            TaskType::kNetworkingUnfreezableImageLoading);
+      }
+    }
   }
-
   return loader_factory_->CreateURLLoader(ResourceRequest(request), options,
                                           freezable_task_runner_, task_runner,
                                           back_forward_cache_loader_helper_);
@@ -1989,7 +2004,8 @@ void ResourceFetcher::SetImagesEnabled(bool enable) {
 }
 
 bool ResourceFetcher::ShouldDeferImageLoad(const KURL& url) const {
-  return !Context().AllowImage(images_enabled_, url) || !auto_load_images_;
+  return !Context().AllowImage(images_enabled_, url) ||
+         (!auto_load_images_ && !url.ProtocolIsData());
 }
 
 void ResourceFetcher::ReloadImagesIfNotDeferred() {
@@ -2039,6 +2055,11 @@ void ResourceFetcher::ClearContext() {
       !base::FeatureList::IsEnabled(
           blink::features::kKeepAliveInBrowserMigration)) {
     // There are some keepalive requests.
+
+    // Records the current time to estimate how long the remaining requests will
+    // stay.
+    detached_time_ = base::TimeTicks::Now();
+
     // The use of WrapPersistent creates a reference cycle intentionally,
     // to keep the ResourceFetcher and ResourceLoaders alive until the requests
     // complete or the timer fires.
@@ -2205,6 +2226,14 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
   } else {
     RemoveResourceLoader(loader);
     DCHECK(!non_blocking_loaders_.Contains(loader));
+
+    if (resource->GetResourceRequest().GetKeepalive()) {
+      base::UmaHistogramBoolean("Blink.Fetch.KeepAlive.Total.IsSuccess", true);
+      if (IsDetached()) {
+        base::UmaHistogramBoolean(
+            "Blink.Fetch.KeepAlive.AfterDetached.IsSuccess", true);
+      }
+    }
   }
   DCHECK(!loaders_.Contains(loader));
 
@@ -2227,7 +2256,7 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
           network::mojom::FetchResponseType::kOpaque &&
       resource->GetResponse().HasRangeRequested() &&
       !resource->GetResourceRequest().HttpHeaderFields().Contains(
-          net::HttpRequestHeaders::kRange)) {
+          http_names::kRange)) {
     RemovePreload(resource);
   }
 
@@ -2266,6 +2295,13 @@ void ResourceFetcher::HandleLoaderError(Resource* resource,
   inflight_keepalive_bytes_ -= inflight_keepalive_bytes;
 
   RemoveResourceLoader(resource->Loader());
+  if (resource->GetResourceRequest().GetKeepalive()) {
+    base::UmaHistogramBoolean("Blink.Fetch.KeepAlive.Total.IsSuccess", false);
+    if (IsDetached()) {
+      base::UmaHistogramBoolean("Blink.Fetch.KeepAlive.AfterDetached.IsSuccess",
+                                false);
+    }
+  }
   PendingResourceTimingInfo info = resource_timing_info_map_.Take(resource);
 
   if (!info.is_null()) {
@@ -2409,6 +2445,15 @@ bool ResourceFetcher::StartLoad(
 
 void ResourceFetcher::RemoveResourceLoader(ResourceLoader* loader) {
   DCHECK(loader);
+
+  if (IsDetached() && detached_time_ != base::TimeTicks()) {
+    // Only logs the requests duration timed after the context is detached.
+    base::TimeDelta elapsed = base::TimeTicks::Now() - detached_time_;
+    // kKeepaliveLoadersTimeout > 10 sec, so UmaHistogramTimes can't be used.
+    base::UmaHistogramMediumTimes(
+        "Blink.Fetch.KeepAlive.AfterDetached.Duration", elapsed);
+  }
+
   if (loaders_.Contains(loader))
     loaders_.erase(loader);
   else if (non_blocking_loaders_.Contains(loader))
@@ -2710,7 +2755,8 @@ void ResourceFetcher::PopulateAndAddResourceTimingInfo(
     if (!response.NetworkAccessed() &&
         (!response.WasFetchedViaServiceWorker() ||
          response.IsServiceWorkerPassThrough())) {
-      initiator_type = "early-hints";
+      initiator_type = AtomicString("early-hints");
+      resource->SetIsPreloadedByEarlyHints();
     }
   }
 
@@ -2959,6 +3005,13 @@ void ResourceFetcher::UpdateServiceWorkerSubresourceMetrics(
         metrics.mock_handled |= true;
       } else {
         metrics.mock_fallback |= true;
+      }
+      break;
+    case ResourceType::kDictionary:  // 14
+      if (handled_by_serviceworker) {
+        metrics.dictionary_handled |= true;
+      } else {
+        metrics.dictionary_fallback |= true;
       }
       break;
   }

@@ -131,6 +131,14 @@ message ChromeUserPopulation {
   optional bool is_signed_in = 18;
 }
 
+message ImageFeatureEmbedding {
+  // Tracking embedding-model's version from iteration to iteration
+  optional int32 embedding_model_version = 1;
+
+  // Raw tensor output of the embedding layer.
+  repeated float embedding_value = 2;
+}
+
 message ClientPhishingRequest {
   // URL that the client visited.  The CGI parameters are stripped by the
   // client.
@@ -242,7 +250,10 @@ message ClientPhishingRequest {
   // where the scoring from protego requested this request.
   optional ClientSideDetectionType client_side_detection_type = 28;
 
-  // next available tag number: 29.
+  // Image embedding from model output tensor
+  optional ImageFeatureEmbedding image_feature_embedding = 29;
+
+  // next available tag number: 30.
 }
 
 message ClientPhishingResponse {
@@ -816,10 +827,9 @@ message ClientDownloadRequest {
   // Population that the reporting user is part of.
   optional ChromeUserPopulation population = 24;
 
-  // True if the .zip or DMG, etc, was 100% successfully unpacked.
-  // This field is in the process of being deprecated and replaced with
-  // `archive_summary.valid`.
-  optional bool archive_valid = 26;
+  // This field has been deprecated and replaced with
+  // `archive_summary.parser_status`.
+  optional bool DEPRECATED_archive_valid = 26 [deprecated = true];
 
   // True if this ClientDownloadRequest is from a allowlisted domain.
   optional bool skipped_url_allowlist = 28;
@@ -866,12 +876,10 @@ message ClientDownloadRequest {
   // protection for Advanced Protection users.
   optional bool request_ap_verdicts = 67;
 
-  // For archives files the number of files and directories contained within the
-  // archive.
-  // These fields are in the process of being deprecated and replaced with
+  // These fields have been deprecated and replaced with
   // `archive_summary.file_count` or `archive_summary.directory_count`.
-  optional int32 archive_file_count = 68;
-  optional int32 archive_directory_count = 69;
+  optional int32 DEPRECATED_archive_file_count = 68 [deprecated = true];
+  optional int32 DEPRECATED_archive_directory_count = 69 [deprecated = true];
 
   // Only for display on chrome://safe-browsing. The actual token is sent in the
   // "Authorization: Bearer" header
@@ -985,6 +993,10 @@ message ClientDownloadRequest {
     optional int32 version = 1;
   }
   optional TailoredInfo tailored_info = 86;
+
+  // Fields 87-89 are reserved for server-side use and are never sent by the
+  // client.
+  reserved 87 to 89;
 }
 
 message ReferrerChainOptions {
@@ -1048,6 +1060,11 @@ message ReferrerChainEntry {
     //  * <a> link click
     //  * using window.history.pushState (i.e. back, forward button interaction)
     RENDERER_INITIATED_WITH_USER_GESTURE = 3;
+
+    // Navigation is initiated by the browser process and it is believed the
+    // navigation is the result of the user copy and paste the address from the
+    // browser into the address bar.
+    COPY_PASTE_USER_INITIATED = 4;
   }
 
   message ServerRedirect {
@@ -1492,6 +1509,7 @@ message ClientSafeBrowsingReportRequest {
     BLOCKED_AD_POPUP = 20;
     // TODO(crbug.com/1410253): Deprecate this once the experiment is complete.
     HASH_PREFIX_REAL_TIME_EXPERIMENT = 21;
+    PHISHY_SITE_INTERACTIONS = 22;
   }
 
   message HTTPHeader {
@@ -1598,6 +1616,8 @@ message ClientSafeBrowsingReportRequest {
     FLYWHEEL = 4 [deprecated = true];
     // Safe Browsing real time API.
     REAL_TIME = 5;
+    // The Safe Browsing API v5 protocol hit in real time (non-Android).
+    PVER5_NATIVE_REAL_TIME = 6;
   }
 
   // The information propagated from the client about various environment
@@ -1794,11 +1814,86 @@ message ClientSafeBrowsingReportRequest {
     FENCED_FRAME = 23;
     // Federated Credential Management requests
     WEB_IDENTITY = 24;
+    // <link rel=dictionary>
+    DICTIONARY = 25;
   }
 
   // Only populated for interstitial reports (URL_PHISHING, URL_MALWARE,
   // URL_UNWANTED and BILLING).
   optional UrlRequestDestination url_request_destination = 29;
+
+  // Information about user interactions with an interstitial.
+  message InterstitialInteraction {
+    // Type of interaction with security interstitial.
+    enum SecurityInterstitialInteraction {
+      UNSPECIFIED = 0;
+      // Decisions
+      CMD_DONT_PROCEED = 1;
+      CMD_PROCEED = 2;
+      // Ways for user to get more information
+      CMD_SHOW_MORE_SECTION = 3;
+      CMD_OPEN_HELP_CENTER = 4;
+      CMD_OPEN_DIAGNOSTIC = 5;
+      // Primary button actions
+      CMD_RELOAD = 6;
+      CMD_OPEN_DATE_SETTINGS = 7;
+      CMD_OPEN_LOGIN = 8;
+      // Safe Browsing Extended Reporting
+      CMD_DO_REPORT = 9;
+      CMD_DONT_REPORT = 10;
+      CMD_OPEN_REPORTING_PRIVACY = 11;
+      CMD_OPEN_WHITEPAPER = 12;
+      // Report a phishing error
+      CMD_REPORT_PHISHING_ERROR = 13;
+      // Open enhanced protection settings.
+      CMD_OPEN_ENHANCED_PROTECTION_SETTINGS = 14;
+      // Leave interstitial without making explicit UI decision.
+      CMD_CLOSE_INTERSTITIAL_WITHOUT_UI = 15;
+    }
+
+    // Type of security interstitial interaction that occurred.
+    optional SecurityInterstitialInteraction security_interstitial_interaction =
+        1;
+
+    // Number of interstitial interaction occurrences.
+    optional int32 occurrence_count = 2;
+
+    // Timestamp of first interstitial interaction occurrence.
+    optional int64 first_interaction_timestamp_msec = 3;
+
+    // Timestamp of last interstitial interaction occurrence.
+    optional int64 last_interaction_timestamp_msec = 4;
+  }
+
+  // List of user interactions that the user performs with the interstitial.
+  repeated InterstitialInteraction interstitial_interactions = 30;
+
+  // Information about user interactions with a phishy site.
+  message PhishySiteInteraction {
+    // Type of interaction with phishy site.
+    enum PhishySiteInteractionType {
+      UNSPECIFIED = 0;
+      // User interactions.
+      PHISHY_CLICK_EVENT = 1;
+      PHISHY_KEY_EVENT = 2;
+      PHISHY_PASTE_EVENT = 3;
+    }
+
+    // Type of security interstitial interaction that occurred.
+    optional PhishySiteInteractionType phishy_site_interaction_type = 1;
+
+    // Number of phishy site interaction occurrences.
+    optional int32 occurrence_count = 2;
+
+    // Timestamp of first phishy site interaction occurrence.
+    optional int64 first_interaction_timestamp_msec = 3;
+
+    // Timestamp of last phishy site interaction occurrence.
+    optional int64 last_interaction_timestamp_msec = 4;
+  }
+
+  // List of user interactions that the user performs with a phishy site.
+  repeated PhishySiteInteraction phishy_site_interactions = 31;
 }
 
 // An HTML Element on the page (eg: iframe, div, script, etc).

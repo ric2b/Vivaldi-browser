@@ -14,9 +14,9 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/driver/sync_service.h"
-#include "components/sync/driver/sync_service_observer.h"
-#include "components/sync/driver/sync_service_utils.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_service_observer.h"
+#include "components/sync/service/sync_service_utils.h"
 #include "components/unified_consent/pref_names.h"
 
 
@@ -171,9 +171,8 @@ void SyncBasedUrlKeyedDataCollectionConsentHelper::OnSyncShutdown(
 }
 
 void SyncBasedUrlKeyedDataCollectionConsentHelper::UpdateSyncDataTypeStates() {
-  for (auto iter = sync_data_type_states_.begin();
-       iter != sync_data_type_states_.end(); ++iter) {
-    iter->second = syncer::GetUploadToGoogleState(sync_service_, iter->first);
+  for (auto& [model_type, upload_state] : sync_data_type_states_) {
+    upload_state = syncer::GetUploadToGoogleState(sync_service_, model_type);
   }
 }
 

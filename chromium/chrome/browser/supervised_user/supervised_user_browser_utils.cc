@@ -5,11 +5,21 @@
 #include "chrome/browser/supervised_user/supervised_user_browser_utils.h"
 #include <string>
 
+#include "base/check.h"
+#include "base/feature_list.h"
 #include "base/strings/string_util.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_selections.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/url_constants.h"
+#include "components/signin/public/base/consent_level.h"
+#include "components/signin/public/identity_manager/account_info.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/supervised_user/core/common/features.h"
 #include "components/url_matcher/url_util.h"
 #include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension_urls.h"
+#include "google_apis/gaia/core_account_id.h"
 #include "url/url_constants.h"
 
 namespace supervised_user {
@@ -62,6 +72,35 @@ bool ShouldContentSkipParentAllowlistFiltering(content::WebContents* contents) {
 
   return outer_most_content->GetLastCommittedURL() ==
          GURL(chrome::kChromeUIEDUCoexistenceLoginURLV2);
+}
+
+ProfileSelections BuildProfileSelectionsForRegularAndGuest() {
+  // Do not create for Incognito profile.
+  return ProfileSelections::Builder()
+      .WithRegular(ProfileSelection::kOriginalOnly)
+      .WithGuest(ProfileSelection::kRedirectedToOriginal)
+      .Build();
+}
+
+ProfileSelections BuildProfileSelectionsLegacy() {
+  CHECK(!base::FeatureList::IsEnabled(
+      supervised_user::kUpdateSupervisedUserFactoryCreation));
+  return ProfileSelections::Builder()
+      .WithRegular(ProfileSelection::kOriginalOnly)
+      .WithGuest(ProfileSelection::kOriginalOnly)
+      .Build();
+}
+
+std::string GetAccountGivenName(Profile& profile) {
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(&profile);
+  CHECK(identity_manager);
+
+  const CoreAccountInfo core_info =
+      identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
+  const AccountInfo account_info =
+      identity_manager->FindExtendedAccountInfo(core_info);
+  return account_info.given_name;
 }
 
 }  // namespace supervised_user

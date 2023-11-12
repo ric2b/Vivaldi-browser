@@ -14,12 +14,16 @@
 class Browser;
 @protocol BrowserCommands;
 @protocol BrowsingDataCommands;
+enum class DefaultBrowserPromoSource;
 @protocol ImportDataControllerDelegate;
 @protocol SnackbarCommands;
 @class UserFeedbackData;
 namespace password_manager {
 struct CredentialUIEntry;
 }  // namespace password_manager
+namespace autofill {
+class CreditCard;
+}  // namespace autofill
 
 // The accessibility identifier for the settings' "Done" button.
 extern NSString* const kSettingsDoneButtonId;
@@ -153,6 +157,13 @@ extern NSString* const kSettingsDoneButtonId;
                                    (id<SettingsNavigationControllerDelegate>)
                                        delegate;
 
+// Creates a new PrivacyController `browser` is the browser where settings are
+// being displayed and should not be nil. `delegate` may be nil.
++ (instancetype)
+    privacyControllerForBrowser:(Browser*)browser
+                       delegate:
+                           (id<SettingsNavigationControllerDelegate>)delegate;
+
 // Creates a new AutofillCreditCardCollectionViewController and the chrome
 // around it. `browser` is the browser where settings are being displayed and
 // should not be nil. `delegate` may be nil.
@@ -162,6 +173,17 @@ extern NSString* const kSettingsDoneButtonId;
                                       (id<SettingsNavigationControllerDelegate>)
                                           delegate;
 
+// Creates a new AutofillCreditCardEditTableViewController and the chrome around
+// it. `browser` is the browser where settings are being displayed and should
+// not be nil. `delegate` may be nil.
++ (instancetype)
+    autofillCreditCardEditControllerForBrowser:(Browser*)browser
+                                      delegate:
+                                          (id<SettingsNavigationControllerDelegate>)
+                                              delegate
+                                    creditCard:
+                                        (const autofill::CreditCard*)creditCard;
+
 // Creates a new DefaultBrowserSettingsTableViewController and the chrome
 // around it. `browser` is the browser where settings are being displayed and
 // should not be nil. `delegate` may be nil.
@@ -169,7 +191,8 @@ extern NSString* const kSettingsDoneButtonId;
     defaultBrowserControllerForBrowser:(Browser*)browser
                               delegate:
                                   (id<SettingsNavigationControllerDelegate>)
-                                      delegate;
+                                      delegate
+                          sourceForUMA:(DefaultBrowserPromoSource)source;
 
 // Creates a new ClearBrowsingDataTableViewController and the chrome
 // around it. `browser` is the browser where settings are being displayed and

@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style_property_shorthand.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 // Implementations of methods in Shorthand subclasses that aren't generated.
 
@@ -38,6 +39,20 @@ namespace blink {
 namespace css_shorthand {
 
 namespace {
+
+// New animation-* properties are  "reset only":
+// https://github.com/w3c/csswg-drafts/issues/6946#issuecomment-1233190360
+bool IsResetOnlyAnimationProperty(CSSPropertyID property) {
+  switch (property) {
+    case CSSPropertyID::kAnimationDelayEnd:
+    case CSSPropertyID::kAnimationTimeline:
+    case CSSPropertyID::kAnimationRangeStart:
+    case CSSPropertyID::kAnimationRangeEnd:
+      return true;
+    default:
+      return false;
+  }
+}
 
 // Legacy parsing allows <string>s for animation-name.
 CSSValue* ConsumeAnimationValue(CSSPropertyID property,
@@ -53,8 +68,8 @@ CSSValue* ConsumeAnimationValue(CSSPropertyID property,
       DCHECK(RuntimeEnabledFeatures::CSSAnimationDelayStartEndEnabled());
       return css_parsing_utils::ConsumeAnimationDelay(range, context);
     case CSSPropertyID::kAnimationDelayEnd:
-      // New animation-* properties are  "reset only":
-      // https://github.com/w3c/csswg-drafts/issues/6946#issuecomment-1233190360
+      // New animation-* properties are  "reset only", see
+      // IsResetOnlyAnimationProperty.
       //
       // Returning nullptr here means that AnimationDelayEnd::InitialValue will
       // be used.
@@ -103,7 +118,8 @@ bool ParseAnimationShorthand(const StylePropertyShorthand& shorthand,
   HeapVector<Member<CSSValueList>, css_parsing_utils::kMaxNumAnimationLonghands>
       longhands(longhand_count);
   if (!css_parsing_utils::ConsumeAnimationShorthand(
-          shorthand, longhands, ConsumeAnimationValue, range, context,
+          shorthand, longhands, ConsumeAnimationValue,
+          IsResetOnlyAnimationProperty, range, context,
           local_context.UseAliasParsing())) {
     return false;
   }
@@ -121,11 +137,22 @@ const CSSValue* CSSValueFromComputedAnimation(
     const StylePropertyShorthand& shorthand,
     const CSSAnimationData* animation_data) {
   if (animation_data) {
+    // The shorthand can not represent the following properties if they have
+    // non-initial values. This is because they are always reset to their
+    // initial value by the shorthand.
+    if (!animation_data->HasSingleInitialTimeline() ||
+        !animation_data->HasSingleInitialDelayEnd() ||
+        !animation_data->HasSingleInitialRangeStart() ||
+        !animation_data->HasSingleInitialRangeEnd()) {
+      return nullptr;
+    }
+
     CSSValueList* animations_list = CSSValueList::CreateCommaSeparated();
     for (wtf_size_t i = 0; i < animation_data->NameList().size(); ++i) {
       CSSValueList* list = CSSValueList::CreateSpaceSeparated();
       list->Append(*ComputedStyleUtils::ValueForAnimationDuration(
-          CSSTimingData::GetRepeated(animation_data->DurationList(), i)));
+          CSSTimingData::GetRepeated(animation_data->DurationList(), i),
+          /* resolve_auto_to_zero */ true));
       list->Append(*ComputedStyleUtils::ValueForAnimationTimingFunction(
           CSSTimingData::GetRepeated(animation_data->TimingFunctionList(), i)));
       list->Append(*ComputedStyleUtils::ValueForAnimationDelayStart(
@@ -140,25 +167,6 @@ const CSSValue* CSSValueFromComputedAnimation(
           CSSTimingData::GetRepeated(animation_data->PlayStateList(), i)));
       list->Append(*MakeGarbageCollected<CSSCustomIdentValue>(
           animation_data->NameList()[i]));
-      // The shorthand can not represent the following properties if they have
-      // non-initial values. This is because they are always reset to their
-      // initial value by the shorthand.
-      if (CSSAnimationData::InitialTimeline() !=
-          animation_data->GetTimeline(i)) {
-        return nullptr;
-      }
-      if (CSSAnimationData::InitialDelayEnd() !=
-          CSSTimingData::GetRepeated(animation_data->DelayEndList(), i)) {
-        return nullptr;
-      }
-      if (CSSAnimationData::InitialRangeStart() !=
-          CSSTimingData::GetRepeated(animation_data->RangeStartList(), i)) {
-        return nullptr;
-      }
-      if (CSSAnimationData::InitialRangeEnd() !=
-          CSSTimingData::GetRepeated(animation_data->RangeEndList(), i)) {
-        return nullptr;
-      }
       animations_list->Append(*list);
     }
     return animations_list;
@@ -168,7 +176,8 @@ const CSSValue* CSSValueFromComputedAnimation(
   // animation-name default value.
   list->Append(*CSSIdentifierValue::Create(CSSValueID::kNone));
   list->Append(*ComputedStyleUtils::ValueForAnimationDuration(
-      CSSAnimationData::InitialDuration()));
+      CSSAnimationData::InitialDuration(),
+      /* resolve_auto_to_zero */ true));
   list->Append(*ComputedStyleUtils::ValueForAnimationTimingFunction(
       CSSAnimationData::InitialTimingFunction()));
   list->Append(*ComputedStyleUtils::ValueForAnimationDelayStart(
@@ -1374,7 +1383,8 @@ bool FlexFlow::ParseShorthand(
     const CSSParserLocalContext&,
     HeapVector<CSSPropertyValue, 64>& properties) const {
   return css_parsing_utils::ConsumeShorthandGreedilyViaLonghands(
-      flexFlowShorthand(), important, context, range, properties);
+      flexFlowShorthand(), important, context, range, properties,
+      /* use_initial_value_function */ true);
 }
 
 const CSSValue* FlexFlow::CSSValueFromComputedStyleInternal(
@@ -1490,12 +1500,10 @@ bool ConsumeFont(bool important,
       CSSPropertyID::kFontVariantEastAsian, CSSPropertyID::kFont,
       *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
       css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
-  if (RuntimeEnabledFeatures::FontVariantAlternatesEnabled()) {
-    css_parsing_utils::AddProperty(
-        CSSPropertyID::kFontVariantAlternates, CSSPropertyID::kFont,
-        *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
-        css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
-  }
+  css_parsing_utils::AddProperty(
+      CSSPropertyID::kFontVariantAlternates, CSSPropertyID::kFont,
+      *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
+      css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
   if (RuntimeEnabledFeatures::CSSFontSizeAdjustEnabled()) {
     css_parsing_utils::AddProperty(
         CSSPropertyID::kFontSizeAdjust, CSSPropertyID::kFont,
@@ -1624,12 +1632,10 @@ bool FontVariant::ParseShorthand(
         CSSPropertyID::kFontVariantEastAsian, CSSPropertyID::kFontVariant,
         *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
         css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
-    if (RuntimeEnabledFeatures::FontVariantAlternatesEnabled()) {
-      css_parsing_utils::AddProperty(
-          CSSPropertyID::kFontVariantAlternates, CSSPropertyID::kFontVariant,
-          *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
-          css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
-    }
+    css_parsing_utils::AddProperty(
+        CSSPropertyID::kFontVariantAlternates, CSSPropertyID::kFontVariant,
+        *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
+        css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
     if (RuntimeEnabledFeatures::FontVariantPositionEnabled()) {
       css_parsing_utils::AddProperty(
           CSSPropertyID::kFontVariantPosition, CSSPropertyID::kFontVariant,
@@ -1653,9 +1659,7 @@ bool FontVariant::ParseShorthand(
     FontVariantEastAsianParser::ParseResult east_asian_parse_result =
         east_asian_parser.ConsumeEastAsian(range);
     FontVariantAlternatesParser::ParseResult alternates_parse_result =
-        RuntimeEnabledFeatures::FontVariantAlternatesEnabled()
-            ? alternates_parser.ConsumeAlternates(range, context)
-            : FontVariantAlternatesParser::ParseResult::kUnknownValue;
+        alternates_parser.ConsumeAlternates(range, context);
     if (ligatures_parse_result ==
             FontVariantLigaturesParser::ParseResult::kConsumedValue ||
         numeric_parse_result ==
@@ -1723,12 +1727,10 @@ bool FontVariant::ParseShorthand(
                  : *CSSIdentifierValue::Create(CSSValueID::kNormal),
       important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
       properties);
-  if (RuntimeEnabledFeatures::FontVariantAlternatesEnabled()) {
-    css_parsing_utils::AddProperty(
-        CSSPropertyID::kFontVariantAlternates, CSSPropertyID::kFontVariant,
-        *alternates_parser.FinalizeValue(), important,
-        css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
-  }
+  css_parsing_utils::AddProperty(
+      CSSPropertyID::kFontVariantAlternates, CSSPropertyID::kFontVariant,
+      *alternates_parser.FinalizeValue(), important,
+      css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
   if (RuntimeEnabledFeatures::FontVariantPositionEnabled()) {
     css_parsing_utils::AddProperty(
         CSSPropertyID::kFontVariantPosition, CSSPropertyID::kFontVariant,
@@ -2653,7 +2655,7 @@ bool Offset::ParseShorthand(
   } else if (RuntimeEnabledFeatures::CSSOffsetPositionAnchorEnabled()) {
     css_parsing_utils::AddProperty(
         CSSPropertyID::kOffsetPosition, CSSPropertyID::kOffset,
-        *CSSInitialValue::Create(), important,
+        *CSSIdentifierValue::Create(CSSValueID::kAuto), important,
         css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
   }
 
@@ -2665,7 +2667,7 @@ bool Offset::ParseShorthand(
   } else {
     css_parsing_utils::AddProperty(
         CSSPropertyID::kOffsetPath, CSSPropertyID::kOffset,
-        *CSSInitialValue::Create(), important,
+        *CSSIdentifierValue::Create(CSSValueID::kNone), important,
         css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
   }
 
@@ -2677,8 +2679,10 @@ bool Offset::ParseShorthand(
   } else {
     css_parsing_utils::AddProperty(
         CSSPropertyID::kOffsetDistance, CSSPropertyID::kOffset,
-        *CSSInitialValue::Create(), important,
-        css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
+        *CSSNumericLiteralValue::Create(0,
+                                        CSSPrimitiveValue::UnitType::kPixels),
+        important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
+        properties);
   }
 
   if (offset_rotate) {
@@ -2689,7 +2693,7 @@ bool Offset::ParseShorthand(
   } else {
     css_parsing_utils::AddProperty(
         CSSPropertyID::kOffsetRotate, CSSPropertyID::kOffset,
-        *CSSInitialValue::Create(), important,
+        *CSSIdentifierValue::Create(CSSValueID::kAuto), important,
         css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
   }
 
@@ -2701,7 +2705,7 @@ bool Offset::ParseShorthand(
   } else if (RuntimeEnabledFeatures::CSSOffsetPositionAnchorEnabled()) {
     css_parsing_utils::AddProperty(
         CSSPropertyID::kOffsetAnchor, CSSPropertyID::kOffset,
-        *CSSInitialValue::Create(), important,
+        *CSSIdentifierValue::Create(CSSValueID::kAuto), important,
         css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
   }
 
@@ -3190,20 +3194,15 @@ const CSSValue* ScrollPaddingInline::CSSValueFromComputedStyleInternal(
 
 namespace {
 
-// Consume a single name and a single axis, and append the result to
+// Consume a single name, axis, and attachment, then append the result to
 // `name_list` and `axis_list` respectively.
 bool ConsumeTimelineItemInto(CSSParserTokenRange& range,
                              const CSSParserContext& context,
                              CSSValueList* name_list,
-                             CSSValueList* axis_list,
-                             CSSValueList* attachment_list) {
-  using css_parsing_utils::ConsumeSingleTimelineAttachment;
+                             CSSValueList* axis_list) {
   using css_parsing_utils::ConsumeSingleTimelineAxis;
   using css_parsing_utils::ConsumeSingleTimelineName;
 
-  // Note that while the spec theoretically allows the name and axis in
-  // any order, the name will always come first in practice, since any
-  // value accepted as an axis is also accepted as a name.
   CSSValue* name = ConsumeSingleTimelineName(range, context);
 
   if (!name) {
@@ -3215,14 +3214,8 @@ bool ConsumeTimelineItemInto(CSSParserTokenRange& range,
     axis = CSSIdentifierValue::Create(CSSValueID::kBlock);
   }
 
-  CSSValue* attachment = ConsumeSingleTimelineAttachment(range);
-  if (!attachment) {
-    attachment = CSSIdentifierValue::Create(CSSValueID::kLocal);
-  }
-
   name_list->Append(*name);
   axis_list->Append(*axis);
-  attachment_list->Append(*attachment);
 
   return true;
 }
@@ -3238,60 +3231,132 @@ bool ParseTimelineShorthand(CSSPropertyID shorthand_id,
   using css_parsing_utils::ConsumeCommaIncludingWhitespace;
   using css_parsing_utils::IsImplicitProperty;
 
-  DCHECK_EQ(3u, shorthand.length());
-
   CSSValueList* name_list = CSSValueList::CreateCommaSeparated();
   CSSValueList* axis_list = CSSValueList::CreateCommaSeparated();
-  CSSValueList* attachment_list = CSSValueList::CreateCommaSeparated();
 
   do {
-    if (!ConsumeTimelineItemInto(range, context, name_list, axis_list,
-                                 attachment_list)) {
+    if (!ConsumeTimelineItemInto(range, context, name_list, axis_list)) {
       return false;
     }
   } while (ConsumeCommaIncludingWhitespace(range));
 
   DCHECK(name_list->length());
   DCHECK(axis_list->length());
-  DCHECK(attachment_list->length());
   DCHECK_EQ(name_list->length(), axis_list->length());
-  DCHECK_EQ(name_list->length(), attachment_list->length());
 
+  DCHECK_EQ(shorthand.length(), 2u);
   AddProperty(shorthand.properties()[0]->PropertyID(), shorthand_id, *name_list,
               important, IsImplicitProperty::kNotImplicit, properties);
   AddProperty(shorthand.properties()[1]->PropertyID(), shorthand_id, *axis_list,
               important, IsImplicitProperty::kNotImplicit, properties);
-  AddProperty(shorthand.properties()[2]->PropertyID(), shorthand_id,
-              *attachment_list, important, IsImplicitProperty::kNotImplicit,
-              properties);
 
   return range.AtEnd();
 }
 
 static CSSValue* CSSValueForTimelineShorthand(
     const HeapVector<Member<const ScopedCSSName>>& name_vector,
-    const Vector<TimelineAxis>& axis_vector,
-    const Vector<TimelineAttachment>& attachment_vector) {
+    const Vector<TimelineAxis>& axis_vector) {
   CSSValueList* list = CSSValueList::CreateCommaSeparated();
 
-  if (name_vector.size() != axis_vector.size() ||
-      name_vector.size() != attachment_vector.size()) {
+  if (name_vector.size() != axis_vector.size()) {
     return list;
   }
   if (name_vector.empty()) {
     list->Append(*ComputedStyleUtils::SingleValueForTimelineShorthand(
-        /* name */ nullptr, TimelineAxis::kBlock, TimelineAttachment::kLocal));
+        /* name */ nullptr, TimelineAxis::kBlock));
     return list;
   }
   for (wtf_size_t i = 0; i < name_vector.size(); ++i) {
     list->Append(*ComputedStyleUtils::SingleValueForTimelineShorthand(
-        name_vector[i].Get(), axis_vector[i], attachment_vector[i]));
+        name_vector[i].Get(), axis_vector[i]));
   }
 
   return list;
 }
 
 }  // namespace
+
+bool ScrollStart::ParseShorthand(
+    bool important,
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext& local_context,
+    HeapVector<CSSPropertyValue, 64>& properties) const {
+  CSSValue* block_value = css_parsing_utils::ConsumeScrollStart(range, context);
+  if (!block_value) {
+    return false;
+  }
+  CSSValue* inline_value =
+      css_parsing_utils::ConsumeScrollStart(range, context);
+  if (!inline_value) {
+    inline_value = CSSIdentifierValue::Create(CSSValueID::kStart);
+  }
+  AddProperty(scrollStartShorthand().properties()[0]->PropertyID(),
+              scrollStartShorthand().id(), *block_value, important,
+              css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
+  AddProperty(scrollStartShorthand().properties()[1]->PropertyID(),
+              scrollStartShorthand().id(), *inline_value, important,
+              css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
+  return range.AtEnd();
+}
+
+const CSSValue* ScrollStart::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style) const {
+  const CSSValue* block_value =
+      scrollStartShorthand().properties()[0]->CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style);
+  const CSSValue* inline_value =
+      scrollStartShorthand().properties()[1]->CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style);
+  if (const auto* ident_value = DynamicTo<CSSIdentifierValue>(inline_value);
+      !ident_value || ident_value->GetValueID() != CSSValueID::kStart) {
+    return MakeGarbageCollected<CSSValuePair>(
+        block_value, inline_value, CSSValuePair::kDropIdenticalValues);
+  }
+  return block_value;
+}
+
+bool ScrollStartTarget::ParseShorthand(
+    bool important,
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext& local_context,
+    HeapVector<CSSPropertyValue, 64>& properties) const {
+  CSSValue* block_value = css_parsing_utils::ConsumeScrollStartTarget(range);
+  if (!block_value) {
+    return false;
+  }
+  CSSValue* inline_value = css_parsing_utils::ConsumeScrollStartTarget(range);
+  if (!inline_value) {
+    inline_value = CSSIdentifierValue::Create(CSSValueID::kNone);
+  }
+  AddProperty(scrollStartTargetShorthand().properties()[0]->PropertyID(),
+              scrollStartTargetShorthand().id(), *block_value, important,
+              css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
+  AddProperty(scrollStartTargetShorthand().properties()[1]->PropertyID(),
+              scrollStartTargetShorthand().id(), *inline_value, important,
+              css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
+  return range.AtEnd();
+}
+
+const CSSValue* ScrollStartTarget::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style) const {
+  const CSSValue* block_value =
+      scrollStartTargetShorthand().properties()[0]->CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style);
+  const CSSValue* inline_value =
+      scrollStartTargetShorthand().properties()[1]->CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style);
+  if (To<CSSIdentifierValue>(*inline_value).GetValueID() != CSSValueID::kNone) {
+    return MakeGarbageCollected<CSSValuePair>(
+        block_value, inline_value, CSSValuePair::kDropIdenticalValues);
+  }
+  return block_value;
+}
 
 bool ScrollTimeline::ParseShorthand(
     bool important,
@@ -3312,10 +3377,7 @@ const CSSValue* ScrollTimeline::CSSValueFromComputedStyleInternal(
       style.ScrollTimelineName() ? style.ScrollTimelineName()->GetNames()
                                  : HeapVector<Member<const ScopedCSSName>>{};
   const Vector<TimelineAxis>& axis_vector = style.ScrollTimelineAxis();
-  const Vector<TimelineAttachment>& attachment_vector =
-      style.ScrollTimelineAttachment();
-  return CSSValueForTimelineShorthand(name_vector, axis_vector,
-                                      attachment_vector);
+  return CSSValueForTimelineShorthand(name_vector, axis_vector);
 }
 
 bool TextDecoration::ParseShorthand(
@@ -3397,11 +3459,14 @@ bool Transition::ParseShorthand(
   const StylePropertyShorthand shorthand = transitionShorthandForParsing();
   const unsigned longhand_count = shorthand.length();
 
+  // Only relevant for 'animation'.
+  auto is_reset_only_function = [](CSSPropertyID) { return false; };
+
   HeapVector<Member<CSSValueList>, css_parsing_utils::kMaxNumAnimationLonghands>
       longhands(longhand_count);
   if (!css_parsing_utils::ConsumeAnimationShorthand(
-          shorthand, longhands, ConsumeTransitionValue, range, context,
-          local_context.UseAliasParsing())) {
+          shorthand, longhands, ConsumeTransitionValue, is_reset_only_function,
+          range, context, local_context.UseAliasParsing())) {
     return false;
   }
 
@@ -3480,10 +3545,7 @@ const CSSValue* ViewTimeline::CSSValueFromComputedStyleInternal(
       style.ViewTimelineName() ? style.ViewTimelineName()->GetNames()
                                : HeapVector<Member<const ScopedCSSName>>{};
   const Vector<TimelineAxis>& axis_vector = style.ViewTimelineAxis();
-  const Vector<TimelineAttachment>& attachment_vector =
-      style.ViewTimelineAttachment();
-  return CSSValueForTimelineShorthand(name_vector, axis_vector,
-                                      attachment_vector);
+  return CSSValueForTimelineShorthand(name_vector, axis_vector);
 }
 
 bool WebkitColumnBreakAfter::ParseShorthand(

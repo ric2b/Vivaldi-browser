@@ -27,7 +27,6 @@
 #include "cc/raster/raster_source.h"
 #include "components/viz/client/client_resource_provider.h"
 #include "components/viz/common/features.h"
-#include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/context_support.h"
@@ -72,7 +71,7 @@ class GpuRasterBufferProvider::GpuRasterBacking
     pmd->AddOwnershipEdge(buffer_dump_guid, tracing_guid, importance);
   }
 
-  // The ContextProvider used to clean up the mailbox
+  // The context used to clean up the mailbox
   raw_ptr<viz::RasterContextProvider> worker_context_provider = nullptr;
 };
 
@@ -136,10 +135,10 @@ bool GpuRasterBufferProvider::RasterBufferImpl::
 }
 
 GpuRasterBufferProvider::GpuRasterBufferProvider(
-    viz::ContextProvider* compositor_context_provider,
+    viz::RasterContextProvider* compositor_context_provider,
     viz::RasterContextProvider* worker_context_provider,
     bool use_gpu_memory_buffer_resources,
-    viz::SharedImageFormat tile_format,
+    const RasterCapabilities& raster_caps,
     const gfx::Size& max_tile_size,
     bool unpremultiply_and_dither_low_bit_depth_tiles,
     RasterQueryQueue* const pending_raster_queries,
@@ -147,7 +146,7 @@ GpuRasterBufferProvider::GpuRasterBufferProvider(
     : compositor_context_provider_(compositor_context_provider),
       worker_context_provider_(worker_context_provider),
       use_gpu_memory_buffer_resources_(use_gpu_memory_buffer_resources),
-      tile_format_(tile_format),
+      tile_format_(raster_caps.tile_format),
       max_tile_size_(max_tile_size),
       pending_raster_queries_(pending_raster_queries),
       raster_metric_probability_(raster_metric_probability),
@@ -156,7 +155,18 @@ GpuRasterBufferProvider::GpuRasterBufferProvider(
           base::FeatureList::IsEnabled(features::kUseDMSAAForTiles)) {
   DCHECK(pending_raster_queries);
   DCHECK(compositor_context_provider);
-  DCHECK(worker_context_provider);
+  CHECK(worker_context_provider);
+
+#if BUILDFLAG(IS_ANDROID)
+  // On Android, DMSAA is currently only enabled for vulkan until GL
+  // regressions are fixed.
+  {
+    absl::optional<viz::RasterContextProvider::ScopedRasterContextLock> lock;
+    lock.emplace(worker_context_provider);
+    is_using_dmsaa_ &=
+        worker_context_provider->ContextCapabilities().using_vulkan_context;
+  }
+#endif
 }
 
 GpuRasterBufferProvider::~GpuRasterBufferProvider() = default;
@@ -388,7 +398,7 @@ void GpuRasterBufferProvider::RasterBufferImpl::RasterizeSource(
                               base::bits::Log2Floor(sample_count), 0, 7, 7);
   // With Raw Draw, the framebuffer will be the rasterization target. It cannot
   // support LCD text, so disable LCD text for Raw Draw backings.
-  // TODO(penghuang): remove it when GrSlug can be serialized.
+  // TODO(penghuang): remove it when sktext::gpu::Slug can be serialized.
   bool is_raw_draw_backing =
       client_->is_using_raw_draw_ && !backing_->overlay_candidate;
   bool use_lcd_text = playback_settings.use_lcd_text && !is_raw_draw_backing;

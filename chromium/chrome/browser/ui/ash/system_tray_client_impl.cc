@@ -181,12 +181,9 @@ void OpenInBrowser(const GURL& event_url) {
   }
 
   // Lacros is not the primary browser, so use this workaround.
-  chrome::ScopedTabbedBrowserDisplayer displayer(
-      ProfileManager::GetActiveUserProfile());
-  NavigateParams params(
-      GetSingletonTabNavigateParams(displayer.browser(), event_url));
-  params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(displayer.browser(), &params);
+  ShowSingletonTabOverwritingNTP(ProfileManager::GetActiveUserProfile(),
+                                 event_url,
+                                 NavigateParams::IGNORE_AND_NAVIGATE);
 }
 
 ash::ManagementDeviceMode GetManagementDeviceMode(
@@ -448,6 +445,14 @@ void SystemTrayClientImpl::ShowPrivacyHubSettings() {
       chromeos::settings::mojom::kPrivacyHubSubpagePath);
 }
 
+void SystemTrayClientImpl::ShowSpeakOnMuteDetectionSettings() {
+  ShowSettingsSubPageForActiveUser(
+      std::string(chromeos::settings::mojom::kPrivacyHubSubpagePath) +
+      "?settingId=" +
+      base::NumberToString(static_cast<int32_t>(
+          chromeos::settings::mojom::Setting::kSpeakOnMuteDetectionOnOff)));
+}
+
 void SystemTrayClientImpl::ShowSmartPrivacySettings() {
   ShowSettingsSubPageForActiveUser(
       chromeos::settings::mojom::kSmartPrivacySubpagePath);
@@ -512,6 +517,16 @@ void SystemTrayClientImpl::ShowAccessibilitySettings() {
           : chromeos::settings::mojom::kAccessibilitySectionPath);
 }
 
+void SystemTrayClientImpl::ShowColorCorrectionSettings() {
+  if (user_manager::UserManager::Get()->IsLoggedInAsAnyKioskApp()) {
+    // TODO(b/259370808): Color correction settings subpage not available in
+    // Kiosk.
+    return;
+  }
+  ShowSettingsSubPageForActiveUser(
+      chromeos::settings::mojom::kDisplayAndMagnificationSubpagePath);
+}
+
 void SystemTrayClientImpl::ShowGestureEducationHelp() {
   base::RecordAction(base::UserMetricsAction("ShowGestureEducationHelp"));
   Profile* profile = ProfileManager::GetActiveUserProfile();
@@ -532,9 +547,8 @@ void SystemTrayClientImpl::ShowPaletteHelp() {
     return;
   }
 
-  chrome::ScopedTabbedBrowserDisplayer displayer(
-      ProfileManager::GetActiveUserProfile());
-  ShowSingletonTab(displayer.browser(), GURL(chrome::kChromePaletteHelpURL));
+  ShowSingletonTab(ProfileManager::GetActiveUserProfile(),
+                   GURL(chrome::kChromePaletteHelpURL));
 }
 
 void SystemTrayClientImpl::ShowPaletteSettings() {
@@ -637,6 +651,11 @@ void SystemTrayClientImpl::ShowSettingsSimUnlock() {
 
 void SystemTrayClientImpl::ShowNetworkSettings(const std::string& network_id) {
   ShowNetworkSettingsHelper(network_id, false /* show_configure */);
+}
+
+void SystemTrayClientImpl::ShowHotspotSubpage() {
+  ShowSettingsSubPageForActiveUser(
+      chromeos::settings::mojom::kHotspotSubpagePath);
 }
 
 void SystemTrayClientImpl::ShowNetworkSettingsHelper(
@@ -781,7 +800,6 @@ void SystemTrayClientImpl::ShowChannelInfoGiveFeedback() {
 }
 
 void SystemTrayClientImpl::ShowAudioSettings() {
-  DCHECK(ash::features::IsAudioSettingsPageEnabled());
   base::RecordAction(base::UserMetricsAction("ShowAudioSettingsPage"));
   ShowSettingsSubPageForActiveUser(
       chromeos::settings::mojom::kAudioSubpagePath);
@@ -904,8 +922,7 @@ void SystemTrayClientImpl::UpdateDeviceEnterpriseInfo() {
   ash::DeviceEnterpriseInfo device_enterprise_info;
   device_enterprise_info.enterprise_domain_manager =
       connector->GetEnterpriseDomainManager();
-  device_enterprise_info.active_directory_managed =
-      connector->IsActiveDirectoryManaged();
+  device_enterprise_info.active_directory_managed = false;
   device_enterprise_info.management_device_mode =
       GetManagementDeviceMode(connector);
   if (!last_device_enterprise_info_) {

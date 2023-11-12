@@ -13,7 +13,6 @@
 @property(nonatomic, copy) NSString* lastSyncDateString;
 // Indicates if sync is connected and active
 @property(nonatomic) NSString* statusText;
-@property(nonatomic) UIColor* statusIndicatorColor;
 @property(nonatomic) UIColor* statusBackgroundColor;
 @end
 
@@ -24,7 +23,8 @@
 // Label displaying the sync status
 @property(nonatomic, readonly, strong) UILabel* syncActiveLabel;
 @property(nonatomic, readonly, strong) UIView* syncStatusView;
-@property(nonatomic, readonly, strong) UIImageView* statusCircle;
+
+- (void)updateLabelCornerRadius;
 
 @end
 

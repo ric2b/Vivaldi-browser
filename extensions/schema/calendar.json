@@ -7,7 +7,7 @@
       {
         "id": "AccountType",
         "type": "string",
-        "enum": [ "local", "vivaldi", "google", "caldav", "ical"],
+        "enum": [ "local", "vivaldi", "google", "caldav", "ical", "fastmail"],
         "description": "The account type. Maps to int in db: 0: Local. 1: Vivaldi.net calendar. 2: Google Calendar. 3: CalDAV.  4: Read only iCal."
       },
       {

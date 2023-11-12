@@ -136,7 +136,7 @@ TEST_F(AppCommandRunnerTest, FormatParameter) {
   const struct {
     const wchar_t* format_string;
     const wchar_t* expected_output;
-    const std::vector<std::wstring>& substitutions;
+    const std::vector<std::wstring> substitutions;
   } test_cases[] = {
       // Format string does not have any placeholders.
       {L"abc=1 xyz=2 q", L"abc=1 xyz=2 q", no_substitutions},
@@ -187,7 +187,7 @@ TEST_F(AppCommandRunnerTest,
   const struct {
     std::vector<std::wstring> input;
     const wchar_t* output;
-    const std::vector<std::wstring>& substitutions;
+    const std::vector<std::wstring> substitutions;
   } test_cases[] = {
       // Unformatted parameters.
       {{L"abc=1"}, L"abc=1", nosubstitutions},
@@ -443,9 +443,7 @@ TEST_F(AppCommandRunnerTest, RunProcessLauncherFormat) {
         kAppId1, test_case.app_name, test_case.app_version, test_case.cmd_id,
         base::StrCat({cmd_exe_command_line_.GetCommandLineString(), L" ",
                       base::JoinString(test_case.input, L" ")}));
-    ASSERT_EQ(
-        app_command_runner.has_value() ? S_OK : app_command_runner.error(),
-        test_case.expected_hr);
+    ASSERT_EQ(app_command_runner.error_or(S_OK), test_case.expected_hr);
     if (FAILED(test_case.expected_hr)) {
       continue;
     }

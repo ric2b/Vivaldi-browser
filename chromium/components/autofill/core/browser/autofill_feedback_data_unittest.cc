@@ -23,7 +23,7 @@ namespace {
 const char kExpectedFeedbackDataJSON[] = R"({
    "formStructures": [ {
       "formSignature": "4232380759432074174",
-      "hostFrame": "00000000000000000000000000000000",
+      "hostFrame": "00000000000181CD000000000000A8CA",
       "idAttribute": "",
       "mainFrameUrl": "https://myform_root.com",
       "nameAttribute": "",
@@ -97,6 +97,7 @@ const char kExpectedFeedbackDataJSON[] = R"({
 })";
 
 void CreateFeedbackTestFormData(FormData* form) {
+  form->host_frame = test::MakeLocalFrameToken(test::RandomizeFrame(false));
   form->unique_renderer_id = test::MakeFormRendererId();
   form->name = u"MyForm";
   form->url = GURL("https://myform.com/form.html");
@@ -107,11 +108,14 @@ void CreateFeedbackTestFormData(FormData* form) {
   FormFieldData field;
   test::CreateTestFormField("First Name on Card", "firstnameoncard", "", "text",
                             "cc-given-name", &field);
+  field.host_frame = form->host_frame;
   form->fields.push_back(field);
   test::CreateTestFormField("Last Name on Card", "lastnameoncard", "", "text",
                             "cc-family-name", &field);
+  field.host_frame = form->host_frame;
   form->fields.push_back(field);
   test::CreateTestFormField("Email", "email", "", "email", &field);
+  field.host_frame = form->host_frame;
   form->fields.push_back(field);
 }
 }  // namespace
@@ -150,7 +154,6 @@ TEST_F(AutofillFeedbackDataUnitTest, CreatesCompleteReport) {
   auto expected_data = base::JSONReader::ReadAndReturnValueWithError(
       kExpectedFeedbackDataJSON,
       base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS);
-
   ASSERT_TRUE(expected_data.has_value()) << expected_data.error().message;
   ASSERT_TRUE(expected_data->is_dict());
   EXPECT_EQ(autofill_feedback_data, expected_data->GetDict());
@@ -166,7 +169,7 @@ TEST_F(AutofillFeedbackDataUnitTest, IncludesLastAutofillEventLogEntry) {
 
   // Simulates an autofill event.
   browser_autofill_manager_->OnSingleFieldSuggestionSelected(
-      u"TestValue", POPUP_ITEM_ID_IBAN_ENTRY, form, field);
+      u"TestValue", PopupItemId::kIbanEntry, form, field);
 
   auto expected_data = base::JSONReader::ReadAndReturnValueWithError(
       kExpectedFeedbackDataJSON,
@@ -198,7 +201,7 @@ TEST_F(AutofillFeedbackDataUnitTest,
 
   // Simulates an autofill event.
   browser_autofill_manager_->OnSingleFieldSuggestionSelected(
-      u"TestValue", POPUP_ITEM_ID_IBAN_ENTRY, form, field);
+      u"TestValue", PopupItemId::kIbanEntry, form, field);
 
   // Advance the clock 4 minutes should disregard the last autofill event log.
   clock.Advance(base::Minutes(4));

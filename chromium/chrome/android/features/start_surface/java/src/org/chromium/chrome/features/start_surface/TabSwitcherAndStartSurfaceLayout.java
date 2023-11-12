@@ -45,16 +45,17 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher.TabListDelegate;
+import org.chromium.chrome.browser.tasks.tab_management.TabSwitcherLayout.PerfListener;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.features.start_surface.StartSurface.TabSwitcherViewObserver;
 import org.chromium.chrome.features.tasks.TasksView;
 import org.chromium.components.browser_ui.styles.ChromeColors;
-import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.components.browser_ui.widget.scrim.ScrimProperties;
 import org.chromium.components.version_info.VersionInfo;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.interpolators.Interpolators;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.resources.ResourceManager;
 
@@ -103,12 +104,13 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
     // Always use getCarouselOrSingleTabListDelegate() instead to make sure it's not null.
     @Nullable
     private TabSwitcher.TabListDelegate mCarouselOrSingleTabListDelegate;
-
-    // To force Toolbar finishes its animation when this Layout finished hiding.
-    private final LayoutTab mDummyLayoutTab;
     private boolean mIsInitialized;
 
+    // Only access this value via isTabGtsAnimationEnabled. Caches the value to avoid repeated
+    // calculations during animations.
+    private Boolean mCachedIsTabGtsAnimationEnabled;
     private float mBackgroundAlpha;
+    private int mTabListTopOffset;
 
     private int mFrameCount;
     private long mStartTime;
@@ -120,19 +122,12 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
 
     private Animator mBackgroundTabAnimation;
 
-    interface PerfListener {
-        void onAnimationDone(
-                int frameRendered, long elapsedMs, long maxFrameInterval, int dirtySpan);
-    }
-
     private PerfListener mPerfListenerForTesting;
 
     public TabSwitcherAndStartSurfaceLayout(Context context, LayoutUpdateHost updateHost,
             LayoutRenderHost renderHost, StartSurface startSurface,
             ViewGroup tabSwitcherScrimAnchor, ScrimCoordinator scrimCoordinator) {
         super(context, updateHost, renderHost);
-        mDummyLayoutTab = createLayoutTab(Tab.INVALID_TAB_ID, false);
-        mDummyLayoutTab.setShowToolbar(true);
         mStartSurface = startSurface;
         mStartSurface.setOnTabSelectingListener(this::onTabSelecting);
         mScrimAnchor = tabSwitcherScrimAnchor;
@@ -154,7 +149,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
                 // causing janky frames. When animation is off or not used, the thumbnail is already
                 // updated when showing the GTS. Tab-to-GTS animation is not invoked for tablet tab
                 // switcher polish.
-                if (isTabGtsAnimationEnabled()) {
+                if (isTabGtsAnimationEnabled(false)) {
                     // Delay thumbnail taking a bit more to make it less likely to happen before the
                     // thumbnail taking triggered by ThumbnailFetcher. See crbug.com/996385 for
                     // details.
@@ -180,7 +175,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
                 // If not doing GTS-to-Tab transition animation or start surface homepage is hiding
                 // (instead of grid tab switcher), we show the fade-out instead, which was already
                 // done.
-                if (!isTabGtsAnimationEnabled() || isHidingStartSurfaceHomepage()) {
+                if (!isTabGtsAnimationEnabled(false) || isHidingStartSurfaceHomepage()) {
                     postHiding();
                     return;
                 }
@@ -211,11 +206,6 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         if (mSceneLayer != null) {
             mSceneLayer.setTabModelSelector(modelSelector);
         }
-    }
-
-    @Override
-    public LayoutTab getLayoutTab(int id) {
-        return mDummyLayoutTab;
     }
 
     @Override
@@ -309,7 +299,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
                 // until the next layout pass.
                 mDeferredAnimationRunnable = () -> {
                     showOverviewWithTabShrink(shouldAnimate, () -> {
-                        return getGridTabListDelegate().getThumbnailLocationOfCurrentTab(false);
+                        return getGridTabListDelegate().getThumbnailLocationOfCurrentTab();
                     }, isShowingStartSurfaceHomepage, quick);
                 };
                 getGridTabListDelegate().runAnimationOnNextLayout(() -> {
@@ -412,7 +402,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
             translateDown();
         } else {
-            mStartSurface.hideTabSwitcherView(!isTabGtsAnimationEnabled());
+            mStartSurface.hideTabSwitcherView(!isTabGtsAnimationEnabled(true));
         }
     }
 
@@ -510,7 +500,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         // Skip shrinking animation when there is no tab in current tab model. If it's showing
         // start surface, we don't show the shrink tab animation.
         boolean isCurrentTabModelEmpty = mTabModelSelector.getCurrentModel().getCount() == 0;
-        boolean showShrinkingAnimation = animate && isTabGtsAnimationEnabled()
+        boolean showShrinkingAnimation = animate && isTabGtsAnimationEnabled(true)
                 && !isCurrentTabModelEmpty && !isShowingStartSurfaceHomepage;
 
         boolean skipSlowZooming = TabUiFeatureUtilities.SKIP_SLOW_ZOOMING.getValue();
@@ -519,7 +509,8 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
             showShrinkingAnimation &= quick;
         }
 
-        if (!showShrinkingAnimation || target.get() == null) {
+        final Rect targetRect = target.get();
+        if (!showShrinkingAnimation || targetRect == null) {
             mStartSurface.showOverview(animate);
             return;
         }
@@ -541,13 +532,13 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
 
         // Step 1: zoom out the source tab
         Supplier<Float> scaleStartValueSupplier = () -> 1.0f;
-        Supplier<Float> scaleEndValueSupplier = () -> target.get().width() / (getWidth() * mDpToPx);
+        Supplier<Float> scaleEndValueSupplier = () -> targetRect.width() / (getWidth() * mDpToPx);
 
         Supplier<Float> xStartValueSupplier = () -> 0f;
-        Supplier<Float> xEndValueSupplier = () -> target.get().left / mDpToPx;
+        Supplier<Float> xEndValueSupplier = () -> targetRect.left / mDpToPx;
 
         Supplier<Float> yStartValueSupplier = () -> 0f;
-        Supplier<Float> yEndValueSupplier = () -> target.get().top / mDpToPx;
+        Supplier<Float> yEndValueSupplier = () -> targetRect.top / mDpToPx;
 
         animationList.add(CompositorAnimator.ofWritableFloatPropertyKey(handler, sourceLayoutTab,
                 LayoutTab.SCALE, scaleStartValueSupplier, scaleEndValueSupplier, ZOOMING_DURATION,
@@ -568,6 +559,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
                         : getWidth(),
                 ZOOMING_DURATION, Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR));
 
+        mTabListTopOffset = getLastUsedTabListDelegate().getTabListTopOffset();
         CompositorAnimator backgroundAlpha =
                 CompositorAnimator.ofFloat(handler, 0f, 1f, BACKGROUND_FADING_DURATION_MS,
                         animator -> mBackgroundAlpha = animator.getAnimatedValue());
@@ -633,6 +625,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
                 sourceLayoutTab.getUnclampedOriginalContentHeight(), ZOOMING_DURATION,
                 Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR));
 
+        mTabListTopOffset = getLastUsedTabListDelegate().getTabListTopOffset();
         CompositorAnimator backgroundAlpha =
                 CompositorAnimator.ofFloat(handler, 1f, 0f, BACKGROUND_FADING_DURATION_MS,
                         animator -> mBackgroundAlpha = animator.getAnimatedValue());
@@ -713,7 +706,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
     private void translateDown() {
         // Note(david@vivaldi.com): We don't translate we just hide the overview.
         if (BuildConfig.IS_VIVALDI) {
-            mStartSurface.hideTabSwitcherView(!isTabGtsAnimationEnabled());
+            mStartSurface.hideTabSwitcherView(!isTabGtsAnimationEnabled(false));
             return;
         }
 
@@ -750,9 +743,9 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
 
     private Rect getThumbnailLocationOfCurrentTab() {
         if (isHidingStartSurfaceHomepage()) {
-            return getCarouselOrSingleTabListDelegate().getThumbnailLocationOfCurrentTab(true);
+            return getCarouselOrSingleTabListDelegate().getThumbnailLocationOfCurrentTab();
         } else {
-            return getGridTabListDelegate().getThumbnailLocationOfCurrentTab(true);
+            return getGridTabListDelegate().getThumbnailLocationOfCurrentTab();
         }
     }
 
@@ -804,7 +797,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
     }
 
     @VisibleForTesting
-    void setPerfListenerForTesting(PerfListener perfListener) {
+    public void setPerfListenerForTesting(PerfListener perfListener) {
         mPerfListenerForTesting = perfListener;
     }
 
@@ -869,8 +862,8 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         // The content viewport is intentionally sent as both params below.
         mSceneLayer.pushLayers(getContext(), contentViewport, contentViewport, this,
                 tabContentManager, resourceManager, browserControls,
-                isTabGtsAnimationEnabled() ? currentTabListDelegate.getResourceId() : 0,
-                mBackgroundAlpha, currentTabListDelegate.getTabListTopOffset());
+                isTabGtsAnimationEnabled(false) ? currentTabListDelegate.getResourceId() : 0,
+                mBackgroundAlpha, mTabListTopOffset);
         mFrameCount++;
         if (mLastFrameTime != 0) {
             long elapsed = SystemClock.elapsedRealtime() - mLastFrameTime;
@@ -914,8 +907,15 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
      * Shrink/Expand animation is disabled for Tablet TabSwitcher launch polish.
      * @return Whether shrink/expand animation is enabled.
      */
-    private boolean isTabGtsAnimationEnabled() {
-        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) return false;
-        return TabUiFeatureUtilities.isTabToGtsAnimationEnabled(getContext());
+    private boolean isTabGtsAnimationEnabled(boolean updateCachedValue) {
+        if (updateCachedValue || mCachedIsTabGtsAnimationEnabled == null) {
+            if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
+                mCachedIsTabGtsAnimationEnabled = false;
+            } else {
+                mCachedIsTabGtsAnimationEnabled =
+                        TabUiFeatureUtilities.isTabToGtsAnimationEnabled(getContext());
+            }
+        }
+        return mCachedIsTabGtsAnimationEnabled;
     }
 }

@@ -18,6 +18,7 @@
 #include "chrome/browser/media/webrtc/capture_policy_utils.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/same_origin_observer.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -55,11 +56,11 @@ using content::GlobalRenderFrameHostId;
 using content::RenderFrameHost;
 using content::WebContents;
 
-// Killswitch for removing the "share this tab instead" button for self-capture,
-// in those special circumstances where it was recently allowed.
-// TODO(crbug.com/1395477): Remove this.
-BASE_FEATURE(kShareThisTabInsteadSelfCapture,
-             "ShareThisTabInsteadSelfCapture",
+// Killswitch for bypassing the new logic for fixing tab-sharing indicators
+// for guest mode, in case an unexpected bug is discovered.
+// TODO(crbug.com/1443411): Remove this.
+BASE_FEATURE(kTabShareInGuestModeBugfix,
+             "TabShareInGuestModeBugfix",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -144,6 +145,7 @@ TabSharingUIViews::TabSharingUIViews(
     bool app_preferred_current_tab,
     TabSharingInfoBarDelegate::TabShareType capture_type)
     : capture_session_id_(next_capture_session_id_++),
+      profile_(ProfileManager::GetLastUsedProfileAllowedByPolicy()),
       capturer_(capturer),
       capturer_origin_(GetOriginFromId(capturer)),
       can_focus_capturer_(GetOriginFromId(capturer).scheme() !=
@@ -163,7 +165,6 @@ TabSharingUIViews::TabSharingUIViews(
 
   Observe(shared_tab_);
   shared_tab_name_ = GetTabName(shared_tab_);
-  profile_ = ProfileManager::GetLastUsedProfileAllowedByPolicy();
 
   if (capturer_restricted_to_same_origin_) {
     // base::Unretained is safe here because we own the origin observer, so it
@@ -233,8 +234,12 @@ void TabSharingUIViews::StopSharing() {
 }
 
 void TabSharingUIViews::OnBrowserAdded(Browser* browser) {
-  if (browser->profile()->GetOriginalProfile() == profile_)
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  CHECK(browser);
+
+  if (IsCapturableByCapturer(browser->profile())) {
     browser->tab_strip_model()->AddObserver(this);
+  }
 }
 
 void TabSharingUIViews::OnBrowserRemoved(Browser* browser) {
@@ -355,6 +360,13 @@ void TabSharingUIViews::CreateInfobarsForAllTabs() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   BrowserList* browser_list = BrowserList::GetInstance();
   for (auto* browser : *browser_list) {
+    CHECK(browser);
+
+    if (base::FeatureList::IsEnabled(kTabShareInGuestModeBugfix) &&
+        !IsCapturableByCapturer(browser->profile())) {
+      continue;
+    }
+
     OnBrowserAdded(browser);
 
     TabStripModel* tab_strip_model = browser->tab_strip_model();
@@ -547,7 +559,7 @@ ui::ImageModel TabSharingUIViews::TabFavicon(WebContents* web_contents) const {
   }
 
   if (!web_contents) {
-    return ui::ImageModel::FromImage(favicon::GetDefaultFavicon());
+    return favicon::GetDefaultFaviconModel();
   }
 
   auto it = favicon_overrides_for_testing_.find(web_contents);
@@ -556,8 +568,8 @@ ui::ImageModel TabSharingUIViews::TabFavicon(WebContents* web_contents) const {
   }
 
   const gfx::Image favicon = favicon::TabFaviconFromWebContents(web_contents);
-  return ui::ImageModel::FromImage(
-      favicon.IsEmpty() ? favicon::GetDefaultFavicon() : favicon);
+  return favicon.IsEmpty() ? favicon::GetDefaultFaviconModel()
+                           : ui::ImageModel::FromImage(favicon);
 }
 
 ui::ImageModel TabSharingUIViews::TabFavicon(
@@ -628,6 +640,23 @@ bool TabSharingUIViews::IsShareInsteadButtonPossible(
   // Note that for many applications, choosing the current tab is undesirable.
   // For example, in the context of video-conferencing applications, it would
   // often produce a "hall of mirrors" effect.
-  return base::FeatureList::IsEnabled(kShareThisTabInsteadSelfCapture) &&
-         app_preferred_current_tab_;
+  return app_preferred_current_tab_;
+}
+
+bool TabSharingUIViews::IsCapturableByCapturer(const Profile* profile) const {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  CHECK(profile);
+
+  if (base::FeatureList::IsEnabled(kTabShareInGuestModeBugfix)) {
+    // Guest profiles may have an arbitrary non-guest profile as their original,
+    // so direct comparison would not work. Instead, we rely on the assumption
+    // that there is at most one guest profile.
+    const bool capturer_is_guest = profile_ && profile_->IsGuestSession();
+    const bool new_is_guest = profile->IsGuestSession();
+    if (capturer_is_guest || new_is_guest) {
+      return capturer_is_guest && new_is_guest;
+    }
+  }
+
+  return profile->GetOriginalProfile() == profile_;
 }

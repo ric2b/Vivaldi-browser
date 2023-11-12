@@ -20,6 +20,7 @@
 #include "third_party/skia/include/core/SkYUVAPixmaps.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/ganesh/SkImageGanesh.h"
+#include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 
 namespace media {
@@ -39,15 +40,13 @@ viz::SharedImageFormat PlaneSharedImageFormat(int num_channels,
     case 4:
       return viz::SinglePlaneFormat::kRGBA_8888;
   }
-  NOTREACHED();
-  return viz::SinglePlaneFormat::kRGBA_8888;
+  NOTREACHED_NORETURN();
 }
 
-GLenum PlaneGLFormat(int num_channels, const gpu::Capabilities& capabilities) {
-  return viz::TextureStorageFormat(
-      PlaneSharedImageFormat(num_channels, capabilities.texture_rg)
-          .resource_format(),
-      capabilities.angle_rgbx_internal_format);
+GLenum PlaneGLFormat(int num_channels,
+                     viz::RasterContextProvider* context_provider) {
+  return context_provider->GetGrGLTextureFormat(PlaneSharedImageFormat(
+      num_channels, context_provider->ContextCapabilities().texture_rg));
 }
 
 }  // namespace
@@ -239,7 +238,7 @@ bool VideoFrameYUVMailboxesHolder::VideoFrameToPlaneSkSurfaces(
     if (color_type == kGray_8_SkColorType)
       color_type = kAlpha_8_SkColorType;
 
-    auto surface = SkSurface::MakeFromBackendTexture(
+    auto surface = SkSurfaces::WrapBackendTexture(
         gr_context, yuva_backend_textures.texture(plane),
         kTopLeft_GrSurfaceOrigin, /*sampleCnt=*/1, color_type,
         SkColorSpace::MakeSRGB(), nullptr);
@@ -276,7 +275,7 @@ void VideoFrameYUVMailboxesHolder::ImportTextures(bool for_surface) {
     int num_channels = yuva_info_.numChannelsInPlane(plane);
     textures_[plane].texture.fTarget = holders_[plane].texture_target;
     textures_[plane].texture.fFormat =
-        PlaneGLFormat(num_channels, provider_->ContextCapabilities());
+        PlaneGLFormat(num_channels, provider_.get());
   }
 
   imported_textures_ = true;

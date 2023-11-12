@@ -21,18 +21,24 @@ Blocklist* BlocklistFactory::GetForBrowserContext(BrowserContext* context) {
 
 // static
 BlocklistFactory* BlocklistFactory::GetInstance() {
-  return base::Singleton<BlocklistFactory>::get();
+  static base::NoDestructor<BlocklistFactory> instance;
+  return instance.get();
 }
 
 BlocklistFactory::BlocklistFactory()
     : ProfileKeyedServiceFactory(
           "Blocklist",
           // Redirected in incognito.
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   DependsOn(extensions::ExtensionPrefsFactory::GetInstance());
 }
 
-BlocklistFactory::~BlocklistFactory() {}
+BlocklistFactory::~BlocklistFactory() = default;
 
 KeyedService* BlocklistFactory::BuildServiceInstanceFor(
     BrowserContext* context) const {

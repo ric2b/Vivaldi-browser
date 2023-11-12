@@ -4,14 +4,15 @@
 
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_visibility_configuration.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 @implementation ToolbarButtonVisibilityConfiguration
-
-@synthesize type = _type;
 
 - (instancetype)initWithType:(ToolbarType)type {
   self = [super init];
@@ -23,106 +24,112 @@
 
 - (ToolbarComponentVisibility)backButtonVisibility {
   switch (self.type) {
-    case PRIMARY:
+    case ToolbarType::kPrimary:
       return ToolbarComponentVisibilityAlways &
              ~ToolbarComponentVisibilitySplit;
-    case SECONDARY:
+    case ToolbarType::kSecondary:
       return ToolbarComponentVisibilitySplit;
   }
 }
 
 - (ToolbarComponentVisibility)forwardButtonVisibility {
   switch (self.type) {
-    case PRIMARY:
+    case ToolbarType::kPrimary:
       return ToolbarComponentVisibilityAlways &
              ~ToolbarComponentVisibilitySplit;
-    case SECONDARY:
+    case ToolbarType::kSecondary:
       return ToolbarComponentVisibilitySplit;
   }
 }
 
 - (ToolbarComponentVisibility)tabGridButtonVisibility {
   switch (self.type) {
-    case PRIMARY:
+    case ToolbarType::kPrimary:
       return ToolbarComponentVisibilityAlways &
              ~ToolbarComponentVisibilitySplit;
-    case SECONDARY:
+    case ToolbarType::kSecondary:
       return ToolbarComponentVisibilitySplit;
   }
 }
 
 - (ToolbarComponentVisibility)toolsMenuButtonVisibility {
+
+  // Note: (prio@vivaldi.com): We will always show the tool menu button.
+  // The visibility is controlled in the primary toolbar view.
+  if (vivaldi::IsVivaldiRunning())
+    return ToolbarComponentVisibilityAlways; // End Vivaldi
+
   switch (self.type) {
-    case PRIMARY:
+    case ToolbarType::kPrimary:
       return ToolbarComponentVisibilityAlways &
              ~ToolbarComponentVisibilitySplit;
-    case SECONDARY:
+    case ToolbarType::kSecondary:
       return ToolbarComponentVisibilitySplit;
   }
 }
 
 - (ToolbarComponentVisibility)shareButtonVisibility {
   switch (self.type) {
-    case PRIMARY:
+    case ToolbarType::kPrimary:
       return ToolbarComponentVisibilityAlways &
              ~ToolbarComponentVisibilitySplit;
-    case SECONDARY:
+    case ToolbarType::kSecondary:
       return ToolbarComponentVisibilityNone;
   }
 }
 
 - (ToolbarComponentVisibility)reloadButtonVisibility {
   switch (self.type) {
-    case PRIMARY:
+    case ToolbarType::kPrimary:
       return ToolbarComponentVisibilityAlways &
              ~ToolbarComponentVisibilitySplit;
-    case SECONDARY:
+    case ToolbarType::kSecondary:
       return ToolbarComponentVisibilityNone;
   }
 }
 
 - (ToolbarComponentVisibility)stopButtonVisibility {
   switch (self.type) {
-    case PRIMARY:
+    case ToolbarType::kPrimary:
       return ToolbarComponentVisibilityAlways &
              ~ToolbarComponentVisibilitySplit;
-    case SECONDARY:
+    case ToolbarType::kSecondary:
       return ToolbarComponentVisibilityNone;
   }
 }
 
 - (ToolbarComponentVisibility)voiceSearchButtonVisibility {
   switch (self.type) {
-    case PRIMARY:
+    case ToolbarType::kPrimary:
       return ToolbarComponentVisibilityRegularWidthRegularHeight;
-    case SECONDARY:
+    case ToolbarType::kSecondary:
       return ToolbarComponentVisibilityNone;
   }
 }
 
 - (ToolbarComponentVisibility)contractButtonVisibility {
   switch (self.type) {
-    case PRIMARY:
+    case ToolbarType::kPrimary:
       return ToolbarComponentVisibilityNone;
-    case SECONDARY:
+    case ToolbarType::kSecondary:
       return ToolbarComponentVisibilityNone;
   }
 }
 
 - (ToolbarComponentVisibility)newTabButtonVisibility {
   switch (self.type) {
-    case PRIMARY:
+    case ToolbarType::kPrimary:
       return ToolbarComponentVisibilityNone;
-    case SECONDARY:
+    case ToolbarType::kSecondary:
       return ToolbarComponentVisibilitySplit;
   }
 }
 
 - (ToolbarComponentVisibility)locationBarLeadingButtonVisibility {
   switch (self.type) {
-    case PRIMARY:
+    case ToolbarType::kPrimary:
       return ToolbarComponentVisibilityAlways;
-    case SECONDARY:
+    case ToolbarType::kSecondary:
       return ToolbarComponentVisibilityNone;
   }
 }

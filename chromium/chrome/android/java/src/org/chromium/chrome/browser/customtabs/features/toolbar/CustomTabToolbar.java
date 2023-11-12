@@ -96,7 +96,7 @@ import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.base.DeviceFormFactor;
-import org.chromium.ui.interpolators.BakedBezierInterpolator;
+import org.chromium.ui.interpolators.Interpolators;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
@@ -395,14 +395,18 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         return (ImageButton) mCustomActionButtons.getChildAt(index);
     }
 
+    @VisibleForTesting
+    public ImageButton getMaximizeButtonForTest() {
+        return (ImageButton) findViewById(R.id.custom_tabs_sidepanel_maximize);
+    }
+
     @Override
     protected int getTabStripHeight() {
         return 0;
     }
 
     /** @return The current active {@link Tab}. */
-    @Nullable
-    private Tab getCurrentTab() {
+    private @Nullable Tab getCurrentTab() {
         return getToolbarDataProvider().getTab();
     }
 
@@ -650,7 +654,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
 
         mBrandColorTransitionAnimation = ValueAnimator.ofFloat(0, 1).setDuration(
                 ToolbarPhone.THEME_COLOR_TRANSITION_DURATION);
-        mBrandColorTransitionAnimation.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
+        mBrandColorTransitionAnimation.setInterpolator(Interpolators.FAST_OUT_SLOW_IN_INTERPOLATOR);
         mBrandColorTransitionAnimation.addUpdateListener(animation -> {
             float fraction = animation.getAnimatedFraction();
             int red   = (int) interpolate(Color.red(startColor),   Color.red(endColor),   fraction);
@@ -1281,10 +1285,15 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
                 displayText = formattedDisplayText;
             } else {
                 UrlBarData urlBarData = mLocationBarDataProvider.getUrlBarData();
-                displayText = urlBarData.displayText.subSequence(
-                        urlBarData.originStartIndex, urlBarData.originEndIndex);
                 originStart = 0;
-                originEnd = displayText.length();
+                if (urlBarData.displayText != null) {
+                    displayText = urlBarData.displayText.subSequence(
+                            urlBarData.originStartIndex, urlBarData.originEndIndex);
+                    originEnd = displayText.length();
+                } else {
+                    displayText = null;
+                    originEnd = 0;
+                }
             }
 
             mUrlCoordinator.setUrlBarData(

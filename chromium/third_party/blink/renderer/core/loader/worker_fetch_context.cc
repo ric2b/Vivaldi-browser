@@ -195,6 +195,9 @@ void WorkerFetchContext::PrepareRequest(
   probe::ApplyUserAgentOverride(Probe(), &user_agent);
   DCHECK(!user_agent.IsNull());
   request.SetHTTPUserAgent(AtomicString(user_agent));
+  request.SetSharedDictionaryWriterEnabled(
+      RuntimeEnabledFeatures::CompressionDictionaryTransportEnabled(
+          GetExecutionContext()));
 
   WrappedResourceRequest webreq(request);
   web_context_->WillSendRequest(webreq);
@@ -222,7 +225,7 @@ void WorkerFetchContext::AddAdditionalRequestHeaders(ResourceRequest& request) {
   // remove it for the time being. If you're reading this, consider building
   // permissions policies for workers and/or deprecating this inclusion.
   if (save_data_enabled_)
-    request.SetHttpHeaderField(http_names::kSaveData, "on");
+    request.SetHttpHeaderField(http_names::kSaveData, AtomicString("on"));
 }
 
 void WorkerFetchContext::AddResourceTiming(

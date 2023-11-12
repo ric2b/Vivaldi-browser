@@ -61,25 +61,6 @@ inline bool IsOutOfFlowPositionedWithImplicitHeight(
          !child->StyleRef().LogicalBottom().IsAuto();
 }
 
-// Inclusive of |from|, exclusive of |to|.
-PaintLayer* FindFirstStickyBetween(LayoutObject* from, LayoutObject* to) {
-  LayoutObject* maybe_sticky_ancestor = from;
-  while (maybe_sticky_ancestor && maybe_sticky_ancestor != to) {
-    if (maybe_sticky_ancestor->StyleRef().HasStickyConstrainedPosition()) {
-      return To<LayoutBoxModelObject>(maybe_sticky_ancestor)->Layer();
-    }
-
-    // We use LocationContainer here to find the nearest sticky ancestor which
-    // shifts the given element's position so that the sticky positioning code
-    // is aware ancestor sticky position shifts.
-    maybe_sticky_ancestor =
-        maybe_sticky_ancestor->IsLayoutInline()
-            ? maybe_sticky_ancestor->Container()
-            : To<LayoutBox>(maybe_sticky_ancestor)->LocationContainer();
-  }
-  return nullptr;
-}
-
 void MarkBoxForRelayoutAfterSplit(LayoutBoxModelObject* box) {
   // FIXME: The table code should handle that automatically. If not,
   // we should fix it and remove the table part checks.
@@ -103,6 +84,21 @@ void CollapseLoneAnonymousBlockChild(LayoutBox* parent, LayoutObject* child) {
   if (!parent_block_flow)
     return;
   parent_block_flow->CollapseAnonymousBlockChild(child_block_flow);
+}
+
+bool NeedsAnchorScrollData(Element& element, const ComputedStyle& style) {
+  // `anchor-scroll` has no effect if the element is not absolutely positioned
+  // or when the property value is `none`.
+  if (!style.HasOutOfFlowPosition() || !style.AnchorScroll()) {
+    return false;
+  }
+  // There's an explicitly set `anchor-scroll` or `anchor-default` value.
+  if (!style.AnchorScroll()->IsDefault() || style.AnchorDefault()) {
+    return true;
+  }
+  // Now we have `anchor-scroll: default` and `anchor-default: implicit`. We
+  // need AnchorScrollData only if there's an implicit anchor element.
+  return element.ImplicitAnchorElement();
 }
 
 }  // namespace
@@ -169,7 +165,6 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
   bool had_non_initial_backdrop_filter = HasNonInitialBackdropFilter();
   bool had_layer = HasLayer();
   bool layer_was_self_painting = had_layer && Layer()->IsSelfPaintingLayer();
-  bool was_horizontal_writing_mode = IsHorizontalWritingMode();
   bool could_contain_fixed = CanContainFixedPositionObjects();
   bool could_contain_absolute = CanContainAbsolutePositionObjects();
 
@@ -294,22 +289,6 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
       SetChildNeedsLayout();
   }
 
-  if (old_style && was_horizontal_writing_mode != IsHorizontalWritingMode()) {
-    // Changing the getWritingMode() may change isOrthogonalWritingModeRoot()
-    // of children. Make sure all children are marked/unmarked as orthogonal
-    // writing-mode roots.
-    bool new_horizontal_writing_mode = IsHorizontalWritingMode();
-    for (LayoutObject* child = SlowFirstChild(); child;
-         child = child->NextSibling()) {
-      if (!child->IsBox())
-        continue;
-      if (new_horizontal_writing_mode != child->IsHorizontalWritingMode())
-        To<LayoutBox>(child)->MarkOrthogonalWritingModeRoot();
-      else
-        To<LayoutBox>(child)->UnmarkOrthogonalWritingModeRoot();
-    }
-  }
-
   // The used style for body background may change due to computed style change
   // on the document element because of change of BackgroundTransfersToView()
   // which depends on the document element style.
@@ -345,10 +324,11 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
   }
 
   if (Element* element = DynamicTo<Element>(GetNode())) {
-    if (IsOutOfFlowPositioned() && StyleRef().AnchorScroll())
+    if (NeedsAnchorScrollData(*element, StyleRef())) {
       element->EnsureAnchorScrollData();
-    else
+    } else {
       element->RemoveAnchorScrollData();
+    }
   }
 }
 
@@ -489,13 +469,20 @@ void LayoutBoxModelObject::UpdateFromStyle() {
 PhysicalRect LayoutBoxModelObject::PhysicalVisualOverflowRectIncludingFilters()
     const {
   NOT_DESTROYED();
-  PhysicalRect bounds_rect = PhysicalVisualOverflowRect();
-  if (!StyleRef().HasFilter())
-    return bounds_rect;
-  gfx::RectF float_rect(bounds_rect);
+  return ApplyFiltersToRect(PhysicalVisualOverflowRect());
+}
+
+PhysicalRect LayoutBoxModelObject::ApplyFiltersToRect(
+    const PhysicalRect& rect) const {
+  NOT_DESTROYED();
+  if (!StyleRef().HasFilter()) {
+    return rect;
+  }
+  gfx::RectF float_rect(rect);
   gfx::RectF filter_reference_box = Layer()->FilterReferenceBox();
-  if (!filter_reference_box.size().IsZero())
+  if (!filter_reference_box.size().IsZero()) {
     float_rect.UnionEvenIfEmpty(filter_reference_box);
+  }
   float_rect = Layer()->MapRectForFilter(float_rect);
   return PhysicalRect::EnclosingRect(float_rect);
 }
@@ -559,10 +546,6 @@ bool LayoutBoxModelObject::HasAutoHeightOrContainingBlockWithAutoHeight()
         return false;
     }
   }
-  if (this_box && this_box->IsCustomItem() &&
-      (this_box->HasOverrideContainingBlockContentLogicalHeight())) {
-    return false;
-  }
 
   if ((logical_height_length.IsAutoOrContentOrIntrinsic() ||
        logical_height_length.IsFillAvailable()) &&
@@ -574,12 +557,8 @@ bool LayoutBoxModelObject::HasAutoHeightOrContainingBlockWithAutoHeight()
     // resolve the block-size of the descendant, except when in quirks mode.
     // Flexboxes follow strict behavior even in quirks mode, though.
     if (!GetDocument().InQuirksMode() || cb->IsFlexibleBoxIncludingNG()) {
-      if (this_box &&
-          this_box->HasOverrideContainingBlockContentLogicalHeight()) {
-        return this_box->OverrideContainingBlockContentLogicalHeight() ==
-               LayoutUnit(-1);
-      } else if (this_box && this_box->GetSingleCachedLayoutResult() &&
-                 !this_box->GetBoxLayoutExtraInput()) {
+      if (this_box && this_box->GetSingleCachedLayoutResult() &&
+          !this_box->GetBoxLayoutExtraInput()) {
         return this_box->GetSingleCachedLayoutResult()
                    ->GetConstraintSpaceForCaching()
                    .AvailableSize()
@@ -738,9 +717,9 @@ bool LayoutBoxModelObject::UpdateStickyPositionConstraints() {
   // The respective search ranges are [container, containingBlock) and
   // [containingBlock, scrollAncestor).
   constraints->nearest_sticky_layer_shifting_sticky_box =
-      FindFirstStickyBetween(location_container, sticky_container);
+      location_container->FindFirstStickyContainer(sticky_container);
   constraints->nearest_sticky_layer_shifting_containing_block =
-      FindFirstStickyBetween(sticky_container, &scroll_container);
+      sticky_container->FindFirstStickyContainer(&scroll_container);
 
   // We skip the right or top sticky offset if there is not enough space to
   // honor both the left/right or top/bottom offsets.

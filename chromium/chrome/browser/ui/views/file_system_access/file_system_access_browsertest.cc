@@ -119,7 +119,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest, SaveFile) {
   const std::string file_contents = "file contents to write";
 
   ui::SelectFileDialog::SetFactory(
-      new SelectPredeterminedFileDialogFactory({test_file}));
+      std::make_unique<SelectPredeterminedFileDialogFactory>(
+          std::vector<base::FilePath>{test_file}));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   content::WebContents* web_contents =
@@ -162,7 +163,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest, OpenFile) {
   const std::string file_contents = "file contents to write";
 
   ui::SelectFileDialog::SetFactory(
-      new SelectPredeterminedFileDialogFactory({test_file}));
+      std::make_unique<SelectPredeterminedFileDialogFactory>(
+          std::vector<base::FilePath>{test_file}));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   content::WebContents* web_contents =
@@ -212,7 +214,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest, FullscreenOpenFile) {
   GURL frame_url = embedded_test_server()->GetURL("/title1.html");
 
   ui::SelectFileDialog::SetFactory(
-      new SelectPredeterminedFileDialogFactory({test_file}));
+      std::make_unique<SelectPredeterminedFileDialogFactory>(
+          std::vector<base::FilePath>{test_file}));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   content::WebContents* web_contents =
@@ -228,25 +231,26 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest, FullscreenOpenFile) {
                             "  self.entry = e;"
                             "  return e.name; })()"));
 
-  EXPECT_TRUE(
-      content::ExecuteScript(web_contents,
-                             "(async () => {"
-                             "  await document.body.requestFullscreen();"
-                             "})()"));
+  EXPECT_TRUE(content::ExecJs(web_contents,
+                              "(async () => {"
+                              "  await document.body.requestFullscreen();"
+                              "})()",
+                              content::EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
 
   // Wait until the fullscreen operation completes.
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(IsFullscreen());
 
-  EXPECT_TRUE(content::ExecuteScript(
-      web_contents,
-      "(async () => {"
-      "  let fsChangePromise = new Promise((resolve) => {"
-      "    document.onfullscreenchange = resolve;"
-      "  });"
-      "  const w = await self.entry.createWritable();"
-      "  await fsChangePromise;"
-      "  return; })()"));
+  EXPECT_TRUE(
+      content::ExecJs(web_contents,
+                      "(async () => {"
+                      "  let fsChangePromise = new Promise((resolve) => {"
+                      "    document.onfullscreenchange = resolve;"
+                      "  });"
+                      "  const w = await self.entry.createWritable();"
+                      "  await fsChangePromise;"
+                      "  return; })()",
+                      content::EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
 
   // Wait until the fullscreen exit operation completes.
   base::RunLoop().RunUntilIdle();
@@ -280,7 +284,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserSlowLoadTest, WaitUntilLoaded) {
   const std::string file_contents = "file contents to write";
 
   ui::SelectFileDialog::SetFactory(
-      new SelectPredeterminedFileDialogFactory({test_file}));
+      std::make_unique<SelectPredeterminedFileDialogFactory>(
+          std::vector<base::FilePath>{test_file}));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
 
@@ -378,7 +383,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest, SafeBrowsing) {
   GURL frame_url = embedded_test_server()->GetURL("/title1.html");
 
   ui::SelectFileDialog::SetFactory(
-      new SelectPredeterminedFileDialogFactory({test_file}));
+      std::make_unique<SelectPredeterminedFileDialogFactory>(
+          std::vector<base::FilePath>{test_file}));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), frame_url));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -435,7 +441,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest,
   const std::string file_contents = "file contents to write";
 
   ui::SelectFileDialog::SetFactory(
-      new SelectPredeterminedFileDialogFactory({test_file}));
+      std::make_unique<SelectPredeterminedFileDialogFactory>(
+          std::vector<base::FilePath>{test_file}));
 
   auto url = embedded_test_server()->GetURL("/title1.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
@@ -487,7 +494,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest,
   const std::string file_contents = "file contents to write";
 
   ui::SelectFileDialog::SetFactory(
-      new SelectPredeterminedFileDialogFactory({test_file}));
+      std::make_unique<SelectPredeterminedFileDialogFactory>(
+          std::vector<base::FilePath>{test_file}));
 
   auto url = embedded_test_server()->GetURL("/title1.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
@@ -539,7 +547,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest,
                        RevokePermissionAfterNavigation) {
   const base::FilePath test_file = CreateTestFile("");
   ui::SelectFileDialog::SetFactory(
-      new SelectPredeterminedFileDialogFactory({test_file}));
+      std::make_unique<SelectPredeterminedFileDialogFactory>(
+          std::vector<base::FilePath>{test_file}));
 
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
@@ -566,7 +575,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest,
   content::TestNavigationObserver popup_observer(nullptr);
   popup_observer.StartWatchingNewWebContents();
   auto iframe_url = https_server.GetURL("a.com", "/iframe_cross_site.html");
-  EXPECT_TRUE(ExecuteScript(
+  EXPECT_TRUE(ExecJs(
       first_party_web_contents,
       "self.third_party_window = window.open('" + iframe_url.spec() + "');"));
   popup_observer.Wait();
@@ -719,7 +728,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest,
                        RevokePermissionAfterClosingTab) {
   const base::FilePath test_file = CreateTestFile("");
   ui::SelectFileDialog::SetFactory(
-      new SelectPredeterminedFileDialogFactory({test_file}));
+      std::make_unique<SelectPredeterminedFileDialogFactory>(
+          std::vector<base::FilePath>{test_file}));
 
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
@@ -746,7 +756,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemAccessBrowserTest,
   content::TestNavigationObserver popup_observer(nullptr);
   popup_observer.StartWatchingNewWebContents();
   auto iframe_url = https_server.GetURL("a.com", "/iframe_cross_site.html");
-  EXPECT_TRUE(ExecuteScript(
+  EXPECT_TRUE(ExecJs(
       first_party_web_contents,
       "self.third_party_window = window.open('" + iframe_url.spec() + "');"));
   popup_observer.Wait();
@@ -893,7 +903,8 @@ IN_PROC_BROWSER_TEST_F(PersistedPermissionsFileSystemAccessBrowserTest,
           browser()->profile());
 
   ui::SelectFileDialog::SetFactory(
-      new SelectPredeterminedFileDialogFactory({test_file}));
+      std::make_unique<SelectPredeterminedFileDialogFactory>(
+          std::vector<base::FilePath>{test_file}));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), test_url));
 
   // The usage indicator is not initially visible.
@@ -1172,7 +1183,8 @@ IN_PROC_BROWSER_TEST_F(FencedFrameFileSystemAccessBrowserTest,
   const base::FilePath test_file = CreateTestFile("");
 
   ui::SelectFileDialog::SetFactory(
-      new SelectPredeterminedFileDialogFactory({test_file}));
+      std::make_unique<SelectPredeterminedFileDialogFactory>(
+          std::vector<base::FilePath>{test_file}));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
   content::WebContents* web_contents =
@@ -1217,8 +1229,6 @@ IN_PROC_BROWSER_TEST_F(FencedFrameFileSystemAccessBrowserTest,
                                 PermissionRequestOutcome::kInvalidFrame);
 }
 
-// The helper methods in this class uses ExecuteScriptXXX, because WebUI has
-// a Content Security Policy that interferes with ExecJs and EvalJs.
 class FileSystemAccessBrowserTestForWebUI : public InProcessBrowserTest {
  public:
   FileSystemAccessBrowserTestForWebUI() {
@@ -1230,17 +1240,6 @@ class FileSystemAccessBrowserTestForWebUI : public InProcessBrowserTest {
     // %ProgramFiles% on Windows when running as Admin, which is a blocked path
     // (`kBlockedPaths`). This can fail some of the tests.
     CHECK(temp_dir_.CreateUniqueTempDirUnderPath(base::GetTempDirForTesting()));
-  }
-
-  // Return the evaluated value of a JavaScript |statement| as a std::string.
-  // The statement can be a Promise that resolves to a string. If errors are
-  // encountered during evaluation, returns the error's message.
-  std::string GetJsStatementValueAsString(content::WebContents* web_contents,
-                                          const std::string& statement) {
-    return content::EvalJs(web_contents,
-                           base::StrCat({"Promise.resolve(", statement,
-                                         ").catch(error => error.message);"}))
-        .ExtractString();
   }
 
   content::WebContents* SetUpAndNavigateToTestWebUI() {
@@ -1273,25 +1272,22 @@ class FileSystemAccessBrowserTestForWebUI : public InProcessBrowserTest {
 
     // Open the dialog and choose the file.
     ui::SelectFileDialog::SetFactory(
-        new SelectPredeterminedFileDialogFactory({test_file_path}));
-    EXPECT_EQ("ok",
-              GetJsStatementValueAsString(web_contents,
-                                          "window.showOpenFilePicker().then("
-                                          "  handles => {"
-                                          "    window.file_handle = handles[0];"
-                                          "    return 'ok';"
-                                          "})"));
+        std::make_unique<SelectPredeterminedFileDialogFactory>(
+            std::vector<base::FilePath>{test_file_path}));
+    EXPECT_TRUE(
+        content::ExecJs(web_contents,
+                        "window.showOpenFilePicker().then("
+                        "  handles => { window.file_handle = handles[0]; })"));
 
-    EXPECT_EQ("file", GetJsStatementValueAsString(web_contents,
-                                                  "window.file_handle.kind"));
+    EXPECT_EQ("file", content::EvalJs(web_contents, "window.file_handle.kind"));
 
     // Check permission descriptors.
     EXPECT_EQ("granted",
-              GetJsStatementValueAsString(
+              content::EvalJs(
                   web_contents,
                   "window.file_handle.queryPermission({ mode: 'read' })"));
     EXPECT_EQ("granted",
-              GetJsStatementValueAsString(
+              content::EvalJs(
                   web_contents,
                   "window.file_handle.queryPermission({ mode: 'readwrite' })"));
   }
@@ -1306,26 +1302,24 @@ class FileSystemAccessBrowserTestForWebUI : public InProcessBrowserTest {
 
     // Open the dialog and choose the directory.
     ui::SelectFileDialog::SetFactory(
-        new SelectPredeterminedFileDialogFactory({dir_path}));
+        std::make_unique<SelectPredeterminedFileDialogFactory>(
+            std::vector<base::FilePath>{dir_path}));
 
-    EXPECT_EQ("ok",
-              GetJsStatementValueAsString(web_contents,
-                                          "window.showDirectoryPicker().then("
-                                          "  handle => {"
-                                          "    window.dir_handle = handle;"
-                                          "    return 'ok';"
-                                          "})"));
+    EXPECT_TRUE(
+        content::ExecJs(web_contents,
+                        "window.showDirectoryPicker().then("
+                        "  handle => { window.dir_handle = handle; })"));
 
-    EXPECT_EQ("directory", GetJsStatementValueAsString(
-                               web_contents, "window.dir_handle.kind"));
+    EXPECT_EQ("directory",
+              content::EvalJs(web_contents, "window.dir_handle.kind"));
 
     // Check permission descriptors.
+    EXPECT_EQ(
+        "granted",
+        content::EvalJs(web_contents,
+                        "window.dir_handle.queryPermission({ mode: 'read' })"));
     EXPECT_EQ("granted",
-              GetJsStatementValueAsString(
-                  web_contents,
-                  "window.dir_handle.queryPermission({ mode: 'read' })"));
-    EXPECT_EQ("granted",
-              GetJsStatementValueAsString(
+              content::EvalJs(
                   web_contents,
                   "window.dir_handle.queryPermission({ mode: 'readwrite' })"));
   }

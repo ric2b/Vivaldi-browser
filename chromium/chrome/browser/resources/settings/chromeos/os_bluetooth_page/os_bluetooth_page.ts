@@ -10,8 +10,10 @@
 
 import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
-import '../../settings_shared.css.js';
+import '../settings_shared.css.js';
 import '../os_settings_page/os_settings_animated_pages.js';
+import '../os_settings_page/os_settings_section.js';
+import '../os_settings_page/os_settings_subpage.js';
 import './os_bluetooth_devices_subpage.js';
 import './os_bluetooth_summary.js';
 import './os_bluetooth_device_detail_subpage.js';
@@ -22,6 +24,8 @@ import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {BluetoothSystemProperties, BluetoothSystemState, SystemPropertiesObserverReceiver} from 'chrome://resources/mojo/chromeos/ash/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom-webui.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {Section} from '../mojom-webui/routes.mojom-webui.js';
 
 import {OsBluetoothDevicesSubpageBrowserProxy, OsBluetoothDevicesSubpageBrowserProxyImpl} from './os_bluetooth_devices_subpage_browser_proxy.js';
 import {getTemplate} from './os_bluetooth_page.html.js';
@@ -39,6 +43,12 @@ class SettingsBluetoothPageElement extends SettingsBluetoothPageElementBase {
 
   static get properties() {
     return {
+      section_: {
+        type: Number,
+        value: Section.kBluetooth,
+        readOnly: true,
+      },
+
       systemProperties_: Object,
 
       shouldShowPairingDialog_: {
@@ -55,6 +65,7 @@ class SettingsBluetoothPageElement extends SettingsBluetoothPageElementBase {
   }
 
   private browserProxy_: OsBluetoothDevicesSubpageBrowserProxy;
+  private section_: Section;
   private showSavedDevicesLoadingIndicators_: boolean;
   private shouldShowPairingDialog_: boolean;
   private systemProperties_: BluetoothSystemProperties;

@@ -19,8 +19,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
-#include "content/services/auction_worklet/auction_downloader.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
+#include "content/services/auction_worklet/public/cpp/auction_downloader.h"
 #include "net/http/http_response_headers.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -35,28 +35,52 @@ namespace auction_worklet {
 
 namespace {
 
-// Validates that the X-FLEDGE-Auction-Only header is present. Returns
-// absl::nullopt upon success. Upon failure, returns an error string.
+// Validates that the Ad-Auction-Only (or deprecated X-FLEDGE-Auction-Only)
+// header is present. Returns absl::nullopt upon success. Upon failure, returns
+// an error string.
 //
 // NOTE: This check is *NOT* directly part of the DirectFromSellerSignals
 // security model, and serves more as a convenience check for developers: the
 // network service and browser process ensure that resources that have the
-// "X-FLEDGE-Auction-Only: true" header are only usable in FLEDGE auctions. This
+// "Ad-Auction-Only: true" header are only usable in FLEDGE auctions. This
 // check reminds developers using DirectFromSellerSignals to use
-// X-FLEDGE-Auction-Only on subresource responses to ensure that these responses
+// Ad-Auction-Only on subresource responses to ensure that these responses
 // are protected (by the browser and network stack) from being using outside
 // FLEDGE.
 absl::optional<std::string> CheckHeader(
     scoped_refptr<net::HttpResponseHeaders> headers) {
-  std::string auction_only;
-  if (!headers->GetNormalizedHeader("X-FLEDGE-Auction-Only", &auction_only)) {
-    return "Missing X-FLEDGE-Auction-Only header.";
+  // TODO(crbug.com/1448564): Remove support for old header names once API users
+  // have switched.
+  std::string old_header_value;
+  std::string new_header_value;
+  // TODO(crbug.com/1448564): Remove old names once API users have migrated to
+  // new names.
+  const bool got_new_header =
+      headers->GetNormalizedHeader("Ad-Auction-Only", &new_header_value);
+  const bool got_old_header =
+      headers->GetNormalizedHeader("X-FLEDGE-Auction-Only", &old_header_value);
+  if (!got_new_header && !got_old_header) {
+    return "Missing Ad-Auction-Only (or deprecated X-FLEDGE-Auction-Only) "
+           "header.";
   }
-  if (!base::EqualsCaseInsensitiveASCII(auction_only, "true")) {
+  if (got_old_header) {
+    if (got_new_header) {
+      if (old_header_value != new_header_value) {
+        return base::StringPrintf(
+            "Ad-Auction-Only: %s does not match deprecated header "
+            "X-FLEDGE-Auction-Only: %s.",
+            new_header_value.c_str(), old_header_value.c_str());
+      }
+    } else {
+      new_header_value = std::move(old_header_value);
+    }
+  }
+  if (!base::EqualsCaseInsensitiveASCII(new_header_value, "true")) {
     return base::StringPrintf(
-        "Wrong X-FLEDGE-Auction-Only header value. Expected \"true\", found "
+        "Wrong Ad-Auction-Only (or deprecated X-FLEDGE-Auction-Only) header "
+        "value. Expected \"true\", found "
         "\"%s\".",
-        auction_only.c_str());
+        new_header_value.c_str());
   }
 
   return absl::nullopt;
@@ -205,6 +229,7 @@ DirectFromSellerSignalsRequester::LoadSignals(
         signals_url,
         CoalescedDownload(std::make_unique<AuctionDownloader>(
             &url_loader_factory, signals_url,
+            AuctionDownloader::DownloadMode::kActualDownload,
             AuctionDownloader::MimeType::kJson,
             base::BindOnce(
                 &DirectFromSellerSignalsRequester::OnSignalsDownloaded,

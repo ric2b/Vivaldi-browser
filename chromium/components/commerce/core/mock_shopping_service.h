@@ -7,11 +7,16 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 
 #include "components/commerce/core/shopping_service.h"
 #include "components/commerce/core/subscriptions/commerce_subscription.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
+
+namespace bookmarks {
+class BookmarkNode;
+}  // namespace bookmarks
 
 namespace commerce {
 
@@ -27,6 +32,10 @@ class MockShoppingService : public commerce::ShoppingService {
   MOCK_METHOD(void,
               GetProductInfoForUrl,
               (const GURL& url, commerce::ProductInfoCallback callback),
+              (override));
+  MOCK_METHOD(void,
+              GetPriceInsightsInfoForUrl,
+              (const GURL& url, commerce::PriceInsightsInfoCallback callback),
               (override));
   MOCK_METHOD(void,
               GetUpdatedProductInfoForBookmarks,
@@ -67,16 +76,32 @@ class MockShoppingService : public commerce::ShoppingService {
               IsSubscribedFromCache,
               (const CommerceSubscription& subscription),
               (override));
+  MOCK_METHOD(void,
+              GetAllPriceTrackedBookmarks,
+              (base::OnceCallback<
+                  void(std::vector<const bookmarks::BookmarkNode*>)> callback),
+              (override));
+  MOCK_METHOD(std::vector<const bookmarks::BookmarkNode*>,
+              GetAllShoppingBookmarks,
+              (),
+              (override));
   MOCK_METHOD(void, ScheduleSavedProductUpdate, (), (override));
   MOCK_METHOD(bool, IsShoppingListEligible, (), (override));
+  MOCK_METHOD(void,
+              WaitForReady,
+              (base::OnceCallback<void(ShoppingService*)>),
+              (override));
   MOCK_METHOD(void,
               IsClusterIdTrackedByUser,
               (uint64_t cluster_id, base::OnceCallback<void(bool)> callback),
               (override));
   MOCK_METHOD(bool, IsMerchantViewerEnabled, (), (override));
+  MOCK_METHOD(bool, IsPriceInsightsEligible, (), (override));
 
   void SetResponseForGetProductInfoForUrl(
       absl::optional<commerce::ProductInfo> product_info);
+  void SetResponseForGetPriceInsightsInfoForUrl(
+      absl::optional<commerce::PriceInsightsInfo> price_insights_info);
   void SetResponsesForGetUpdatedProductInfoForBookmarks(
       std::map<int64_t, ProductInfo> bookmark_updates);
   void SetResponseForGetMerchantInfoForUrl(
@@ -87,8 +112,14 @@ class MockShoppingService : public commerce::ShoppingService {
   void SetGetAllSubscriptionsCallbackValue(
       std::vector<CommerceSubscription> subscriptions);
   void SetIsShoppingListEligible(bool enabled);
+  void SetIsReady(bool ready);
   void SetIsClusterIdTrackedByUserResponse(bool is_tracked);
   void SetIsMerchantViewerEnabled(bool is_enabled);
+  void SetGetAllPriceTrackedBookmarksCallbackValue(
+      std::vector<const bookmarks::BookmarkNode*> bookmarks);
+  void SetGetAllShoppingBookmarksValue(
+      std::vector<const bookmarks::BookmarkNode*> bookmarks);
+  void SetIsPriceInsightsEligible(bool is_eligible);
 };
 
 }  // namespace commerce

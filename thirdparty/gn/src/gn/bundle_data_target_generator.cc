@@ -27,6 +27,8 @@ void BundleDataTargetGenerator::DoRun() {
     return;
   if (!FillOutputs())
     return;
+  if (!FillProductType())
+    return;
 
   if (target_->sources().empty()) {
     *err_ = Err(function_call_,
@@ -73,6 +75,18 @@ bool BundleDataTargetGenerator::FillOutputs() {
       return false;
   }
 
+  return true;
+}
+
+bool BundleDataTargetGenerator::FillProductType() {
+  const Value* value = scope_->GetValue(variables::kProductType, true);
+  if (!value)
+    return true;
+
+  if (!value->VerifyTypeIs(Value::STRING, err_))
+    return false;
+
+  target_->bundle_data().product_type().assign(value->string_value());
   return true;
 }
 

@@ -166,7 +166,7 @@ class DeleteOnCloseDelegate : public NotificationDelegate {
 };
 
 // The default app id used to create simple notifications.
-const std::string kDefaultAppId = "app1";
+const char kDefaultAppId[] = "app1";
 
 }  // anonymous namespace
 
@@ -611,6 +611,46 @@ TEST_F(MessageCenterImplTest, NotificationBlocker) {
   EXPECT_EQ(2u, message_center()->GetVisibleNotifications().size());
 }
 
+TEST_F(MessageCenterImplTest, MarkPopupAsShownWhileBlocked) {
+  const std::string kMarkedId = "id1";
+  const std::string kNotMarkedId = "id2";
+
+  ToggledNotificationBlocker blocker(message_center());
+
+  message_center()->AddNotification(CreateSimpleNotification(kMarkedId));
+  message_center()->AddNotification(CreateSimpleNotification(kNotMarkedId));
+
+  EXPECT_EQ(message_center()->GetPopupNotifications().size(), 2u);
+  EXPECT_EQ(message_center()->GetVisibleNotifications().size(), 2u);
+
+  // Block all notifications. There should be no popups or visible
+  // notifications.
+  blocker.SetPopupNotificationsEnabled(false);
+  blocker.SetNotificationsEnabled(false);
+  EXPECT_TRUE(message_center()->GetPopupNotifications().empty());
+  EXPECT_TRUE(message_center()->GetVisibleNotifications().empty());
+  EXPECT_EQ(message_center()->GetNotifications().size(), 2u);
+
+  // Mark one notification as being shown as a popup, so that when blocking ends
+  // it will not be displayed.
+  message_center()->MarkSinglePopupAsShown(kMarkedId, false);
+
+  // Stop blocking notifications, which should cause notifications to show as
+  // popups and in notifications center depending on their state.
+  blocker.SetPopupNotificationsEnabled(true);
+  blocker.SetNotificationsEnabled(true);
+
+  // Only the notification we did not mark should show as a popup.
+  NotificationList::PopupNotifications popups =
+      message_center()->GetPopupNotifications();
+  EXPECT_EQ(popups.size(), 1u);
+  EXPECT_TRUE(PopupNotificationsContain(popups, kNotMarkedId));
+
+  // Both notifications should be visible.
+  EXPECT_EQ(message_center()->GetNotifications().size(), 2u);
+  EXPECT_EQ(message_center()->GetVisibleNotifications().size(), 2u);
+}
+
 TEST_F(MessageCenterImplTest, VisibleNotificationsWithoutBlocker) {
   NotifierId notifier_id1(NotifierType::APPLICATION, /*id=*/"app1");
   NotifierId notifier_id2(NotifierType::APPLICATION, /*id=*/"app2");
@@ -879,6 +919,79 @@ TEST_F(MessageCenterImplTest, TotalNotificationBlocker) {
   message_center()->RemoveAllNotifications(false /* by_user */,
                                            MessageCenter::RemoveType::ALL);
   EXPECT_EQ(0u, message_center()->NotificationCount());
+}
+
+// Tests that notification state is updated when a notification blocker is
+// removed.
+TEST_F(MessageCenterImplTest, NotificationsUpdatedWhenBlockerRemoved) {
+  // Add two notifications and display them as popups.
+  NotifierId notifier_id1(NotifierType::APPLICATION, "app1");
+  NotifierId notifier_id2(NotifierType::APPLICATION, "app2");
+  message_center()->AddNotification(
+      CreateSimpleNotificationWithNotifierId("id1", notifier_id1.id));
+  message_center()->AddNotification(
+      CreateSimpleNotificationWithNotifierId("id2", notifier_id2.id));
+  message_center()->DisplayedNotification("id1", DISPLAY_SOURCE_POPUP);
+  message_center()->DisplayedNotification("id2", DISPLAY_SOURCE_POPUP);
+
+  // Verify that they are not blocked.
+  ASSERT_EQ(2u, message_center()->NotificationCount());
+  NotificationList::Notifications notifications =
+      message_center()->GetVisibleNotifications();
+  ASSERT_TRUE(NotificationsContain(notifications, "id1"));
+  ASSERT_TRUE(NotificationsContain(notifications, "id2"));
+  NotificationList::PopupNotifications popups =
+      message_center()->GetPopupNotifications();
+  ASSERT_EQ(2u, popups.size());
+  ASSERT_TRUE(PopupNotificationsContain(popups, "id1"));
+  ASSERT_TRUE(PopupNotificationsContain(popups, "id2"));
+
+  {
+    // Block all notifications, including popups (except those from
+    // `notifier_id2`).
+    TotalNotificationBlocker blocker(message_center(), notifier_id2);
+    blocker.SetNotificationsEnabled(false);
+    blocker.SetPopupNotificationsEnabled(false);
+
+    // Verify that "id1" is blocked and "id2" is not.
+    ASSERT_EQ(1u, message_center()->NotificationCount());
+    ASSERT_FALSE(NotificationsContain(
+        message_center()->GetVisibleNotifications(), "id1"));
+    ASSERT_TRUE(NotificationsContain(
+        message_center()->GetVisibleNotifications(), "id2"));
+    popups = message_center()->GetPopupNotifications();
+    ASSERT_EQ(1u, popups.size());
+    ASSERT_FALSE(PopupNotificationsContain(popups, "id1"));
+    ASSERT_TRUE(PopupNotificationsContain(popups, "id2"));
+
+    // Add a third notification.
+    message_center()->AddNotification(
+        CreateSimpleNotificationWithNotifierId("id3", notifier_id1.id));
+    message_center()->DisplayedNotification("id3", DISPLAY_SOURCE_POPUP);
+
+    // Verify that "id3" is blocked.
+    ASSERT_EQ(1u, message_center()->NotificationCount());
+    ASSERT_FALSE(NotificationsContain(
+        message_center()->GetVisibleNotifications(), "id3"));
+    popups = message_center()->GetPopupNotifications();
+    ASSERT_EQ(1u, popups.size());
+    ASSERT_FALSE(PopupNotificationsContain(popups, "id3"));
+
+    // Remove the blocker (it is removed in its dtor, which is called when
+    // exiting this scope).
+  }
+
+  // Verify that the notifications are not blocked, and in particular that "id2"
+  // is now shown as a popup since it didn't initially get to show as a popup.
+  EXPECT_EQ(3u, message_center()->NotificationCount());
+  notifications = message_center()->GetVisibleNotifications();
+  EXPECT_TRUE(NotificationsContain(notifications, "id1"));
+  EXPECT_TRUE(NotificationsContain(notifications, "id2"));
+  EXPECT_TRUE(NotificationsContain(notifications, "id3"));
+  popups = message_center()->GetPopupNotifications();
+  EXPECT_EQ(2u, popups.size());
+  EXPECT_TRUE(PopupNotificationsContain(popups, "id2"));
+  EXPECT_TRUE(PopupNotificationsContain(popups, "id3"));
 }
 
 TEST_F(MessageCenterImplTest, RemoveAllNotifications) {

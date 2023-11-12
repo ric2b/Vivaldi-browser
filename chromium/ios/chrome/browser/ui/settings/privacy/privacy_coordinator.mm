@@ -6,14 +6,15 @@
 
 #import "base/check.h"
 #import "base/mac/foundation_util.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_coordinator.h"
 #import "ios/chrome/browser/ui/settings/privacy/handoff_table_view_controller.h"
+#import "ios/chrome/browser/ui/settings/privacy/lockdown_mode/lockdown_mode_coordinator.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_navigation_commands.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_safe_browsing_coordinator.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_table_view_controller.h"
@@ -28,7 +29,8 @@
     ClearBrowsingDataCoordinatorDelegate,
     PrivacyNavigationCommands,
     PrivacySafeBrowsingCoordinatorDelegate,
-    PrivacyTableViewControllerPresentationDelegate>
+    PrivacyTableViewControllerPresentationDelegate,
+    LockdownModeCoordinatorDelegate>
 
 @property(nonatomic, strong) id<ApplicationCommands> handler;
 @property(nonatomic, strong) PrivacyTableViewController* viewController;
@@ -39,6 +41,9 @@
 // The coordinator for the clear browsing data screen.
 @property(nonatomic, strong)
     ClearBrowsingDataCoordinator* clearBrowsingDataCoordinator;
+
+// Coordinator for Lockdown Mode settings.
+@property(nonatomic, strong) LockdownModeCoordinator* lockdownModeCoordinator;
 
 @end
 
@@ -121,6 +126,15 @@
   [self.safeBrowsingCoordinator start];
 }
 
+- (void)showLockdownMode {
+  DCHECK(!self.lockdownModeCoordinator);
+  self.lockdownModeCoordinator = [[LockdownModeCoordinator alloc]
+      initWithBaseNavigationController:self.baseNavigationController
+                               browser:self.browser];
+  self.lockdownModeCoordinator.delegate = self;
+  [self.lockdownModeCoordinator start];
+}
+
 #pragma mark - ClearBrowsingDataCoordinatorDelegate
 
 - (void)clearBrowsingDataCoordinatorViewControllerWasRemoved:
@@ -138,6 +152,15 @@
   [self.safeBrowsingCoordinator stop];
   self.safeBrowsingCoordinator.delegate = nil;
   self.safeBrowsingCoordinator = nil;
+}
+
+#pragma mark - LockdownModeCoordinatorDelegate
+
+- (void)lockdownModeCoordinatorDidRemove:(LockdownModeCoordinator*)coordinator {
+  DCHECK_EQ(self.lockdownModeCoordinator, coordinator);
+  [self.lockdownModeCoordinator stop];
+  self.lockdownModeCoordinator.delegate = nil;
+  self.lockdownModeCoordinator = nil;
 }
 
 @end

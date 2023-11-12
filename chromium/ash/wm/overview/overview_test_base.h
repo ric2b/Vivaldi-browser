@@ -46,6 +46,12 @@ class OverviewTestBase : public AshTestBase {
 
   bool InOverviewSession();
 
+  void DispatchLongPress(OverviewItem* item);
+
+  // Creates `n` app windows. They are created in reverse order, so that the
+  // first window in the vector is the MRU window.
+  std::vector<std::unique_ptr<aura::Window>> CreateAppWindows(int n);
+
   bool WindowsOverlapping(aura::Window* window1, aura::Window* window2);
 
   // Creates a window which cannot be snapped by splitview.
@@ -74,6 +80,12 @@ class OverviewTestBase : public AshTestBase {
   views::View* GetBackdropView(OverviewItem* item);
 
   WindowPreviewView* GetPreviewView(OverviewItem* item);
+
+  gfx::Rect GetShadowBounds(OverviewItem* item) const;
+
+  views::Widget* GetCannotSnapWidget(OverviewItem* item);
+
+  void SetAnimatingToClose(OverviewItem* item, bool val);
 
   float GetCloseButtonOpacity(OverviewItem* item);
 

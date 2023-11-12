@@ -7,11 +7,14 @@ package org.chromium.chrome.browser.autofill.settings;
 import android.view.KeyEvent;
 import android.widget.EditText;
 
+import androidx.fragment.app.Fragment;
+
+import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.chrome.browser.autofill.prefeditor.EditorDialog;
+import org.chromium.chrome.browser.autofill.editors.EditorDialogView;
+import org.chromium.chrome.browser.autofill.editors.EditorObserverForTest;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
-import org.chromium.components.autofill.prefeditor.EditorObserverForTest;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.List;
@@ -20,14 +23,17 @@ import java.util.concurrent.TimeoutException;
 /**
  * Custom ChromeBrowserTestRule to test Autofill.
  */
-class AutofillTestRule extends ChromeBrowserTestRule implements EditorObserverForTest {
+class AutofillTestRule
+        extends ChromeBrowserTestRule implements EditorObserverForTest, Callback<Fragment> {
     final CallbackHelper mClickUpdate;
     final CallbackHelper mEditorTextUpdate;
     final CallbackHelper mPreferenceUpdate;
     final CallbackHelper mValidationUpdate;
     final CallbackHelper mConfirmationDialogUpdate;
+    final CallbackHelper mFragmentShown;
 
-    private EditorDialog mEditorDialog;
+    private EditorDialogView mEditorDialog;
+    private Fragment mLastestShownFragment;
 
     AutofillTestRule() {
         mClickUpdate = new CallbackHelper();
@@ -35,7 +41,9 @@ class AutofillTestRule extends ChromeBrowserTestRule implements EditorObserverFo
         mPreferenceUpdate = new CallbackHelper();
         mValidationUpdate = new CallbackHelper();
         mConfirmationDialogUpdate = new CallbackHelper();
+        mFragmentShown = new CallbackHelper();
         AutofillProfilesFragment.setObserverForTest(AutofillTestRule.this);
+        AutofillLocalCardEditor.setObserverForTest(AutofillTestRule.this);
     }
 
     protected void setTextInEditorAndWait(final String[] values) throws TimeoutException {
@@ -47,6 +55,11 @@ class AutofillTestRule extends ChromeBrowserTestRule implements EditorObserverFo
             }
         });
         mEditorTextUpdate.waitForCallback(callCount);
+    }
+
+    protected void waitForFragmentToBeShown() throws TimeoutException {
+        int callCount = mFragmentShown.getCallCount();
+        mFragmentShown.waitForCallback(callCount);
     }
 
     protected void clickInEditorAndWait(final int resourceId) throws TimeoutException {
@@ -104,10 +117,14 @@ class AutofillTestRule extends ChromeBrowserTestRule implements EditorObserverFo
         mPreferenceUpdate.waitForCallback(callCount);
     }
 
-    protected void setEditorDialogAndWait(EditorDialog editorDialog) throws TimeoutException {
+    protected void setEditorDialogAndWait(EditorDialogView editorDialog) throws TimeoutException {
         int callCount = mClickUpdate.getCallCount();
         mEditorDialog = editorDialog;
         mClickUpdate.waitForCallback(callCount);
+    }
+
+    protected Fragment getLastestShownFragment() {
+        return mLastestShownFragment;
     }
 
     @Override
@@ -137,5 +154,13 @@ class AutofillTestRule extends ChromeBrowserTestRule implements EditorObserverFo
     public void onEditorConfirmationDialogShown() {
         ThreadUtils.assertOnUiThread();
         mConfirmationDialogUpdate.notifyCalled();
+    }
+
+    // Callback<Fragment>
+    @Override
+    public void onResult(Fragment fragment) {
+        ThreadUtils.assertOnUiThread();
+        mLastestShownFragment = fragment;
+        mFragmentShown.notifyCalled();
     }
 }

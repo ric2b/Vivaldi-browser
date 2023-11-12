@@ -23,6 +23,7 @@
 <translation id="1257336506558170607">Exportar certificado selecionado</translation>
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Arquivo HTML com Favoritos</translation>
+<translation id="1358741672408003399">Ortografia e gramática</translation>
 <translation id="1430915738399379752">Imprimir</translation>
 <translation id="1451375123200651445">Página da Web, arquivo único</translation>
 <translation id="1465176863081977902">C&amp;opiar endereço do áudio</translation>
@@ -33,6 +34,7 @@
 <translation id="15662109988763471">A impressora selecionada não está disponível ou não foi instalada corretamente. Verifique a impressora ou selecione outra.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Abrir Link Com...</translation>
+<translation id="1589055389569595240">Mostrar ortografia e gramática</translation>
 <translation id="159359590073980872">Cache de Imagem</translation>
 <translation id="1601560923496285236">Aplicar</translation>
 <translation id="1603914832182249871">(privada)</translation>
@@ -56,7 +58,6 @@
 <translation id="1925021887439448749">Digite o endereço da Web personalizado</translation>
 <translation id="1932098463447129402">Não antes</translation>
 <translation id="1936931585862840749">Use um número para indicar quantas cópias serão impressas (1 a <ph name="MAX_COPIES" />).</translation>
-<translation id="1994173015038366702">URL do site</translation>
 <translation id="2019718679933488176">&amp;Abrir áudio em uma nova aba</translation>
 <translation id="2050339315714019657">Retrato</translation>
 <translation id="2076269580855484719">Ocultar este plug-in</translation>
@@ -72,7 +73,6 @@
 <translation id="219008588003277019">Módulo de Cliente Nativo: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Colar como texto sem formatação</translation>
 <translation id="2249605167705922988">1-5, 8, 11-13</translation>
-<translation id="225240747099314620">Permitir identificadores únicos (talvez seja necessário reiniciar o computador)</translation>
 <translation id="2280486287150724112">Margem direta</translation>
 <translation id="2282146716419988068">Processo de GPU</translation>
 <translation id="2301382460326681002">O diretório raiz da extensão é inválido.</translation>
@@ -83,7 +83,6 @@
 <translation id="2348176352564285430">Aplicativo: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Selecione o diretório da extensão.</translation>
 <translation id="2379281330731083556">Imprimir utilizando caixa de diálogo de sistema... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="2381756643783702095">Perguntar antes de enviar (recomendado)</translation>
 <translation id="241082044617551207">Plugin desconhecido</translation>
 <translation id="2423578206845792524">Sal&amp;var imagem como...</translation>
 <translation id="2439110203301358333">Outro programa em seu computador adicionou uma extensão que pode modificar a forma como o Vivaldi funciona.</translation>
@@ -106,7 +105,7 @@
 <translation id="2719936478972253983">Os seguintes cookies foram bloqueados</translation>
 <translation id="2721037002783622288">&amp;Pesquisar imagem no <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Não após</translation>
-<translation id="2783321960289401138">Criar atalho...</translation>
+<translation id="2749881179542288782">Verificar a gramática com a ortografia</translation>
 <translation id="2785873697295365461">Descritores de arquivo</translation>
 <translation id="2809586584051668049">e mais <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2825758591930162672">Chave pública do assunto</translation>
@@ -115,7 +114,6 @@
 <translation id="2881076733170862447">Quando você clicar na extensão</translation>
 <translation id="2889064240420137087">Abrir link com...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> não conseguiu se comunicar com esta impressora. Verifique se a impressora está conectada e tente novamente.</translation>
-<translation id="2913331724188855103">Permitir que os sites salvem e leiam cookies (recomendado)</translation>
 <translation id="2916745397441987255">Pesquisar extensões</translation>
 <translation id="2931157624143513983">Ajustar à área de impressão</translation>
 <translation id="2932085390869194046">Sugerir senha…</translation>
@@ -124,7 +122,6 @@
 <translation id="2972581237482394796">Refa&amp;zer</translation>
 <translation id="2993517869960930405">Informações do Aplicativo</translation>
 <translation id="3003623123441819449">Cache do CSS</translation>
-<translation id="3008272652534848354">Redefinir permissões</translation>
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3021678814754966447">Exibir Código Fonte do Frame</translation>
 <translation id="3036546437875325427">Ativar Flash</translation>
@@ -160,14 +157,11 @@
 <translation id="3393582007140394275">Não foi possível transmitir a tela.</translation>
 <translation id="345693547134384690">Abrir &amp;imagem em uma nova aba</translation>
 <translation id="3493881266323043047">Validade</translation>
-<translation id="3494769164076977169">Perguntar quando um site tentar fazer download de arquivos automaticamente após o primeiro arquivo (recomendado)</translation>
-<translation id="3505030558724226696">Revogar acesso ao dispositivo</translation>
 <translation id="3511307672085573050">Copiar end&amp;ereço do link</translation>
 <translation id="354068948465830244">Pode ler e alterar os dados do site</translation>
 <translation id="3560034655160545939">&amp;Verificação ortográfica</translation>
 <translation id="3587482841069643663">Todas</translation>
 <translation id="3627588569887975815">Abrir link em janela &amp;privada</translation>
-<translation id="3627879631695760395">Instalar <ph name="APP" />…</translation>
 <translation id="3678156199662914018">Extensão: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> deseja transmitir a tela</translation>
 <translation id="3708684582558000260">Não permitir que os sites fechados terminem de enviar ou receber dados</translation>
@@ -176,7 +170,6 @@
 <translation id="3760460896538743390">Inspecionar Página de &amp;Fundo</translation>
 <translation id="3797900183766075808">&amp;Pesquisar por “<ph name="SEARCH_TERMS" />” no <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3798449238516105146">Versão</translation>
-<translation id="3800806661949714323">Exibir imagens (recomendado)</translation>
 <translation id="3810973564298564668">Gerenciar</translation>
 <translation id="3838085852053358637">Falha ao carregar extensão</translation>
 <translation id="383891835335927981">Nenhum site teve o zoom modificado</translation>
@@ -191,11 +184,11 @@
 <translation id="3936390757709632190">Abrir áudio em nova &amp;aba</translation>
 <translation id="3943582379552582368">&amp;Voltar</translation>
 <translation id="3948116654032448504">&amp;Pesquisar imagem no <ph name="SEARCH_ENGINE" /></translation>
-<translation id="3955193568934677022">Permitir que os sites reproduzam conteúdo protegido por DRM (recomendado)</translation>
 <translation id="3979395879372752341">Nova extensão adicionada (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Copiar Link para Conteúdo Destacado</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Adicionar ao dicionário</translation>
+<translation id="4058793769387728514">Verificar documento agora</translation>
 <translation id="407520071244661467">Escala</translation>
 <translation id="4079140982534148664">Usar a verificação ortográfica aprimorada</translation>
 <translation id="4087089424473531098">A extensão foi compactada em:
@@ -226,6 +219,7 @@
 <translation id="4423376891418188461">Restaurar Configurações</translation>
 <translation id="4478664379124702289">Salvar Lin&amp;k Como...</translation>
 <translation id="4520385623207007473">Cookies em uso</translation>
+<translation id="4580596421317071374">As senhas são salvas no <ph name="GOOGLE_PASSWORD_MANAGER" /> neste dispositivo.</translation>
 <translation id="4593021220803146968">&amp;Acessar <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplicativos e extensões só podem ser modificados pelo administrador (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Uma extensão alterou a página exibida quando uma nova aba é aberta.</translation>
@@ -241,7 +235,7 @@
 <translation id="4839303808932127586">Sal&amp;var vídeo como...</translation>
 <translation id="4840096453115567876">Deseja mesmo encerrar a navegação anônima?</translation>
 <translation id="488785315393301722">Exibir Detalhes</translation>
-<translation id="4907306957610201395">Categoria de Permissão</translation>
+<translation id="4895799941222633551">Criar &amp;atalho…</translation>
 <translation id="4912643508233590958">Ativações do Estado Ocioso</translation>
 <translation id="49265687513387605">Não foi possível transmitir a tela. Verifique se a solicitação para compartilhar sua tela foi confirmada.</translation>
 <translation id="4927753642311223124">Não há nada para se ver aqui.</translation>
@@ -250,7 +244,6 @@
 <translation id="4988526792673242964">Páginas</translation>
 <translation id="49896407730300355">Girar no s&amp;entido anti-horário</translation>
 <translation id="4989966318180235467">Inspecionar página de &amp;fundo</translation>
-<translation id="5000922062037820727">Bloqueado (recomendado)</translation>
 <translation id="5027562294707732951">Adicionar extensão</translation>
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5057110919553308744">Quando você clicar na extensão</translation>
@@ -280,10 +273,10 @@
 <translation id="5370819323174483825">Atualiza&amp;r</translation>
 <translation id="5390743329570580756">Enviar para</translation>
 <translation id="5398572795982417028">Referência de página fora do limite, que é <ph name="MAXIMUM_PAGE" /></translation>
+<translation id="5423753908060469325">Criar &amp;atalho…</translation>
 <translation id="5425042808445046667">Continuar a transferência</translation>
 <translation id="5427459444770871191">Girar no &amp;Sentido Horário</translation>
 <translation id="5431318178759467895">Colorido</translation>
-<translation id="5483785310822538350">Revogar acesso ao arquivo e ao dispositivo</translation>
 <translation id="5485102783864353244">Adicionar aplicativo</translation>
 <translation id="5486561344817861625">Simular Reinicialização do Navegador</translation>
 <translation id="5487521232677179737">Excluir Dados</translation>
@@ -296,7 +289,6 @@
 <translation id="5614553682702429503">Salvar senha?</translation>
 <translation id="5623842676595125836">Log</translation>
 <translation id="5627086634964711283">Controla também qual página deve ser exibida quando você clica no botão "Página inicial".</translation>
-<translation id="563535393368633106">Perguntar antes de acessar (recomendado)</translation>
 <translation id="5638309510554459422">Encontre extensões e temas na <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Bloqueado</translation>
 <translation id="5707185214361380026">Erro ao carregar a extensão de:</translation>
@@ -348,7 +340,6 @@
 <translation id="6315493146179903667">Trazer Todas para Frente</translation>
 <translation id="6326855256003666642">Contagem de Manutenção de Atividade</translation>
 <translation id="6374469231428023295">Repetir</translation>
-<translation id="6385543213911723544">Os sites podem salvar e ler cookies</translation>
 <translation id="6398765197997659313">Sair do modo tela-cheia</translation>
 <translation id="6406303162637086258">Simular reinicialização do navegador</translation>
 <translation id="6445450263907939268">Se você não deseja essas alterações, é possível restaurar as configurações anteriores.</translation>
@@ -368,13 +359,12 @@
 <translation id="6787839852456839824">Atalhos do teclado</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Manter alterações</translation>
-<translation id="6817174620439930047">Perguntar quando um site desejar usar mensagens exclusivas do sistema para acessar dispositivos MIDI (recomendado)</translation>
 <translation id="6824564591481349393">Copiar &amp;endereço de e-mail</translation>
 <translation id="6840155290835956714">Perguntar antes de enviar</translation>
 <translation id="6886871292305414135">Abrir link em nova &amp;aba</translation>
 <translation id="6892812721183419409">Abrir Link como <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplicativo de Segundo Plano: <ph name="BACKGROUND_APP_URL" /></translation>
-<translation id="6904344821472985372">Revogar acesso a arquivos</translation>
+<translation id="6916590542764765824">Gerenciar extensões</translation>
 <translation id="6945221475159498467">Selecionar</translation>
 <translation id="6955446738988643816">Inspecionar Pop-up</translation>
 <translation id="6970856801391541997">Imprimir páginas específicas</translation>
@@ -385,15 +375,16 @@
 <translation id="7070484045139057854">Pode ler e alterar os dados do site</translation>
 <translation id="708060913198414444">C&amp;opiar endereço do áudio</translation>
 <translation id="7121728544325372695">Traços inteligentes</translation>
+<translation id="7144856456372460176">&amp;Instalar <ph name="APP" />…</translation>
 <translation id="7175353351958621980">Carregada de:</translation>
 <translation id="7186088072322679094">Manter na Barra de Ferramentas</translation>
 <translation id="7287143125007575591">Acesso negado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
+<translation id="7339785458027436441">Verificar ortografia ao digitar</translation>
 <translation id="73786666777299047">Abrir a Chrome Web Store</translation>
 <translation id="7385854874724088939">Ocorreu um erro durante a impressão.  Verifique a sua impressora e tente novamente.</translation>
 <translation id="7412226954991670867">Memória da GPU</translation>
 <translation id="7421925624202799674">Exibir Código Fonte da Página</translation>
-<translation id="7423098979219808738">Perguntar antes</translation>
 <translation id="7427348830195639090">Página de Fundo: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Ao selecionar esta impressora, você concede permissão para acessar sua impressora à seguinte extensão:</translation>
 <translation id="749028671485790643">Usuário <ph name="VALUE" /></translation>
@@ -449,7 +440,6 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8261378640211443080">Esta extensão não está listada na <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e pode ter sido adicionada sem seu conhecimento.</translation>
 <translation id="8351419472474436977">Essa extensão assumiu o controle das suas configurações de proxy, o que significa que ela pode alterar, quebrar ou escutar qualquer coisa que você faz on-line. Se você não tem certeza do motivo dessa mudança, provavelmente não a deseja.</translation>
 <translation id="8382913212082956454">Copiar &amp;endereço de e-mail</translation>
-<translation id="8413385045638830869">Perguntar antes (recomendado)</translation>
 <translation id="8434480141477525001">Porta de Depuração de Cliente Nativo</translation>
 <translation id="8449008133205184768">Colar com o Mesmo Estilo</translation>
 <translation id="8477384620836102176">&amp;Geral</translation>
@@ -458,7 +448,6 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8523493869875972733">Manter Alterações</translation>
 <translation id="8546306075665861288">Cache de imagem</translation>
 <translation id="8569682776816196752">Nenhum destino encontrado</translation>
-<translation id="857943718398505171">Permitido (recomendado)</translation>
 <translation id="8584280235376696778">Abrir vídeo em nova &amp;aba</translation>
 <translation id="8605428685123651449">Memória SQLite</translation>
 <translation id="8615618338313291042">Aplicativo Privado: <ph name="APP_NAME" /></translation>
@@ -489,7 +478,6 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="9056810968620647706">Nenhuma correspondência foi encontrada.</translation>
 <translation id="9084064520949870008">Abrir como Janela</translation>
 <translation id="9137916601698928395">Abrir link como <ph name="USER" /></translation>
-<translation id="91568222606626347">Criar Atalho...</translation>
 <translation id="916607977885256133">Picture in Picture</translation>
 <translation id="9170848237812810038">Des&amp;fazer</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" adicionada</translation>

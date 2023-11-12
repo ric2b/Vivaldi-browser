@@ -12,7 +12,10 @@ update_target("//base:base") {
     "//vivaldi/app/vivaldi_apptools.cpp",
     "//vivaldi/app/vivaldi_apptools.h",
   ]
-  allow_circular_includes_from = [
+  if (!defined(allow_circular_includes_from)) {
+    allow_circular_includes_from = []
+  }
+  allow_circular_includes_from += [
     "//base:base_static",
   ]
 }

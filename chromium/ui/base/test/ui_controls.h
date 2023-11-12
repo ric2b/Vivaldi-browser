@@ -100,7 +100,7 @@ bool SendKeyEventsNotifyWhenDone(gfx::NativeWindow window,
 
 // This value specifies that no window hint is given and an appropriate target
 // window should be deduced from the target or current mouse position.
-constexpr gfx::NativeWindow kNoWindowHint = gfx::kNullNativeWindow;
+constexpr gfx::NativeWindow kNoWindowHint = gfx::NativeWindow();
 
 // Simulate a mouse move.
 //
@@ -181,7 +181,7 @@ bool SendTouchEventsNotifyWhenDone(int action,
                                    base::OnceClosure task);
 #endif
 
-#if defined(USE_AURA)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_WIN)
 class UIControlsAura;
 void InstallUIControlsAura(UIControlsAura* instance);
 #endif

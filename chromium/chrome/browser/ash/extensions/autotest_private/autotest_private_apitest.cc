@@ -42,6 +42,7 @@
 #include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/ash/system_web_apps/test_support/test_system_web_app_installation.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_prefs.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "components/feature_engagement/public/feature_constants.h"
@@ -241,6 +242,10 @@ IN_PROC_BROWSER_TEST_F(AutotestPrivateApiTest, ShelfAPITest) {
   ASSERT_TRUE(RunAutotestPrivateExtensionTest("shelf")) << message_;
 }
 
+IN_PROC_BROWSER_TEST_F(AutotestPrivateApiTest, IsFeatureEnabled) {
+  ASSERT_TRUE(RunAutotestPrivateExtensionTest("isFeatureEnabled")) << message_;
+}
+
 class AutotestPrivateHoldingSpaceApiTest
     : public AutotestPrivateApiTest,
       public ::testing::WithParamInterface<bool /* mark_time_of_first_add */> {
@@ -359,7 +364,7 @@ IN_PROC_BROWSER_TEST_F(AutotestPrivateApiOverviewTest, Drag) {
   ASSERT_TRUE(RunAutotestPrivateExtensionTest("overviewDrag")) << message_;
 }
 
-IN_PROC_BROWSER_TEST_F(AutotestPrivateApiOverviewTest, LeftSnapped) {
+IN_PROC_BROWSER_TEST_F(AutotestPrivateApiOverviewTest, PrimarySnapped) {
   const ash::OverviewInfo info =
       ash::OverviewTestApi().GetOverviewInfo().value();
   const gfx::Point start_point =
@@ -381,7 +386,7 @@ IN_PROC_BROWSER_TEST_F(AutotestPrivateApiOverviewTest, LeftSnapped) {
   generator.MoveTouch(end_point);
   generator.ReleaseTouch();
 
-  ASSERT_TRUE(RunAutotestPrivateExtensionTest("splitviewLeftSnapped"))
+  ASSERT_TRUE(RunAutotestPrivateExtensionTest("splitviewPrimarySnapped"))
       << message_;
 }
 
@@ -501,11 +506,29 @@ class AutotestPrivateLacrosTest : public AutotestPrivateApiTest {
 
  protected:
   AutotestPrivateLacrosTest() {
-    feature_list_.InitAndEnableFeature(ash::features::kLacrosSupport);
+    feature_list_.InitWithFeatures(
+        {
+            ash::features::kLacrosSupport,
+            ash::features::kLacrosPrimary,
+            ash::features::kLacrosOnly,
+            ash::features::kLacrosProfileMigrationForceOff,
+        },
+        // Disable ash extension keeplist so that the test extension will not
+        // be blocked in Ash.
+        {ash::features::kEnforceAshExtensionKeeplist});
     crosapi::BrowserManager::DisableForTesting();
   }
   ~AutotestPrivateLacrosTest() override {
     crosapi::BrowserManager::EnableForTesting();
+  }
+
+  void SetUpOnMainThread() override {
+    // For testing APIs, we need web browser instance as JS runtime.
+    Browser::CreateParams params(ProfileManager::GetLastUsedProfile(), false);
+    Browser::Create(params);
+    SelectFirstBrowser();
+
+    AutotestPrivateApiTest::SetUpOnMainThread();
   }
 
  private:

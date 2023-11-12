@@ -23,6 +23,7 @@
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/resource_id.h"
 #include "components/viz/common/resources/shared_image_format.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
@@ -47,7 +48,7 @@ FrameSinkImpl::FrameSinkImpl(
         compositor_frame_sink_associated_remote,
     mojo::PendingReceiver<viz::mojom::CompositorFrameSinkClient>
         client_receiver,
-    scoped_refptr<viz::ContextProvider> context_provider,
+    scoped_refptr<viz::RasterContextProvider> context_provider,
     base::PlatformThreadId io_thread_id,
     std::unique_ptr<Scheduler> scheduler)
     : task_runner_(std::move(task_runner)),
@@ -134,8 +135,10 @@ void FrameSinkImpl::MaybeCompositeNow() {
 
 void FrameSinkImpl::UploadUIResource(cc::UIResourceId resource_id,
                                      cc::UIResourceBitmap resource_bitmap) {
-  const gpu::Capabilities& caps = context_provider_->ContextCapabilities();
   gfx::Size size = resource_bitmap.GetSize();
+  TRACE_EVENT1("cc", "slim::FrameSinkImpl::UploadUIResource", "size",
+               size.ToString());
+  const gpu::Capabilities& caps = context_provider_->ContextCapabilities();
   if (size.width() > caps.max_texture_size ||
       size.height() > caps.max_texture_size) {
     LOG(ERROR) << "Size exceeds max texture size";
@@ -166,7 +169,8 @@ void FrameSinkImpl::UploadUIResource(cc::UIResourceId resource_id,
   gpu::SyncToken sync_token = sii->GenUnverifiedSyncToken();
 
   GLenum texture_target = gpu::GetBufferTextureTarget(
-      gfx::BufferUsage::SCANOUT, BufferFormat(format.resource_format()), caps);
+      gfx::BufferUsage::SCANOUT,
+      viz::SinglePlaneSharedImageFormatToBufferFormat(format), caps);
   uploaded_resource.viz_resource_id = resource_provider_.ImportResource(
       viz::TransferableResource::MakeGpu(
           uploaded_resource.mailbox, texture_target, sync_token,

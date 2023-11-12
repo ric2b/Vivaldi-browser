@@ -145,6 +145,11 @@ build_recipe(
 )
 
 build_recipe(
+    name = "recipe:chromium/autosharder",
+    bootstrappable = True,
+)
+
+build_recipe(
     name = "recipe:chromium/orchestrator",
     bootstrappable = True,
 )
@@ -157,6 +162,10 @@ build_recipe(
 build_recipe(
     name = "recipe:chromium/builder_cache_prewarmer",
     bootstrappable = True,
+)
+
+build_recipe(
+    name = "recipe:chromium/targets_config_verifier",
 )
 
 build_recipe(
@@ -190,14 +199,6 @@ build_recipe(
 
 build_recipe(
     name = "recipe:chromium_export_metadata",
-)
-
-build_recipe(
-    name = "recipe:chromium_libfuzzer",
-)
-
-build_recipe(
-    name = "recipe:chromium_libfuzzer_trybot",
 )
 
 build_recipe(
@@ -235,6 +236,11 @@ build_recipe(
 )
 
 build_recipe(
+    name = "recipe:gofindit/chromium/test_single_revision",
+    bootstrappable = POLYMORPHIC,
+)
+
+build_recipe(
     name = "recipe:perf/crossbench",
 )
 
@@ -244,10 +250,6 @@ build_recipe(
 
 build_recipe(
     name = "recipe:reclient_config_deploy_check/tester",
-)
-
-build_recipe(
-    name = "recipe:reclient_goma_comparison",
 )
 
 build_recipe(

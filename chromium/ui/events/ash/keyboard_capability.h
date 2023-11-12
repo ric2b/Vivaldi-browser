@@ -15,14 +15,15 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/events/ash/mojom/modifier_key.mojom-shared.h"
-#include "ui/events/devices/input_device.h"
 #include "ui/events/devices/input_device_event_observer.h"
+#include "ui/events/devices/keyboard_device.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
+#include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
 #include "ui/events/ozone/evdev/event_device_info.h"
 
 namespace ui {
 
-// TODO(dpad): Handle privacy screen toggle and display mirror top row keys.
+// TODO(dpad): Handle display mirror top row keys.
 enum class TopRowActionKey {
   kNone = 0,
   kMinValue = kNone,
@@ -48,7 +49,8 @@ enum class TopRowActionKey {
   kAllApplications,
   kEmojiPicker,
   kDictation,
-  kMaxValue = kDictation,
+  kPrivacyScreenToggle,
+  kMaxValue = kPrivacyScreenToggle,
 };
 
 inline constexpr auto kLayout1TopRowActionKeys =
@@ -123,6 +125,7 @@ inline constexpr auto kLayout2TopRowKeyToFKeyMap =
     });
 
 // Keyboard wilco/drallion map between top row keys to function keys.
+// TODO(dpad): Handle privacy screen better on drallion devices.
 // TODO(zhangwenyu): Both F3 and F12 map to VKEY_ZOOM for wilco. Handle edge
 // case when creating the top row accelerator alias for VKEY_ZOOM key.
 inline constexpr auto kLayoutWilcoDrallionTopRowKeyToFKeyMap =
@@ -169,6 +172,7 @@ class KeyboardCapability : public InputDeviceEventObserver {
   enum class DeviceType {
     kDeviceUnknown = 0,
     kDeviceInternalKeyboard,
+    kDeviceInternalRevenKeyboard,
     kDeviceExternalAppleKeyboard,
     kDeviceExternalChromeOsKeyboard,
     kDeviceExternalGenericKeyboard,
@@ -237,7 +241,6 @@ class KeyboardCapability : public InputDeviceEventObserver {
     KeyboardTopRowLayout top_row_layout;
     std::vector<uint32_t> top_row_scan_codes;
     std::vector<TopRowActionKey> top_row_action_keys;
-    std::unique_ptr<EventDeviceInfo> event_device_info;
   };
 
   explicit KeyboardCapability(std::unique_ptr<Delegate> delegate);
@@ -251,12 +254,16 @@ class KeyboardCapability : public InputDeviceEventObserver {
 
   // Generates an `EventDeviceInfo` from a given input device.
   static std::unique_ptr<EventDeviceInfo> CreateEventDeviceInfoFromInputDevice(
-      const InputDevice& keyboard);
+      const KeyboardDevice& keyboard);
 
   // Converts from the given `key_code` to the corresponding meaning in
   // `TopRowActionKey` enum.
   static absl::optional<TopRowActionKey> ConvertToTopRowActionKey(
       ui::KeyboardCode key_code);
+
+  // Converts the given `action_key` to the corresponding `KeyboardCode` VKEY.
+  static absl::optional<KeyboardCode> ConvertToKeyboardCode(
+      TopRowActionKey action_key);
 
   void AddObserver(Observer* observer);
 
@@ -287,20 +294,19 @@ class KeyboardCapability : public InputDeviceEventObserver {
   // kReversedSixPackKeyToSystemKeyMap.
   static bool IsReversedSixPackKey(const KeyboardCode& key_code);
 
-  // Find the mapped function key if the given key code is a top row key for the
-  // given keyboard.
+  // Find the mapped function key if the given key code is a top row key for
+  // the given keyboard.
   // TODO(zhangwenyu): Support custom vivaldi layouts.
   absl::optional<KeyboardCode> GetMappedFKeyIfExists(
       const KeyboardCode& key_code,
-      const InputDevice& keyboard) const;
+      const KeyboardDevice& keyboard) const;
 
   // Check if a keyboard has a launcher button rather than a search button.
-  // TODO(zhangwenyu): Handle command key and window key cases.
-  bool HasLauncherButton(
-      const absl::optional<InputDevice>& keyboard = absl::nullopt);
+  bool HasLauncherButton(const KeyboardDevice& keyboard) const;
+  bool HasLauncherButtonOnAnyKeyboard() const;
 
   // Check if a keyboard has a six pack key.
-  static bool HasSixPackKey(const InputDevice& keyboard);
+  static bool HasSixPackKey(const KeyboardDevice& keyboard);
 
   // Check if any of the connected keyboards has a six pack key.
   static bool HasSixPackOnAnyKeyboard();
@@ -313,25 +319,28 @@ class KeyboardCapability : public InputDeviceEventObserver {
 
   // Returns the set of modifier keys present on the given keyboard.
   std::vector<mojom::ModifierKey> GetModifierKeys(
-      const InputDevice& keyboard) const;
+      const KeyboardDevice& keyboard) const;
 
   // Returns the device type of the given keyboard.
-  DeviceType GetDeviceType(const InputDevice& keyboard) const;
+  DeviceType GetDeviceType(const KeyboardDevice& keyboard) const;
   DeviceType GetDeviceType(int device_id) const;
 
   // Returns the device's top row layout.
-  KeyboardTopRowLayout GetTopRowLayout(const InputDevice& keyboard) const;
+  KeyboardTopRowLayout GetTopRowLayout(const KeyboardDevice& keyboard) const;
   KeyboardTopRowLayout GetTopRowLayout(int device_id) const;
 
   // Returns the device's top row scan codes. If the device does not have a
   // custom top row, the returned list will be null or empty.
   const std::vector<uint32_t>* GetTopRowScanCodes(
-      const InputDevice& keyboard) const;
+      const KeyboardDevice& keyboard) const;
   const std::vector<uint32_t>* GetTopRowScanCodes(int device_id) const;
 
   // Takes a `KeyboardInfo` to use for testing the passed in keyboard.
-  void SetKeyboardInfoForTesting(const InputDevice& keyboard,
-                                 KeyboardInfo keyboard_info);
+  void SetKeyboardInfoForTesting(const KeyboardDevice& keyboard, KeyboardInfo);
+
+  // Disables "trimming" which means the `keyboard_info_map_` will not remove
+  // entries when they are disconnected.
+  void DisableKeyboardInfoTrimmingForTesting();
 
   // InputDeviceEventObserver:
   void OnDeviceListsComplete() override;
@@ -339,41 +348,81 @@ class KeyboardCapability : public InputDeviceEventObserver {
 
   // Check if a specific key event exists on a given keyboard.
   bool HasKeyEvent(const KeyboardCode& key_code,
-                   const InputDevice& keyboard) const;
+                   const KeyboardDevice& keyboard) const;
 
   // Check if any of the connected keyboards has a specific key event.
   bool HasKeyEventOnAnyKeyboard(const KeyboardCode& key_code) const;
 
   // Check if a given `action_key` exists on the given keyboard.
-  bool HasTopRowActionKey(const InputDevice& keyboard,
+  bool HasTopRowActionKey(const KeyboardDevice& keyboard,
                           TopRowActionKey action_key) const;
   bool HasTopRowActionKeyOnAnyKeyboard(TopRowActionKey action_key) const;
 
   // Check if the globe key exists on the given keyboard.
-  bool HasGlobeKey(const InputDevice& keyboard) const;
+  bool HasGlobeKey(const KeyboardDevice& keyboard) const;
   bool HasGlobeKeyOnAnyKeyboard() const;
 
   // Check if the calculator key exists on the given keyboard.
-  bool HasCalculatorKey(const InputDevice& keyboard) const;
+  bool HasCalculatorKey(const KeyboardDevice& keyboard) const;
   bool HasCalculatorKeyOnAnyKeyboard() const;
 
   // Check if the privacy screen key exists on the given keyboard.
-  bool HasPrivacyScreenKey(const InputDevice& keyboard) const;
+  bool HasPrivacyScreenKey(const KeyboardDevice& keyboard) const;
   bool HasPrivacyScreenKeyOnAnyKeyboard() const;
+
+  // Check if the browser search key exists on the given keyboard.
+  bool HasBrowserSearchKey(const KeyboardDevice& keyboard) const;
+  bool HasBrowserSearchKeyOnAnyKeyboard() const;
+
+  // Check if the help key exists on the given keyboard.
+  bool HasHelpKey(const KeyboardDevice& keyboard) const;
+  bool HasHelpKeyOnAnyKeyboard() const;
+
+  // Check if the settings key exists on the given keyboard.
+  bool HasSettingsKey(const KeyboardDevice& keyboard) const;
+  bool HasSettingsKeyOnAnyKeyboard() const;
+
+  // Check if the given keyboard has media keys including:
+  // - Media Rewind
+  // - Media Fastforward
+  // - Media Play
+  // - Media Pause
+  // These keys do not exist on any internal chromeos keyboards, but are likely
+  // to potentially exist on external keyboards.
+  bool HasMediaKeys(const KeyboardDevice& keyboard) const;
+  bool HasMediaKeysOnAnyKeyboard() const;
+
+  // Check if the assistant key exists on the given keyboard.
+  bool HasAssistantKey(const KeyboardDevice& keyboard) const;
+  bool HasAssistantKeyOnAnyKeyboard() const;
+
+  // Check if the CapsLock key exists on the given keyboard.
+  bool HasCapsLockKey(const KeyboardDevice& keyboard) const;
 
   // Gets the corresponding function key for the given `action_key` on the
   // given `keyboard`.
   absl::optional<KeyboardCode> GetCorrespondingFunctionKey(
-      const InputDevice& keyboard,
+      const KeyboardDevice& keyboard,
       TopRowActionKey action_key) const;
+
+  // Gets the corresponding action key for the given `key_code` which must be an
+  // F-Key in the range of F1 to F24 for the given `keyboard`
+  absl::optional<TopRowActionKey> GetCorrespondingActionKeyForFKey(
+      const KeyboardDevice& keyboard,
+      KeyboardCode key_code) const;
+
+  const std::vector<TopRowActionKey>* GetTopRowActionKeys(
+      const KeyboardDevice& keyboard);
 
   const base::flat_map<int, KeyboardInfo>& keyboard_info_map() const {
     return keyboard_info_map_;
   }
 
  private:
-  const KeyboardInfo* GetKeyboardInfo(const InputDevice& keyboard) const;
+  const KeyboardInfo* GetKeyboardInfo(const KeyboardDevice& keyboard) const;
   void TrimKeyboardInfoMap();
+
+  bool IsChromeOSKeyboard(const ui::KeyboardDevice& keyboard) const;
 
   ScanCodeToEvdevKeyConverter scan_code_to_evdev_key_converter_;
 
@@ -382,6 +431,10 @@ class KeyboardCapability : public InputDeviceEventObserver {
   // which are effectively const.
   mutable base::flat_map<int, KeyboardInfo> keyboard_info_map_;
   std::unique_ptr<Delegate> delegate_;
+
+  // Whether or not to disable "trimming" which means the `keyboard_info_map_`
+  // will not remove entries when they are disconnected.
+  bool should_disable_trimming_ = false;
 };
 
 }  // namespace ui

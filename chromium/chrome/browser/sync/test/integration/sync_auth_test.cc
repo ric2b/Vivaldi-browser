@@ -19,8 +19,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
-#include "components/sync/driver/sync_service_impl.h"
-#include "components/sync/driver/sync_token_status.h"
+#include "components/sync/service/sync_service_impl.h"
+#include "components/sync/service/sync_token_status.h"
 #include "content/public/test/browser_test.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/base/net_errors.h"
@@ -374,7 +374,7 @@ IN_PROC_BROWSER_TEST_F(SyncAuthTest, SyncPausedState) {
   ASSERT_FALSE(GetSyncService(0)->GetAuthError().IsPersistentError());
 
   // Once the auth error is gone, wait for Sync to start up again.
-  GetClient(0)->AwaitSyncSetupCompletion();
+  ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
 
   // Now the active data types should be back.
   EXPECT_TRUE(GetSyncService(0)->IsSyncFeatureActive());
@@ -438,7 +438,7 @@ IN_PROC_BROWSER_TEST_F(SyncAuthTest, ShouldTrackDeletionsInSyncPausedState) {
   NoAuthErrorChecker(GetSyncService(0)).Wait();
   ASSERT_FALSE(GetSyncService(0)->GetAuthError().IsPersistentError());
   // Once the auth error is gone, wait for Sync to start up again.
-  GetClient(0)->AwaitSyncSetupCompletion();
+  ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
 
   // Resuming sync could issue a reconfiguration, so wait until it finishes.
   SyncTransportActiveChecker(GetSyncService(0)).Wait();

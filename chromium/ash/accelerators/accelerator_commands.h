@@ -69,6 +69,14 @@ ASH_EXPORT bool CanLock();
 
 ASH_EXPORT bool CanMoveActiveWindowBetweenDisplays();
 
+ASH_EXPORT bool CanGroupOrUngroupWindows();
+
+ASH_EXPORT void GroupOrUngroupWindowsInSnapGroup();
+
+ASH_EXPORT bool CanMinimizeSnapGroupWindows();
+
+ASH_EXPORT void MinimizeWindowsInSnapGroup();
+
 ASH_EXPORT bool CanMinimizeTopWindowOnBack();
 
 ASH_EXPORT bool CanPerformMagnifierZoom();
@@ -77,7 +85,7 @@ ASH_EXPORT bool CanScreenshot(bool take_screenshot);
 
 ASH_EXPORT bool CanShowStylusTools();
 
-ASH_EXPORT bool CanStartAmbientMode();
+ASH_EXPORT bool CanStopScreenRecording();
 
 ASH_EXPORT bool CanSwapPrimaryDisplay();
 
@@ -133,6 +141,11 @@ ASH_EXPORT void CycleUser(CycleUserDirection direction);
 
 // Disables caps-lock.
 ASH_EXPORT void DisableCapsLock();
+
+// Fingerprint sensor touched with finger finger_id finger_id can be 1,2 or 3.
+// 3 different id is enough to cover all testing scenarios and it's better to
+// minimize the number of used dev keyboard shortcuts.
+ASH_EXPORT void TouchFingerprintSensor(int finger_id);
 
 // Focuses the camera preview if it is present.
 ASH_EXPORT void FocusCameraPreview();
@@ -273,6 +286,9 @@ ASH_EXPORT void ShowStylusTools();
 // Brings up task manager.
 ASH_EXPORT void ShowTaskManager();
 
+// Stops the capture mode recording.
+ASH_EXPORT void StopScreenRecording();
+
 // Puts device in sleep mode(suspend).
 ASH_EXPORT void Suspend();
 
@@ -281,9 +297,6 @@ ASH_EXPORT void SwitchToNextIme();
 
 // Takes screenshot.
 ASH_EXPORT void TakeScreenshot(bool from_snapshot_key);
-
-// Turns the ambient mode on or off.
-ASH_EXPORT void ToggleAmbientMode();
 
 // Toggles app list.
 ASH_EXPORT void ToggleAppList(AppListShowSource show_source,

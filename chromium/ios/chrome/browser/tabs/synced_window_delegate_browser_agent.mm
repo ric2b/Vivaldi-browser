@@ -5,10 +5,10 @@
 #import "ios/chrome/browser/tabs/synced_window_delegate_browser_agent.h"
 
 #import "base/check_op.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/sessions/ios_chrome_session_tab_helper.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/sync/ios_chrome_synced_tab_delegate.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -85,30 +85,48 @@ sync_sessions::SyncedTabDelegate* SyncedWindowDelegateBrowserAgent::GetTabAt(
       web_state_list_->GetWebStateAt(index));
 }
 
-void SyncedWindowDelegateBrowserAgent::WebStateInsertedAt(
+#pragma mark - WebStateListObserver
+
+void SyncedWindowDelegateBrowserAgent::WebStateListChanged(
     WebStateList* web_state_list,
-    web::WebState* web_state,
-    int index,
-    bool activating) {
+    const WebStateListChange& change,
+    const WebStateSelection& selection) {
   DCHECK_EQ(web_state_list_, web_state_list);
-  SetWindowIdForWebState(web_state);
+  switch (change.type()) {
+    case WebStateListChange::Type::kSelectionOnly:
+      // Do nothing when a WebState is selected and its status is updated.
+      break;
+    case WebStateListChange::Type::kDetach:
+      // Do nothing when a WebState is detached.
+      break;
+    case WebStateListChange::Type::kMove:
+      // Do nothing when a WebState is moved.
+      break;
+    case WebStateListChange::Type::kReplace: {
+      const WebStateListChangeReplace& replace_change =
+          change.As<WebStateListChangeReplace>();
+      SetWindowIdForWebState(replace_change.inserted_web_state());
+      break;
+    }
+    case WebStateListChange::Type::kInsert: {
+      const WebStateListChangeInsert& insert_change =
+          change.As<WebStateListChangeInsert>();
+      SetWindowIdForWebState(insert_change.inserted_web_state());
+      break;
+    }
+  }
 }
 
-void SyncedWindowDelegateBrowserAgent::WebStateReplacedAt(
-    WebStateList* web_state_list,
-    web::WebState* old_web_state,
-    web::WebState* new_web_state,
-    int index) {
-  DCHECK_EQ(web_state_list_, web_state_list);
-  SetWindowIdForWebState(new_web_state);
-}
-
-void SyncedWindowDelegateBrowserAgent::SetWindowIdForWebState(
-    web::WebState* web_state) {
-  IOSChromeSessionTabHelper::FromWebState(web_state)->SetWindowID(session_id_);
-}
+#pragma mark - BrowserObserver
 
 void SyncedWindowDelegateBrowserAgent::BrowserDestroyed(Browser* browser) {
   web_state_list_->RemoveObserver(this);
   browser->RemoveObserver(this);
+}
+
+#pragma mark - Private
+
+void SyncedWindowDelegateBrowserAgent::SetWindowIdForWebState(
+    web::WebState* web_state) {
+  IOSChromeSessionTabHelper::FromWebState(web_state)->SetWindowID(session_id_);
 }

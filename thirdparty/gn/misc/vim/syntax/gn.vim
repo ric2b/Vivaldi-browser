@@ -51,7 +51,7 @@ syn keyword     gnVariable framework_dirs frameworks include_dirs inputs ldflags
 syn keyword     gnVariable lib_dirs libs output_extension output_name outputs
 syn keyword     gnVariable public public_configs public_deps scripte sources
 syn keyword     gnVariable testonly visibility contents output_conversion rebase
-syn keyword     gnVariable walk_keys gen_deps
+syn keyword     gnVariable walk_keys gen_deps mnemonic
 hi def link     gnVariable          Keyword
 
 " Strings

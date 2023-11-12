@@ -113,6 +113,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void SimulateUnloadACK() override;
   void SimulateUserActivation() override;
   const std::vector<std::string>& GetConsoleMessages() override;
+  void ClearConsoleMessages() override;
   int GetHeavyAdIssueCount(HeavyAdIssueType type) override;
   void SimulateManifestURLUpdate(const GURL& manifest_url) override;
   TestRenderFrameHost* AppendFencedFrame() override;
@@ -162,10 +163,17 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       blink::mojom::InsecureRequestPolicy policy);
 
   // Returns the number of FedCM issues of FederatedAuthRequestResult type
-  // `filter` sent to DevTools. If `filter` is absl::nullopt, returns the total
-  // number of FedCM issues of any type sent to DevTools.
+  // `status_type` sent to DevTools. If `status_type` is absl::nullopt, returns
+  // the total number of FedCM issues of any type sent to DevTools.
   int GetFederatedAuthRequestIssueCount(
-      absl::optional<blink::mojom::FederatedAuthRequestResult> filter);
+      absl::optional<blink::mojom::FederatedAuthRequestResult> status_type);
+
+  // Returns the number of FedCM issues of FederatedAuthUserInfoRequestResult
+  // type `status_type` sent to DevTools. If `status_type` is absl::nullopt,
+  // returns the total number of FedCM issues of any type sent to DevTools.
+  int GetFederatedAuthUserInfoRequestIssueCount(
+      absl::optional<blink::mojom::FederatedAuthUserInfoRequestResult>
+          status_type);
 
   // If set, navigations will appear to have cleared the history list in the
   // RenderFrame (DidCommitProvisionalLoadParams::history_list_was_cleared).
@@ -273,9 +281,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
           controller_service_worker_info,
       blink::mojom::ServiceWorkerContainerInfoForClientPtr container_info,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
-          prefetch_loader_factory,
-      mojo::PendingRemote<network::mojom::URLLoaderFactory>
-          topics_loader_factory,
+          subresource_proxying_loader_factory,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           keep_alive_loader_factory,
       mojo::PendingRemote<blink::mojom::ResourceCache> resource_cache_remote,
@@ -339,6 +345,10 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   // ReportInspectorIssue.
   std::unordered_map<blink::mojom::FederatedAuthRequestResult, int>
       federated_auth_counts_;
+
+  // Keeps a count of getUserInfo() issues sent to ReportInspectorIssue.
+  std::unordered_map<blink::mojom::FederatedAuthUserInfoRequestResult, int>
+      federated_auth_user_info_counts_;
 
   TestRenderFrameHostCreationObserver child_creation_observer_;
 

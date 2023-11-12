@@ -593,10 +593,6 @@ void GuestViewBase::DidStopLoading() {
   GuestViewDidStopLoading();
 }
 
-void GuestViewBase::RenderViewReady() {
-  GuestReady();
-}
-
 void GuestViewBase::WebContentsDestroyed() {
   // NOTE(andre@vivaldi.com) : If the observed webcontents is destroyed outside
   // and it is owned by this we must release ownership. It is owned by the

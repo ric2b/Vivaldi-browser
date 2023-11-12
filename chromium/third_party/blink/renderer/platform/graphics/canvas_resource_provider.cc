@@ -18,6 +18,7 @@
 #include "cc/paint/display_item_list.h"
 #include "cc/tiles/software_image_decode_cache.h"
 #include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/common/capabilities.h"
@@ -35,7 +36,12 @@
 #include "third_party/blink/renderer/platform/instrumentation/canvas_memory_dump_provider.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/skia/include/core/SkSurface.h"
+#include "third_party/skia/include/gpu/GpuTypes.h"
+#include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
+#include "third_party/skia/include/gpu/GrTypes.h"
+#include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 
 namespace blink {
 
@@ -79,7 +85,8 @@ namespace {
 bool IsGMBAllowed(const SkImageInfo& info, const gpu::Capabilities& caps) {
   const gfx::Size size(info.width(), info.height());
   const gfx::BufferFormat buffer_format =
-      viz::BufferFormat(viz::SkColorTypeToResourceFormat(info.colorType()));
+      viz::SinglePlaneSharedImageFormatToBufferFormat(
+          viz::SkColorTypeToSinglePlaneSharedImageFormat(info.colorType()));
   return gpu::IsImageSizeValidForGpuMemoryBufferFormat(size, buffer_format) &&
          gpu::IsImageFromGpuMemoryBufferFormatSupported(buffer_format, caps);
 }
@@ -158,7 +165,7 @@ class CanvasResourceProviderBitmap : public CanvasResourceProvider {
 
     const auto info = GetSkImageInfo().makeAlphaType(kPremul_SkAlphaType);
     const auto props = GetSkSurfaceProps();
-    return SkSurface::MakeRaster(info, &props);
+    return SkSurfaces::Raster(info, &props);
   }
 };
 
@@ -182,8 +189,8 @@ class CanvasResourceProviderSharedBitmap : public CanvasResourceProviderBitmap {
  private:
   scoped_refptr<CanvasResource> CreateResource() final {
     SkImageInfo info = GetSkImageInfo();
-    if (!IsBitmapFormatSupported(
-            viz::SkColorTypeToResourceFormat(info.colorType()))) {
+    if (!viz::SkColorTypeToSinglePlaneSharedImageFormat(info.colorType())
+             .IsBitmapFormatSupported()) {
       // If the rendering format is not supported, downgrade to 8-bits.
       // TODO(junov): Should we try 12-12-12-12 and 10-10-10-2?
       info = info.makeColorType(kN32_SkColorType);
@@ -334,7 +341,8 @@ class CanvasResourceProviderSharedImage : public CanvasResourceProvider {
       // Note that the call below is guarenteed to not issue any GPU work for
       // the backend texture since we ensure that all skia work on the resource
       // is issued before releasing write access.
-      surface_->getBackendTexture(SkSurface::kFlushRead_BackendHandleAccess)
+      SkSurfaces::GetBackendTexture(surface_.get(),
+                                    SkSurfaces::BackendHandleAccess::kFlushRead)
           .glTextureParametersModified();
     }
   }
@@ -540,8 +548,9 @@ class CanvasResourceProviderSharedImage : public CanvasResourceProvider {
       // deferred queue in that context so that we don't need to copy.
       GetFlushForImageListener()->NotifyFlushForImage(content_id);
 
-      if (!use_oop_rasterization_)
-        surface_->flushAndSubmit();
+      if (!use_oop_rasterization_) {
+        skgpu::ganesh::FlushAndSubmit(surface_);
+      }
     }
 
     return !resource_->HasOneRef();
@@ -554,7 +563,7 @@ class CanvasResourceProviderSharedImage : public CanvasResourceProvider {
 
     const auto props = GetSkSurfaceProps();
     if (is_accelerated_) {
-      return SkSurface::MakeFromBackendTexture(
+      return SkSurfaces::WrapBackendTexture(
           GetGrContext(), CreateGrTextureForResource(), GetGrSurfaceOrigin(),
           0 /* msaa_sample_count */, GetSkImageInfo().colorType(),
           GetSkImageInfo().refColorSpace(), &props);
@@ -563,7 +572,7 @@ class CanvasResourceProviderSharedImage : public CanvasResourceProvider {
     // For software raster path, we render into cpu memory managed internally
     // by SkSurface and copy the rendered results to the GMB before dispatching
     // it to the display compositor.
-    return SkSurface::MakeRaster(resource_->CreateSkImageInfo(), &props);
+    return SkSurfaces::Raster(resource_->CreateSkImageInfo(), &props);
   }
 
   GrBackendTexture CreateGrTextureForResource() const {
@@ -828,21 +837,19 @@ class CanvasResourceProviderSwapChain final : public CanvasResourceProvider {
     if (IsGpuContextLost() || !resource_)
       return nullptr;
 
-    const auto& capabilities =
-        ContextProviderWrapper()->ContextProvider()->GetCapabilities();
-
     GrGLTextureInfo texture_info = {};
     texture_info.fID = resource_->GetBackBufferTextureId();
     texture_info.fTarget = resource_->TextureTarget();
-    texture_info.fFormat = viz::TextureStorageFormat(
-        viz::SkColorTypeToResourceFormat(GetSkImageInfo().colorType()),
-        capabilities.angle_rgbx_internal_format);
+    texture_info.fFormat =
+        ContextProviderWrapper()->ContextProvider()->GetGrGLTextureFormat(
+            viz::SkColorTypeToSinglePlaneSharedImageFormat(
+                GetSkImageInfo().colorType()));
 
-    auto backend_texture = GrBackendTexture(Size().width(), Size().height(),
-                                            GrMipMapped::kNo, texture_info);
+    auto backend_texture = GrBackendTexture(
+        Size().width(), Size().height(), skgpu::Mipmapped::kNo, texture_info);
 
     const auto props = GetSkSurfaceProps();
-    return SkSurface::MakeFromBackendTexture(
+    return SkSurfaces::WrapBackendTexture(
         GetGrContext(), backend_texture, kTopLeft_GrSurfaceOrigin,
         0 /* msaa_sample_count */, GetSkImageInfo().colorType(),
         GetSkImageInfo().refColorSpace(), &props);
@@ -1443,7 +1450,7 @@ absl::optional<cc::PaintRecord> CanvasResourceProvider::FlushCanvas(
 void CanvasResourceProvider::RasterRecord(cc::PaintRecord last_recording) {
   EnsureSkiaCanvas();
   skia_canvas_->drawPicture(std::move(last_recording));
-  GetSkSurface()->flushAndSubmit();
+  skgpu::ganesh::FlushAndSubmit(GetSkSurface());
 }
 
 void CanvasResourceProvider::RasterRecordOOP(cc::PaintRecord last_recording,

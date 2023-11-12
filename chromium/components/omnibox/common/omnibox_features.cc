@@ -46,12 +46,6 @@ const auto enabled_by_default_android_ios =
     base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
 
-// Feature used to enable various experiments on keyword mode, UI and
-// suggestions.
-BASE_FEATURE(kExperimentalKeywordMode,
-             "OmniboxExperimentalKeywordMode",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Feature to enable showing thumbnail in front of the Omnibox clipboard image
 // search suggestion.
 BASE_FEATURE(kImageSearchSuggestionThumbnail,
@@ -76,7 +70,7 @@ BASE_FEATURE(kIgnoreIntermediateResults,
 // autocomplete_grouper_sections.h) to limit and group (but not sort) matches.
 BASE_FEATURE(kGroupingFrameworkForZPS,
              "OmniboxGroupingFrameworkForZPS",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             enabled_by_default_android_only);
 
 // When enabled, uses the grouping framework with prefixed suggestions (i.e.
 // autocomplete_grouper_sections.h) to limit and group (but not sort) matches.
@@ -99,17 +93,10 @@ BASE_FEATURE(kPreferNonShortcutMatchesWhenDeduping,
 
 // Determines which are culled when both tail and history cluster suggestions
 // are available. See `MaybeCullTailSuggestions()`.
+// TODO(manukh): Enabled by default 6/1/23 m116. Clean up feature code 8/15 when
+//   m116 reaches stable.
 BASE_FEATURE(kPreferTailOverHistoryClusterSuggestions,
              "OmniboxPreferTailOverHistoryClusterSuggestions",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Feature to tweak how the default suggestion is preserved. Feature params
-// control which tweaks specifically are enabled. Enabling this feature without
-// params is a no-op.
-// TODO(manukh) Enabled by default 2/15/23 m112. Clean up feature code 4/4 when
-//   m112 reaches stable.
-BASE_FEATURE(kPreserveDefault,
-             "OmniboxPreserveDefault",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When disabled, when providers update their matches, the new set of matches
@@ -271,52 +258,11 @@ BASE_FEATURE(kOnDeviceHeadProviderIncognito,
 BASE_FEATURE(kOnDeviceHeadProviderNonIncognito,
              "OmniboxOnDeviceHeadProviderNonIncognito",
              base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kOnDeviceHeadProviderKorean,
+             "OmniboxOnDeviceHeadProviderKorean",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kOnDeviceTailModel,
              "OmniboxOnDeviceTailModel",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, changes the way Google-provided search suggestions are scored by
-// the backend. Note that this Feature is only used for triggering a server-
-// side experiment config that will send experiment IDs to the backend. It is
-// not referred to in any of the Chromium code.
-BASE_FEATURE(kOmniboxExperimentalSuggestScoring,
-             "OmniboxExperimentalSuggestScoring",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, suggestions from a cgi param name match are scored to 0.
-BASE_FEATURE(kDisableCGIParamMatching,
-             "OmniboxDisableCGIParamMatching",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Features used to enable matching short inputs to bookmarks for suggestions.
-// By default, if both of the following are disabled, input words shorter than 3
-//   characters won't prefix match bookmarks. E.g., the inputs 'abc x' or 'x'
-//   won't match bookmark text 'abc xyz'.
-// If |kShortBookmarkSuggestions()| is enabled, this limitation is lifted and
-//   both inputs 'abc x' and 'x' can match bookmark text 'abc xyz'.
-// If |kShortBookmarkSuggestionsByTotalInputLength()| is enabled, matching is
-//   limited by input length rather than input word length. Input 'abc x' can
-//   but input 'x' can't match bookmark text 'abc xyz'.
-BASE_FEATURE(kShortBookmarkSuggestions,
-             "OmniboxShortBookmarkSuggestions",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-// TODO(manukh): Clean up 4/4/23 when m112 reaches stable.
-BASE_FEATURE(kShortBookmarkSuggestionsByTotalInputLength,
-             "OmniboxShortBookmarkSuggestionsByTotalInputLength",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// If enabled, when updating or creating a shortcut, the last word of the input
-// is expanded, if possible, to a complete word in the suggestion description.
-BASE_FEATURE(kShortcutExpanding,
-             "OmniboxShortcutExpanding",
-             enabled_by_default_desktop_only);
-
-// If enabled, the shortcut provider is more aggressive in scoring. The exact
-// details will change over time; but ATM, the shortcut provider will chose 1
-// candidate to compete with HUP's URL-what-you-typed suggestion for the default
-// slot.
-BASE_FEATURE(kShortcutBoost,
-             "OmniboxShortcutBoost",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, the relevant AutocompleteProviders will store "title" data in
@@ -325,14 +271,6 @@ BASE_FEATURE(kShortcutBoost,
 BASE_FEATURE(kStoreTitleInContentsAndUrlInDescription,
              "OmniboxStoreTitleInContentsAndUrlInDescription",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// HQP scores suggestions higher when it finds fewer matches. When enabled,
-// HQP will consider the count of unique hosts, rather than the total count of
-// matches.
-// TODO(manukh): Clean up 3/7/23 when m111 reaches stable.
-BASE_FEATURE(kHistoryQuickProviderSpecificityScoreCountUniqueHosts,
-             "OmniboxHistoryQuickProviderSpecificityScoreCountUniqueHosts",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Feature used to fetch document suggestions.
 BASE_FEATURE(kDocumentProvider,
@@ -359,10 +297,22 @@ BASE_FEATURE(kClipboardSuggestionContentHidden,
              "ClipboardSuggestionContentHidden",
              enabled_by_default_android_only);
 
-// If enabled, uses Chrome Refresh 2023 Action Chips in the omnibox suggestion
-// popup.
+// If enabled, clipboard suggestion for distinct clip data will not show after
+// first use.
+BASE_FEATURE(kSuppressClipboardSuggestionAfterFirstUsed,
+             "SuppressClipboardSuggestionAfterFirstUsed",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, uses the Chrome Refresh 2023 design's shape for action chips in
+// the omnibox suggestion popup.
 BASE_FEATURE(kCr2023ActionChips,
              "Cr2023ActionChips",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, uses the Chrome Refresh 2023 design's icons for action chips in
+// the omnibox suggestion popup.
+BASE_FEATURE(kCr2023ActionChipsIcons,
+             "Cr2023ActionChipsIcons",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, finance ticker answer from omnibox will reverse the color for
@@ -377,7 +327,7 @@ BASE_FEATURE(kSuggestionAnswersColorReverse,
 // with a carousel of tiles, instead of one URL per row.
 BASE_FEATURE(kMostVisitedTiles,
              "OmniboxMostVisitedTiles",
-             enabled_by_default_android_ios);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, expands autocompletion to possibly (depending on params) include
 // suggestion titles and non-prefixes as opposed to be restricted to URL
@@ -415,14 +365,18 @@ BASE_FEATURE(kOmniboxMostVisitedTilesOnSrp,
 
 // If enabled, adds a grey square background to search icons, and makes answer
 // icon square instead of round.
+// TODO(manukh): Clean up feature code 9/12 when m117 reaches stable; we're
+//   launching the rest of CR23 in m117.
 BASE_FEATURE(kSquareSuggestIcons,
              "OmniboxSquareIcons",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, forces omnibox suggestion rows to be uniformly sized.
+// TODO(manukh): Clean up feature code 9/12 when m117 reaches stable; we're
+//   launching the rest of CR23 in m117.
 BASE_FEATURE(kUniformRowHeight,
              "OmniboxUniformRowHeight",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, shows the omnibox suggestions popup in WebUI.
 BASE_FEATURE(kWebUIOmniboxPopup,
@@ -450,6 +404,18 @@ BASE_FEATURE(kExpandedStateColors,
 // guidelines.
 BASE_FEATURE(kExpandedStateSuggestIcons,
              "OmniboxExpandedStateSuggestIcons",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, Omnibox "expanded state" layout is updated to match CR23
+// guidelines.
+BASE_FEATURE(kExpandedLayout,
+             "OmniboxExpandedLayout",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, the shape of the "hover fill" that's rendered for Omnibox
+// suggestions is updated to match CR23 guidelines.
+BASE_FEATURE(kSuggestionHoverFillShape,
+             "OmniboxSuggestionHoverFillShape",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // When enabled, use Assistant for omnibox voice query recognition instead of
@@ -544,9 +510,11 @@ const base::FeatureParam<std::string> kOmniboxLightBackgroundColorHovered(
 
 // If enabled, Omnibox "steady state" height is increased from 28 dp to 34 dp to
 // match CR23 guidelines.
+// TODO(manukh): Clean up feature code 9/12 when m117 reaches stable; we're
+//   launching the rest of CR23 in m117.
 BASE_FEATURE(kOmniboxSteadyStateHeight,
              "OmniboxSteadyStateHeight",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, Omnibox "steady state" text style is updated to match CR23
 // guidelines.
@@ -630,17 +598,10 @@ BASE_FEATURE(kDiscardTemporaryInputOnTabSwitch,
              "OmniboxDiscardTemporaryInputOnTabSwitch",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// TODO(manukh): Enabled by default 4/5/23 m114. Clean up feature code 5/30 when
-//   m114 reaches stable.
-BASE_FEATURE(kClosePopupWithEscape,
-             "OmniboxClosePopupWithEscape",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// When enabled, adds a "starter pack" of @history, @bookmarks, and @settings
-// scopes to Site Search/Keyword Mode.
-BASE_FEATURE(kSiteSearchStarterPack,
-             "OmniboxSiteSearchStarterPack",
-             enabled_by_default_desktop_only);
+// Enable new Omnibox & Suggestions visual style.
+BASE_FEATURE(kOmniboxModernizeVisualUpdate,
+             "OmniboxModernizeVisualUpdate",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Experiment to introduce new security indicators for HTTPS.
 BASE_FEATURE(kUpdatedConnectionSecurityIndicators,
@@ -715,12 +676,19 @@ BASE_FEATURE(kUrlScoringModel,
 
 // If enabled, appends additional Trending and Recent Search Related Queries to
 // the suggestion list on the NTP and SRP.
-BASE_FEATURE(kInspireMe, "OmniboxInspireMe", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kInspireMe, "OmniboxInspireMe", enabled_by_default_android_only);
 
 // Actions in Suggest is a data-driven feature; it's considered enabled when the
 // data is available.
 // The feature flag below helps us tune feature behaviors.
 BASE_FEATURE(kActionsInSuggest,
              "OmniboxActionsInSuggest",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// If enabled, treats categorical suggestions just like the entity suggestions
+// by reusing the `ACMatchType::SEARCH_SUGGEST_ENTITY` and reports the original
+// `omnibox::TYPE_CATEGORICAL_QUERY` to the server.
+BASE_FEATURE(kCategoricalSuggestions,
+             "CategoricalSuggestions",
              base::FEATURE_ENABLED_BY_DEFAULT);
 }  // namespace omnibox

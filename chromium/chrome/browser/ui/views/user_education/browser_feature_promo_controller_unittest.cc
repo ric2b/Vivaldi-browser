@@ -121,19 +121,15 @@ class BrowserFeaturePromoControllerTest : public TestWithBrowserView {
     // Create a dummy tutorial.
     // This is just the first two steps of the "create tab group" tutorial.
     TutorialDescription desc;
-
-    TutorialDescription::Step step1(0, IDS_TUTORIAL_TAB_GROUP_ADD_TAB_TO_GROUP,
-                                    ui::InteractionSequence::StepType::kShown,
-                                    kTabStripElementId, std::string(),
-                                    HelpBubbleArrow::kTopCenter);
-    desc.steps.emplace_back(step1);
-
-    TutorialDescription::Step step2(
-        0, IDS_TUTORIAL_TAB_GROUP_ADD_TAB_TO_GROUP,
-        ui::InteractionSequence::StepType::kShown, kTabGroupEditorBubbleId,
-        std::string(), HelpBubbleArrow::kLeftCenter,
-        ui::CustomElementEventType(), false /*must_remain_visible*/);
-    desc.steps.emplace_back(std::move(step2));
+    desc.steps.emplace_back(
+        TutorialDescription::BubbleStep(kTabStripElementId)
+            .SetBubbleBodyText(IDS_TUTORIAL_TAB_GROUP_ADD_TAB_TO_GROUP)
+            .SetBubbleArrow(HelpBubbleArrow::kTopCenter));
+    desc.steps.emplace_back(
+        TutorialDescription::BubbleStep(kTabGroupEditorBubbleId)
+            .SetBubbleBodyText(IDS_TUTORIAL_TAB_GROUP_ADD_TAB_TO_GROUP)
+            .SetBubbleArrow(HelpBubbleArrow::kLeftCenter)
+            .AbortIfVisibilityLost(false));
 
     user_education_service->tutorial_registry().AddTutorial(
         kTestTutorialIdentifier, std::move(desc));
@@ -142,21 +138,21 @@ class BrowserFeaturePromoControllerTest : public TestWithBrowserView {
 
     registry()->RegisterFeature(
         FeaturePromoSpecification::CreateForTutorialPromo(
-            kTutorialIPHFeature, kAppMenuButtonElementId, IDS_REOPEN_TAB_PROMO,
+            kTutorialIPHFeature, kAppMenuButtonElementId, IDS_CHROME_TIP,
             kTestTutorialIdentifier));
 
     registry()->RegisterFeature(
         FeaturePromoSpecification::CreateForCustomAction(
-            kCustomActionIPHFeature, kAppMenuButtonElementId,
-            IDS_REOPEN_TAB_PROMO, IDS_REOPEN_TAB_PROMO,
+            kCustomActionIPHFeature, kAppMenuButtonElementId, IDS_CHROME_TIP,
+            IDS_CHROME_TIP,
             base::BindRepeating(
                 &BrowserFeaturePromoControllerTest::OnCustomPromoAction,
                 base::Unretained(this),
                 base::Unretained(&kCustomActionIPHFeature))));
 
     auto default_custom = FeaturePromoSpecification::CreateForCustomAction(
-        kDefaultCustomActionIPHFeature, kAppMenuButtonElementId,
-        IDS_REOPEN_TAB_PROMO, IDS_REOPEN_TAB_PROMO,
+        kDefaultCustomActionIPHFeature, kAppMenuButtonElementId, IDS_CHROME_TIP,
+        IDS_CHROME_TIP,
         base::BindRepeating(
             &BrowserFeaturePromoControllerTest::OnCustomPromoAction,
             base::Unretained(this),
@@ -221,7 +217,7 @@ class BrowserFeaturePromoControllerTest : public TestWithBrowserView {
 
   FeaturePromoSpecification DefaultBubbleParams() {
     return FeaturePromoSpecification::CreateForLegacyPromo(
-        &kTestIPHFeature, kAppMenuButtonElementId, IDS_REOPEN_TAB_PROMO);
+        &kTestIPHFeature, kAppMenuButtonElementId, IDS_CHROME_TIP);
   }
 
   void OnCustomPromoAction(const base::Feature* feature,
@@ -237,8 +233,9 @@ class BrowserFeaturePromoControllerTest : public TestWithBrowserView {
               controller_->GetPromoStatus(*feature));
   }
 
-  raw_ptr<BrowserFeaturePromoController> controller_;
-  raw_ptr<NiceMock<feature_engagement::test::MockTracker>> mock_tracker_;
+  raw_ptr<BrowserFeaturePromoController, DanglingUntriaged> controller_;
+  raw_ptr<NiceMock<feature_engagement::test::MockTracker>, DanglingUntriaged>
+      mock_tracker_;
   BrowserFeaturePromoController::TestLock lock_;
   int custom_callback_count_ = 0;
 
@@ -429,10 +426,10 @@ TEST_F(BrowserFeaturePromoControllerTest, CancelPromoBeforeStartup) {
 }
 
 TEST_F(BrowserFeaturePromoControllerTest, ShowsBubbleAnyContext) {
-  registry()->RegisterFeature(std::move(
-      FeaturePromoSpecification::CreateForLegacyPromo(
-          &kOneOffIPHFeature, kOneOffIPHElementId, IDS_REOPEN_TAB_PROMO)
-          .SetInAnyContext(true)));
+  registry()->RegisterFeature(
+      std::move(FeaturePromoSpecification::CreateForLegacyPromo(
+                    &kOneOffIPHFeature, kOneOffIPHElementId, IDS_CHROME_TIP)
+                    .SetInAnyContext(true)));
 
   EXPECT_CALL(*mock_tracker_, ShouldTriggerHelpUI(Ref(kOneOffIPHFeature)))
       .WillOnce(Return(true));
@@ -464,14 +461,14 @@ TEST_F(BrowserFeaturePromoControllerTest, ShowsBubbleAnyContext) {
 }
 
 TEST_F(BrowserFeaturePromoControllerTest, ShowsBubbleWithFilter) {
-  registry()->RegisterFeature(std::move(
-      FeaturePromoSpecification::CreateForLegacyPromo(
-          &kOneOffIPHFeature, kOneOffIPHElementId, IDS_REOPEN_TAB_PROMO)
-          .SetAnchorElementFilter(base::BindLambdaForTesting(
-              [](const ui::ElementTracker::ElementList& elements) {
-                EXPECT_EQ(2U, elements.size());
-                return elements[0];
-              }))));
+  registry()->RegisterFeature(
+      std::move(FeaturePromoSpecification::CreateForLegacyPromo(
+                    &kOneOffIPHFeature, kOneOffIPHElementId, IDS_CHROME_TIP)
+                    .SetAnchorElementFilter(base::BindLambdaForTesting(
+                        [](const ui::ElementTracker::ElementList& elements) {
+                          EXPECT_EQ(2U, elements.size());
+                          return elements[0];
+                        }))));
 
   EXPECT_CALL(*mock_tracker_, ShouldTriggerHelpUI(Ref(kOneOffIPHFeature)))
       .WillOnce(Return(true));
@@ -495,20 +492,21 @@ TEST_F(BrowserFeaturePromoControllerTest, ShowsBubbleWithFilter) {
 
 TEST_F(BrowserFeaturePromoControllerTest, ShowsBubbleWithFilterAnyContext) {
   ui::ElementContext widget_context;
-  registry()->RegisterFeature(std::move(
-      FeaturePromoSpecification::CreateForLegacyPromo(
-          &kOneOffIPHFeature, kOneOffIPHElementId, IDS_REOPEN_TAB_PROMO)
-          .SetInAnyContext(true)
-          .SetAnchorElementFilter(base::BindLambdaForTesting(
-              [&](const ui::ElementTracker::ElementList& elements) {
-                EXPECT_EQ(3U, elements.size());
-                for (auto* element : elements) {
-                  if (element->context() == widget_context)
-                    return element;
-                }
-                ADD_FAILURE() << "Did not find expected element.";
-                return (ui::TrackedElement*)(nullptr);
-              }))));
+  registry()->RegisterFeature(
+      std::move(FeaturePromoSpecification::CreateForLegacyPromo(
+                    &kOneOffIPHFeature, kOneOffIPHElementId, IDS_CHROME_TIP)
+                    .SetInAnyContext(true)
+                    .SetAnchorElementFilter(base::BindLambdaForTesting(
+                        [&](const ui::ElementTracker::ElementList& elements) {
+                          EXPECT_EQ(3U, elements.size());
+                          for (auto* element : elements) {
+                            if (element->context() == widget_context) {
+                              return element;
+                            }
+                          }
+                          ADD_FAILURE() << "Did not find expected element.";
+                          return (ui::TrackedElement*)(nullptr);
+                        }))));
 
   EXPECT_CALL(*mock_tracker_, ShouldTriggerHelpUI(Ref(kOneOffIPHFeature)))
       .WillOnce(Return(true));
@@ -950,7 +948,7 @@ TEST_F(BrowserFeaturePromoControllerTest, ShowNewCriticalPromoAfterClose) {
 
 TEST_F(BrowserFeaturePromoControllerTest, FailsIfBubbleIsShowing) {
   HelpBubbleParams bubble_params;
-  bubble_params.body_text = l10n_util::GetStringUTF16(IDS_REOPEN_TAB_PROMO);
+  bubble_params.body_text = l10n_util::GetStringUTF16(IDS_CHROME_TIP);
   auto bubble = bubble_factory()->CreateHelpBubble(GetAnchorElement(),
                                                    std::move(bubble_params));
   EXPECT_TRUE(bubble);
@@ -1073,8 +1071,8 @@ TEST_F(BrowserFeaturePromoControllerTest, DoesNotPerformDefaultCustomAction) {
 TEST_F(BrowserFeaturePromoControllerTest, CustomActionHidesAnchorView) {
   FeaturePromoHandle promo_handle;
   registry()->RegisterFeature(FeaturePromoSpecification::CreateForCustomAction(
-      kCustomActionIPHFeature2, kAppMenuButtonElementId, IDS_REOPEN_TAB_PROMO,
-      IDS_REOPEN_TAB_PROMO,
+      kCustomActionIPHFeature2, kAppMenuButtonElementId, IDS_CHROME_TIP,
+      IDS_CHROME_TIP,
       base::BindLambdaForTesting(
           [&](ui::ElementContext context, FeaturePromoHandle handle) {
             views::ElementTrackerViews::GetInstance()

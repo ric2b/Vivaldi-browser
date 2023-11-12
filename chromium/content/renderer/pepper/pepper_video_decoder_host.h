@@ -13,8 +13,8 @@
 #include <set>
 #include <vector>
 
+#include "content/renderer/pepper/video_decoder_shim.h"
 #include "gpu/command_buffer/common/mailbox.h"
-#include "media/video/video_decode_accelerator.h"
 #include "ppapi/c/pp_codecs.h"
 #include "ppapi/host/host_message_context.h"
 #include "ppapi/host/resource_host.h"
@@ -129,13 +129,12 @@ class PepperVideoDecoderHost : public ppapi::host::ResourceHost,
 
   media::VideoCodecProfile profile_;
 
-  std::unique_ptr<media::VideoDecodeAccelerator> decoder_;
+  std::unique_ptr<VideoDecoderShim> decoder_;
 
   bool software_fallback_allowed_ = false;
   bool software_fallback_used_ = false;
 
   // Used to record UMA values.
-  bool legacy_hardware_video_decoder_path_initialized_ = false;
   bool mojo_video_decoder_path_initialized_ = false;
 
   // Used for UMA stats; not frame-accurate.

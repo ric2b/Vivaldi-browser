@@ -16,6 +16,7 @@
 #include "ash/system/camera/autozoom_toast_controller.h"
 #include "ash/system/channel_indicator/channel_indicator.h"
 #include "ash/system/channel_indicator/channel_indicator_utils.h"
+#include "ash/system/hotspot/hotspot_tray_view.h"
 #include "ash/system/human_presence/snooping_protection_view.h"
 #include "ash/system/message_center/ash_message_popup_collection.h"
 #include "ash/system/message_center/message_center_ui_controller.h"
@@ -58,6 +59,7 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "media/capture/video/chromeos/video_capture_features_chromeos.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/presentation_time_recorder.h"
@@ -247,6 +249,11 @@ UnifiedSystemTray::UnifiedSystemTray(Shelf* shelf)
             shelf, CameraMicTrayItemView::Type::kCamera));
     mic_view_ = AddTrayItemToContainer(std::make_unique<CameraMicTrayItemView>(
         shelf, CameraMicTrayItemView::Type::kMic));
+  }
+
+  if (features::IsHotspotEnabled()) {
+    hotspot_tray_view_ =
+        AddTrayItemToContainer(std::make_unique<HotspotTrayView>(shelf));
   }
 
   if (features::IsSeparateNetworkIconsEnabled()) {
@@ -498,7 +505,7 @@ const char* UnifiedSystemTray::GetClassName() const {
 
 absl::optional<AcceleratorAction> UnifiedSystemTray::GetAcceleratorAction()
     const {
-  return absl::make_optional(TOGGLE_SYSTEM_TRAY_BUBBLE);
+  return absl::make_optional(AcceleratorAction::kToggleSystemTrayBubble);
 }
 
 void UnifiedSystemTray::OnAnyBubbleVisibilityChanged(
@@ -643,7 +650,7 @@ std::u16string UnifiedSystemTray::GetAccessibleNameForQuickSettingsBubble() {
     }
 
     return l10n_util::GetStringUTF16(
-        IDS_ASH_QUICK_SETTINGS_BUBBLE_ACCESSIBLE_DESCRIPTION);
+        IDS_ASH_REVAMPED_QUICK_SETTINGS_BUBBLE_ACCESSIBLE_DESCRIPTION);
   }
 
   if (bubble_->unified_view()->IsDetailedViewShown()) {
@@ -676,6 +683,12 @@ std::u16string UnifiedSystemTray::GetAccessibleNameForTray() {
   status.push_back(network_tray_view_->GetVisible()
                        ? network_tray_view_->GetAccessibleNameString()
                        : base::EmptyString16());
+
+  if (hotspot_tray_view_) {
+    status.push_back(hotspot_tray_view_->GetVisible()
+                         ? hotspot_tray_view_->GetAccessibleNameString()
+                         : base::EmptyString16());
+  }
 
   // For privacy string, we use either `privacy_indicators_view_` or the combo
   // of `mic_view_` and `camera_view_`.
@@ -844,6 +857,13 @@ void UnifiedSystemTray::DestroyBubbles() {
     bubble_->unified_system_tray_controller()->RemoveObserver(this);
   }
   bubble_.reset();
+}
+
+void UnifiedSystemTray::UpdateTrayItemColor(bool is_active) {
+  DCHECK(chromeos::features::IsJellyEnabled());
+  for (auto* tray_item : tray_items_) {
+    tray_item->UpdateLabelOrImageViewColor(is_active);
+  }
 }
 
 }  // namespace ash

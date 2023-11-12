@@ -8,9 +8,10 @@
 #include <string>
 
 #include "base/android/jni_string.h"
+#include "chrome/browser/password_check/android/internal/internal_jni/PasswordCheckBridge_jni.h"
 #include "chrome/browser/password_check/android/jni_headers/CompromisedCredential_jni.h"
-#include "chrome/browser/password_check/android/jni_headers/PasswordCheckBridge_jni.h"
 #include "chrome/browser/password_manager/android/password_checkup_launcher_helper.h"
+#include "chrome/browser/password_manager/android/password_checkup_launcher_helper_impl.h"
 #include "components/password_manager/core/browser/affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
@@ -130,7 +131,8 @@ void PasswordCheckBridge::GetCompromisedCredentials(
 void PasswordCheckBridge::LaunchCheckupInAccount(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& activity) {
-  PasswordCheckupLauncherHelper::LaunchCheckupInAccountWithActivity(
+  PasswordCheckupLauncherHelperImpl checkup_launcher;
+  checkup_launcher.LaunchCheckupInAccountWithActivity(
       env,
       base::android::ConvertUTF8ToJavaString(
           env, password_manager::GetPasswordCheckupURL().spec()),

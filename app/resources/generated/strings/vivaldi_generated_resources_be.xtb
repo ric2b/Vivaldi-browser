@@ -58,7 +58,6 @@
 <translation id="1925021887439448749">Увядзіце адвольны вэб-адрас</translation>
 <translation id="1932098463447129402">Не раней</translation>
 <translation id="1936931585862840749">Увядзіце колькасць копій для друкавання (ад 1 да <ph name="MAX_COPIES" />).</translation>
-<translation id="1994173015038366702">Адрас сайта</translation>
 <translation id="2019718679933488176">&amp;Адкрыць аўдыё ў новай укладцы</translation>
 <translation id="2050339315714019657">Кніжная</translation>
 <translation id="2076269580855484719">Схаваць убудову</translation>
@@ -74,7 +73,6 @@
 <translation id="219008588003277019">Модуль натыўнага кліента: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Уставіць як звычайны тэкст</translation>
 <translation id="2249605167705922988">Напрыклад: 1-5, 7, 16-18</translation>
-<translation id="225240747099314620">Дазволіць ідэнтыфікатары для абароненага змесціва (можа спатрэбіцца перазапуск камп'ютара)</translation>
 <translation id="2280486287150724112">Правае поле</translation>
 <translation id="2282146716419988068">Працэс GPU</translation>
 <translation id="2301382460326681002">Няправільны каранёвы каталог пашырэння.</translation>
@@ -85,7 +83,6 @@
 <translation id="2348176352564285430">Праграма: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Абярыце каталог пашырэння.</translation>
 <translation id="2379281330731083556">Надрукаваць праз сістэмны дыялог... <ph name="SHORTCUT_KEY" /></translation>
-<translation id="2381756643783702095">Пытацца перад адпраўленнем (рэкамендуецца)</translation>
 <translation id="241082044617551207">Невядомая ўбудова</translation>
 <translation id="2423578206845792524">Захаваць выяву як...</translation>
 <translation id="2439110203301358333">Іншая праграма на вашым камп'ютары дадала пашырэнне, якое можа ўплываць на працу Vivaldi.</translation>
@@ -109,7 +106,6 @@
 <translation id="2721037002783622288">&amp;Знайсці выяву ў <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Не пазней</translation>
 <translation id="2749881179542288782">Праверыць граматыку і правапіс</translation>
-<translation id="2783321960289401138">Стварыць цэтлік...</translation>
 <translation id="2785873697295365461">Дэскрыптары файлаў</translation>
 <translation id="2809586584051668049">і яшчэ <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2825758591930162672">Публічны ключ суб'екта</translation>
@@ -118,7 +114,6 @@
 <translation id="2881076733170862447">Пры націсканні на пашырэнне</translation>
 <translation id="2889064240420137087">Адкрыць спасылку з дапамогай...</translation>
 <translation id="2902127500170292085">Пашырэнне <ph name="EXTENSION_NAME" /> не можа злучыцца з прынтарам. Пераканайцеся, што прынтар уключаны, і паўтарыце спробу.</translation>
-<translation id="2913331724188855103">Дазволіць сайтам захоўваць і чытаць даныя cookie (рэкамендуецца)</translation>
 <translation id="2916745397441987255">Шукаць пашырэнні</translation>
 <translation id="2931157624143513983">Па памерах вобласці друку</translation>
 <translation id="2932085390869194046">Прапаноўваць пароль...</translation>
@@ -127,7 +122,6 @@
 <translation id="2972581237482394796">&amp;Паўтарыць</translation>
 <translation id="2993517869960930405">Звесткі пра праграму</translation>
 <translation id="3003623123441819449">Кэш CSS</translation>
-<translation id="3008272652534848354">Скінуць правы</translation>
 <translation id="3012631534724231212">(iфрэйм)</translation>
 <translation id="3021678814754966447">&amp;Праглядзець код рамкі</translation>
 <translation id="3036546437875325427">Уключыць Flash</translation>
@@ -156,21 +150,18 @@
 <translation id="3331974543021145906">Звесткі пра праграму</translation>
 <translation id="3341703758641437857">Дазволіць для лакальных файлаў</translation>
 <translation id="3347086966102161372">С&amp;капіяваць адрас выявы</translation>
-<translation id="3360297538363969800">Не атрымалася надрукаваць. Калі ласка, праверце прынтар і паспрабуйце зноў.</translation>
+<translation id="3360297538363969800">Не ўдалося надрукаваць. Калі ласка, праверце прынтар і паспрабуйце зноў.</translation>
 <translation id="3378572629723696641">Гэтае пашырэнне можа быць пашкоджана.</translation>
 <translation id="3387614642886316601">Палепшаная праверка правапісу</translation>
 <translation id="3390013585654699824">Звесткі пра праграму</translation>
 <translation id="3393582007140394275">Немагчыма трансляваць экран.</translation>
 <translation id="345693547134384690">Адкрыць &amp;выяву ў новай укладцы</translation>
 <translation id="3493881266323043047">Тэрмін дзеяння</translation>
-<translation id="3494769164076977169">Папярэджваць пра спробы аўтаматычнага спампоўвання файлаў (рэкамендуецца)</translation>
-<translation id="3505030558724226696">Адклікаць доступ да прылад</translation>
 <translation id="3511307672085573050">Скапіяваць адрас &amp;спасылкі</translation>
 <translation id="354068948465830244">Можа чытаць і змяняць даныя сайтаў</translation>
 <translation id="3560034655160545939">&amp;Праверка правапісу</translation>
 <translation id="3587482841069643663">Усе</translation>
 <translation id="3627588569887975815">Адкрыць спасылку ў акне ў рэжыме і&amp;нкогніта</translation>
-<translation id="3627879631695760395">Усталяваць <ph name="APP" />...</translation>
 <translation id="3678156199662914018">Пашырэнне: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Запыт на доступ да экрана ад <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Забараняць закрытым сайтам адпраўляць і атрымліваць даныя</translation>
@@ -179,9 +170,8 @@
 <translation id="3760460896538743390">Інспектаваць &amp;фонаваю старонку</translation>
 <translation id="3797900183766075808">Шукаць <ph name="SEARCH_ENGINE" /> у “<ph name="SEARCH_TERMS" />”</translation>
 <translation id="3798449238516105146">Версія</translation>
-<translation id="3800806661949714323">Паказаць усе (рэкамендуецца)</translation>
 <translation id="3810973564298564668">Кіраванне</translation>
-<translation id="3838085852053358637">Не атрымалася загрузіць пашырэнне</translation>
+<translation id="3838085852053358637">Не ўдалося загрузіць пашырэнне</translation>
 <translation id="383891835335927981">Сайты са змененым маштабам адсутнічаюць</translation>
 <translation id="385051799172605136">Назад</translation>
 <translation id="3858860766373142691">Назва</translation>
@@ -194,7 +184,6 @@
 <translation id="3936390757709632190">&amp;Адкрыць аўдыё ў новай укладцы</translation>
 <translation id="3943582379552582368">&amp;Назад</translation>
 <translation id="3948116654032448504">&amp;Знайсці выяву у <ph name="SEARCH_ENGINE" /></translation>
-<translation id="3955193568934677022">Дазволіць сайтам прайграваць абароненае змесціва (рэкамендуецца)</translation>
 <translation id="3979395879372752341">Дададзена новае пашырэнне (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Скапіяваць спасылку на абраны тэкст</translation>
 <translation id="4021279097213088397">-</translation>
@@ -246,7 +235,6 @@
 <translation id="4839303808932127586">Захаваць відэа як...</translation>
 <translation id="4840096453115567876">Выйсці з рэжыму інкогніта?</translation>
 <translation id="488785315393301722">Паказаць падрабязнасці</translation>
-<translation id="4907306957610201395">Катэгорыя права доступу</translation>
 <translation id="4912643508233590958">Пераход у актыўны рэжым</translation>
 <translation id="49265687513387605">Немагчыма трансляваць экран. Пераканайцеся, што вы далі дазвол на трансляцыю.</translation>
 <translation id="4927753642311223124">Тут нічога няма, пераходзьце далей.</translation>
@@ -255,7 +243,6 @@
 <translation id="4988526792673242964">Старонкі</translation>
 <translation id="49896407730300355">Павярнуць &amp;супраць стрэлкі гадзінніка</translation>
 <translation id="4989966318180235467">Інспектаваць &amp;фонавую старонку</translation>
-<translation id="5000922062037820727">Заблакавана (рэкамендуецца)</translation>
 <translation id="5027562294707732951">Дадаць пашырэнне</translation>
 <translation id="5039804452771397117">Дазволіць</translation>
 <translation id="5057110919553308744">Пры націсканні на пашырэнне</translation>
@@ -271,7 +258,7 @@
 <translation id="5233736638227740678">&amp;Уставіць</translation>
 <translation id="5256861893479663409">На ўсіх сайтах</translation>
 <translation id="5260334392110301220">Разумныя двукоссі</translation>
-<translation id="5269977353971873915">Не атрымалася надрукаваць</translation>
+<translation id="5269977353971873915">Не ўдалося надрукаваць</translation>
 <translation id="5284445933715251131">Працягнуць спампоўванне</translation>
 <translation id="52912272896845572">Хібны файл прыватнага ключа.</translation>
 <translation id="5301954838959518834">Зразумела</translation>
@@ -288,7 +275,6 @@
 <translation id="5425042808445046667">Працягнуць спампоўванне</translation>
 <translation id="5427459444770871191">Павярнуць &amp;па стрэлцы гадзінніка</translation>
 <translation id="5431318178759467895">Колер</translation>
-<translation id="5483785310822538350">Адклікаць доступ да файлаў і прылад</translation>
 <translation id="5485102783864353244">Дадаць праграму</translation>
 <translation id="5486561344817861625">Сімуляваць перазапуск браўзера</translation>
 <translation id="5487521232677179737">Выдаліць даныя</translation>
@@ -301,10 +287,9 @@
 <translation id="5614553682702429503">Захаваць пароль?</translation>
 <translation id="5623842676595125836">Журнал</translation>
 <translation id="5627086634964711283">Таксама пашырэнне змяніла хатнюю старонку.</translation>
-<translation id="563535393368633106">Пытацца дазволу на доступ (рэкамендуецца)</translation>
 <translation id="5638309510554459422">Шукайце пашырэнні і тэмы ў <ph name="BEGIN_LINK" />Сеціўнай краме Chrome<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Заблакавана</translation>
-<translation id="5707185214361380026">Не атрымалася загрузіць пашырэнне з:</translation>
+<translation id="5707185214361380026">Не ўдалося загрузіць пашырэнне з:</translation>
 <translation id="5713171467967533494">Адкрываць у браўзеры Vivaldi</translation>
 <translation id="5715711091495208045">Пасярэднік: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Захаваць як PDF</translation>
@@ -335,7 +320,7 @@
 <translation id="6086846494333236931">Усталявана адміністратарам</translation>
 <translation id="6101226222197207147">Дададзена новая праграма (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Пашырэнне змяніла налады проксі</translation>
-<translation id="6147020289383635445">Не атрымалася выканаць папярэдні прагляд.</translation>
+<translation id="6147020289383635445">Не ўдалося выканаць папярэдні прагляд.</translation>
 <translation id="6156863943908443225">Кэш скрыпта</translation>
 <translation id="6196854373336333322">Пашырэнне "<ph name="EXTENSION_NAME" />" змяніла налады проксі. Зараз яно можа сачыць ці змяняць даныя, якія вы адпраўляеце, і перапыніць злучэнне. Калі вы не ведалі пра гэта, то адключыце гэтае пашырэнне.</translation>
 <translation id="6200151268994853226">Кіраванне пашырэннем</translation>
@@ -353,7 +338,6 @@
 <translation id="6315493146179903667">Узняць усё на пярэдні план</translation>
 <translation id="6326855256003666642">Колькасць сігналаў захавання актыўнасці</translation>
 <translation id="6374469231428023295">Паўтарыць спробу</translation>
-<translation id="6385543213911723544">Сайты могуць захоўваць і чытаць даныя cookie</translation>
 <translation id="6398765197997659313">Выйсці з поўнаэкраннага рэжыму</translation>
 <translation id="6406303162637086258">Сімуляваць перазапуск браўзера</translation>
 <translation id="6445450263907939268">Вы можаце аднавіць папярэднія налады.</translation>
@@ -373,13 +357,11 @@
 <translation id="6787839852456839824">Спалучэнні клавіш</translation>
 <translation id="6798954102094737107">Убудова: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Захаваць змены</translation>
-<translation id="6817174620439930047">Папярэджваць, калі сайты спрабуюць выкарыстаць сістэмныя паведамленні для доступу да MIDI-прылад (рэкамендуецца)</translation>
 <translation id="6824564591481349393">Скапіяваць &amp;адрас электроннай пошты</translation>
 <translation id="6840155290835956714">Пытацца перад адпраўленнем</translation>
 <translation id="6886871292305414135">Адкрыць спасылку ў новай &amp;укладцы</translation>
 <translation id="6892812721183419409">Адкрыць спасылку як <ph name="USER" /></translation>
 <translation id="6900284862687837908">Праграма ў фоне: <ph name="BACKGROUND_APP_URL" /></translation>
-<translation id="6904344821472985372">Адклікаць доступ да файлаў</translation>
 <translation id="6916590542764765824">Кіраваць пашырэннямі</translation>
 <translation id="6945221475159498467">Абраць</translation>
 <translation id="6955446738988643816">Інспектаваць выплыўное акно</translation>
@@ -400,7 +382,6 @@
 <translation id="7385854874724088939">Падчас друку адбылася памылка.   Калі ласка, праверце прынтар і паўтарыце спробу.</translation>
 <translation id="7412226954991670867">Памяць GPU</translation>
 <translation id="7421925624202799674">&amp;Праглядзець код старонкі</translation>
-<translation id="7423098979219808738">Спачатку пытацца</translation>
 <translation id="7427348830195639090">Старонка ў фоне: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Абраўшы гэты прынтар, вы даяце да яго доступ наступнаму пашырэнню:</translation>
 <translation id="749028671485790643">Карыстальнік <ph name="VALUE" /></translation>
@@ -455,7 +436,6 @@
 <translation id="8261378640211443080">У <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> няма звестак пра гэтае пашырэнне, яно магло быць усталявана без вашага ведама.</translation>
 <translation id="8351419472474436977">Пашырэнне змяніла налады проксі. Зараз яно можа сачыць ці змяняць даныя, якія вы адпраўляеце, і перапыніць злучэнне. Калі вы не ведалі пра гэта, то адключыце гэтае пашырэнне.</translation>
 <translation id="8382913212082956454">Скапіяваць &amp;адрас электроннай пошты</translation>
-<translation id="8413385045638830869">Спачатку пытацца (рэкамендуецца)</translation>
 <translation id="8434480141477525001">Порт адладкі NaCl</translation>
 <translation id="8449008133205184768">Уставіць з захаваннем стылю</translation>
 <translation id="8477384620836102176">&amp;Агульныя звесткі</translation>
@@ -464,7 +444,6 @@
 <translation id="8523493869875972733">Захаваць змены</translation>
 <translation id="8546306075665861288">Кэш выяў</translation>
 <translation id="8569682776816196752">Нічога не знойдзена</translation>
-<translation id="857943718398505171">Дазволена (рэкамендуецца)</translation>
 <translation id="8584280235376696778">&amp;Адкрыць відэа ў новай укладцы</translation>
 <translation id="8605428685123651449">Памяць SQLite</translation>
 <translation id="8615618338313291042">Праграма ў рэжыме інкогніта: <ph name="APP_NAME" /></translation>
@@ -495,7 +474,6 @@
 <translation id="9056810968620647706">Нічога не знойдзена.</translation>
 <translation id="9084064520949870008">Адкрыць як акно</translation>
 <translation id="9137916601698928395">Адкрыць спасылку як <ph name="USER" /></translation>
-<translation id="91568222606626347">Стварыць цэтлік...</translation>
 <translation id="916607977885256133">Рэжым плавальных акон</translation>
 <translation id="9170848237812810038">&amp;Адрабіць</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" дададзена</translation>

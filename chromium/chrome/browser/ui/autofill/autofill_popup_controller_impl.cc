@@ -13,6 +13,7 @@
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -45,6 +46,8 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/autofill/manual_filling_controller_impl.h"
+#include "chrome/browser/password_manager/android/local_passwords_migration_warning_util.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 
 using FillingSource = ManualFillingController::FillingSource;
 #endif
@@ -62,10 +65,10 @@ static constexpr base::TimeDelta kIgnoreEarlyClicksOnPopupDuration =
     base::Milliseconds(500);
 
 // Returns true if the given id refers to an element that can be accepted.
-bool CanAccept(int id) {
-  return id != POPUP_ITEM_ID_SEPARATOR &&
-         id != POPUP_ITEM_ID_INSECURE_CONTEXT_PAYMENT_DISABLED_MESSAGE &&
-         id != POPUP_ITEM_ID_MIXED_FORM_MESSAGE && id != POPUP_ITEM_ID_TITLE;
+bool CanAccept(PopupItemId id) {
+  return id != PopupItemId::kSeparator &&
+         id != PopupItemId::kInsecureContextPaymentDisabledMessage &&
+         id != PopupItemId::kMixedFormMessage && id != PopupItemId::kTitle;
 }
 
 }  // namespace
@@ -90,9 +93,15 @@ WeakPtr<AutofillPopupControllerImpl> AutofillPopupControllerImpl::GetOrCreate(
 
   if (previous)
     previous->Hide(PopupHidingReason::kViewDestroyed);
-
+#if BUILDFLAG(IS_ANDROID)
   AutofillPopupControllerImpl* controller = new AutofillPopupControllerImpl(
-      delegate, web_contents, container_view, element_bounds, text_direction);
+      delegate, web_contents, container_view, element_bounds, text_direction,
+      base::BindRepeating(&local_password_migration::ShowWarning));
+#else
+  AutofillPopupControllerImpl* controller = new AutofillPopupControllerImpl(
+      delegate, web_contents, container_view, element_bounds, text_direction,
+      base::DoNothing());
+#endif
   return controller->GetWeakPtr();
 }
 #endif
@@ -102,10 +111,17 @@ AutofillPopupControllerImpl::AutofillPopupControllerImpl(
     content::WebContents* web_contents,
     gfx::NativeView container_view,
     const gfx::RectF& element_bounds,
-    base::i18n::TextDirection text_direction)
+    base::i18n::TextDirection text_direction,
+    base::RepeatingCallback<
+        void(gfx::NativeWindow,
+             Profile*,
+             password_manager::metrics_util::PasswordMigrationWarningTriggers)>
+        show_pwd_migration_warning_callback)
     : controller_common_(element_bounds, text_direction, container_view),
       web_contents_(web_contents),
-      delegate_(delegate) {
+      delegate_(delegate),
+      show_pwd_migration_warning_callback_(
+          std::move(show_pwd_migration_warning_callback)) {
   ClearState();
   delegate->RegisterDeletionCallback(base::BindOnce(
       &AutofillPopupControllerImpl::HideViewAndDie, GetWeakPtr()));
@@ -173,7 +189,7 @@ void AutofillPopupControllerImpl::UpdateDataListValues(
   // Remove all the old data list values, which should always be at the top of
   // the list if they are present.
   while (!suggestions_.empty() &&
-         suggestions_[0].frontend_id == POPUP_ITEM_ID_DATALIST_ENTRY) {
+         suggestions_[0].popup_item_id == PopupItemId::kDatalistEntry) {
     suggestions_.erase(suggestions_.begin());
   }
 
@@ -181,7 +197,7 @@ void AutofillPopupControllerImpl::UpdateDataListValues(
   // is one).
   if (values.empty()) {
     if (!suggestions_.empty() &&
-        suggestions_[0].frontend_id == POPUP_ITEM_ID_SEPARATOR) {
+        suggestions_[0].popup_item_id == PopupItemId::kSeparator) {
       suggestions_.erase(suggestions_.begin());
     }
 
@@ -196,9 +212,9 @@ void AutofillPopupControllerImpl::UpdateDataListValues(
 
   // Add a separator if there are any other values.
   if (!suggestions_.empty() &&
-      suggestions_[0].frontend_id != POPUP_ITEM_ID_SEPARATOR) {
+      suggestions_[0].popup_item_id != PopupItemId::kSeparator) {
     suggestions_.insert(suggestions_.begin(),
-                        Suggestion(POPUP_ITEM_ID_SEPARATOR));
+                        Suggestion(PopupItemId::kSeparator));
   }
 
   // Prepend the parameters to the suggestions we already have.
@@ -207,7 +223,7 @@ void AutofillPopupControllerImpl::UpdateDataListValues(
     suggestions_[i].main_text =
         Suggestion::Text(values[i], Suggestion::Text::IsPrimary(true));
     suggestions_[i].labels = {{Suggestion::Text(labels[i])}};
-    suggestions_[i].frontend_id = POPUP_ITEM_ID_DATALIST_ENTRY;
+    suggestions_[i].popup_item_id = PopupItemId::kDatalistEntry;
   }
 
   OnSuggestionsChanged();
@@ -281,9 +297,14 @@ void AutofillPopupControllerImpl::AcceptSuggestion(int index) {
   // Ignore clicks immediately after the popup was shown. This is to prevent
   // users accidentally accepting suggestions (crbug.com/1279268).
   DCHECK(!time_view_shown_.is_null());
-  if ((base::TimeTicks::Now() - time_view_shown_ <
-       kIgnoreEarlyClicksOnPopupDuration) &&
+  const base::TimeDelta time_elapsed =
+      base::TimeTicks::Now() - time_view_shown_;
+  if ((time_elapsed < kIgnoreEarlyClicksOnPopupDuration) &&
       !disable_threshold_for_testing_) {
+    base::UmaHistogramCustomTimes(
+        "Autofill.Popup.AcceptanceDelayThresholdNotMet", time_elapsed,
+        base::Milliseconds(0), kIgnoreEarlyClicksOnPopupDuration,
+        /*buckets=*/50);
     return;
   }
 
@@ -318,7 +339,7 @@ void AutofillPopupControllerImpl::AcceptSuggestionWithoutThreshold(int index) {
 #endif
 
   if (web_contents_ &&
-      suggestion.frontend_id == POPUP_ITEM_ID_VIRTUAL_CREDIT_CARD_ENTRY) {
+      suggestion.popup_item_id == PopupItemId::kVirtualCreditCardEntry) {
     feature_engagement::TrackerFactory::GetForBrowserContext(
         web_contents_->GetBrowserContext())
         ->NotifyEvent("autofill_virtual_card_suggestion_accepted");
@@ -340,6 +361,19 @@ void AutofillPopupControllerImpl::AcceptSuggestionWithoutThreshold(int index) {
   }
 
   delegate_->DidAcceptSuggestion(suggestion, index);
+#if BUILDFLAG(IS_ANDROID)
+  if ((suggestion.popup_item_id == PopupItemId::kPasswordEntry ||
+       suggestion.popup_item_id == PopupItemId::kUsernameEntry) &&
+      base::FeatureList::IsEnabled(
+          password_manager::features::
+              kUnifiedPasswordManagerLocalPasswordsMigrationWarning)) {
+    show_pwd_migration_warning_callback_.Run(
+        web_contents_->GetTopLevelNativeWindow(),
+        Profile::FromBrowserContext(web_contents_->GetBrowserContext()),
+        password_manager::metrics_util::PasswordMigrationWarningTriggers::
+            kKeyboardAcessoryBar);
+  }
+#endif
 }
 
 gfx::NativeView AutofillPopupControllerImpl::container_view() const {
@@ -397,7 +431,9 @@ bool AutofillPopupControllerImpl::GetRemovalConfirmationText(
     std::u16string* body) {
   return delegate_->GetDeletionConfirmationText(
       suggestions_[list_index].main_text.value,
-      suggestions_[list_index].frontend_id, title, body);
+      suggestions_[list_index].popup_item_id,
+      suggestions_[list_index].GetPayload<Suggestion::BackendId>(), title,
+      body);
 }
 
 bool AutofillPopupControllerImpl::RemoveSuggestion(int list_index) {
@@ -411,8 +447,10 @@ bool AutofillPopupControllerImpl::RemoveSuggestion(int list_index) {
   // TODO(crbug.com/1209792): Replace these checks with a stronger identifier.
   if (list_index < 0 || static_cast<size_t>(list_index) >= suggestions_.size())
     return false;
-  if (!delegate_->RemoveSuggestion(suggestions_[list_index].main_text.value,
-                                   suggestions_[list_index].frontend_id)) {
+  if (!delegate_->RemoveSuggestion(
+          suggestions_[list_index].main_text.value,
+          suggestions_[list_index].popup_item_id,
+          suggestions_[list_index].GetPayload<Suggestion::BackendId>())) {
     return false;
   }
 
@@ -438,16 +476,13 @@ void AutofillPopupControllerImpl::SelectSuggestion(
 
   if (index) {
     DCHECK_LT(*index, suggestions_.size());
-    if (!CanAccept(GetSuggestionAt(*index).frontend_id)) {
+    if (!CanAccept(GetSuggestionAt(*index).popup_item_id)) {
       index = absl::nullopt;
     }
   }
 
   if (index) {
-    const Suggestion& suggestion = GetSuggestionAt(*index);
-    delegate_->DidSelectSuggestion(
-        suggestion.main_text.value, suggestion.frontend_id,
-        suggestion.GetPayload<Suggestion::BackendId>());
+    delegate_->DidSelectSuggestion(GetSuggestionAt(*index));
   } else {
     delegate_->ClearPreviewedForm();
   }
@@ -461,9 +496,9 @@ bool AutofillPopupControllerImpl::HasSuggestions() const {
   if (suggestions_.empty()) {
     return false;
   }
-  int id = suggestions_[0].frontend_id;
-  return id > 0 || base::Contains(kItemsTriggeringFieldFilling, id) ||
-         id == POPUP_ITEM_ID_SCAN_CREDIT_CARD;
+  PopupItemId popup_item_id = suggestions_[0].popup_item_id;
+  return base::Contains(kItemsTriggeringFieldFilling, popup_item_id) ||
+         popup_item_id == PopupItemId::kScanCreditCard;
 }
 
 void AutofillPopupControllerImpl::SetSuggestions(

@@ -38,14 +38,12 @@
 #if BUILDFLAG(ENABLE_SCREEN_CAPTURE)
 #include "content/browser/media/capture/desktop_capture_device_uma_types.h"
 #include "content/browser/media/capture/web_contents_video_capture_device.h"
-#if BUILDFLAG(IS_ANDROID)
-#include "content/browser/media/capture/screen_capture_device_android.h"
-#else
+#if !BUILDFLAG(IS_ANDROID)
 #if defined(USE_AURA)
 #include "content/browser/media/capture/aura_window_video_capture_device.h"
-#endif
+#endif  // defined(USE_AURA)
 #include "content/browser/media/capture/desktop_capture_device.h"
-#endif  // BUILDFLAG(IS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 #if BUILDFLAG(IS_MAC)
 #include "content/browser/media/capture/desktop_capture_device_mac.h"
 #include "content/browser/media/capture/screen_capture_kit_device_mac.h"
@@ -127,13 +125,6 @@ void IncrementDesktopCaptureCounters(const DesktopMediaID& device_id) {
   }
 }
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-bool ShouldUseDesktopCaptureLacrosV2() {
-  return base::FeatureList::IsEnabled(features::kDesktopCaptureLacrosV2) &&
-         VideoCaptureDeviceProxyLacros::IsAvailable();
-}
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 enum DesktopCaptureImplementation {
@@ -190,10 +181,6 @@ DesktopCaptureImplementation CreatePlatformDependentVideoCaptureDevice(
     const DesktopMediaID& desktop_id,
     std::unique_ptr<media::VideoCaptureDevice>& device_out) {
   DCHECK_EQ(device_out.get(), nullptr);
-#if BUILDFLAG(IS_ANDROID)
-  if ((device_out = std::make_unique<ScreenCaptureDeviceAndroid>()))
-    return DesktopCaptureImplementation::kScreenCaptureDeviceAndroid;
-#else
 #if BUILDFLAG(IS_MAC)
   // Prefer using ScreenCaptureKit. After that try DesktopCaptureDeviceMac, and
   // if both fail, use the generic DesktopCaptureDevice.
@@ -206,11 +193,12 @@ DesktopCaptureImplementation CreatePlatformDependentVideoCaptureDevice(
   if ((device_out = CreateDesktopCaptureDeviceMac(desktop_id))) {
     return kDesktopCaptureDeviceMac;
   }
-#endif
+#endif  // BUILDFLAG(IS_MAC)
+#if !BUILDFLAG(IS_ANDROID)
   if ((device_out = DesktopCaptureDevice::Create(desktop_id))) {
     return kLegacyDesktopCaptureDevice;
   }
-#endif
+#endif  // !BUILDFLAG(IS_ANDROID)
   return kNoImplementation;
 }
 #endif  // BUILDFLAG(ENABLE_SCREEN_CAPTURE)
@@ -263,13 +251,10 @@ void InProcessVideoCaptureDeviceLauncher::LaunchDeviceAsync(
 
   switch (stream_type) {
     case blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE: {
-      if (!video_capture_system_) {
-        // Clients who create an instance of |this| without providing a
-        // VideoCaptureSystem instance are expected to know that
-        // MEDIA_DEVICE_VIDEO_CAPTURE is not supported in this case.
-        NOTREACHED();
-        return;
-      }
+      // Clients who create an instance of |this| without providing a
+      // VideoCaptureSystem instance are expected to know that
+      // MEDIA_DEVICE_VIDEO_CAPTURE is not supported in this case.
+      CHECK(video_capture_system_);
       start_capture_closure = base::BindOnce(
           &InProcessVideoCaptureDeviceLauncher::
               DoStartDeviceCaptureOnDeviceThread,
@@ -352,19 +337,16 @@ void InProcessVideoCaptureDeviceLauncher::LaunchDeviceAsync(
 #endif  // defined(USE_AURA) || BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-      if (ShouldUseDesktopCaptureLacrosV2()) {
-        TRACE_EVENT_INSTANT0(
-            TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
-            "UsingDesktopCaptureLacrosV2", TRACE_EVENT_SCOPE_THREAD);
-        start_capture_closure = base::BindOnce(
-            &InProcessVideoCaptureDeviceLauncher::
-                DoStartDesktopCaptureWithReceiverOnDeviceThread,
-            base::Unretained(this), desktop_id, params, std::move(receiver),
-            std::move(after_start_capture_callback));
-        break;
-      }
-#endif
-
+      TRACE_EVENT_INSTANT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
+                           "UsingDesktopCaptureLacrosV2",
+                           TRACE_EVENT_SCOPE_THREAD);
+      start_capture_closure = base::BindOnce(
+          &InProcessVideoCaptureDeviceLauncher::
+              DoStartDesktopCaptureWithReceiverOnDeviceThread,
+          base::Unretained(this), desktop_id, params, std::move(receiver),
+          std::move(after_start_capture_callback));
+      break;
+#else
       // All cases other than tab capture or Aura desktop/window capture.
       TRACE_EVENT_INSTANT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
                            "UsingDesktopCapturer", TRACE_EVENT_SCOPE_THREAD);
@@ -377,6 +359,7 @@ void InProcessVideoCaptureDeviceLauncher::LaunchDeviceAsync(
                              std::move(receiver_on_io_thread)),
           std::move(after_start_capture_callback));
       break;
+#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
     }
 #endif  // BUILDFLAG(ENABLE_SCREEN_CAPTURE)
 
@@ -456,8 +439,7 @@ void InProcessVideoCaptureDeviceLauncher::OnDeviceStarted(
         std::move(done_cb).Run();
         return;
       case State::READY_TO_LAUNCH:
-        NOTREACHED();
-        return;
+        NOTREACHED_NORETURN();
     }
   }
 
@@ -475,8 +457,7 @@ void InProcessVideoCaptureDeviceLauncher::OnDeviceStarted(
       std::move(done_cb).Run();
       return;
     case State::READY_TO_LAUNCH:
-      NOTREACHED();
-      return;
+      NOTREACHED_NORETURN();
   }
 }
 

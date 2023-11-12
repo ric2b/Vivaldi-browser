@@ -25,9 +25,11 @@ export class OptionPanel extends View {
   private readonly observers = new Map<state.State, state.StateObserver>();
 
   constructor() {
-    super(
-        ViewName.OPTION_PANEL,
-        {dismissByEsc: true, dismissByBackgroundClick: true});
+    super(ViewName.OPTION_PANEL, {
+      dismissByEsc: true,
+      dismissByBackgroundClick: true,
+      dismissOnStopStreaming: true,
+    });
   }
 
   override entering(options: EnterOptions): void {
@@ -40,8 +42,12 @@ export class OptionPanel extends View {
     this.title.setAttribute('i18n-text', titleLabel);
 
     this.container.replaceChildren();
-    for (const {label, ariaLabel, state: targetState, isDisableOption} of
-             stateOptions) {
+    for (const {
+           label,
+           ariaLabel,
+           state: targetState,
+           isDisableOption = false,
+         } of stateOptions) {
       const item = util.instantiateTemplate('#state-option-template');
       const span = dom.getFrom(item, 'span', HTMLSpanElement);
 

@@ -820,8 +820,9 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
                            net::HttpRequestHeaders::kUserAgent));
 }
 
+// https://crbug.com/1446050
 IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
-                       SetUserAgentStringRendererInitiated) {
+                       DISABLED_SetUserAgentStringRendererInitiated) {
   net::test_server::ControllableHttpResponse response_1(embedded_test_server(),
                                                         "", true);
   net::test_server::ControllableHttpResponse response_2(embedded_test_server(),
@@ -862,15 +863,10 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, AutoPlayDefault) {
   NavigateAndWaitForCompletion(url, tab);
 
   auto* web_contents = tab->web_contents();
-  bool playing = false;
   // There's no notification to watch that would signal video wasn't autoplayed,
   // so instead check once through javascript.
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      web_contents,
-      "window.domAutomationController.send(!document.getElementById('vid')."
-      "paused)",
-      &playing));
-  ASSERT_FALSE(playing);
+  ASSERT_EQ(false, content::EvalJs(web_contents,
+                                   "!document.getElementById('vid').paused"));
 }
 
 namespace {

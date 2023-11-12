@@ -97,7 +97,6 @@ import org.chromium.chrome.browser.endpoint_fetcher.EndpointResponse;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge.OptimizationGuideCallback;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeJni;
@@ -320,8 +319,8 @@ public class TabListMediatorUnitTest {
     private TabListModel mModel;
     private SimpleRecyclerViewAdapter.ViewHolder mViewHolder1;
     private SimpleRecyclerViewAdapter.ViewHolder mViewHolder2;
-    private RecyclerView.ViewHolder mDummyViewHolder1;
-    private RecyclerView.ViewHolder mDummyViewHolder2;
+    private RecyclerView.ViewHolder mFakeViewHolder1;
+    private RecyclerView.ViewHolder mFakeViewHolder2;
     private View mItemView1 = mock(View.class);
     private View mItemView2 = mock(View.class);
     private TabModelObserver mMediatorTabModelObserver;
@@ -357,8 +356,8 @@ public class TabListMediatorUnitTest {
         mTab2 = prepareTab(TAB2_ID, TAB2_TITLE, TAB2_URL);
         mViewHolder1 = prepareViewHolder(TAB1_ID, POSITION1);
         mViewHolder2 = prepareViewHolder(TAB2_ID, POSITION2);
-        mDummyViewHolder1 = prepareDummyViewHolder(mItemView1, POSITION1);
-        mDummyViewHolder2 = prepareDummyViewHolder(mItemView2, POSITION2);
+        mFakeViewHolder1 = prepareFakeViewHolder(mItemView1, POSITION1);
+        mFakeViewHolder2 = prepareFakeViewHolder(mItemView2, POSITION2);
         List<Tab> tabs1 = new ArrayList<>(Arrays.asList(mTab1));
         List<Tab> tabs2 = new ArrayList<>(Arrays.asList(mTab2));
 
@@ -372,11 +371,14 @@ public class TabListMediatorUnitTest {
         // Incognito is unused. Mock the same profile for simplified test.
         doReturn(mTabModel).when(mTabModelSelector).getModel(false);
         doReturn(mTabModel).when(mTabModelSelector).getModel(true);
+        // Mock that tab restoring stage is over.
+        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         doReturn(mProfile).when(mTabModel).getProfile();
         doReturn(tabModelList).when(mTabModelSelector).getModels();
 
         doReturn(mTabModelFilterProvider).when(mTabModelSelector).getTabModelFilterProvider();
         doReturn(mTabModelFilter).when(mTabModelFilterProvider).getCurrentTabModelFilter();
+        doReturn(mTabModelFilter).when(mTabModelFilterProvider).getTabModelFilter(false);
         doReturn(2).when(mTabModelFilter).getCount();
         doReturn(mTab1).when(mTabModelFilter).getTabAt(POSITION1);
         doReturn(mTab2).when(mTabModelFilter).getTabAt(POSITION2);
@@ -585,7 +587,6 @@ public class TabListMediatorUnitTest {
     public void updatesFavicon_Navigation_NoOpSameDocument() {
         initAndAssertAllProperties();
         mMediator.setActionOnAllRelatedTabsForTesting(true);
-        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         doReturn(mFavicon).when(mTabListFaviconProvider).getDefaultFavicon(anyBoolean());
 
         mModel.get(0).model.set(TabProperties.FAVICON, null);
@@ -604,7 +605,6 @@ public class TabListMediatorUnitTest {
     public void updatesFavicon_Navigation_NoOpSameUrl() {
         initAndAssertAllProperties();
         mMediator.setActionOnAllRelatedTabsForTesting(true);
-        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         doReturn(mFavicon).when(mTabListFaviconProvider).getDefaultFavicon(anyBoolean());
 
         mModel.get(0).model.set(TabProperties.FAVICON, null);
@@ -623,7 +623,6 @@ public class TabListMediatorUnitTest {
     public void updatesFavicon_Navigation_NoOpNtpUrl() {
         initAndAssertAllProperties();
         mMediator.setActionOnAllRelatedTabsForTesting(true);
-        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         doReturn(mFavicon).when(mTabListFaviconProvider).getDefaultFavicon(anyBoolean());
 
         NavigationHandle navigationHandle = mock(NavigationHandle.class);
@@ -713,8 +712,8 @@ public class TabListMediatorUnitTest {
 
     @Test
     @Features.EnableFeatures(TAB_GROUPS_CONTINUATION_ANDROID)
-    public void updatesFaviconFetcher_TabGroup_GTS() {
-        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.GRID);
+    public void updatesFaviconFetcher_TabGroup_ListGTS() {
+        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.LIST);
 
         assertNotNull(mModel.get(0).model.get(TabProperties.FAVICON_FETCHER));
         mModel.get(0).model.set(TabProperties.FAVICON_FETCHER, null);
@@ -735,7 +734,6 @@ public class TabListMediatorUnitTest {
     @Features.EnableFeatures(TAB_GROUPS_CONTINUATION_ANDROID)
     public void updatesFaviconFetcher_Navigation_NoOpSameDocument() {
         setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.GRID);
-        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         doReturn(mFavicon).when(mTabListFaviconProvider).getDefaultFavicon(anyBoolean());
 
         mModel.get(0).model.set(TabProperties.FAVICON_FETCHER, null);
@@ -754,7 +752,6 @@ public class TabListMediatorUnitTest {
     @Features.EnableFeatures(TAB_GROUPS_CONTINUATION_ANDROID)
     public void updatesFaviconFetcher_Navigation_NoOpSameUrl() {
         setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.GRID);
-        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         doReturn(mFavicon).when(mTabListFaviconProvider).getDefaultFavicon(anyBoolean());
 
         mModel.get(0).model.set(TabProperties.FAVICON_FETCHER, null);
@@ -773,7 +770,6 @@ public class TabListMediatorUnitTest {
     @Features.EnableFeatures(TAB_GROUPS_CONTINUATION_ANDROID)
     public void updatesFaviconFetcher_Navigation_NoOpNtpUrl() {
         setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.GRID);
-        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         doReturn(mFavicon).when(mTabListFaviconProvider).getDefaultFavicon(anyBoolean());
 
         GURL ntpUrl = JUnitTestGURLs.getGURL(JUnitTestGURLs.NTP_URL);
@@ -891,13 +887,13 @@ public class TabListMediatorUnitTest {
         itemTouchHelperCallback.setActionsOnAllRelatedTabsForTesting(true);
         itemTouchHelperCallback.setHoveredTabIndexForTesting(POSITION1);
         itemTouchHelperCallback.setSelectedTabIndexForTesting(POSITION2);
-        itemTouchHelperCallback.getMovementFlags(mRecyclerView, mDummyViewHolder1);
+        itemTouchHelperCallback.getMovementFlags(mRecyclerView, mFakeViewHolder1);
 
         doReturn(mAdapter).when(mRecyclerView).getAdapter();
 
         // Simulate the drop action.
         itemTouchHelperCallback.onSelectedChanged(
-                mDummyViewHolder2, ItemTouchHelper.ACTION_STATE_IDLE);
+                mFakeViewHolder2, ItemTouchHelper.ACTION_STATE_IDLE);
 
         verify(mTabGroupModelFilter).mergeTabsToGroup(eq(TAB2_ID), eq(TAB1_ID));
         verify(mGridLayoutManager).removeView(mItemView2);
@@ -916,8 +912,8 @@ public class TabListMediatorUnitTest {
         SimpleRecyclerViewAdapter.ViewHolder viewHolder4 = prepareViewHolder(TAB4_ID, POSITION2);
         View itemView3 = mock(View.class);
         View itemView4 = mock(View.class);
-        RecyclerView.ViewHolder dummyViewHolder3 = prepareDummyViewHolder(itemView3, 2);
-        RecyclerView.ViewHolder dummyViewHolder4 = prepareDummyViewHolder(itemView4, 3);
+        RecyclerView.ViewHolder fakeViewHolder3 = prepareFakeViewHolder(itemView3, 2);
+        RecyclerView.ViewHolder fakeViewHolder4 = prepareFakeViewHolder(itemView4, 3);
 
         List<Tab> tabs = new ArrayList<>(Arrays.asList(mTab1, mTab2, tab3, tab4));
         mMediator.resetWithListOfTabs(PseudoTab.getListOfPseudoTab(tabs), false, false);
@@ -928,12 +924,12 @@ public class TabListMediatorUnitTest {
         itemTouchHelperCallback.setActionsOnAllRelatedTabsForTesting(true);
         itemTouchHelperCallback.setHoveredTabIndexForTesting(POSITION1);
         itemTouchHelperCallback.setSelectedTabIndexForTesting(POSITION2);
-        itemTouchHelperCallback.getMovementFlags(mRecyclerView, mDummyViewHolder1);
+        itemTouchHelperCallback.getMovementFlags(mRecyclerView, mFakeViewHolder1);
 
         doReturn(mAdapter).when(mRecyclerView).getAdapter();
 
         itemTouchHelperCallback.onSelectedChanged(
-                mDummyViewHolder2, ItemTouchHelper.ACTION_STATE_IDLE);
+                mFakeViewHolder2, ItemTouchHelper.ACTION_STATE_IDLE);
 
         verify(mTabGroupModelFilter).mergeTabsToGroup(eq(TAB2_ID), eq(TAB1_ID));
         verify(mGridLayoutManager).removeView(mItemView2);
@@ -946,42 +942,43 @@ public class TabListMediatorUnitTest {
         mTabGroupModelFilterObserverCaptor.getValue().didMergeTabToGroup(mTab2, TAB1_ID);
 
         assertThat(mModel.size(), equalTo(3));
-        mDummyViewHolder1 = prepareDummyViewHolder(mItemView1, 0);
-        dummyViewHolder3 = prepareDummyViewHolder(itemView3, 1);
-        dummyViewHolder4 = prepareDummyViewHolder(itemView4, 2);
+        mFakeViewHolder1 = prepareFakeViewHolder(mItemView1, 0);
+        fakeViewHolder3 = prepareFakeViewHolder(itemView3, 1);
+        fakeViewHolder4 = prepareFakeViewHolder(itemView4, 2);
 
         // Merge 4 to 3.
         when(mTabGroupModelFilter.getTabAt(1)).thenReturn(tab3);
         when(mTabGroupModelFilter.getTabAt(2)).thenReturn(tab4);
         itemTouchHelperCallback.setHoveredTabIndexForTesting(1);
         itemTouchHelperCallback.setSelectedTabIndexForTesting(2);
-        itemTouchHelperCallback.getMovementFlags(mRecyclerView, dummyViewHolder3);
+        itemTouchHelperCallback.getMovementFlags(mRecyclerView, fakeViewHolder3);
 
         itemTouchHelperCallback.onSelectedChanged(
-                dummyViewHolder4, ItemTouchHelper.ACTION_STATE_IDLE);
+                fakeViewHolder4, ItemTouchHelper.ACTION_STATE_IDLE);
 
         verify(mTabGroupModelFilter).mergeTabsToGroup(eq(TAB4_ID), eq(TAB3_ID));
         verify(mGridLayoutManager).removeView(itemView4);
         verify(mTracker, times(2)).notifyEvent(eq(EventConstants.TAB_DRAG_AND_DROP_TO_GROUP));
 
         when(mTabGroupModelFilter.getRelatedTabList(TAB4_ID)).thenReturn(Arrays.asList(tab3, tab4));
+        when(mTabGroupModelFilter.getRelatedTabList(TAB3_ID)).thenReturn(Arrays.asList(tab3, tab4));
         when(mTabModel.indexOf(tab3)).thenReturn(2);
         when(mTabModel.indexOf(tab4)).thenReturn(3);
         mTabGroupModelFilterObserverCaptor.getValue().didMergeTabToGroup(tab4, TAB3_ID);
 
         assertThat(mModel.size(), equalTo(2));
-        mDummyViewHolder1 = prepareDummyViewHolder(mItemView1, 0);
-        dummyViewHolder3 = prepareDummyViewHolder(itemView3, 1);
+        mFakeViewHolder1 = prepareFakeViewHolder(mItemView1, 0);
+        fakeViewHolder3 = prepareFakeViewHolder(itemView3, 1);
 
         // Merge 3 to 1.
         when(mTabGroupModelFilter.getTabAt(0)).thenReturn(mTab1);
         when(mTabGroupModelFilter.getTabAt(1)).thenReturn(tab3);
         itemTouchHelperCallback.setHoveredTabIndexForTesting(0);
         itemTouchHelperCallback.setSelectedTabIndexForTesting(1);
-        itemTouchHelperCallback.getMovementFlags(mRecyclerView, mDummyViewHolder1);
+        itemTouchHelperCallback.getMovementFlags(mRecyclerView, mFakeViewHolder1);
 
         itemTouchHelperCallback.onSelectedChanged(
-                dummyViewHolder3, ItemTouchHelper.ACTION_STATE_IDLE);
+                fakeViewHolder3, ItemTouchHelper.ACTION_STATE_IDLE);
 
         verify(mTabGroupModelFilter).mergeTabsToGroup(eq(TAB3_ID), eq(TAB1_ID));
         verify(mGridLayoutManager).removeView(itemView3);
@@ -1003,13 +1000,13 @@ public class TabListMediatorUnitTest {
         itemTouchHelperCallback.setActionsOnAllRelatedTabsForTesting(true);
         itemTouchHelperCallback.setHoveredTabIndexForTesting(POSITION1);
         itemTouchHelperCallback.setSelectedTabIndexForTesting(POSITION2);
-        itemTouchHelperCallback.getMovementFlags(mRecyclerView, mDummyViewHolder1);
+        itemTouchHelperCallback.getMovementFlags(mRecyclerView, mFakeViewHolder1);
 
         doReturn(mAdapter).when(mRecyclerView).getAdapter();
 
         // Simulate the drop action.
         itemTouchHelperCallback.onSelectedChanged(
-                mDummyViewHolder1, ItemTouchHelper.ACTION_STATE_IDLE);
+                mFakeViewHolder1, ItemTouchHelper.ACTION_STATE_IDLE);
 
         verify(mGridLayoutManager, never()).removeView(any(View.class));
     }
@@ -1021,14 +1018,14 @@ public class TabListMediatorUnitTest {
         TabGridItemTouchHelperCallback itemTouchHelperCallback = getItemTouchHelperCallback();
         itemTouchHelperCallback.setActionsOnAllRelatedTabsForTesting(false);
         itemTouchHelperCallback.setUnGroupTabIndexForTesting(POSITION1);
-        itemTouchHelperCallback.getMovementFlags(mRecyclerView, mDummyViewHolder1);
+        itemTouchHelperCallback.getMovementFlags(mRecyclerView, mFakeViewHolder1);
 
         doReturn(mAdapter).when(mRecyclerView).getAdapter();
         doReturn(1).when(mAdapter).getItemCount();
 
         // Simulate the ungroup action.
         itemTouchHelperCallback.onSelectedChanged(
-                mDummyViewHolder1, ItemTouchHelper.ACTION_STATE_IDLE);
+                mFakeViewHolder1, ItemTouchHelper.ACTION_STATE_IDLE);
 
         verify(mTabGroupModelFilter).moveTabOutOfGroup(eq(TAB1_ID));
         verify(mGridLayoutManager).removeView(mItemView1);
@@ -1058,6 +1055,8 @@ public class TabListMediatorUnitTest {
 
     @Test
     public void tabAddition_RestoreNotComplete() {
+        // Mock that tab restoring stage is started.
+        doReturn(false).when(mTabModelSelector).isTabStateInitialized();
         initAndAssertAllProperties();
         mMediator.setActionOnAllRelatedTabsForTesting(true);
 
@@ -1079,6 +1078,8 @@ public class TabListMediatorUnitTest {
 
     @Test
     public void tabAddition_Restore() {
+        // Mock that tab restoring stage is started.
+        doReturn(false).when(mTabModelSelector).isTabStateInitialized();
         initAndAssertAllProperties();
         mMediator.setActionOnAllRelatedTabsForTesting(true);
         // Mock that tab restoring stage is over.
@@ -1111,8 +1112,6 @@ public class TabListMediatorUnitTest {
     @Test
     public void tabAddition_Restore_SyncingTabListModelWithTabModel() {
         setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.GRID);
-        // Mock that tab restoring stage is over.
-        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         // Mock that tab1 and tab2 are in the same group, and they are being restored. The
         // TabListModel has been cleaned out before the restoring happens. This case could happen
@@ -1137,7 +1136,6 @@ public class TabListMediatorUnitTest {
     public void tabAddition_GTS() {
         initAndAssertAllProperties();
         mMediator.setActionOnAllRelatedTabsForTesting(true);
-        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         TabImpl newTab = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
         doReturn(mTab1).when(mTabModelFilter).getTabAt(0);
@@ -1159,7 +1157,6 @@ public class TabListMediatorUnitTest {
     public void tabAddition_GTS_delayAdd() {
         mMediator.setComponentNameForTesting(TabSwitcherCoordinator.COMPONENT_NAME);
         initAndAssertAllProperties();
-        doReturn(true).when(mTabModelSelector).isTabStateInitialized();
 
         TabImpl newTab = prepareTab(TAB3_ID, TAB3_TITLE, TAB3_URL);
         doReturn(mTab1).when(mTabModelFilter).getTabAt(0);
@@ -2211,8 +2208,6 @@ public class TabListMediatorUnitTest {
         Configuration configuration = new Configuration();
         configuration.orientation = Configuration.ORIENTATION_PORTRAIT;
         configuration.screenWidthDp = TabListCoordinator.MAX_SCREEN_WIDTH_COMPACT_DP - 1;
-        // Mock that we are in single window mode.
-        MultiWindowUtils.getInstance().setIsInMultiWindowModeForTesting(false);
 
         mComponentCallbacksCaptor.getValue().onConfigurationChanged(configuration);
 
@@ -2225,34 +2220,11 @@ public class TabListMediatorUnitTest {
         // Mock that we are switching to landscape mode.
         Configuration configuration = new Configuration();
         configuration.orientation = Configuration.ORIENTATION_LANDSCAPE;
-        configuration.screenWidthDp = TabListCoordinator.MAX_SCREEN_WIDTH_COMPACT_DP - 1;
-        // Mock that we are in single window mode.
-        MultiWindowUtils.getInstance().setIsInMultiWindowModeForTesting(false);
+        configuration.screenWidthDp = TabListCoordinator.MAX_SCREEN_WIDTH_MEDIUM_DP - 1;
 
         mComponentCallbacksCaptor.getValue().onConfigurationChanged(configuration);
 
         verify(mGridLayoutManager).setSpanCount(TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_MEDIUM);
-    }
-
-    @Test
-    public void updateSpanCount_MultiWindow() {
-        initAndAssertAllProperties();
-        Configuration portraitConfiguration = new Configuration();
-        portraitConfiguration.screenWidthDp = TabListCoordinator.MAX_SCREEN_WIDTH_COMPACT_DP - 1;
-        portraitConfiguration.orientation = Configuration.ORIENTATION_PORTRAIT;
-        Configuration landscapeConfiguration = new Configuration();
-        landscapeConfiguration.orientation = Configuration.ORIENTATION_LANDSCAPE;
-        landscapeConfiguration.screenWidthDp = TabListCoordinator.MAX_SCREEN_WIDTH_COMPACT_DP - 1;
-        // Mock that we are in multi window mode.
-        MultiWindowUtils.getInstance().setIsInMultiWindowModeForTesting(true);
-
-        mComponentCallbacksCaptor.getValue().onConfigurationChanged(landscapeConfiguration);
-        mComponentCallbacksCaptor.getValue().onConfigurationChanged(portraitConfiguration);
-        mComponentCallbacksCaptor.getValue().onConfigurationChanged(landscapeConfiguration);
-
-        // The span count is fixed to 2 for multi window mode regardless of the orientation change.
-        verify(mGridLayoutManager, times(3))
-                .setSpanCount(TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_COMPACT);
     }
 
     @Test
@@ -2264,9 +2236,6 @@ public class TabListMediatorUnitTest {
                 .thenReturn(TabListCoordinator.MAX_SCREEN_WIDTH_MEDIUM_DP + 1);
         Configuration portraitConfiguration = new Configuration();
         portraitConfiguration.orientation = Configuration.ORIENTATION_LANDSCAPE;
-
-        // Mock that we are in single window mode.
-        MultiWindowUtils.getInstance().setIsInMultiWindowModeForTesting(false);
 
         // Compact width
         portraitConfiguration.screenWidthDp = TabListCoordinator.MAX_SCREEN_WIDTH_COMPACT_DP - 1;
@@ -3164,6 +3133,7 @@ public class TabListMediatorUnitTest {
 
     @Test
     public void testListObserver_OnItemRangeInserted() {
+        PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
         setPriceTrackingEnabledForTesting(true);
         mMediator = new TabListMediator(mActivity, mModel, TabListMode.GRID, mTabModelSelector,
                 getTabThumbnailCallback(), mTitleProvider, mTabListFaviconProvider, true, null,
@@ -3181,6 +3151,7 @@ public class TabListMediatorUnitTest {
 
     @Test
     public void testListObserver_OnItemRangeRemoved() {
+        PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
         setPriceTrackingEnabledForTesting(true);
         mMediator = new TabListMediator(mActivity, mModel, TabListMode.GRID, mTabModelSelector,
                 getTabThumbnailCallback(), mTitleProvider, mTabListFaviconProvider, true, null,
@@ -3246,7 +3217,7 @@ public class TabListMediatorUnitTest {
     @Test
     @Features.EnableFeatures({TAB_GROUPS_CONTINUATION_ANDROID})
     public void testUpdateFaviconFetcherForGroup() {
-        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.GRID);
+        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.LIST);
         mModel.get(0).model.set(TabProperties.FAVICON, null);
         mModel.get(0).model.set(TabProperties.FAVICON_FETCHER, null);
 
@@ -3277,7 +3248,7 @@ public class TabListMediatorUnitTest {
     @Test
     @Features.EnableFeatures({TAB_GROUPS_CONTINUATION_ANDROID})
     public void testUpdateFaviconFetcherForGroup_StaleIndex_SelectAnotherTabWithinGroup() {
-        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.GRID);
+        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.LIST);
         mMediator.setActionOnAllRelatedTabsForTesting(true);
         assertNull(mModel.get(0).model.get(TabProperties.FAVICON));
         assertNull(mModel.get(1).model.get(TabProperties.FAVICON));
@@ -3305,7 +3276,7 @@ public class TabListMediatorUnitTest {
     @Test
     @Features.EnableFeatures({TAB_GROUPS_CONTINUATION_ANDROID})
     public void testUpdateFaviconFetcherForGroup_StaleIndex_CloseTab() {
-        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.GRID);
+        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.LIST);
         mMediator.setActionOnAllRelatedTabsForTesting(true);
         assertNull(mModel.get(0).model.get(TabProperties.FAVICON));
         assertNull(mModel.get(1).model.get(TabProperties.FAVICON));
@@ -3332,7 +3303,7 @@ public class TabListMediatorUnitTest {
     @Test
     @Features.EnableFeatures({TAB_GROUPS_CONTINUATION_ANDROID})
     public void testUpdateFaviconFetcherForGroup_StaleIndex_Reset() {
-        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.GRID);
+        setUpForTabGroupOperation(TabListMediatorType.TAB_SWITCHER, TabListMode.LIST);
         assertNull(mModel.get(0).model.get(TabProperties.FAVICON));
         assertNull(mModel.get(1).model.get(TabProperties.FAVICON));
         mModel.get(0).model.set(TabProperties.FAVICON_FETCHER, null);
@@ -3573,6 +3544,7 @@ public class TabListMediatorUnitTest {
         when(mTabGroupModelFilter.getRelatedTabList(TAB1_ID)).thenReturn(Arrays.asList(mTab1));
         when(mTabGroupModelFilter.getRelatedTabList(TAB2_ID))
                 .thenReturn(Arrays.asList(mTab2, tab4));
+        when(mTabGroupModelFilter.getRelatedTabList(TAB3_ID)).thenReturn(Arrays.asList(tab3));
         List<Tab> tabs = new ArrayList<>(Arrays.asList(mTab1, mTab2, tab3));
         when(mSelectionDelegate.isItemSelected(TAB1_ID)).thenReturn(false);
         mMediator.resetWithListOfTabs(PseudoTab.getListOfPseudoTab(tabs), false, false);
@@ -3733,7 +3705,7 @@ public class TabListMediatorUnitTest {
         return viewHolder;
     }
 
-    private RecyclerView.ViewHolder prepareDummyViewHolder(View itemView, int index) {
+    private RecyclerView.ViewHolder prepareFakeViewHolder(View itemView, int index) {
         RecyclerView.ViewHolder viewHolder = new RecyclerView.ViewHolder(itemView) {};
         when(mRecyclerView.findViewHolderForAdapterPosition(index)).thenReturn(viewHolder);
         return viewHolder;

@@ -93,13 +93,16 @@ std::unique_ptr<KeyframeModel> KeyframeModel::CreateImplInstance(
   to_return->ForceRunState(initial_run_state);
   to_return->set_iterations(iterations());
   to_return->set_iteration_start(iteration_start());
-  to_return->set_start_time(start_time());
+  if (has_set_start_time()) {
+    to_return->set_start_time(start_time());
+  }
   to_return->set_pause_time(pause_time());
   to_return->set_total_paused_duration(total_paused_duration());
   to_return->set_time_offset(time_offset());
   to_return->set_direction(direction());
   to_return->set_playback_rate(playback_rate());
   to_return->set_fill_mode(fill_mode());
+  to_return->set_active_at_boundary(active_at_boundary());
   DCHECK(!to_return->is_controlling_instance_);
   to_return->is_controlling_instance_ = true;
 #if DCHECK_IS_ON()

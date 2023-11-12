@@ -12,13 +12,15 @@
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
 #include "build/chromeos_buildflags.h"
-#include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_image/ozone_image_backing.h"
-#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
 #include "gpu/command_buffer/service/shared_memory_region_wrapper.h"
+#include "gpu/config/gpu_finch_features.h"
+#include "ui/gfx/buffer_types.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/native_pixmap.h"
 #include "ui/gl/buildflags.h"
@@ -40,6 +42,12 @@ gfx::BufferUsage GetBufferUsage(uint32_t usage) {
     // Just use SCANOUT for WebGPU since the memory doesn't need to be linear.
     return gfx::BufferUsage::SCANOUT;
   } else if (usage & SHARED_IMAGE_USAGE_SCANOUT) {
+    if (base::FeatureList::IsEnabled(features::kOzoneFrontBufferUsage) &&
+        usage & SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE) {
+      // Example usage here is low latency (desynchronized) 2d canvas. Note that
+      // this does not imply CPU read/write.
+      return gfx::BufferUsage::SCANOUT_FRONT_RENDERING;
+    }
     return gfx::BufferUsage::SCANOUT;
   } else {
     return gfx::BufferUsage::GPU_READ;
@@ -152,6 +160,10 @@ std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
   }
   if (!pixel_data.empty()) {
     SkImageInfo info = backing->AsSkImageInfo();
+    if (pixel_data.size() != info.computeMinByteSize()) {
+      DLOG(ERROR) << "Invalid initial pixel data size";
+      return nullptr;
+    }
     SkPixmap pixmap(info, pixel_data.data(), info.minRowBytes());
 
     if (!backing->UploadFromMemory({pixmap})) {
@@ -186,13 +198,12 @@ std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
   }
 
   const gfx::Size plane_size = gpu::GetPlaneSize(plane, size);
-  const viz::ResourceFormat plane_format =
-      viz::GetResourceFormat(GetPlaneBufferFormat(plane, buffer_format));
+  const auto plane_format =
+      viz::GetSharedImageFormat(GetPlaneBufferFormat(plane, buffer_format));
   auto backing = std::make_unique<OzoneImageBacking>(
-      mailbox, viz::SharedImageFormat::SinglePlane(plane_format), plane,
-      plane_size, color_space, surface_origin, alpha_type, usage,
-      shared_context_state_.get(), std::move(pixmap), dawn_procs_, workarounds_,
-      use_passthrough_);
+      mailbox, plane_format, plane, plane_size, color_space, surface_origin,
+      alpha_type, usage, shared_context_state_.get(), std::move(pixmap),
+      dawn_procs_, workarounds_, use_passthrough_);
   backing->SetCleared();
 
   return backing;

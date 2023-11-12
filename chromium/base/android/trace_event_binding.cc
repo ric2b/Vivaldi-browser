@@ -8,7 +8,7 @@
 
 #include "base/android/jni_string.h"
 #include "base/android/trace_event_binding.h"
-#include "base/base_jni_headers/TraceEvent_jni.h"
+#include "base/base_jni/TraceEvent_jni.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/base_tracing.h"
 #include "base/tracing_buildflags.h"
@@ -246,6 +246,44 @@ static void JNI_TraceEvent_InstantAndroidToolbar(JNIEnv* env,
                                                  jint snapshot_diff) {}
 
 #endif  // BUILDFLAG(ENABLE_BASE_TRACING)
+
+static void JNI_TraceEvent_WebViewStartupStage1(JNIEnv* env,
+                                                jlong start_time_ms,
+                                                jlong duration_ms) {
+  // The following code does nothing if base tracing is disabled.
+  // TODO(b/283286049): set the track name explicitly after the Perfetto SDK
+  // migration is finished (crbug/1006541).
+  [[maybe_unused]] auto t =
+      perfetto::Track(trace_event::GetNextGlobalTraceId());
+  TRACE_EVENT_BEGIN("android_webview.timeline",
+                    "WebView.Startup.CreationTime.Stage1.FactoryInit", t,
+                    TimeTicks() + Milliseconds(start_time_ms));
+  TRACE_EVENT_END("android_webview.timeline", t,
+                  TimeTicks() + Milliseconds(start_time_ms + duration_ms));
+}
+
+static void JNI_TraceEvent_WebViewStartupStage2(JNIEnv* env,
+                                                jlong start_time_ms,
+                                                jlong duration_ms,
+                                                jboolean is_cold_startup) {
+  // The following code does nothing if base tracing is disabled.
+  // TODO(b/283286049): set the track name explicitly after the Perfetto SDK
+  // migration is finished (crbug/1006541).
+  [[maybe_unused]] auto t =
+      perfetto::Track(trace_event::GetNextGlobalTraceId());
+  if (is_cold_startup) {
+    TRACE_EVENT_BEGIN("android_webview.timeline",
+                      "WebView.Startup.CreationTime.Stage2.ProviderInit.Cold",
+                      t, TimeTicks() + Milliseconds(start_time_ms));
+  } else {
+    TRACE_EVENT_BEGIN("android_webview.timeline",
+                      "WebView.Startup.CreationTime.Stage2.ProviderInit.Warm",
+                      t, TimeTicks() + Milliseconds(start_time_ms));
+  }
+
+  TRACE_EVENT_END("android_webview.timeline", t,
+                  TimeTicks() + Milliseconds(start_time_ms + duration_ms));
+}
 
 static void JNI_TraceEvent_Begin(JNIEnv* env,
                                  const JavaParamRef<jstring>& jname,

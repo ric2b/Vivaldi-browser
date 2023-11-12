@@ -75,13 +75,18 @@
 #endif
 
 #if BUILDFLAG(IS_WIN)
+#include "base/native_library.h"
 #include "base/rand_util.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
+#include "content/utility/sandbox_delegate_data.mojom.h"
+#include "sandbox/policy/win/sandbox_warmup.h"
 #include "sandbox/win/src/sandbox.h"
+#endif  // BUILDFLAG(IS_WIN)
 
+#if BUILDFLAG(IS_WIN)
 sandbox::TargetServices* g_utility_target_services = nullptr;
-#endif
+#endif  // BUILDFLAG(IS_WIN)
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_WIN)
 #include "platform_media/sandbox/win/platform_media_init.h"
@@ -135,6 +140,40 @@ bool ShouldUseAmdGpuPolicy(sandbox::mojom::Sandbox sandbox_type) {
   return false;
 }
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+
+#if BUILDFLAG(IS_WIN)
+// Handle pre-lockdown sandbox hooks
+bool PreLockdownSandboxHook(base::span<const uint8_t> delegate_blob) {
+  // TODO(1435571) Migrate other settable things to delegate_data.
+  CHECK(!delegate_blob.empty());
+  content::mojom::sandbox::UtilityConfigPtr sandbox_config;
+  if (!content::mojom::sandbox::UtilityConfig::Deserialize(
+          delegate_blob.data(), delegate_blob.size(), &sandbox_config)) {
+    NOTREACHED_NORETURN();
+  }
+  if (!sandbox_config->preload_libraries.empty()) {
+    for (const auto& library_path : sandbox_config->preload_libraries) {
+      CHECK(library_path.IsAbsolute());
+      base::NativeLibraryLoadError lib_error;
+      HMODULE h_mod = base::LoadNativeLibrary(library_path, &lib_error);
+      // We deliberately "leak" `h_mod` so that the module stays loaded.
+      if (!h_mod) {
+        // The browser should not request libraries that do not exist, so crash
+        // on failure.
+        wchar_t dll_name[MAX_PATH];
+        base::wcslcpy(dll_name, library_path.value().c_str(), MAX_PATH);
+        base::debug::Alias(dll_name);
+        base::debug::Alias(&lib_error);
+        NOTREACHED_NORETURN();
+      }
+    }
+  }
+  if (sandbox_config->pin_user32) {
+    base::win::PinUser32();
+  }
+  return true;
+}
+#endif  // BUILDFLAG(IS_WIN)
 
 void SetUtilityThreadName(const std::string utility_sub_type) {
   // Typical utility sub-types are audio.mojom.AudioService or
@@ -267,6 +306,15 @@ int UtilityMain(MainFunctionParams parameters) {
   }
 #elif BUILDFLAG(IS_WIN)
   g_utility_target_services = parameters.sandbox_info->target_services;
+
+  // Call hooks with data provided by UtilitySandboxedProcessLauncherDelegate.
+  // Must happen before IO thread to preempt any mojo services starting.
+  if (g_utility_target_services) {
+    auto delegate_data = g_utility_target_services->GetDelegateData();
+    if (delegate_data.has_value() && !delegate_data->empty()) {
+      PreLockdownSandboxHook(delegate_data.value());
+    }
+  }
 #endif
 
   ChildProcess utility_process(base::ThreadType::kDefault);
@@ -328,13 +376,6 @@ int UtilityMain(MainFunctionParams parameters) {
     base::win::EnableHighDPISupport();
   }
 
-  // The FileUtilService supports archive inspection, which uses unrar for
-  // inspecting rar archives. Unrar depends on user32.dll for handling
-  // upper/lowercase.
-  if (sandbox_type == sandbox::mojom::Sandbox::kFileUtil) {
-    base::win::PinUser32();
-  }
-
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   platform_media_init::InitForUtilityProcess(*parameters.command_line);
 #endif
@@ -345,10 +386,8 @@ int UtilityMain(MainFunctionParams parameters) {
       sandbox_type != sandbox::mojom::Sandbox::kWindowsSystemProxyResolver) {
     if (!g_utility_target_services)
       return false;
-    char buffer;
-    // Ensure RtlGenRandom is warm before the token is lowered; otherwise,
-    // base::RandBytes() will CHECK fail when v8 is initialized.
-    base::RandBytes(&buffer, sizeof(buffer));
+
+    sandbox::policy::WarmupRandomnessInfrastructure();
 
     g_utility_target_services->LowerToken();
   }

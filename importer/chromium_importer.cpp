@@ -120,7 +120,7 @@ void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
     }
 
     const std::string* base64_encoded_key =
-        os_crypt_dict->FindStringKey("encrypted_key");
+        os_crypt_dict->GetDict().FindString("encrypted_key");
     if (!base64_encoded_key) {
       LOG(ERROR) << "Unable to find 'encrypted_key' entry for import browser.";
       return;

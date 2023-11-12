@@ -82,11 +82,12 @@ suite('inputKeyTest', function() {
     inputKeyElement.key = 'PrintScreen';
     await flush();
 
-    const iconWrapperElement = inputKeyElement.shadowRoot!.querySelector(
-                                   '#key > div') as HTMLDivElement;
-    assertTrue(isVisible(iconWrapperElement));
-    assertEquals('take screenshot', iconWrapperElement.ariaLabel);
-    assertEquals('img', iconWrapperElement.getAttribute('role'));
+    const iconElement = inputKeyElement.shadowRoot!.querySelector(
+                            '#key-icon') as IronIconElement;
+    assertTrue(isVisible(iconElement));
+    assertEquals('shortcut-customization-keys:screenshot', iconElement.icon);
+    assertEquals('take screenshot', iconElement.ariaLabel);
+    assertEquals('img', iconElement.getAttribute('role'));
   });
 
   test('MetaKeyShowLauncherIcon', async () => {
@@ -99,12 +100,10 @@ suite('inputKeyTest', function() {
     // Should show launcher icon when hasLauncherButton is true.
     const iconElement = inputKeyElement.shadowRoot!.querySelector(
                             '#key-icon') as IronIconElement;
-    const iconWrapperElement = inputKeyElement.shadowRoot!.querySelector(
-                                   '#key > div') as HTMLDivElement;
     assertTrue(isVisible(iconElement));
-    assertTrue(isVisible(iconWrapperElement));
     assertEquals('shortcut-customization-keys:launcher', iconElement.icon);
-    assertEquals('launcher', iconWrapperElement.ariaLabel);
+    assertEquals('open launcher', iconElement.ariaLabel);
+    assertEquals('img', iconElement.getAttribute('role'));
   });
 
   test('MetaKeyShowSearchIcon', async () => {
@@ -115,19 +114,17 @@ suite('inputKeyTest', function() {
     await flush();
 
     // Should show search icon when hasLauncherButton is false.
-    const iconElement2 = inputKeyElement.shadowRoot!.querySelector(
-                             '#key-icon') as IronIconElement;
-    const iconWrapperElement2 = inputKeyElement.shadowRoot!.querySelector(
-                                    '#key > div') as HTMLDivElement;
-    assertTrue(isVisible(iconElement2));
-    assertTrue(isVisible(iconWrapperElement2));
-    assertEquals('shortcut-customization-keys:search', iconElement2.icon);
-    assertEquals('search', iconWrapperElement2.ariaLabel);
+    const iconElement = inputKeyElement.shadowRoot!.querySelector(
+                            '#key-icon') as IronIconElement;
+    assertTrue(isVisible(iconElement));
+    assertEquals('shortcut-customization-keys:search', iconElement.icon);
+    assertEquals('open search', iconElement.ariaLabel);
+    assertEquals('img', iconElement.getAttribute('role'));
   });
 
-  test('MetaKeyIsAlwaysModifier', async () => {
+  test('LwinKeyAsSearchModifier', async () => {
     inputKeyElement = initInputKeyElement();
-    inputKeyElement.key = 'meta';
+    inputKeyElement.key = 'Meta';
     inputKeyElement.keyState = KeyInputState.ALPHANUMERIC_SELECTED;
 
     manager!.setHasLauncherButton(true);
@@ -137,7 +134,7 @@ suite('inputKeyTest', function() {
     const iconElement = inputKeyElement.shadowRoot!.querySelector(
                             '#key-icon') as IronIconElement;
     assertEquals('shortcut-customization-keys:launcher', iconElement.icon);
-    // 'meta' key should always be a modifier.
+    // Lwin key should be treated as a search modifier key.
     assertEquals(KeyInputState.MODIFIER_SELECTED, inputKeyElement.keyState);
   });
 

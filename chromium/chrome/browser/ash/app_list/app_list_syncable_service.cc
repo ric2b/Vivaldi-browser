@@ -28,6 +28,7 @@
 #include "chrome/browser/ash/app_list/app_list_model_updater.h"
 #include "chrome/browser/ash/app_list/app_list_sync_model_sanitizer.h"
 #include "chrome/browser/ash/app_list/app_service/app_service_app_model_builder.h"
+#include "chrome/browser/ash/app_list/app_service/app_service_promise_app_model_builder.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ash/app_list/chrome_app_list_item.h"
@@ -52,11 +53,11 @@
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/app_update.h"
-#include "components/sync/driver/sync_service.h"
 #include "components/sync/model/sync_change_processor.h"
 #include "components/sync/model/sync_data.h"
 #include "components/sync/protocol/app_list_specifics.pb.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
+#include "components/sync/service/sync_service.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -503,11 +504,19 @@ void AppListSyncableService::BuildModel() {
 
   app_service_apps_builder_ =
       std::make_unique<AppServiceAppModelBuilder>(controller);
+  if (ash::features::ArePromiseIconsEnabled()) {
+    app_service_promise_apps_builder_ =
+        std::make_unique<AppServicePromiseAppModelBuilder>(controller);
+  }
 
   DCHECK(profile_);
   SyncStarted();
 
   app_service_apps_builder_->Initialize(this, profile_, model_updater_.get());
+  if (ash::features::ArePromiseIconsEnabled()) {
+    app_service_promise_apps_builder_->Initialize(this, profile_,
+                                                  model_updater_.get());
+  }
 
   HandleUpdateFinished(false /* clean_up_after_init_sync */);
 
@@ -1182,6 +1191,9 @@ absl::optional<syncer::ModelError> AppListSyncableService::ProcessSyncChanges(
 
 void AppListSyncableService::Shutdown() {
   app_service_apps_builder_.reset();
+  if (ash::features::ArePromiseIconsEnabled()) {
+    app_service_promise_apps_builder_.reset();
+  }
 }
 
 void AppListSyncableService::SetAppListPreferredOrder(

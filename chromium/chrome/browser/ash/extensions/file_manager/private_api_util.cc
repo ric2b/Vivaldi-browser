@@ -18,6 +18,8 @@
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/drive/file_system_util.h"
+#include "chrome/browser/ash/extensions/file_manager/event_router.h"
+#include "chrome/browser/ash/extensions/file_manager/event_router_factory.h"
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/filesystem_api_util.h"
@@ -34,9 +36,11 @@
 #include "chrome/common/extensions/api/file_manager_private.h"
 #include "chromeos/ash/components/drivefs/drivefs_pin_manager.h"
 #include "chromeos/ash/components/drivefs/drivefs_util.h"
+#include "chromeos/ash/components/drivefs/mojom/drivefs.mojom.h"
 #include "chromeos/ash/components/drivefs/sync_status_tracker.h"
 #include "components/drive/drive_api_util.h"
 #include "components/drive/file_errors.h"
+#include "components/drive/file_system_core_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
@@ -47,8 +51,7 @@
 
 namespace file_manager_private = extensions::api::file_manager_private;
 
-namespace file_manager {
-namespace util {
+namespace file_manager::util {
 namespace {
 
 // The struct is used for GetSelectedFileInfo().
@@ -245,8 +248,12 @@ extensions::api::file_manager_private::BulkPinStage DrivefsPinStageToJs(
   switch (stage) {
     case drivefs::pinning::Stage::kStopped:
       return extensions::api::file_manager_private::BULK_PIN_STAGE_STOPPED;
-    case drivefs::pinning::Stage::kPaused:
-      return extensions::api::file_manager_private::BULK_PIN_STAGE_PAUSED;
+    case drivefs::pinning::Stage::kPausedOffline:
+      return extensions::api::file_manager_private::
+          BULK_PIN_STAGE_PAUSED_OFFLINE;
+    case drivefs::pinning::Stage::kPausedBatterySaver:
+      return extensions::api::file_manager_private::
+          BULK_PIN_STAGE_PAUSED_BATTERY_SAVER;
     case drivefs::pinning::Stage::kGettingFreeSpace:
       return extensions::api::file_manager_private::
           BULK_PIN_STAGE_GETTING_FREE_SPACE;
@@ -272,6 +279,36 @@ extensions::api::file_manager_private::BulkPinStage DrivefsPinStageToJs(
   }
   NOTREACHED();
   return extensions::api::file_manager_private::BULK_PIN_STAGE_NONE;
+}
+
+bool IsPinManagerSyncingForProfile(drivefs::pinning::PinManager* pin_manager) {
+  if (!pin_manager) {
+    return false;
+  }
+  if (pin_manager->GetProgress().stage !=
+      drivefs::pin_manager_types::mojom::Stage::kSyncing) {
+    return false;
+  }
+  return true;
+}
+
+drivefs::pinning::PinManager* GetPinManager(Profile* profile) {
+  if (!profile) {
+    return nullptr;
+  }
+  drive::DriveIntegrationService* integration_service =
+      drive::DriveIntegrationServiceFactory::FindForProfile(profile);
+  if (!integration_service || !integration_service->IsMounted()) {
+    return nullptr;
+  }
+
+  return integration_service->GetPinManager();
+}
+
+bool IsPathUnderMyDrive(const base::FilePath& relative_path) {
+  return base::FilePath("/")
+      .Append(drive::util::kDriveMyDriveRootDirName)
+      .IsParent(relative_path);
 }
 
 }  // namespace
@@ -321,9 +358,8 @@ void SingleEntryPropertiesGetterForDriveFs::StartProcess() {
     CompleteGetEntryProperties(drive::FILE_ERROR_SERVICE_UNAVAILABLE);
     return;
   }
-  base::FilePath path;
   if (!integration_service->GetRelativeDrivePath(file_system_url_.path(),
-                                                 &path)) {
+                                                 &relative_path_)) {
     CompleteGetEntryProperties(drive::FILE_ERROR_INVALID_OPERATION);
     return;
   }
@@ -334,9 +370,13 @@ void SingleEntryPropertiesGetterForDriveFs::StartProcess() {
     return;
   }
 
-  if (base::FeatureList::IsEnabled(ash::features::kFilesInlineSyncStatus)) {
+  file_manager::EventRouter* event_router =
+      file_manager::EventRouterFactory::GetForProfile(running_profile_);
+  if (ash::features::IsInlineSyncStatusEnabled() && event_router) {
     drivefs::SyncState sync_state =
-        integration_service->GetSyncStateForPath(file_system_url_.path());
+        ash::features::IsInlineSyncStatusProgressEventsEnabled()
+            ? event_router->GetDriveSyncStateForPath(file_system_url_.path())
+            : integration_service->GetSyncStateForPath(file_system_url_.path());
     properties_->progress = sync_state.progress;
     switch (sync_state.status) {
       case drivefs::SyncStatus::kQueued:
@@ -371,7 +411,7 @@ void SingleEntryPropertiesGetterForDriveFs::StartProcess() {
   }
 
   drivefs_interface->GetMetadata(
-      path,
+      relative_path_,
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(&SingleEntryPropertiesGetterForDriveFs::OnGetFileInfo,
                          weak_ptr_factory_.GetWeakPtr()),
@@ -392,11 +432,46 @@ void SingleEntryPropertiesGetterForDriveFs::OnGetFileInfo(
   properties_->present = metadata->available_offline;
   properties_->dirty = metadata->dirty;
   properties_->hosted = drivefs::IsHosted(metadata->type);
+
   properties_->available_offline =
       metadata->available_offline || *properties_->hosted;
   properties_->available_when_metered =
       metadata->available_offline || *properties_->hosted;
   properties_->pinned = metadata->pinned;
+
+  if (drive::util::IsDriveFsBulkPinningEnabled(running_profile_)) {
+    properties_->available_offline =
+        (drivefs::IsHosted(metadata->type) &&
+         !drive::util::IsPinnableGDocMimeType(metadata->content_mime_type))
+            ? false
+            : metadata->available_offline;
+    properties_->available_when_metered = properties_->available_offline;
+    properties_->pinned = metadata->pinned;
+
+    if (drivefs::pinning::PinManager* const pin_manager =
+            GetPinManager(running_profile_);
+        IsPinManagerSyncingForProfile(pin_manager) &&
+        IsPathUnderMyDrive(relative_path_)) {
+      if (metadata->type == drivefs::mojom::FileMetadata::Type::kDirectory &&
+          !pin_manager->IsUntrackedPath(file_system_url_.path())) {
+        // Folders can't be pinned automatically to provide a way to intercept
+        // items being added to these folders. However items in the folders will
+        // be pinned, so to ensure the UI shows these folders as available
+        // offline, return these items as pinned and available offline. This
+        // should not include shortcuts and only cover directories that are
+        // parented at "My drive" (e.g. no Shared drives).
+        properties_->available_when_metered = true;
+        properties_->available_offline = true;
+        properties_->pinned = true;
+      } else if (drive::util::IsPinnableGDocMimeType(
+                     metadata->content_mime_type)) {
+        // When bulk pinning is enabled, hosted files should reflect the pinned
+        // state as their available offline state.
+        properties_->pinned = properties_->available_offline;
+      }
+    }
+  }
+
   properties_->shared = metadata->shared;
   properties_->starred = metadata->starred;
 
@@ -449,6 +524,14 @@ void SingleEntryPropertiesGetterForDriveFs::OnGetFileInfo(
         metadata->folder_feature->is_external_media;
     properties_->is_arbitrary_sync_folder =
         metadata->folder_feature->is_arbitrary_sync_folder;
+  }
+
+  if (metadata->shortcut_details) {
+    properties_->shortcut =
+        (metadata->shortcut_details->target_lookup_status !=
+         drivefs::mojom::ShortcutDetails::LookupStatus::kUnknown);
+  } else {
+    properties_->shortcut = false;
   }
 
   CompleteGetEntryProperties(drive::FILE_ERROR_OK);
@@ -756,8 +839,8 @@ extensions::api::file_manager_private::BulkPinProgress BulkPinProgressToJs(
   result.bytes_to_pin = progress.bytes_to_pin;
   result.pinned_bytes = progress.pinned_bytes;
   result.files_to_pin = progress.files_to_pin;
+  result.remaining_seconds = progress.remaining_seconds;
   return result;
 }
 
-}  // namespace util
-}  // namespace file_manager
+}  // namespace file_manager::util

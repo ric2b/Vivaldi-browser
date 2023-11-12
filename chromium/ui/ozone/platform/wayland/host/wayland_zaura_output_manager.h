@@ -5,6 +5,8 @@
 #ifndef UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_ZAURA_OUTPUT_MANAGER_H_
 #define UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_ZAURA_OUTPUT_MANAGER_H_
 
+#include <ostream>
+
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
@@ -51,6 +53,8 @@ class WaylandZAuraOutputManager
   void RemoveOutputMetrics(WaylandOutput::Id output_id);
 
   zaura_output_manager* wl_object() { return obj_.get(); }
+
+  void DumpState(std::ostream& out) const;
 
  private:
   WaylandOutput::Id GetId(wl_output* output) const;
@@ -114,6 +118,13 @@ class WaylandZAuraOutputManager
   static void OnActivated(void* data,
                           zaura_output_manager* output_manager,
                           wl_output* output);
+  static void OnOverscanInsets(void* data,
+                               zaura_output_manager* output_manager,
+                               wl_output* output,
+                               int32_t top,
+                               int32_t left,
+                               int32_t bottom,
+                               int32_t right);
 
   // `pending_output_metrics_map_` holds Metrics objects that are updated
   // incrementally as events arrive from the server. These Metrics objects are

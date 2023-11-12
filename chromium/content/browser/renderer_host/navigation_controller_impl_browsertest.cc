@@ -90,6 +90,7 @@ namespace content {
 namespace {
 
 using testing::ElementsAre;
+using testing::HasSubstr;
 using testing::IsEmpty;
 using InitialNavigationEntryState =
     NavigationEntryImpl::InitialNavigationEntryState;
@@ -117,7 +118,9 @@ class NavigationControllerBrowserTestBase : public ContentBrowserTest {
  public:
   NavigationControllerBrowserTestBase() {
     feature_list_.InitWithFeaturesAndParameters(
-        {{kQueueNavigationsWhileWaitingForCommit, {{"level", "full"}}}}, {});
+        {{features::kQueueNavigationsWhileWaitingForCommit,
+          {{"queueing_level", "full"}}}},
+        {});
   }
 
  protected:
@@ -14409,7 +14412,11 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, NavigateToEmptyURL) {
 
   // Trying to navigate to an empty URL through setting the location would fail
   // because it's not a valid URL and it's stopped in the renderer.
-  EXPECT_FALSE(NavigateToURLFromRenderer(shell(), GURL()));
+  //
+  // Note: this is only true for things like about:blank and data URLs.
+  EXPECT_THAT(EvalJs(shell(), "try { location = ''; } catch (e) { e.message; }")
+                  .ExtractString(),
+              HasSubstr("'' is not a valid URL."));
   EXPECT_EQ(entry, controller.GetLastCommittedEntry());
   EXPECT_EQ(2, controller.GetEntryCount());
 
@@ -15932,8 +15939,8 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   WebContentsAddedObserver web_contents_added_observer;
   TestNavigationObserver navigation_observer(nullptr, 1);
   navigation_observer.StartWatchingNewWebContents();
-  ASSERT_TRUE(ExecuteScript(contents(),
-                            R"(let form = document.createElement('form');
+  ASSERT_TRUE(ExecJs(contents(),
+                     R"(let form = document.createElement('form');
                                  form.method = 'POST';
                                  form.target = '_blank';
                                  form.action = 'about:blank';
@@ -19461,6 +19468,9 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, ReloadFrame) {
             frame_entry_1->referrer().policy);
   int item_sequence_number_1 = frame_entry_1->item_sequence_number();
   int document_sequence_number_1 = frame_entry_1->document_sequence_number();
+  EXPECT_EQ(ReloadType::NONE, main_frame->reload_type());
+  EXPECT_EQ(ReloadType::NONE,
+            main_frame->child_at(0)->current_frame_host()->reload_type());
 
   // 2. Reload the document.
   TestNavigationManager observer_2(shell()->web_contents(), iframe_url);
@@ -19498,6 +19508,9 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, ReloadFrame) {
   int document_sequence_number_2 = frame_entry_1->document_sequence_number();
   EXPECT_EQ(item_sequence_number_1, item_sequence_number_2);
   EXPECT_EQ(document_sequence_number_1, document_sequence_number_2);
+  EXPECT_EQ(ReloadType::NONE, main_frame->reload_type());
+  EXPECT_EQ(ReloadType::NORMAL,
+            main_frame->child_at(0)->current_frame_host()->reload_type());
 }
 
 // A history navigation only navigates the iframe that should be changed to
@@ -19931,6 +19944,60 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
     // #2 is triggered by NotifyNavigationEntryCommitted().
     EXPECT_EQ(4, all_navigation_state_changed_delegate.call_count());
   }
+}
+
+namespace {
+// WebContentsDelegate that ensures CanGoBack returns false during all
+// NavigationStateChanged notifications.
+class CantGoBackNavigationStateChangedDelegate : public WebContentsDelegate {
+ public:
+  CantGoBackNavigationStateChangedDelegate() = default;
+
+  CantGoBackNavigationStateChangedDelegate(
+      const CantGoBackNavigationStateChangedDelegate&) = delete;
+  CantGoBackNavigationStateChangedDelegate& operator=(
+      const CantGoBackNavigationStateChangedDelegate&) = delete;
+
+  ~CantGoBackNavigationStateChangedDelegate() override = default;
+
+  void NavigationStateChanged(WebContents* source,
+                              InvalidateTypes changed_flags) override {
+    if (changed_flags == INVALIDATE_TYPE_ALL) {
+      EXPECT_FALSE(source->GetController().CanGoBack());
+    }
+  }
+};
+}  // namespace
+
+// Test that CanGoBack does not return true after it starts returning false
+// during a back navigation. See https://crbug.com/1439948.
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
+                       CanGoBackConsistencyForDelegate) {
+  DisableBackForwardCacheForTesting(contents(),
+                                    BackForwardCache::TEST_REQUIRES_NO_CACHING);
+
+  GURL url_1(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  GURL url_2(embedded_test_server()->GetURL("a.com", "/title2.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), url_1));
+  EXPECT_TRUE(NavigateToURL(shell(), url_2));
+
+  // Start a back navigation but do not allow it to commit.  CanGoBack should
+  // change from true before the navigation starts to false after.
+  NavigationControllerImpl& controller =
+      static_cast<NavigationControllerImpl&>(contents()->GetController());
+  TestNavigationManager nav_manager(contents(), url_1);
+  ASSERT_TRUE(controller.CanGoBack());
+  controller.GoBack();
+  EXPECT_TRUE(nav_manager.WaitForRequestStart());
+  EXPECT_FALSE(controller.CanGoBack());
+
+  // Observe any further NavigationStateChanged calls as the navigation resumes.
+  // If CanGoBack starts returning true again, the test will fail.
+  CantGoBackNavigationStateChangedDelegate navigation_state_changed_delegate;
+  contents()->SetDelegate(&navigation_state_changed_delegate);
+  nav_manager.ResumeNavigation();
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
+  EXPECT_FALSE(controller.CanGoBack());
 }
 
 // Verify that calling Restore() with a non-empty entry list on a new

@@ -15,52 +15,14 @@
 
 namespace {
 
-bool PrivacySandboxRestrictedByAccountCapability(Profile* profile) {
-  if (privacy_sandbox::kPrivacySandboxSettings4ForceRestrictedUserForTesting
-          .Get()) {
-    return true;
-  }
-  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
-
-  if (!identity_manager ||
-      !identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
-    // The user isn't signed in so we can't apply any capabilties-based
-    // restrictions.
-    return false;
-  }
-
+signin::Tribool GetPrivacySandboxRestrictedByAccountCapability(
+    signin::IdentityManager* identity_manager) {
   const auto core_account_info =
       identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
   const AccountInfo account_info =
       identity_manager->FindExtendedAccountInfo(core_account_info);
-  auto capability =
-      account_info.capabilities.can_run_chrome_privacy_sandbox_trials();
-
-  // The Privacy Sandbox is not considered restricted unless the capability
-  // has a definitive false signal.
-  return capability == signin::Tribool::kFalse;
+  return account_info.capabilities.can_run_chrome_privacy_sandbox_trials();
 }
-
-bool PrivacySandboxRestrictedNoticeRequired(Profile* profile) {
-  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
-
-  if (!identity_manager ||
-      !identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
-    // The user isn't signed in so we can't apply any capabilties-based
-    // restrictions.
-    return false;
-  }
-
-  const auto core_account_info =
-      identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
-  const AccountInfo account_info =
-      identity_manager->FindExtendedAccountInfo(core_account_info);
-  auto capability =
-      account_info.capabilities
-          .is_subject_to_chrome_privacy_sandbox_restricted_measurement_notice();
-  return capability == signin::Tribool::kTrue;
-}
-
 }  // namespace
 
 PrivacySandboxSettingsDelegate::PrivacySandboxSettingsDelegate(Profile* profile)
@@ -69,22 +31,59 @@ PrivacySandboxSettingsDelegate::PrivacySandboxSettingsDelegate(Profile* profile)
 PrivacySandboxSettingsDelegate::~PrivacySandboxSettingsDelegate() = default;
 
 bool PrivacySandboxSettingsDelegate::IsPrivacySandboxRestricted() const {
-  // If the Sandbox was ever reported as restricted, it is always restricted.
-  // TODO (crbug.com/1428546): Adjust when we have a graduation flow.
-  if (profile_->GetPrefs()->GetBoolean(prefs::kPrivacySandboxM1Restricted)) {
+  if (privacy_sandbox::kPrivacySandboxSettings4ForceRestrictedUserForTesting
+          .Get()) {
     return true;
   }
+  // If the Sandbox was ever reported as restricted, it is always restricted.
+  // TODO (crbug.com/1428546): Adjust when we have a graduation flow.
+  bool was_ever_reported_as_restricted =
+      profile_->GetPrefs()->GetBoolean(prefs::kPrivacySandboxM1Restricted);
 
-  bool restricted_by_capability =
-      PrivacySandboxRestrictedByAccountCapability(profile_);
+  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile_);
+  if (!identity_manager ||
+      !identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
+    // The user isn't signed in so we can't apply any capabilties-based
+    // restrictions.
+    return was_ever_reported_as_restricted;
+  }
 
+  auto restricted_by_capability =
+      GetPrivacySandboxRestrictedByAccountCapability(identity_manager);
+
+  // The Privacy Sandbox is not considered restricted unless the
+  // capability has a definitive false signal.
+  bool is_restricted = restricted_by_capability == signin::Tribool::kFalse;
   // If the capability is restricting the Sandbox, "latch", so the sandbox is
   // always restricted.
-  if (restricted_by_capability) {
+  if (is_restricted) {
     profile_->GetPrefs()->SetBoolean(prefs::kPrivacySandboxM1Restricted, true);
   }
 
-  return restricted_by_capability;
+  return was_ever_reported_as_restricted || is_restricted;
+}
+
+bool PrivacySandboxSettingsDelegate::IsPrivacySandboxCurrentlyUnrestricted()
+    const {
+  if (privacy_sandbox::kPrivacySandboxSettings4ForceRestrictedUserForTesting
+          .Get()) {
+    return false;
+  }
+
+  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile_);
+  if (!identity_manager ||
+      !identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
+    // The user isn't signed in so we can't apply any capabilties-based
+    // restrictions.
+    return false;
+  }
+
+  const AccountInfo account_info =
+      identity_manager->FindExtendedPrimaryAccountInfo(
+          signin::ConsentLevel::kSignin);
+  auto capability =
+      account_info.capabilities.can_run_chrome_privacy_sandbox_trials();
+  return capability == signin::Tribool::kTrue;
 }
 
 bool PrivacySandboxSettingsDelegate::IsSubjectToM1NoticeRestricted() const {
@@ -92,7 +91,7 @@ bool PrivacySandboxSettingsDelegate::IsSubjectToM1NoticeRestricted() const {
   if (!privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.Get()) {
     return false;
   }
-  return PrivacySandboxRestrictedNoticeRequired(profile_);
+  return PrivacySandboxRestrictedNoticeRequired();
 }
 
 bool PrivacySandboxSettingsDelegate::IsIncognitoProfile() const {
@@ -112,4 +111,24 @@ bool PrivacySandboxSettingsDelegate::HasAppropriateTopicsConsent() const {
   // dependency.
   return profile_->GetPrefs()->GetBoolean(
       prefs::kPrivacySandboxTopicsConsentGiven);
+}
+
+bool PrivacySandboxSettingsDelegate::PrivacySandboxRestrictedNoticeRequired()
+    const {
+  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile_);
+
+  if (!identity_manager ||
+      !identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
+    // The user isn't signed in so we can't apply any capabilties-based
+    // restrictions.
+    return false;
+  }
+
+  const AccountInfo account_info =
+      identity_manager->FindExtendedPrimaryAccountInfo(
+          signin::ConsentLevel::kSignin);
+  auto capability =
+      account_info.capabilities
+          .is_subject_to_chrome_privacy_sandbox_restricted_measurement_notice();
+  return capability == signin::Tribool::kTrue;
 }

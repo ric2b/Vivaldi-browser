@@ -10,7 +10,7 @@ be modified or renamed to support side-by-side channel installs.
 
 import os.path
 
-from . import commands, parts
+from signing import commands, parts
 
 from .signing_util import vivaldi_modify_plists
 

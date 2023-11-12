@@ -128,7 +128,8 @@ AtomicString PerformanceResourceTiming::deliveryType() const {
 }
 
 AtomicString PerformanceResourceTiming::renderBlockingStatus() const {
-  return info_->render_blocking_status ? "blocking" : "non-blocking";
+  return AtomicString(info_->render_blocking_status ? "blocking"
+                                                    : "non-blocking");
 }
 
 AtomicString PerformanceResourceTiming::contentType() const {
@@ -150,7 +151,7 @@ AtomicString PerformanceResourceTiming::GetNextHopProtocol(
   // string.
   // https://fetch.spec.whatwg.org/#create-an-opaque-timing-info
   if (returnedProtocol == "unknown" || !info_->allow_timing_details) {
-    returnedProtocol = "";
+    returnedProtocol = g_empty_atom;
   }
 
   return returnedProtocol;
@@ -330,8 +331,10 @@ DOMHighResTimeStamp PerformanceResourceTiming::firstInterimResponseStart()
     return 0;
   }
 
-  base::TimeTicks response_start = info_->timing->first_early_hints_time;
-  if (response_start.is_null()) {
+  base::TimeTicks response_start = info_->timing->receive_headers_start;
+  if (response_start.is_null() ||
+      response_start ==
+          info_->timing->receive_non_informational_headers_start) {
     return 0;
   }
 

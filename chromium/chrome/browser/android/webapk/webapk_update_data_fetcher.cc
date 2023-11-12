@@ -18,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/android/chrome_jni_headers/WebApkUpdateDataFetcher_jni.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/webapps/browser/android/webapp_icon.h"
 #include "components/webapps/browser/android/webapps_icon_utils.h"
 #include "components/webapps/browser/android/webapps_utils.h"
 #include "components/webapps/browser/features.h"
@@ -145,8 +146,8 @@ void WebApkUpdateDataFetcher::FetchInstallableData() {
   params.valid_manifest = true;
   params.prefer_maskable_icon =
       webapps::WebappsIconUtils::DoesAndroidSupportMaskableIcons();
-  params.has_worker = !webapps::features::SkipInstallServiceWorkerCheck();
-  params.wait_for_worker = !webapps::features::SkipInstallServiceWorkerCheck();
+  params.has_worker = false;
+  params.wait_for_worker = false;
   params.valid_primary_icon = true;
   params.valid_splash_icon = true;
   webapps::InstallableManager* installable_manager =
@@ -178,13 +179,6 @@ void WebApkUpdateDataFetcher::OnDidGetInstallableData(
     return;
   }
 
-  if (!base::FeatureList::IsEnabled(webapps::features::kWebApkUniqueId) &&
-      web_manifest_url_ != *data.manifest_url) {
-    UMA_HISTOGRAM_ENUMERATION(kGotUpdateManifestHistogramName,
-                              ManifestResult::kDifferent,
-                              ManifestResult::kMaxValue);
-    return;
-  } else {
     GURL new_manifest_id(blink::GetIdFromManifest(*data.manifest));
     if (web_manifest_id_.is_empty()) {
       // Don't have an existing manifest ID, check if either manifest URL or
@@ -206,7 +200,6 @@ void WebApkUpdateDataFetcher::OnDidGetInstallableData(
                                 ManifestResult::kMaxValue);
       return;
     }
-  }
 
   UMA_HISTOGRAM_ENUMERATION(kGotUpdateManifestHistogramName,
                             ManifestResult::kFound, ManifestResult::kMaxValue);
@@ -223,14 +216,7 @@ void WebApkUpdateDataFetcher::OnDidGetInstallableData(
     is_splash_icon_maskable_ = data.has_maskable_splash_icon;
   }
 
-  std::set<GURL> urls{info_.best_primary_icon_url};
-  if (!info_.splash_image_url.is_empty())
-    urls.insert(info_.splash_image_url);
-
-  for (const auto& shortcut_url : info_.best_shortcut_icon_urls) {
-    if (shortcut_url.is_valid())
-      urls.insert(shortcut_url);
-  }
+  std::vector<webapps::WebappIcon> icons = info_.GetWebApkIcons();
 
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
@@ -240,7 +226,7 @@ void WebApkUpdateDataFetcher::OnDidGetInstallableData(
           ->GetURLLoaderFactoryForBrowserProcess()
           .get(),
       web_contents()->GetWeakPtr(), url::Origin::Create(last_fetched_url_),
-      urls,
+      icons,
       base::BindOnce(&WebApkUpdateDataFetcher::OnGotIconMurmur2Hashes,
                      weak_ptr_factory_.GetWeakPtr()));
 }

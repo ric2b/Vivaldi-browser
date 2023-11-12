@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Veuillez appuyer sur le bouton de rechargement pour renvoyer les données nécessaires au chargement de la page.</translation>
 <translation id="3234666976984236645">Toujours détecter du contenu important sur ce site</translation>
 <translation id="3308738399950580893">publicités</translation>
+<translation id="3384522979010096022">Votre organisation ne vous autorise pas à consulter ce site</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> est actuellement inaccessible.</translation>
 <translation id="3427092606871434483">Autoriser (par défaut)</translation>
 <translation id="3447661539832366887">Le propriétaire de cet appareil a désactivé le jeu avec Antonio, la boule de lave.</translation>
@@ -193,7 +194,6 @@
 <translation id="8150722005171944719">Le fichier disponible à l’adresse <ph name="URL" /> n’est pas lisible. Il est possible qu’il ait été supprimé ou déplacé, ou que les autorisations associées empêchent d’y accéder.</translation>
 <translation id="8184538546369750125">Utiliser le paramètre global par défaut (« Autoriser »)</translation>
 <translation id="8211406090763984747">La connexion est sécurisée</translation>
-<translation id="8225771182978767009">La personne qui a configuré cet ordinateur a choisi de bloquer ce site.</translation>
 <translation id="8241707690549784388">La page que vous recherchez a utilisé des informations que vous avez envoyées. Si vous revenez sur cette page, chaque action précédemment effectuée sera répétée. Souhaitez-vous continuer ?</translation>
 <translation id="8241712895048303527">Bloquer sur ce site</translation>
 <translation id="8286036467436129157">Connexion</translation>
@@ -214,7 +214,6 @@
 <translation id="9062620674789239642">Il a peut-être été déplacé, modifié ou supprimé.</translation>
 <translation id="9069693763241529744">Bloqué par une extension</translation>
 <translation id="9073799351042754113">Vous avez choisi de désactiver les avertissements de sécurité pour ce site.</translation>
-<translation id="910924428752220542">Mots de passe Vivaldi</translation>
 <translation id="9169664750068251925">Toujours bloquer sur ce site</translation>
 <translation id="9180553614777056266">Bloqueur de publicités</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utilise un protocole incompatible.</translation>

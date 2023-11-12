@@ -60,7 +60,7 @@
 #include "chrome/renderer/plugins/non_loadable_plugin_placeholder.h"
 #include "chrome/renderer/plugins/pdf_plugin_placeholder.h"
 #include "chrome/renderer/plugins/plugin_uma.h"
-#include "chrome/renderer/sync_encryption_keys_extension.h"
+#include "chrome/renderer/trusted_vault_encryption_keys_extension.h"
 #include "chrome/renderer/url_loader_throttle_provider_impl.h"
 #include "chrome/renderer/v8_unwinder.h"
 #include "chrome/renderer/websocket_handshake_throttle_provider_impl.h"
@@ -93,6 +93,7 @@
 #include "components/no_state_prefetch/renderer/no_state_prefetch_helper.h"
 #include "components/no_state_prefetch/renderer/no_state_prefetch_utils.h"
 #include "components/no_state_prefetch/renderer/prerender_render_frame_observer.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/page_load_metrics/renderer/metrics_render_frame_observer.h"
 #include "components/paint_preview/buildflags/buildflags.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -119,6 +120,7 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_frame_visitor.h"
 #include "extensions/buildflags/buildflags.h"
+#include "extensions/renderer/worker_script_context_set.h"
 #include "ipc/ipc_sync_channel.h"
 #include "media/base/media_switches.h"
 #include "media/media_buildflags.h"
@@ -160,7 +162,6 @@
 #include "third_party/blink/public/web/web_security_policy.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/jstemplate_builder.h"
 #include "url/origin.h"
@@ -193,7 +194,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/common/controlled_frame.h"
+#include "chrome/common/controlled_frame/controlled_frame.h"
 #include "chrome/common/initialize_extensions_client.h"
 #include "chrome/renderer/extensions/chrome_extensions_renderer_client.h"
 #include "extensions/common/constants.h"
@@ -624,7 +625,7 @@ void ChromeContentRendererClient::RenderFrameCreated(
   SandboxStatusExtension::Create(render_frame);
 #endif
 
-  SyncEncryptionKeysExtension::Create(render_frame);
+  TrustedVaultEncryptionKeysExtension::Create(render_frame);
   if (base::FeatureList::IsEnabled(features::kWebAuthFlowInBrowserTab)) {
     GoogleAccountsPrivateApiExtension::Create(render_frame);
   }
@@ -634,9 +635,7 @@ void ChromeContentRendererClient::RenderFrameCreated(
 
   const bool search_result_extractor_enabled =
       render_frame->IsMainFrame() &&
-      history_clusters::GetConfig().is_journeys_enabled_no_locale_check &&
-      history_clusters::IsApplicationLocaleSupportedByJourneys(
-          RenderThread::Get()->GetLocale());
+      optimization_guide::features::IsPageContentAnnotationEnabled();
   if (search_result_extractor_enabled) {
     continuous_search::SearchResultExtractorImpl::Create(render_frame);
   }
@@ -1007,7 +1006,6 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
           render_frame, params, info, identifier, group_name, template_id,
           message);
     };
-    WebLocalFrame* frame = render_frame->GetWebFrame();
     switch (status) {
       case chrome::mojom::PluginStatus::kNotFound: {
         NOTREACHED();
@@ -1016,6 +1014,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
       case chrome::mojom::PluginStatus::kAllowed:
       case chrome::mojom::PluginStatus::kPlayImportantContent: {
 #if BUILDFLAG(ENABLE_NACL) && BUILDFLAG(ENABLE_EXTENSIONS)
+        WebLocalFrame* frame = render_frame->GetWebFrame();
         const bool is_nacl_plugin =
             info.name == ASCIIToUTF16(nacl::kNaClPluginName);
         const bool is_nacl_mime_type =
@@ -1086,17 +1085,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         }
 #endif  // BUILDFLAG(ENABLE_NACL) && BUILDFLAG(ENABLE_EXTENSIONS)
 
-        if (GURL(frame->GetDocument().Url()).host_piece() ==
-            extension_misc::kPdfExtensionId) {
-          if (!base::FeatureList::IsEnabled(features::kWebUIDarkMode)) {
-            auto* web_view = render_frame->GetWebView();
-            if (web_view) {
-              web_view->GetSettings()->SetPreferredColorScheme(
-                  blink::mojom::PreferredColorScheme::kLight);
-            }
-          }
-        } else if (info.path.value() ==
-                   ChromeContentClient::kPDFExtensionPluginPath) {
+        if (info.path.value() == ChromeContentClient::kPDFExtensionPluginPath) {
           // Report PDF load metrics. Since the PDF plugin is comprised of an
           // extension that loads a second plugin, avoid double counting by
           // ignoring the creation of the second plugin.
@@ -1410,6 +1399,25 @@ bool ChromeContentRendererClient::AllowPopup() {
 #endif
 }
 
+bool ChromeContentRendererClient::ShouldNotifyServiceWorkerOnWebSocketActivity(
+    v8::Local<v8::Context> context) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  extensions::ScriptContext* script_context =
+      ChromeExtensionsRendererClient::GetInstance()
+          ->extension_dispatcher()
+          ->GetWorkerScriptContextSet()
+          ->GetContextByV8Context(context);
+  // Only notify on web socket activity if the service worker is the background
+  // service worker for an extension.
+  return script_context &&
+         ChromeExtensionsRendererClient::GetInstance()
+             ->ExtensionAPIEnabledForServiceWorkerScript(
+                 script_context->service_worker_scope(), script_context->url());
+#else
+  return false;
+#endif
+}
+
 blink::ProtocolHandlerSecurityLevel
 ChromeContentRendererClient::GetProtocolHandlerSecurityLevel() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -1578,10 +1586,8 @@ ChromeContentRendererClient::CreateWorkerContentSettingsClient(
 #if BUILDFLAG(ENABLE_SPEECH_SERVICE)
 std::unique_ptr<media::SpeechRecognitionClient>
 ChromeContentRendererClient::CreateSpeechRecognitionClient(
-    content::RenderFrame* render_frame,
-    media::SpeechRecognitionClient::OnReadyCallback callback) {
-  return std::make_unique<ChromeSpeechRecognitionClient>(render_frame,
-                                                         std::move(callback));
+    content::RenderFrame* render_frame) {
+  return std::make_unique<ChromeSpeechRecognitionClient>(render_frame);
 }
 #endif  // BUILDFLAG(ENABLE_SPEECH_SERVICE)
 

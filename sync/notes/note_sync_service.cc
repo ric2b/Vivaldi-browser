@@ -8,8 +8,11 @@
 
 namespace sync_notes {
 
-NoteSyncService::NoteSyncService(file_sync::SyncedFileStore* synced_file_store)
-    : note_model_type_processor_(synced_file_store) {}
+NoteSyncService::NoteSyncService(
+    file_sync::SyncedFileStore* synced_file_store,
+    bool wipe_model_on_stopping_sync_with_clear_data)
+    : note_model_type_processor_(synced_file_store,
+                                 wipe_model_on_stopping_sync_with_clear_data) {}
 
 NoteSyncService::~NoteSyncService() = default;
 
@@ -28,6 +31,10 @@ void NoteSyncService::DecodeNoteSyncMetadata(
 base::WeakPtr<syncer::ModelTypeControllerDelegate>
 NoteSyncService::GetNoteSyncControllerDelegate() {
   return note_model_type_processor_.GetWeakPtr();
+}
+
+bool NoteSyncService::IsTrackingMetadata() const {
+  return note_model_type_processor_.IsTrackingMetadata();
 }
 
 void NoteSyncService::SetNotesLimitForTesting(size_t limit) {

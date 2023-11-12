@@ -152,7 +152,7 @@ class FakeCancellingSelectFileDialog : public ui::SelectFileDialog {
 class FakeCancellingSelectFileDialogFactory
     : public ui::SelectFileDialogFactory {
  public:
-  FakeCancellingSelectFileDialogFactory() {}
+  FakeCancellingSelectFileDialogFactory() = default;
 
   TestSelectFileDialogFactory& operator=(const TestSelectFileDialogFactory&) =
       delete;
@@ -181,11 +181,9 @@ class MockPasswordManagerExporter
 
   ~MockPasswordManagerExporter() override = default;
 
-  MOCK_METHOD0(PreparePasswordsForExport, void());
-  MOCK_METHOD0(Cancel, void());
-  MOCK_METHOD1(SetDestination, void(const base::FilePath&));
-  MOCK_METHOD0(GetExportProgressStatus,
-               password_manager::ExportProgressStatus());
+  MOCK_METHOD(void, PreparePasswordsForExport, (), (override));
+  MOCK_METHOD(void, Cancel, (), (override));
+  MOCK_METHOD(void, SetDestination, (const base::FilePath&), (override));
 };
 
 class FakePasswordParserService
@@ -224,11 +222,11 @@ class PasswordManagerPorterTest : public ChromeRenderViewHostTestHarness {
     // SelectFileDialog::SetFactory is responsible for freeing the memory
     // associated with a new factory.
     ui::SelectFileDialog::SetFactory(
-        new TestSelectFileDialogFactory(temp_file_path()));
+        std::make_unique<TestSelectFileDialogFactory>(temp_file_path()));
 
-    std::unique_ptr<TestingProfile> profile = CreateTestingProfile();
+    profile_ = CreateTestingProfile();
     porter_ = std::make_unique<PasswordManagerPorter>(
-        profile.get(), &presenter(),
+        profile_.get(), &presenter(),
         /*on_export_progress_callback=*/base::DoNothing());
 
     auto importer =
@@ -245,6 +243,8 @@ class PasswordManagerPorterTest : public ChromeRenderViewHostTestHarness {
   }
 
   void TearDown() override {
+    porter_.reset();
+    profile_.reset();
     store_->ShutdownOnUIThread();
     task_environment()->RunUntilIdle();
     ChromeRenderViewHostTestHarness::TearDown();
@@ -272,6 +272,7 @@ class PasswordManagerPorterTest : public ChromeRenderViewHostTestHarness {
  private:
   FakePasswordParserService service;
   mojo::Receiver<password_manager::mojom::CSVPasswordParser> receiver{&service};
+  std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<PasswordManagerPorter> porter_;
   scoped_refptr<password_manager::TestPasswordStore> store_ =
       base::MakeRefCounted<password_manager::TestPasswordStore>();
@@ -300,7 +301,8 @@ TEST_F(PasswordManagerPorterTest, PasswordExport) {
 }
 
 TEST_F(PasswordManagerPorterTest, CancelExportFileSelection) {
-  ui::SelectFileDialog::SetFactory(new FakeCancellingSelectFileDialogFactory());
+  ui::SelectFileDialog::SetFactory(
+      std::make_unique<FakeCancellingSelectFileDialogFactory>());
 
   std::unique_ptr<MockPasswordManagerExporter> mock_password_manager_exporter_ =
       std::make_unique<StrictMock<MockPasswordManagerExporter>>();
@@ -326,7 +328,8 @@ TEST_F(PasswordManagerPorterTest, CancelExport) {
 }
 
 TEST_F(PasswordManagerPorterTest, ImportDismissedOnCanceledFileSelection) {
-  ui::SelectFileDialog::SetFactory(new FakeCancellingSelectFileDialogFactory());
+  ui::SelectFileDialog::SetFactory(
+      std::make_unique<FakeCancellingSelectFileDialogFactory>());
 
   base::MockCallback<PasswordManagerPorter::ImportResultsCallback> callback;
   EXPECT_CALL(

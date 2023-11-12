@@ -74,7 +74,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
               (const GURL&),
               (const, override));
   MOCK_METHOD(bool, IsFillingEnabled, (const GURL&), (const, override));
-  MOCK_METHOD(bool, IsIncognito, (), (const, override));
+  MOCK_METHOD(bool, IsOffTheRecord, (), (const, override));
   MOCK_METHOD(bool, NotifyUserAutoSigninPtr, (), ());
   MOCK_METHOD(bool,
               NotifyUserCouldBeAutoSignedInPtr,
@@ -263,7 +263,7 @@ class CredentialManagerImplTest : public testing::Test,
     ON_CALL(*client_, IsSavingAndFillingEnabled(_))
         .WillByDefault(testing::Return(true));
     ON_CALL(*client_, IsFillingEnabled(_)).WillByDefault(testing::Return(true));
-    ON_CALL(*client_, IsIncognito()).WillByDefault(testing::Return(false));
+    ON_CALL(*client_, IsOffTheRecord()).WillByDefault(testing::Return(false));
 
     form_.username_value = u"Username";
     form_.display_name = u"Display Name";
@@ -426,7 +426,7 @@ class CredentialManagerImplTest : public testing::Test,
   scoped_refptr<TestPasswordStore> account_store_;
   std::unique_ptr<testing::NiceMock<MockPasswordManagerClient>> client_;
   std::unique_ptr<MockAffiliationService> mock_affiliation_service_;
-  raw_ptr<MockAffiliatedMatchHelper> mock_match_helper_;
+  raw_ptr<MockAffiliatedMatchHelper, DanglingUntriaged> mock_match_helper_;
   std::unique_ptr<CredentialManagerImpl> cm_service_impl_;
 };
 
@@ -840,7 +840,7 @@ TEST_P(CredentialManagerImplTest,
 
 TEST_P(CredentialManagerImplTest,
        CredentialManagerOnPreventMediatedAccessIncognito) {
-  EXPECT_CALL(*client_, IsIncognito()).WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(*client_, IsOffTheRecord()).WillRepeatedly(testing::Return(true));
   EXPECT_CALL(*client_, PromptUserToChooseCredentialsPtr).Times(0);
   store_->AddLogin(form_);
   RunAllPendingTasks();
@@ -874,7 +874,7 @@ TEST_P(CredentialManagerImplTest,
   std::vector<GURL> federations;
   std::vector<std::string> affiliated_realms;
   affiliated_realms.push_back(kTestAndroidRealm1);
-  mock_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(
+  mock_match_helper_->ExpectCallToGetAffiliatedAndGrouped(
       cm_service_impl_->GetSynthesizedFormForOrigin(), affiliated_realms);
   RunAllPendingTasks();
 
@@ -1132,7 +1132,7 @@ TEST_P(CredentialManagerImplTest,
   std::vector<GURL> federations;
   std::vector<std::string> affiliated_realms;
   affiliated_realms.push_back(kTestAndroidRealm1);
-  mock_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(
+  mock_match_helper_->ExpectCallToGetAffiliatedAndGrouped(
       cm_service_impl_->GetSynthesizedFormForOrigin(), affiliated_realms);
 
   // We pass in 'true' for the 'include_passwords' argument to ensure that
@@ -1150,7 +1150,7 @@ TEST_P(CredentialManagerImplTest,
   std::vector<GURL> federations;
   std::vector<std::string> affiliated_realms;
   affiliated_realms.push_back(kTestAndroidRealm1);
-  mock_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(
+  mock_match_helper_->ExpectCallToGetAffiliatedAndGrouped(
       cm_service_impl_->GetSynthesizedFormForOrigin(), affiliated_realms);
 
   // We pass in 'false' for the 'include_passwords' argument to ensure that
@@ -1172,7 +1172,7 @@ TEST_P(CredentialManagerImplTest,
 
   std::vector<std::string> affiliated_realms;
   affiliated_realms.push_back(kTestAndroidRealm1);
-  mock_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(
+  mock_match_helper_->ExpectCallToGetAffiliatedAndGrouped(
       cm_service_impl_->GetSynthesizedFormForOrigin(), affiliated_realms);
 
   ExpectZeroClickSignInSuccess(CredentialMediationRequirement::kSilent, true,
@@ -1193,7 +1193,7 @@ TEST_P(CredentialManagerImplTest,
 
   std::vector<std::string> affiliated_realms;
   affiliated_realms.push_back(kTestAndroidRealm1);
-  mock_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(
+  mock_match_helper_->ExpectCallToGetAffiliatedAndGrouped(
       cm_service_impl_->GetSynthesizedFormForOrigin(), affiliated_realms);
 
   ExpectZeroClickSignInFailure(CredentialMediationRequirement::kSilent, true,
@@ -1471,7 +1471,7 @@ TEST_P(CredentialManagerImplTest,
 }
 
 TEST_P(CredentialManagerImplTest, IncognitoZeroClickRequestCredential) {
-  EXPECT_CALL(*client_, IsIncognito()).WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(*client_, IsOffTheRecord()).WillRepeatedly(testing::Return(true));
   store_->AddLogin(form_);
 
   std::vector<GURL> federations;
@@ -1491,7 +1491,7 @@ TEST_P(CredentialManagerImplTest, ZeroClickWithAffiliatedFormInPasswordStore) {
 
   std::vector<GURL> federations;
   std::vector<std::string> affiliated_realms = {kTestAndroidRealm1};
-  mock_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(
+  mock_match_helper_->ExpectCallToGetAffiliatedAndGrouped(
       cm_service_impl_->GetSynthesizedFormForOrigin(), affiliated_realms);
 
   ExpectZeroClickSignInSuccess(CredentialMediationRequirement::kSilent, true,
@@ -1510,7 +1510,7 @@ TEST_P(CredentialManagerImplTest,
   std::vector<std::string> affiliated_realms;
   affiliated_realms.push_back(kTestAndroidRealm1);
   affiliated_realms.push_back(kTestAndroidRealm2);
-  mock_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(
+  mock_match_helper_->ExpectCallToGetAffiliatedAndGrouped(
       cm_service_impl_->GetSynthesizedFormForOrigin(), affiliated_realms);
 
   ExpectZeroClickSignInFailure(CredentialMediationRequirement::kSilent, true,
@@ -1527,14 +1527,14 @@ TEST_P(CredentialManagerImplTest,
   std::vector<std::string> affiliated_realms;
   PasswordFormDigest digest = cm_service_impl_->GetSynthesizedFormForOrigin();
   // First expect affiliations for the HTTPS domain.
-  mock_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(digest,
-                                                             affiliated_realms);
+  mock_match_helper_->ExpectCallToGetAffiliatedAndGrouped(digest,
+                                                          affiliated_realms);
 
   digest.url = HttpURLFromHttps(digest.url);
   digest.signon_realm = digest.url.spec();
   // The second call happens for HTTP as the migration is triggered.
-  mock_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(digest,
-                                                             affiliated_realms);
+  mock_match_helper_->ExpectCallToGetAffiliatedAndGrouped(digest,
+                                                          affiliated_realms);
 
   std::vector<GURL> federations;
   ExpectZeroClickSignInFailure(CredentialMediationRequirement::kSilent, true,
@@ -1551,7 +1551,7 @@ TEST_P(CredentialManagerImplTest,
 
   std::vector<GURL> federations;
   std::vector<std::string> affiliated_realms;
-  mock_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(
+  mock_match_helper_->ExpectCallToGetAffiliatedAndGrouped(
       cm_service_impl_->GetSynthesizedFormForOrigin(), affiliated_realms);
 
   ExpectZeroClickSignInSuccess(CredentialMediationRequirement::kSilent, true,

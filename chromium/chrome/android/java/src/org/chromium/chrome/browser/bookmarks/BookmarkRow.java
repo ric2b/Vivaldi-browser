@@ -379,9 +379,6 @@ public abstract class BookmarkRow
     @Override
     public void onFolderStateSet(BookmarkId folder) {}
 
-    @Override
-    public void onSearchStateSet() {}
-
     public boolean isItemSelected() {
         return mDelegate.getSelectionDelegate().isItemSelected(mBookmarkId);
     }

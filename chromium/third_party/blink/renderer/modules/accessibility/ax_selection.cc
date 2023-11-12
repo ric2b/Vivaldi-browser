@@ -349,7 +349,8 @@ void AXSelection::UpdateSelectionIfNecessary() {
 
 bool AXSelection::Select(const AXSelectionBehavior selection_behavior) {
   if (!IsValid()) {
-    NOTREACHED() << "Trying to select an invalid accessibility selection.";
+    // By the time the selection action gets here, content could have
+    // changed from the content the action was initially prepared for.
     return false;
   }
 
@@ -422,9 +423,9 @@ bool AXSelection::Select(const AXSelectionBehavior selection_behavior) {
 }
 
 String AXSelection::ToString() const {
-  if (!IsValid())
-    return "Invalid AXSelection";
-  return "AXSelection from " + Base().ToString() + " to " + Extent().ToString();
+  String prefix = IsValid() ? "" : "Invalid ";
+  return prefix + "AXSelection from " + Base().ToString() + " to " +
+         Extent().ToString();
 }
 
 absl::optional<AXSelection::TextControlSelection>

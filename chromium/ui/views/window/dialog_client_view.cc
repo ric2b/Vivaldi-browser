@@ -12,8 +12,10 @@
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "build/build_config.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -22,12 +24,12 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/image_button.h"
-#include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/layout/table_layout.h"
 #include "ui/views/metadata/view_factory.h"
 #include "ui/views/style/platform_style.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/view_utils.h"
@@ -54,6 +56,19 @@ gfx::Size GetBoundingSizeForVerticalStack(const gfx::Size& size1,
                                           const gfx::Size& size2) {
   return gfx::Size(std::max(size1.width(), size2.width()),
                    size1.height() + size2.height());
+}
+
+constexpr ui::ElementIdentifier kNoElementId;
+
+ui::ElementIdentifier GetButtonId(ui::DialogButton type) {
+  switch (type) {
+    case ui::DialogButton::DIALOG_BUTTON_OK:
+      return DialogClientView::kOkButtonElementId;
+    case ui::DialogButton::DIALOG_BUTTON_CANCEL:
+      return DialogClientView::kCancelButtonElementId;
+    default:
+      return kNoElementId;
+  }
 }
 
 }  // namespace
@@ -229,11 +244,15 @@ void DialogClientView::OnThemeChanged() {
 }
 
 void DialogClientView::UpdateInputProtectorTimeStamp() {
-  input_protector_->UpdateViewShownTimeStamp();
+  input_protector_->MaybeUpdateViewProtectedTimeStamp();
 }
 
 void DialogClientView::ResetViewShownTimeStampForTesting() {
   input_protector_->ResetForTesting();  // IN-TEST
+}
+
+bool DialogClientView::IsPossiblyUnintendedInteraction(const ui::Event& event) {
+  return input_protector_->IsPossiblyUnintendedInteraction(event);
 }
 
 DialogDelegate* DialogClientView::GetDialogDelegate() const {
@@ -247,8 +266,8 @@ void DialogClientView::ChildVisibilityChanged(View* child) {
   InvalidateLayout();
 }
 
-void DialogClientView::TriggerInputProtection() {
-  input_protector_->UpdateViewShownTimeStamp();
+void DialogClientView::TriggerInputProtection(bool force_early) {
+  input_protector_->MaybeUpdateViewProtectedTimeStamp(force_early);
 }
 
 void DialogClientView::OnDialogChanged() {
@@ -260,7 +279,7 @@ void DialogClientView::UpdateDialogButtons() {
   InvalidateLayout();
 }
 
-void DialogClientView::UpdateDialogButton(LabelButton** member,
+void DialogClientView::UpdateDialogButton(MdTextButton** member,
                                           ui::DialogButton type) {
   DialogDelegate* const delegate = GetDialogDelegate();
   if (!(delegate->GetDialogButtons() & type)) {
@@ -270,16 +289,16 @@ void DialogClientView::UpdateDialogButton(LabelButton** member,
     return;
   }
 
-  const bool is_default = delegate->GetDefaultDialogButton() == type &&
-                          (type != ui::DIALOG_BUTTON_CANCEL ||
-                           PlatformStyle::kDialogDefaultButtonCanBeCancel);
+  const bool is_default = delegate->GetIsDefault(type);
   const std::u16string title = delegate->GetDialogButtonLabel(type);
+  const ui::ButtonStyle style = delegate->GetDialogButtonStyle(type);
 
   if (*member) {
-    LabelButton* button = *member;
+    MdTextButton* button = *member;
     button->SetEnabled(delegate->IsDialogButtonEnabled(type));
     button->SetIsDefault(is_default);
     button->SetText(title);
+    button->SetStyle(style);
     return;
   }
 
@@ -293,6 +312,8 @@ void DialogClientView::UpdateDialogButton(LabelButton** member,
               .SetCallback(base::BindRepeating(&DialogClientView::ButtonPressed,
                                                base::Unretained(this), type))
               .SetText(title)
+              .SetProperty(views::kElementIdentifierKey, GetButtonId(type))
+              .SetStyle(style)
               .SetProminent(is_default)
               .SetIsDefault(is_default)
               .SetEnabled(delegate->IsDialogButtonEnabled(type))
@@ -304,15 +325,27 @@ void DialogClientView::UpdateDialogButton(LabelButton** member,
 void DialogClientView::ButtonPressed(ui::DialogButton type,
                                      const ui::Event& event) {
   DialogDelegate* const delegate = GetDialogDelegate();
-  if (delegate && !input_protector_->IsPossiblyUnintendedInteraction(event)) {
-    (type == ui::DIALOG_BUTTON_OK) ? delegate->AcceptDialog()
-                                   : delegate->CancelDialog();
+  if (!delegate || input_protector_->IsPossiblyUnintendedInteraction(event)) {
+    return;
+  }
+
+  DCHECK(type == ui::DIALOG_BUTTON_OK || type == ui::DIALOG_BUTTON_CANCEL);
+  if (type == ui::DIALOG_BUTTON_OK &&
+      !delegate->ShouldIgnoreButtonPressedEventHandling(ok_button_, event)) {
+    delegate->AcceptDialog();
+  }
+
+  if (type == ui::DIALOG_BUTTON_CANCEL &&
+      !delegate->ShouldIgnoreButtonPressedEventHandling(cancel_button_,
+                                                        event)) {
+    delegate->CancelDialog();
   }
 }
 
 int DialogClientView::GetExtraViewSpacing() const {
-  if (!ShouldShow(extra_view_) || !(ok_button_ || cancel_button_))
+  if (!ShouldShow(extra_view_) || !(ok_button_ || cancel_button_)) {
     return 0;
+  }
 
   return LayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
@@ -465,5 +498,8 @@ void DialogClientView::RemoveFillerView(size_t view_index) {
 
 BEGIN_METADATA(DialogClientView, ClientView)
 END_METADATA
+
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(DialogClientView, kOkButtonElementId);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(DialogClientView, kCancelButtonElementId);
 
 }  // namespace views

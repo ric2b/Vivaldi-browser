@@ -6,6 +6,7 @@
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_PAGE_ALLOCATOR_INTERNALS_POSIX_H_
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
@@ -17,7 +18,7 @@
 #include "base/allocator/partition_allocator/partition_alloc_base/debug/debugging_buildflags.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/posix/eintr_wrapper.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
-#include "base/allocator/partition_allocator/pkey.h"
+#include "base/allocator/partition_allocator/thread_isolation/thread_isolation.h"
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_APPLE)
@@ -66,8 +67,8 @@ namespace {
 #if defined(PR_SET_VMA) && defined(PR_SET_VMA_ANON_NAME)
 const char* PageTagToName(PageTag tag) {
   // Important: All the names should be string literals. As per prctl.h in
-  // //third_party/android_ndk the kernel keeps a pointer to the name instead
-  // of copying it.
+  // //third_party/android_toolchain the kernel keeps a pointer to the name
+  // instead of copying it.
   //
   // Having the name in .rodata ensures that the pointer remains valid as
   // long as the mapping is alive.
@@ -185,7 +186,9 @@ uintptr_t SystemAllocPagesInternal(uintptr_t hint,
   // into this capability by specifying the "com.apple.security.cs.allow-jit"
   // code signing entitlement and allocating the region with the MAP_JIT flag.
   static const bool kUseMapJit = UseMapJit();
-  if (page_tag == PageTag::kV8 && kUseMapJit) {
+  if (accessibility.permissions ==
+          PageAccessibilityConfiguration::kInaccessibleWillJitLater &&
+      kUseMapJit) {
     map_flags |= MAP_JIT;
   }
 #endif
@@ -216,14 +219,16 @@ bool TrySetSystemPagesAccessInternal(
     uintptr_t address,
     size_t length,
     PageAccessibilityConfiguration accessibility) {
-#if BUILDFLAG(ENABLE_PKEYS)
-  return 0 == PkeyMprotectIfEnabled(reinterpret_cast<void*>(address), length,
-                                    GetAccessFlags(accessibility),
-                                    accessibility.pkey);
-#else
+#if BUILDFLAG(ENABLE_THREAD_ISOLATION)
+  if (accessibility.thread_isolation.enabled) {
+    return 0 == MprotectWithThreadIsolation(reinterpret_cast<void*>(address),
+                                            length,
+                                            GetAccessFlags(accessibility),
+                                            accessibility.thread_isolation);
+  }
+#endif  // BUILDFLAG(ENABLE_THREAD_ISOLATION)
   return 0 == PA_HANDLE_EINTR(mprotect(reinterpret_cast<void*>(address), length,
                                        GetAccessFlags(accessibility)));
-#endif
 }
 
 void SetSystemPagesAccessInternal(
@@ -231,14 +236,18 @@ void SetSystemPagesAccessInternal(
     size_t length,
     PageAccessibilityConfiguration accessibility) {
   int access_flags = GetAccessFlags(accessibility);
-#if BUILDFLAG(ENABLE_PKEYS)
-  int ret =
-      PkeyMprotectIfEnabled(reinterpret_cast<void*>(address), length,
-                            GetAccessFlags(accessibility), accessibility.pkey);
-#else
-  int ret = PA_HANDLE_EINTR(mprotect(reinterpret_cast<void*>(address), length,
-                                     GetAccessFlags(accessibility)));
-#endif
+  int ret;
+#if BUILDFLAG(ENABLE_THREAD_ISOLATION)
+  if (accessibility.thread_isolation.enabled) {
+    ret = MprotectWithThreadIsolation(reinterpret_cast<void*>(address), length,
+                                      GetAccessFlags(accessibility),
+                                      accessibility.thread_isolation);
+  } else
+#endif  // BUILDFLAG(ENABLE_THREAD_ISOLATION)
+  {
+    ret = PA_HANDLE_EINTR(mprotect(reinterpret_cast<void*>(address), length,
+                                   GetAccessFlags(accessibility)));
+  }
 
   // On Linux, man mprotect(2) states that ENOMEM is returned when (1) internal
   // kernel data structures cannot be allocated, (2) the address range is

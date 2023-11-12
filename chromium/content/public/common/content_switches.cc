@@ -22,6 +22,9 @@ const char kAllowInsecureLocalhost[] = "allow-insecure-localhost";
 const char kAllowLoopbackInPeerConnection[] =
     "allow-loopback-in-peer-connection";
 
+// Allows plugins to be loaded in the command line for testing.
+const char kAllowCommandLinePlugins[] = "allow-command-line-plugins";
+
 // Causes the Attribution Report API to run without delays or noise.
 const char kAttributionReportingDebugMode[] =
     "attribution-reporting-debug-mode";
@@ -100,6 +103,11 @@ const char kDisableBackgroundTimerThrottling[] =
 
 // Disables the BackForwardCache feature.
 const char kDisableBackForwardCache[] = "disable-back-forward-cache";
+
+// Disables BackForwardCache for the pages with "Cache-Control: no-store"
+// header.
+const char kDisableBackForwardCacheForCacheControlNoStorePage[] =
+    "disable-back-forward-cache-for-cache-control-no-store-page";
 
 // Disable one or more Blink runtime-enabled features.
 // Use names from runtime_enabled_features.json5, separated by commas.
@@ -210,9 +218,6 @@ const char kDisablePepper3d[]               = "disable-pepper-3d";
 
 // Disables the Permissions API.
 const char kDisablePermissionsAPI[]         = "disable-permissions-api";
-
-// Disable Image Chromium for Pepper 3d.
-const char kDisablePepper3DImageChromium[] = "disable-pepper-3d-image-chromium";
 
 // Disables compositor-accelerated touch-screen pinch gestures.
 const char kDisablePinch[]                  = "disable-pinch";
@@ -465,11 +470,6 @@ const char kEnableWebGLImageChromium[] = "enable-webgl-image-chromium";
 // file:///alias/some/path.html into file:///replacement/some/path.html.
 const char kFileUrlPathAlias[] = "file-url-path-alias";
 
-// Force-enables the PPB_VideoDecoder(Dev) API, overriding the value from any
-// ongoing Finch experiment.
-const char kForceEnablePepperVideoDecoderDevAPI[] =
-    "force-enable-pepper-video-decoder-dev-api";
-
 // This forces pages to be loaded as presentation receivers.  Useful for testing
 // behavior specific to presentation receivers.
 // Spec: https://www.w3.org/TR/presentation-api/#interface-presentationreceiver
@@ -485,11 +485,6 @@ const char kForcePresentationReceiverForTesting[] =
 // 'complete'. If the bundle argument is missing, then the initial AXMode will
 // default to complete but allow changes to the AXMode during execution.
 const char kForceRendererAccessibility[]    = "force-renderer-accessibility";
-
-// Force Skia's CPU backend to use analytic anti-aliasing for all content
-// (rather than a mix of analytic and supersampling). Test migration tool for
-// https://crbug.com/1421297
-const char kForceSkiaAnalyticAntialiasing[] = "force-skia-analytic-aa";
 
 // Extra command line options for launching the GPU process (normally used
 // for debugging). Use like renderer-cmd-prefix.
@@ -849,6 +844,9 @@ const char kUtilitySubType[] = "utility-sub-type";
 // In debug builds, asserts that the stream of input events is valid.
 const char kValidateInputEventStream[] = "validate-input-event-stream";
 
+// Causes tests to attempt to verify pixel output.
+const char kVerifyPixels[] = "browser-ui-tests-verify-pixels";
+
 // Will add kWaitForDebugger to every child processes. If a value is passed, it
 // will be used as a filter to determine if the child process should have the
 // kWaitForDebugger flag passed on or not.
@@ -903,10 +901,6 @@ const char kDisableWebRtcHWDecoding[]       = "disable-webrtc-hw-decoding";
 // Disables HW encode acceleration for WebRTC.
 const char kDisableWebRtcHWEncoding[] = "disable-webrtc-hw-encoding";
 
-// Enables negotiation of GCM cipher suites from RFC 7714 for SRTP in WebRTC.
-// See https://tools.ietf.org/html/rfc7714 for further information.
-const char kEnableWebRtcSrtpAesGcm[] = "enable-webrtc-srtp-aes-gcm";
-
 // Enables negotiation of encrypted header extensions from RFC 6904 for SRTP
 // in WebRTC.
 // See https://tools.ietf.org/html/rfc6904 for further information.
@@ -926,12 +920,6 @@ const char kForceWebRtcIPHandlingPolicy[] = "force-webrtc-ip-handling-policy";
 // Override the maximum framerate as can be specified in calls to getUserMedia.
 // This flag expects a value.  Example: --max-gum-fps=17.5
 const char kWebRtcMaxCaptureFramerate[] = "max-gum-fps";
-
-// Configure the maximum CPU time percentage of a single core that can be
-// consumed for desktop capturing. Default is 50. Set 100 to disable the
-// throttling of the capture.
-const char kWebRtcMaxCpuConsumptionPercentage[] =
-    "webrtc-max-cpu-consumption-percentage";
 
 // Enable capture and local storage of WebRTC event logs without visiting
 // chrome://webrtc-internals. This is useful for automated testing. It accepts
@@ -953,8 +941,9 @@ const char kWebXrRuntimeNone[] = "no-vr-runtime";
 const char kWebXrRuntimeOrientationSensors[] = "orientation-sensors";
 
 // The following are the runtimes that WebXr supports.
+const char kWebXrRuntimeCardboard[] = "cardboard";
+const char kWebXrRuntimeGVR[] = "gvr";
 const char kWebXrRuntimeOpenXr[] = "openxr";
-const char kWebXrRuntimeWMR[] = "windows-mixed-reality";
 
 #if BUILDFLAG(IS_ANDROID)
 // Disable Media Session API

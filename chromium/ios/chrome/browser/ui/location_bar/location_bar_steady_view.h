@@ -70,6 +70,10 @@
 // Current in-use color scheme.
 @property(nonatomic, strong) LocationBarSteadyViewColorScheme* colorScheme;
 
+// Vivaldi
+- (void)fadeSteadyViewContentsWithAlpha:(CGFloat)alpha;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_LOCATION_BAR_LOCATION_BAR_STEADY_VIEW_H_

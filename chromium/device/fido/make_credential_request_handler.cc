@@ -10,6 +10,7 @@
 #include "base/barrier_closure.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/stl_util.h"
@@ -19,6 +20,7 @@
 #include "components/cbor/diagnostic_writer.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/fido/device_public_key_extension.h"
+#include "device/fido/features.h"
 #include "device/fido/fido_authenticator.h"
 #include "device/fido/fido_discovery_factory.h"
 #include "device/fido/fido_parsing_utils.h"
@@ -227,14 +229,6 @@ base::flat_set<FidoTransportProtocol> GetTransportsAllowedByRP(
   return base::flat_set<FidoTransportProtocol>();
 }
 
-void ReportMakeCredentialRequestTransport(FidoAuthenticator* authenticator) {
-  if (authenticator->AuthenticatorTransport()) {
-    base::UmaHistogramEnumeration(
-        "WebAuthentication.MakeCredentialRequestTransport",
-        *authenticator->AuthenticatorTransport());
-  }
-}
-
 void ReportMakeCredentialResponseTransport(
     absl::optional<FidoTransportProtocol> transport) {
   if (transport) {
@@ -427,6 +421,8 @@ MakeCredentialRequestHandler::MakeCredentialRequestHandler(
       options_.is_off_the_record_context;
   transport_availability_info().resident_key_requirement =
       options_.resident_key;
+  transport_availability_info().user_verification_requirement =
+      request_.user_verification;
   transport_availability_info().request_is_internal_only =
       options_.authenticator_attachment == AuthenticatorAttachment::kPlatform;
   transport_availability_info().make_credential_attachment =
@@ -581,8 +577,6 @@ void MakeCredentialRequestHandler::DispatchRequestAfterAppIdExclude(
       NOTREACHED();
       return;
   }
-
-  ReportMakeCredentialRequestTransport(authenticator);
 
   auto request_copy(*request.get());  // can't copy and move in the same stmt.
   authenticator->MakeCredential(
@@ -848,6 +842,14 @@ void MakeCredentialRequestHandler::HandleResponse(
       std::move(completion_callback_)
           .Run(MakeCredentialStatus::kAuthenticatorResponseInvalid,
                absl::nullopt, authenticator);
+    } else if (authenticator->GetType() == AuthenticatorType::kPhone &&
+               base::FeatureList::IsEnabled(kWebAuthnNewHybridUI)) {
+      FIDO_LOG(ERROR) << "Status " << static_cast<int>(status) << " from "
+                      << authenticator->GetDisplayName()
+                      << " is fatal to the request";
+      std::move(completion_callback_)
+          .Run(MakeCredentialStatus::kHybridTransportError, absl::nullopt,
+               authenticator);
     } else {
       FIDO_LOG(ERROR) << "Ignoring status " << static_cast<int>(status)
                       << " from " << authenticator->GetDisplayName();
@@ -958,8 +960,6 @@ void MakeCredentialRequestHandler::DispatchRequestWithToken(
   std::tie(request->pin_protocol, request->pin_auth) =
       token.PinAuth(request->client_data_hash);
   request->pin_token_for_exclude_list_probing = std::move(token);
-
-  ReportMakeCredentialRequestTransport(authenticator);
 
   auto request_copy(*request.get());  // can't copy and move in the same stmt.
   authenticator->MakeCredential(

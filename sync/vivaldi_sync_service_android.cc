@@ -7,7 +7,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/android/chrome_jni_headers/VivaldiSyncService_jni.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "components/sync/driver/sync_token_status.h"
+#include "components/sync/service/sync_token_status.h"
 #include "sync/vivaldi_sync_service_factory.h"
 #include "sync/vivaldi_sync_service_impl.h"
 #include "sync/vivaldi_sync_ui_helper.h"

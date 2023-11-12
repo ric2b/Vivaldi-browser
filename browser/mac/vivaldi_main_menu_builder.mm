@@ -16,16 +16,20 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/strings/grit/ui_strings.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace vivaldi {
 namespace {
 using Item = chrome::internal::MenuItemBuilder;
 
-base::scoped_nsobject<NSMenuItem> BuildAppMenu(NSApplication* nsapp,
-                                               AppController* app_controller) {
+NSMenuItem* BuildAppMenu(NSApplication* nsapp,
+                         AppController* app_controller) {
 
   std::u16string appname(l10n_util::GetStringUTF16(IDS_VIVALDI_APP_NAME));
 
-  base::scoped_nsobject<NSMenuItem> item =
+  NSMenuItem* item =
       Item(IDS_VIVALDI_APP_NAME)
           .tag(IDC_CHROME_MENU)
           .submenu({
@@ -49,17 +53,17 @@ base::scoped_nsobject<NSMenuItem> BuildAppMenu(NSApplication* nsapp,
                 .action(@selector(terminate:)),
               })
           .Build();
-  NSMenuItem* services_item = [[item submenu] itemWithTag:-1];
+  NSMenuItem* services_item = [item.submenu itemWithTag:-1];
   [services_item setTag:0];
 
-  [nsapp setServicesMenu:[services_item submenu]];
+  [nsapp setServicesMenu:services_item.submenu];
 
   return item;
 }
 
-base::scoped_nsobject<NSMenuItem> BuildFileMenu(NSApplication* nsapp,
-                                                AppController* app_controller) {
-  base::scoped_nsobject<NSMenuItem> item =
+NSMenuItem* BuildFileMenu(NSApplication* nsapp,
+                          AppController* app_controller) {
+  NSMenuItem* item =
       Item(IDS_FILE_MENU_MAC)
           .tag(IDC_FILE_MENU)
           .submenu({
@@ -87,9 +91,9 @@ base::scoped_nsobject<NSMenuItem> BuildFileMenu(NSApplication* nsapp,
   return item;
 }
 
-base::scoped_nsobject<NSMenuItem> BuildEditMenu(NSApplication* nsapp,
-                                                AppController* app_controller) {
-  base::scoped_nsobject<NSMenuItem> item =
+NSMenuItem* BuildEditMenu(NSApplication* nsapp,
+                          AppController* app_controller) {
+  NSMenuItem* item =
       Item(IDS_EDIT_MENU_MAC)
           .tag(IDC_EDIT_MENU)
           .submenu({
@@ -164,9 +168,9 @@ base::scoped_nsobject<NSMenuItem> BuildEditMenu(NSApplication* nsapp,
   return item;
 }
 
-base::scoped_nsobject<NSMenuItem> BuildViewMenu(NSApplication* nsapp,
-                                                AppController* app_controller) {
-  base::scoped_nsobject<NSMenuItem> item =
+NSMenuItem* BuildViewMenu(NSApplication* nsapp,
+                          AppController* app_controller) {
+  NSMenuItem* item =
       Item(IDS_VIEW_MENU_MAC)
           .tag(IDC_VIV_VIEW_MENU)
           .submenu({
@@ -182,10 +186,9 @@ base::scoped_nsobject<NSMenuItem> BuildViewMenu(NSApplication* nsapp,
   return item;
 }
 
-base::scoped_nsobject<NSMenuItem> BuildBookmarksMenu(
-    NSApplication* nsapp,
-    AppController* app_controller) {
-  base::scoped_nsobject<NSMenuItem> item =
+NSMenuItem* BuildBookmarksMenu(NSApplication* nsapp,
+                               AppController* app_controller) {
+  NSMenuItem* item =
       Item(IDS_BOOKMARKS_MENU)
           .tag(IDC_BOOKMARKS_MENU)
           .submenu({
@@ -195,20 +198,19 @@ base::scoped_nsobject<NSMenuItem> BuildBookmarksMenu(
   return item;
 }
 
-base::scoped_nsobject<NSMenuItem> BuildToolsMenu(
-    NSApplication* nsapp,
-    AppController* app_controller) {
-  base::scoped_nsobject<NSMenuItem> item = Item(IDS_VIV_TOOLS_MENU)
-                                               .tag(IDC_VIV_TOOLS_MENU)
-                                               .submenu({})
-                                               .Build();
+NSMenuItem* BuildToolsMenu(NSApplication* nsapp,
+                           AppController* app_controller) {
+  NSMenuItem* item =
+      Item(IDS_VIV_TOOLS_MENU)
+          .tag(IDC_VIV_TOOLS_MENU)
+          .submenu({})
+          .Build();
   return item;
 }
 
-base::scoped_nsobject<NSMenuItem> BuildWindowMenu(
-    NSApplication* nsapp,
-    AppController* app_controller) {
-  base::scoped_nsobject<NSMenuItem> item =
+NSMenuItem* BuildWindowMenu(NSApplication* nsapp,
+                            AppController* app_controller) {
+  NSMenuItem* item =
       Item(IDS_WINDOW_MENU_MAC)
           .tag(IDC_WINDOW_MENU)
           .submenu({
@@ -225,15 +227,15 @@ base::scoped_nsobject<NSMenuItem> BuildWindowMenu(
             Item().is_separator(), // seperator before open window list
           })
           .Build();
-  [nsapp setWindowsMenu:[item submenu]];
+  [nsapp setWindowsMenu:item.submenu];
   return item;
 }
 
-base::scoped_nsobject<NSMenuItem> BuildHelpMenu(NSApplication* nsapp,
-                                                AppController* app_controller) {
+NSMenuItem* BuildHelpMenu(NSApplication* nsapp,
+                          AppController* app_controller) {
   std::u16string productname(l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
 
-  base::scoped_nsobject<NSMenuItem> item =
+  NSMenuItem* item =
       Item(IDS_HELP_MENU_MAC)
           .tag(IDC_VIV_HELP_MENU)
           .submenu({
@@ -242,25 +244,28 @@ base::scoped_nsobject<NSMenuItem> BuildHelpMenu(NSApplication* nsapp,
                     .command_id(IDC_HELP_PAGE_VIA_MENU),
           })
           .Build();
-  [nsapp setHelpMenu:[item submenu]];
+  [nsapp setHelpMenu:item.submenu];
   return item;
 }
 
 }
 
 void BuildVivaldiMainMenu(NSApplication* nsapp, AppController* app_controller) {
-  base::scoped_nsobject<NSMenu> main_menu([[NSMenu alloc] initWithTitle:@""]);
+  NSMenu* main_menu = [[NSMenu alloc] initWithTitle:@""];
 
-  using Builder =
-      base::scoped_nsobject<NSMenuItem> (*)(NSApplication*, AppController*);
-  static const Builder kBuilderFuncs[] = {
-      &BuildAppMenu,    &BuildFileMenu,    &BuildEditMenu,
-      &BuildViewMenu,   &BuildBookmarksMenu, &BuildToolsMenu,
-      &BuildWindowMenu,  &BuildHelpMenu,
-  };
-
-  for (auto* builder : kBuilderFuncs) {
-    [main_menu addItem:builder(nsapp, app_controller)];
+  for (auto* builder : {
+            &BuildAppMenu,
+            &BuildFileMenu,
+            &BuildEditMenu,
+            &BuildViewMenu,
+            &BuildBookmarksMenu,
+            &BuildToolsMenu,
+            &BuildWindowMenu,
+            &BuildHelpMenu,
+       }) {
+    auto item = builder(nsapp, app_controller);
+    if (item)
+      [main_menu addItem:item];
   }
 
   [nsapp setMainMenu:main_menu];

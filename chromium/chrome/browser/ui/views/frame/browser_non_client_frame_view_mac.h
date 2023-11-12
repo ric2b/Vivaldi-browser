@@ -9,12 +9,18 @@
 
 #import <CoreGraphics/CGBase.h>
 
+#include <memory>
+
 #include "base/gtest_prod_util.h"
 #include "base/mac/scoped_nsobject.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
-#include "chrome/browser/web_applications/app_registrar_observer.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_app_registrar_observer.h"
 #include "components/prefs/pref_member.h"
+
+namespace base {
+class OneShotTimer;
+}
 
 namespace views {
 class Label;
@@ -25,7 +31,7 @@ class Label;
 class CaptionButtonPlaceholderContainer;
 
 class BrowserNonClientFrameViewMac : public BrowserNonClientFrameView,
-                                     public web_app::AppRegistrarObserver {
+                                     public web_app::WebAppRegistrarObserver {
  public:
   // Mac implementation of BrowserNonClientFrameView.
   BrowserNonClientFrameViewMac(BrowserFrame* frame, BrowserView* browser_view);
@@ -68,7 +74,7 @@ class BrowserNonClientFrameViewMac : public BrowserNonClientFrameView,
   gfx::Size GetMinimumSize() const override;
   void PaintChildren(const views::PaintInfo& info) override;
 
-  // web_app::AppRegistrarObserver
+  // web_app::WebAppRegistrarObserver
   void OnAlwaysShowToolbarInFullscreenChanged(const web_app::AppId& app_id,
                                               bool show) override;
   void OnAppRegistrarDestroyed() override;
@@ -116,10 +122,13 @@ class BrowserNonClientFrameViewMac : public BrowserNonClientFrameView,
   // app.
   bool AlwaysShowToolbarInFullscreen() const;
 
+  // Emits the duration of the current fullscreen session, if any.
+  void EmitFullscreenSessionHistograms();
+
   // Used to keep track of the update of kShowFullscreenToolbar preference.
   BooleanPrefMember show_fullscreen_toolbar_;
   base::ScopedObservation<web_app::WebAppRegistrar,
-                          web_app::AppRegistrarObserver>
+                          web_app::WebAppRegistrarObserver>
       always_show_toolbar_in_fullscreen_observation_{this};
 
   // A placeholder container that lies on top of the traffic lights to indicate
@@ -129,6 +138,14 @@ class BrowserNonClientFrameViewMac : public BrowserNonClientFrameView,
 
   base::scoped_nsobject<FullscreenToolbarController>
       fullscreen_toolbar_controller_;
+
+  // Mark the start of a fullscreen session. Applies to both immersive and
+  // standard fullscreen.
+  absl::optional<base::TimeTicks> fullscreen_session_start_;
+
+  // Fires after 24 hours to emit the duration of the current fullscreen
+  // session, if any.
+  std::unique_ptr<base::OneShotTimer> fullscreen_session_timer_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NON_CLIENT_FRAME_VIEW_MAC_H_

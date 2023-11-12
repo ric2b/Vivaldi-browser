@@ -52,13 +52,19 @@ scoped_refptr<PasswordStoreInterface> PasswordStoreFactory::GetForProfile(
 
 // static
 PasswordStoreFactory* PasswordStoreFactory::GetInstance() {
-  return base::Singleton<PasswordStoreFactory>::get();
+  static base::NoDestructor<PasswordStoreFactory> instance;
+  return instance.get();
 }
 
 PasswordStoreFactory::PasswordStoreFactory()
     : RefcountedProfileKeyedServiceFactory(
           "PasswordStore",
-          ProfileSelections::BuildRedirectedInIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kRedirectedToOriginal)
+              .Build()) {
   DependsOn(AffiliationServiceFactory::GetInstance());
   DependsOn(AffiliationsPrefetcherFactory::GetInstance());
   DependsOn(CredentialsCleanerRunnerFactory::GetInstance());

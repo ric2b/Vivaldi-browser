@@ -7,8 +7,9 @@ package org.chromium.chrome.browser.metrics;
 import android.content.Context;
 import android.content.Intent;
 
-import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.LargeTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -25,6 +26,8 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.page_load_metrics.PageLoadMetrics;
+import org.chromium.chrome.browser.page_load_metrics.PageLoadMetricsTest;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.webapps.WebApkActivityTestRule;
 import org.chromium.chrome.test.ChromeActivityTestRule;
@@ -292,7 +295,7 @@ public class StartupLoadingMetricsTest {
 
             // Put Chrome in background before the page is committed.
             ChromeApplicationTestUtils.fireHomeScreenIntent(
-                    InstrumentationRegistry.getTargetContext());
+                    ApplicationProvider.getApplicationContext());
 
             // Wait for a tab to be loaded.
             mTabbedActivityTestRule.waitForActivityNativeInitializationComplete();
@@ -307,7 +310,7 @@ public class StartupLoadingMetricsTest {
 
         runAndWaitForPageLoadMetricsRecorded(() -> {
             // Put Chrome in foreground before loading a new page.
-            ChromeApplicationTestUtils.launchChrome(InstrumentationRegistry.getTargetContext());
+            ChromeApplicationTestUtils.launchChrome(ApplicationProvider.getApplicationContext());
             mTabbedActivityTestRule.loadUrl(mTestPage);
         });
         assertHistogramsRecordedAsExpected(0, TABBED_SUFFIX);

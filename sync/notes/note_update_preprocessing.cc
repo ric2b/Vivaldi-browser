@@ -7,7 +7,6 @@
 #include <array>
 
 #include "base/containers/span.h"
-#include "base/guid.h"
 #include "base/hash/sha1.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -15,6 +14,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/uuid.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "sync/vivaldi_hash_util.h"
@@ -23,13 +23,13 @@ namespace syncer {
 
 namespace {
 
-std::string ComputeGuidFromBytes(base::span<const uint8_t> bytes) {
+std::string ComputeUuidFromBytes(base::span<const uint8_t> bytes) {
   DCHECK_GE(bytes.size(), 16U);
 
   // This implementation is based on the equivalent logic in base/guid.cc.
 
-  // Set the GUID to version 4 as described in RFC 4122, section 4.4.
-  // The format of GUID version 4 must be xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx,
+  // Set the UUID to version 4 as described in RFC 4122, section 4.4.
+  // The format of UUID version 4 must be xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx,
   // where y is one of [8, 9, A, B].
 
   // Clear the version bits and set the version to 4:
@@ -47,25 +47,25 @@ std::string ComputeGuidFromBytes(base::span<const uint8_t> bytes) {
 }
 
 // Notes created before 2015 (https://codereview.chromium.org/1136953013)
-// have an originator client item ID that is NOT a GUID. Hence, an alternative
-// method must be used to infer a GUID deterministically from a combination of
+// have an originator client item ID that is NOT a UUID. Hence, an alternative
+// method must be used to infer a UUID deterministically from a combination of
 // sync fields that is known to be a) immutable and b) unique per synced
 // note.
 std::string InferGuidForLegacyNote(
     const std::string& originator_cache_guid,
     const std::string& originator_client_item_id) {
   DCHECK(
-      !base::GUID::ParseCaseInsensitive(originator_client_item_id).is_valid());
+      !base::Uuid::ParseCaseInsensitive(originator_client_item_id).is_valid());
 
   const std::string unique_tag =
       base::StrCat({originator_cache_guid, originator_client_item_id});
   const base::SHA1Digest hash =
       base::SHA1HashSpan(base::as_bytes(base::make_span(unique_tag)));
 
-  static_assert(base::kSHA1Length >= 16, "16 bytes needed to infer GUID");
+  static_assert(base::kSHA1Length >= 16, "16 bytes needed to infer UUID");
 
-  const std::string guid = ComputeGuidFromBytes(base::make_span(hash));
-  DCHECK(base::GUID::ParseLowercase(guid).is_valid());
+  const std::string guid = ComputeUuidFromBytes(base::make_span(hash));
+  DCHECK(base::Uuid::ParseLowercase(guid).is_valid());
   return guid;
 }
 
@@ -172,34 +172,36 @@ void AdaptTitleForNote(const sync_pb::SyncEntity& update_entity,
 void AdaptGuidForNote(const sync_pb::SyncEntity& update_entity,
                       sync_pb::EntitySpecifics* specifics) {
   DCHECK(specifics);
-  // Tombstones and permanent entities don't have a GUID.
+  // Tombstones and permanent entities don't have a UUID.
   if (update_entity.deleted() ||
       !update_entity.server_defined_unique_tag().empty()) {
     return;
   }
   DCHECK(specifics->has_notes());
   // Legacy clients don't populate the guid field in the NotesSpecifics, so
-  // we use the originator_client_item_id instead, if it is a valid GUID.
+  // we use the originator_client_item_id instead, if it is a valid UUID.
   // Otherwise, we leave the field empty.
   if (specifics->notes().has_guid()) {
     return;
   }
-  if (base::IsValidGUID(update_entity.originator_client_item_id())) {
-    // Notes created around 2016, between [M44..M52) use an uppercase GUID
+  if (base::Uuid::ParseCaseInsensitive(
+          update_entity.originator_client_item_id())
+          .is_valid()) {
+    // Notes created around 2016, between [M44..M52) use an uppercase UUID
     // as originator client item ID, so it needs to be lowercased to adhere to
-    // the invariant that GUIDs in specifics are canonicalized.
+    // the invariant that U UIDs in specifics are canonicalized.
     specifics->mutable_notes()->set_guid(
         base::ToLowerASCII(update_entity.originator_client_item_id()));
-    DCHECK(base::IsValidGUIDOutputString(specifics->notes().guid()));
+    DCHECK(base::Uuid::ParseLowercase(specifics->notes().guid()).is_valid());
   } else if (update_entity.originator_cache_guid().empty() &&
              update_entity.originator_client_item_id().empty()) {
-    // There's no GUID that could be inferred from empty originator
+    // There's no UUID that could be inferred from empty originator
     // information.
   } else {
     specifics->mutable_notes()->set_guid(
         InferGuidForLegacyNote(update_entity.originator_cache_guid(),
                                update_entity.originator_client_item_id()));
-    DCHECK(base::IsValidGUIDOutputString(specifics->notes().guid()));
+    DCHECK(base::Uuid::ParseLowercase(specifics->notes().guid()).is_valid());
   }
 }
 

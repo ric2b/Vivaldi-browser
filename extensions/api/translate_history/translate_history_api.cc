@@ -3,8 +3,8 @@
 //
 #include "extensions/api/translate_history/translate_history_api.h"
 
-#include "base/guid.h"
 #include "base/lazy_instance.h"
+#include "base/uuid.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "translate_history/th_model.h"
 #include "translate_history/th_service_factory.h"
@@ -136,7 +136,7 @@ ExtensionFunction::ResponseValue TranslateHistoryAddFunction::RunWithModel(
   HistoryItem& item = params->item;
 
   // Assign id to parameter item as that is returned in the call.
-  item.id = base::GenerateGUID();
+  item.id = base::Uuid::GenerateRandomV4().AsLowercaseString();
   std::unique_ptr<TH_Node> node = std::make_unique<TH_Node>(item.id);
   node->src().code = item.src_item.code;
   node->src().text = item.src_item.text;

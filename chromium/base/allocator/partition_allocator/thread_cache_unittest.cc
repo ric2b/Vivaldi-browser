@@ -16,6 +16,7 @@
 #include "base/allocator/partition_allocator/partition_alloc_config.h"
 #include "base/allocator/partition_allocator/partition_alloc_for_testing.h"
 #include "base/allocator/partition_allocator/partition_lock.h"
+#include "base/allocator/partition_allocator/partition_root.h"
 #include "base/allocator/partition_allocator/tagging.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -61,18 +62,13 @@ class DeltaCounter {
 std::unique_ptr<PartitionAllocatorForTesting> CreateAllocator() {
   std::unique_ptr<PartitionAllocatorForTesting> allocator =
       std::make_unique<PartitionAllocatorForTesting>();
-  allocator->init({
-    PartitionOptions::AlignedAlloc::kAllowed,
+  allocator->init(PartitionOptions {
+    .aligned_alloc = PartitionOptions::AlignedAlloc::kAllowed,
 #if !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
-        PartitionOptions::ThreadCache::kEnabled,
-#else
-        PartitionOptions::ThreadCache::kDisabled,
+    .thread_cache = PartitionOptions::ThreadCache::kEnabled,
 #endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
-        PartitionOptions::Quarantine::kAllowed,
-        PartitionOptions::Cookie::kDisallowed,
-        PartitionOptions::BackupRefPtr::kDisabled,
-        PartitionOptions::BackupRefPtrZapping::kDisabled,
-        PartitionOptions::UseConfigurablePool::kNo,
+    .quarantine = PartitionOptions::Quarantine::kAllowed,
+    .cookie = PartitionOptions::Cookie::kDisallowed,
   });
   allocator->root()->UncapEmptySlotSpanMemoryForTesting();
 
@@ -82,8 +78,7 @@ std::unique_ptr<PartitionAllocatorForTesting> CreateAllocator() {
 }  // namespace
 
 class PartitionAllocThreadCacheTest
-    : public ::testing::TestWithParam<
-          PartitionRoot<internal::ThreadSafe>::BucketDistribution> {
+    : public ::testing::TestWithParam<PartitionRoot::BucketDistribution> {
  public:
   PartitionAllocThreadCacheTest()
       : allocator_(CreateAllocator()), scope_(allocator_->root()) {}
@@ -149,8 +144,7 @@ class PartitionAllocThreadCacheTest
   }
 
   static size_t SizeToIndex(size_t size) {
-    return PartitionRoot<internal::ThreadSafe>::SizeToBucketIndex(size,
-                                                                  GetParam());
+    return PartitionRoot::SizeToBucketIndex(size, GetParam());
   }
 
   size_t FillThreadCacheAndReturnIndex(size_t size, size_t count = 1) {
@@ -277,14 +271,9 @@ TEST_P(PartitionAllocThreadCacheTest, Purge) {
 
 TEST_P(PartitionAllocThreadCacheTest, NoCrossPartitionCache) {
   PartitionAllocatorForTesting allocator;
-  allocator.init({
-      PartitionOptions::AlignedAlloc::kAllowed,
-      PartitionOptions::ThreadCache::kDisabled,
-      PartitionOptions::Quarantine::kAllowed,
-      PartitionOptions::Cookie::kDisallowed,
-      PartitionOptions::BackupRefPtr::kDisabled,
-      PartitionOptions::BackupRefPtrZapping::kDisabled,
-      PartitionOptions::UseConfigurablePool::kNo,
+  allocator.init(PartitionOptions{
+      .aligned_alloc = PartitionOptions::AlignedAlloc::kAllowed,
+      .quarantine = PartitionOptions::Quarantine::kAllowed,
   });
 
   size_t bucket_index = FillThreadCacheAndReturnIndex(kSmallSize);
@@ -363,8 +352,7 @@ size_t FillThreadCacheAndReturnIndex(ThreadSafePartitionRoot* root,
                                      BucketDistribution bucket_distribution,
                                      size_t count = 1) {
   uint16_t bucket_index =
-      PartitionRoot<internal::ThreadSafe>::SizeToBucketIndex(
-          size, bucket_distribution);
+      PartitionRoot::SizeToBucketIndex(size, bucket_distribution);
   std::vector<void*> allocated_data;
 
   for (size_t i = 0; i < count; ++i) {
@@ -404,7 +392,7 @@ class ThreadDelegateForMultipleThreadCaches
  private:
   ThreadCache* parent_thread_tcache_ = nullptr;
   ThreadSafePartitionRoot* root_ = nullptr;
-  PartitionRoot<internal::ThreadSafe>::BucketDistribution bucket_distribution_;
+  PartitionRoot::BucketDistribution bucket_distribution_;
 };
 
 }  // namespace
@@ -512,11 +500,17 @@ TEST_P(PartitionAllocThreadCacheTest, ThreadCacheRegistry) {
   auto* parent_thread_tcache = root()->thread_cache_for_testing();
   ASSERT_TRUE(parent_thread_tcache);
 
+#if !BUILDFLAG(IS_APPLE) && BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  // iOS and MacOS 15 create worker threads internally(start_wqthread).
+  // So thread caches are created for the worker threads, because the threads
+  // allocate memory for initialization (_dispatch_calloc is invoked).
+  // We cannot assume that there is only 1 thread cache here.
   {
     internal::ScopedGuard lock(ThreadCacheRegistry::GetLock());
     EXPECT_EQ(parent_thread_tcache->prev_, nullptr);
     EXPECT_EQ(parent_thread_tcache->next_, nullptr);
   }
+#endif
 
   ThreadDelegateForThreadCacheRegistry delegate(parent_thread_tcache, root(),
                                                 GetParam());
@@ -526,9 +520,11 @@ TEST_P(PartitionAllocThreadCacheTest, ThreadCacheRegistry) {
                                                    &thread_handle);
   internal::base::PlatformThreadForTesting::Join(thread_handle);
 
+#if !BUILDFLAG(IS_APPLE) && BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
   internal::ScopedGuard lock(ThreadCacheRegistry::GetLock());
   EXPECT_EQ(parent_thread_tcache->prev_, nullptr);
   EXPECT_EQ(parent_thread_tcache->next_, nullptr);
+#endif
 }
 
 #if PA_CONFIG(THREAD_CACHE_ENABLE_STATISTICS)
@@ -587,10 +583,12 @@ class ThreadDelegateForMultipleThreadCachesAccounting
  public:
   ThreadDelegateForMultipleThreadCachesAccounting(
       ThreadSafePartitionRoot* root,
+      const ThreadCacheStats& wqthread_stats,
       int alloc_count,
       BucketDistribution bucket_distribution)
       : root_(root),
         bucket_distribution_(bucket_distribution),
+        wqthread_stats_(wqthread_stats),
         alloc_count_(alloc_count) {}
 
   void ThreadMain() override {
@@ -603,30 +601,50 @@ class ThreadDelegateForMultipleThreadCachesAccounting
     // 2* for this thread and the parent one.
     EXPECT_EQ(
         2 * root_->buckets[bucket_index].slot_size * kFillCountForMediumBucket,
-        stats.bucket_total_memory);
-    EXPECT_EQ(2 * sizeof(ThreadCache), stats.metadata_overhead);
+        stats.bucket_total_memory - wqthread_stats_.bucket_total_memory);
+    EXPECT_EQ(2 * sizeof(ThreadCache),
+              stats.metadata_overhead - wqthread_stats_.metadata_overhead);
 
     ThreadCacheStats this_thread_cache_stats{};
     root_->thread_cache_for_testing()->AccumulateStats(
         &this_thread_cache_stats);
     EXPECT_EQ(alloc_count_ + this_thread_cache_stats.alloc_count,
-              stats.alloc_count);
+              stats.alloc_count - wqthread_stats_.alloc_count);
   }
 
  private:
   ThreadSafePartitionRoot* root_ = nullptr;
   BucketDistribution bucket_distribution_;
+  const ThreadCacheStats wqthread_stats_;
   const int alloc_count_;
 };
 
 }  // namespace
 
 TEST_P(PartitionAllocThreadCacheTest, MultipleThreadCachesAccounting) {
+  ThreadCacheStats wqthread_stats{0};
+#if BUILDFLAG(IS_APPLE) && BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  {
+    // iOS and MacOS 15 create worker threads internally(start_wqthread).
+    // So thread caches are created for the worker threads, because the threads
+    // allocate memory for initialization (_dispatch_calloc is invoked).
+    // We need to count worker threads created by iOS and Mac system.
+    ThreadCacheRegistry::Instance().DumpStats(false, &wqthread_stats);
+
+    // Remove this thread's thread cache stats from wqthread_stats.
+    ThreadCacheStats this_stats;
+    ThreadCacheRegistry::Instance().DumpStats(true, &this_stats);
+
+    wqthread_stats.alloc_count -= this_stats.alloc_count;
+    wqthread_stats.metadata_overhead -= this_stats.metadata_overhead;
+    wqthread_stats.bucket_total_memory -= this_stats.bucket_total_memory;
+  }
+#endif
   FillThreadCacheAndReturnIndex(kMediumSize);
   uint64_t alloc_count = root()->thread_cache_for_testing()->stats_.alloc_count;
 
-  ThreadDelegateForMultipleThreadCachesAccounting delegate(root(), alloc_count,
-                                                           GetParam());
+  ThreadDelegateForMultipleThreadCachesAccounting delegate(
+      root(), wqthread_stats, alloc_count, GetParam());
 
   internal::base::PlatformThreadHandle thread_handle;
   internal::base::PlatformThreadForTesting::Create(0, &delegate,
@@ -1003,7 +1021,7 @@ class ThreadDelegateForDynamicCountPerBucketMultipleThreads
   std::atomic<bool>& other_thread_started_;
   std::atomic<bool>& threshold_changed_;
   const int bucket_index_;
-  PartitionRoot<internal::ThreadSafe>::BucketDistribution bucket_distribution_;
+  PartitionRoot::BucketDistribution bucket_distribution_;
 };
 
 }  // namespace

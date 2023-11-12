@@ -69,8 +69,12 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
   NOINLINE const NGLayoutResult* HandleNonsuccessfulLayoutResult(
       const NGLayoutResult*);
 
-  NOINLINE const NGLayoutResult* LayoutWithInlineChildLayoutContext(
-      const NGLayoutInputNode& first_child);
+  const NGLayoutResult* LayoutInlineChild(const NGInlineNode& child);
+  NOINLINE const NGLayoutResult* LayoutWithSimpleInlineChildLayoutContext(
+      const NGInlineNode& child);
+  template <wtf_size_t capacity>
+  NOINLINE const NGLayoutResult* LayoutWithOptimalInlineChildLayoutContext(
+      const NGInlineNode& child);
 
   NOINLINE const NGLayoutResult* RelayoutIgnoringLineClamp();
 

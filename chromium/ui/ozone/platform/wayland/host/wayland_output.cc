@@ -12,6 +12,7 @@
 #include "base/strings/string_util.h"
 #include "ui/display/display.h"
 #include "ui/gfx/color_space.h"
+#include "ui/ozone/platform/wayland/host/dump_util.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_zaura_output.h"
@@ -25,6 +26,8 @@ namespace {
 constexpr uint32_t kMinVersion = 2;
 constexpr uint32_t kMaxVersion = 4;
 }  // namespace
+
+using Metrics = WaylandOutput::Metrics;
 
 // static
 constexpr char WaylandOutput::kInterfaceName[];
@@ -56,29 +59,59 @@ void WaylandOutput::Instantiate(WaylandConnection* connection,
   connection->output_manager_->AddWaylandOutput(name, output.release());
 }
 
-WaylandOutput::Metrics::Metrics() = default;
-WaylandOutput::Metrics::Metrics(Id output_id,
-                                int64_t display_id,
-                                gfx::Point origin,
-                                gfx::Size logical_size,
-                                gfx::Size physical_size,
-                                gfx::Insets insets,
-                                float scale_factor,
-                                int32_t panel_transform,
-                                int32_t logical_transform,
-                                const std::string& description)
+Metrics::Metrics() = default;
+Metrics::Metrics(Id output_id,
+                 int64_t display_id,
+                 gfx::Point origin,
+                 gfx::Size logical_size,
+                 gfx::Size physical_size,
+                 gfx::Insets insets,
+                 gfx::Insets physical_overscan_insets,
+                 float scale_factor,
+                 int32_t panel_transform,
+                 int32_t logical_transform,
+                 const std::string& description)
     : output_id(output_id),
       display_id(display_id),
       origin(origin),
       logical_size(logical_size),
       physical_size(physical_size),
       insets(insets),
+      physical_overscan_insets(physical_overscan_insets),
       scale_factor(scale_factor),
       panel_transform(panel_transform),
       logical_transform(logical_transform),
       description(description) {}
-WaylandOutput::Metrics::Metrics(const Metrics& copy) = default;
-WaylandOutput::Metrics::~Metrics() = default;
+Metrics::Metrics(const Metrics&) = default;
+Metrics& Metrics::operator=(const Metrics&) = default;
+Metrics::Metrics(Metrics&&) = default;
+Metrics& Metrics::operator=(Metrics&&) = default;
+Metrics::~Metrics() = default;
+
+void Metrics::DumpState(std::ostream& out) const {
+  constexpr auto kTransformMap = base::MakeFixedFlatMap<int32_t, const char*>({
+      {WL_OUTPUT_TRANSFORM_NORMAL, "normal"},
+      {WL_OUTPUT_TRANSFORM_90, "90"},
+      {WL_OUTPUT_TRANSFORM_180, "180"},
+      {WL_OUTPUT_TRANSFORM_270, "270"},
+      {WL_OUTPUT_TRANSFORM_FLIPPED, "flipped"},
+      {WL_OUTPUT_TRANSFORM_FLIPPED_90, "flipped 90"},
+      {WL_OUTPUT_TRANSFORM_FLIPPED_180, "flipped 180"},
+      {WL_OUTPUT_TRANSFORM_FLIPPED_270, "flipped 270"},
+  });
+
+  out << "output_id=" << output_id << ", display_id=" << display_id
+      << ", description=" << description << ", origin=" << origin.ToString()
+      << ", logical_size=" << logical_size.ToString()
+      << ", physicacl_size=" << physical_size.ToString()
+      << ", scale_factor=" << scale_factor
+      << ", work_area_insets=" << insets.ToString()
+      << ", overscacn_insets=" << physical_overscan_insets.ToString()
+      << ", panel_transform="
+      << GetMapValueOrDefault(kTransformMap, panel_transform)
+      << ", logical_transform="
+      << GetMapValueOrDefault(kTransformMap, logical_transform);
+}
 
 WaylandOutput::WaylandOutput(Id output_id,
                              wl_output* output,
@@ -129,7 +162,7 @@ float WaylandOutput::GetUIScaleFactor() const {
              : scale_factor();
 }
 
-const WaylandOutput::Metrics& WaylandOutput::GetMetrics() const {
+const Metrics& WaylandOutput::GetMetrics() const {
   return metrics_;
 }
 
@@ -175,6 +208,10 @@ void WaylandOutput::TriggerDelegateNotifications() {
     return;
 
   delegate_->OnOutputHandleMetrics(GetMetrics());
+}
+
+void WaylandOutput::DumpState(std::ostream& out) const {
+  metrics_.DumpState(out);
 }
 
 void WaylandOutput::UpdateMetrics() {

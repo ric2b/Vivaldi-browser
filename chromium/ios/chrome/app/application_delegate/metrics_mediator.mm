@@ -18,6 +18,7 @@
 #import "components/crash/core/common/crash_keys.h"
 #import "components/metrics/metrics_pref_names.h"
 #import "components/metrics/metrics_service.h"
+#import "components/metrics/metrics_switches.h"
 #import "components/prefs/pref_service.h"
 #import "components/previous_session_info/previous_session_info.h"
 #import "components/signin/public/identity_manager/tribool.h"
@@ -25,22 +26,22 @@
 #import "ios/chrome/app/application_delegate/metric_kit_subscriber.h"
 #import "ios/chrome/app/application_delegate/startup_information.h"
 #import "ios/chrome/app/startup/ios_enable_sandbox_dump_buildflags.h"
-#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/crash_report/crash_helper.h"
 #import "ios/chrome/browser/default_browser/utils.h"
-#import "ios/chrome/browser/flags/system_flags.h"
-#import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/main/browser_provider.h"
-#import "ios/chrome/browser/main/browser_provider_interface.h"
 #import "ios/chrome/browser/metrics/first_user_action_recorder.h"
 #import "ios/chrome/browser/ntp/new_tab_page_util.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/coordinator/scene/connection_information.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/signin/signin_util.h"
 #import "ios/chrome/browser/tabs/inactive_tabs/metrics.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/widget_kit/features.h"
 #import "ios/chrome/common/app_group/app_group_metrics.h"
 #import "ios/chrome/common/app_group/app_group_metrics_mainapp.h"
@@ -272,8 +273,10 @@ void RecordWidgetUsage(base::span<const HistogramNameCountPair> histograms) {
     if (count != 0) {
       base::UmaHistogramCounts1000(SysNSStringToUTF8(keyMetric[key]), count);
       [shared_defaults setInteger:0 forKey:key];
-      if ([key isEqual:app_group::kCredentialExtensionPasswordUseCount] ||
-          [key isEqual:app_group::kCredentialExtensionQuickPasswordUseCount]) {
+      if ([key isEqualToString:app_group::
+                                   kCredentialExtensionPasswordUseCount] ||
+          [key isEqualToString:app_group::
+                                   kCredentialExtensionQuickPasswordUseCount]) {
         LogLikelyInterestedDefaultBrowserUserActivity(
             DefaultPromoTypeMadeForIOS);
       }
@@ -318,30 +321,32 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
 + (void)recordInactiveTabsSettingsAtStartup:(int)preference;
 // Logs the number of active tabs (based on the arm's definition of
 // active/inactive).
-+ (void)recordNumActiveTabAtStartup:(int)numTabs;
++ (void)recordStartupActiveTabCount:(int)tabCount;
 // Logs the number of inactive tabs (based on the arm's definition of
 // active/inactive).
-+ (void)recordNumInactiveTabAtStartup:(int)numTabs;
++ (void)recordStartupInactiveTabCount:(int)tabCount;
 // Logs the number of tabs older than 21 days.
-+ (void)recordNumAbsoluteInactiveTabAtStartup:(int)numTabs;
++ (void)recordStartupAbsoluteInactiveTabCount:(int)tabCount;
+// Logs the number of pinned tabs at startup.
++ (void)recordStartupPinnedTabCount:(int)tabCount;
 // Logs the number of tabs with UMAHistogramCount100 and allows testing.
-+ (void)recordNumTabAtStartup:(int)numTabs;
++ (void)recordStartupTabCount:(int)tabCount;
 // Logs the number of tabs with UMAHistogramCount100 and allows testing.
-+ (void)recordNumTabAtResume:(int)numTabs;
++ (void)recordResumeTabCount:(int)tabCount;
 // Logs the number of NTP tabs with UMAHistogramCount100 and allows testing.
-+ (void)recordNumNTPTabAtStartup:(int)numTabs;
++ (void)recordStartupNTPTabCount:(int)tabCount;
 // Logs the number of NTP tabs with UMAHistogramCount100 and allows testing.
-+ (void)recordNumNTPTabAtResume:(int)numTabs;
++ (void)recordResumeNTPTabCount:(int)tabCount;
 // Logs the number of live NTP tabs with UMAHistogramCount100 and allows
 // testing.
-+ (void)recordNumLiveNTPTabAtResume:(int)numTabs;
++ (void)recordResumeLiveNTPTabCount:(int)tabCount;
 
 // Logs the number of old (inactive for more than 7 days) tabs with
 // UMAHistogramCount100 and allows testing.
-+ (void)recordNumOldTabAtStartup:(int)numTabs;
++ (void)recordStartupOldTabCount:(int)tabCount;
 // Logs the number of duplicated tabs with UMAHistogramCount100 and allows
 // testing.
-+ (void)recordNumDuplicatedTabAtStartup:(int)numTabs;
++ (void)recordStartupDuplicatedTabCount:(int)tabCount;
 // Logs the age (time elapsed since creation) of each tab  and allows testing.
 + (void)recordTabsAgeAtStartup:(const std::vector<base::TimeDelta>&)tabsAge;
 // Returns a corresponding TabAgeGroup for provided `timeSinceCreation` time.
@@ -413,14 +418,15 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
                                connectedScenes:(NSArray<SceneState*>*)scenes {
   RecordAndResetUkmLogSizeOnSuccessCounter();
 
-  int numTabs = 0;
-  int numNTPTabs = 0;
-  int numLiveNTPTabs = 0;
-  int numOldTabs = 0;
-  int numDuplicatedTabs = 0;
-  int numActiveTabs = 0;
-  int numInactiveTabs = 0;
-  int numAbsoluteInactiveTabs = 0;
+  int tabCount = 0;
+  int pinnedTabCount = 0;
+  int NTPTabCount = 0;
+  int liveNTPTabCount = 0;
+  int oldTabCount = 0;
+  int duplicatedTabCount = 0;
+  int activeTabCount = 0;
+  int inactiveTabCount = 0;
+  int absoluteInactiveTabCount = 0;
 
   // Amount of time after which a tab is considered as old.
   constexpr base::TimeDelta kOldTabThreshold = base::Days(7);
@@ -449,11 +455,12 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
     const int webStateListCount = webStateList->count();
     const int inactiveWebStateListCount = inactiveWebStateList->count();
 
-    numTabs += webStateListCount + inactiveWebStateListCount;
-    numActiveTabs += webStateListCount;
-    numInactiveTabs += inactiveWebStateListCount;
+    tabCount += webStateListCount + inactiveWebStateListCount;
+    pinnedTabCount += webStateList->GetIndexOfFirstNonPinnedWebState();
+    activeTabCount += webStateListCount;
+    inactiveTabCount += inactiveWebStateListCount;
     // All inactive tabs are inactive since minimum 7 days or more.
-    numOldTabs += inactiveWebStateListCount;
+    oldTabCount += inactiveWebStateListCount;
 
     for (int i = 0; i < webStateListCount; i++) {
       web::WebState* webState = webStateList->GetWebStateAt(i);
@@ -462,13 +469,13 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
 
       // Count NTPs.
       if (IsURLNewTabPage(URL)) {
-        numNTPTabs++;
+        NTPTabCount++;
       }
 
       // Count duplicate URLs.
       NSString* URLString = base::SysUTF8ToNSString(URL.GetWithoutRef().spec());
       if ([uniqueURLs containsObject:URLString]) {
-        numDuplicatedTabs++;
+        duplicatedTabCount++;
       } else {
         [uniqueURLs addObject:URLString];
       }
@@ -476,10 +483,10 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
       // Count old tabs.
       base::TimeDelta inactiveTime = now - webState->GetLastActiveTime();
       if (inactiveTime > kOldTabThreshold) {
-        numOldTabs++;
+        oldTabCount++;
         // Count absolute inactive tabs.
         if (inactiveTime > kAbsoluteInactiveTabThreshold) {
-          numAbsoluteInactiveTabs++;
+          absoluteInactiveTabCount++;
         }
       }
 
@@ -501,7 +508,7 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
       base::TimeDelta inactiveTime =
           base::Time::Now() - webState->GetLastActiveTime();
       if (inactiveTime > kAbsoluteInactiveTabThreshold) {
-        numAbsoluteInactiveTabs++;
+        absoluteInactiveTabCount++;
       }
     }
   }
@@ -510,19 +517,20 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
     [self recordInactiveTabsSettingsAtStartup:
               GetApplicationContext()->GetLocalState()->GetInteger(
                   prefs::kInactiveTabsTimeThreshold)];
-    [self recordNumActiveTabAtStartup:numActiveTabs];
-    [self recordNumInactiveTabAtStartup:numInactiveTabs];
-    [self recordNumAbsoluteInactiveTabAtStartup:numAbsoluteInactiveTabs];
-    [self recordNumTabAtStartup:numTabs];
-    [self recordNumNTPTabAtStartup:numNTPTabs];
-    [self recordNumOldTabAtStartup:numOldTabs];
-    [self recordNumDuplicatedTabAtStartup:numDuplicatedTabs];
+    [self recordStartupActiveTabCount:activeTabCount];
+    [self recordStartupInactiveTabCount:inactiveTabCount];
+    [self recordStartupAbsoluteInactiveTabCount:absoluteInactiveTabCount];
+    [self recordStartupPinnedTabCount:pinnedTabCount];
+    [self recordStartupTabCount:tabCount];
+    [self recordStartupNTPTabCount:NTPTabCount];
+    [self recordStartupOldTabCount:oldTabCount];
+    [self recordStartupDuplicatedTabCount:duplicatedTabCount];
     [self recordTabsAgeAtStartup:timesSinceCreation];
   } else {
-    [self recordNumTabAtResume:numTabs];
-    [self recordNumNTPTabAtResume:numNTPTabs];
+    [self recordResumeTabCount:tabCount];
+    [self recordResumeNTPTabCount:NTPTabCount];
     // Only log at resume since there are likely no live NTPs on startup.
-    [self recordNumLiveNTPTabAtResume:numLiveNTPTabs];
+    [self recordResumeLiveNTPTabCount:liveNTPTabCount];
   }
 
   if (UIAccessibilityIsVoiceOverRunning()) {
@@ -554,7 +562,8 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
       }
     }
 
-    if (activeScene) {
+    // Proceed if the active scene is initialized.
+    if (activeScene.browserProviderInterface) {
       web::WebState* currentWebState =
           activeScene.browserProviderInterface.currentBrowserProvider.browser
               ->GetWebStateList()
@@ -613,10 +622,12 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
 }
 
 - (BOOL)areMetricsEnabled {
-
   if (vivaldi::IsVivaldiRunning())
     return NO; // End Vivaldi
 
+  if (metrics::IsMetricsReportingForceEnabled()) {
+    return YES;
+  }
 // If this if-def changes, it needs to be changed in
 // IOSChromeMainParts::IsMetricsReportingEnabled and settings_egtest.mm.
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -730,44 +741,48 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
                             InactiveTabsSettingFromPreference(preference));
 }
 
-+ (void)recordNumActiveTabAtStartup:(int)numTabs {
-  base::UmaHistogramCounts100("Tabs.ActiveCountAtStartup", numTabs);
++ (void)recordStartupActiveTabCount:(int)tabCount {
+  base::UmaHistogramCounts100("Tabs.ActiveCountAtStartup", tabCount);
 }
 
-+ (void)recordNumInactiveTabAtStartup:(int)numTabs {
-  base::UmaHistogramCounts100("Tabs.InactiveCountAtStartup", numTabs);
++ (void)recordStartupInactiveTabCount:(int)tabCount {
+  base::UmaHistogramCounts100("Tabs.InactiveCountAtStartup", tabCount);
 }
 
-+ (void)recordNumAbsoluteInactiveTabAtStartup:(int)numTabs {
-  base::UmaHistogramCounts100("Tabs.OldCountAtStartup", numTabs);
++ (void)recordStartupAbsoluteInactiveTabCount:(int)tabCount {
+  base::UmaHistogramCounts100("Tabs.OldCountAtStartup", tabCount);
 }
 
-+ (void)recordNumTabAtStartup:(int)numTabs {
-  base::UmaHistogramCounts100("Tabs.CountAtStartup", numTabs);
++ (void)recordStartupPinnedTabCount:(int)tabCount {
+  base::UmaHistogramCounts1000("Tabs.PinnedCountAtStartup", tabCount);
 }
 
-+ (void)recordNumTabAtResume:(int)numTabs {
-  base::UmaHistogramCounts100("Tabs.CountAtResume", numTabs);
++ (void)recordStartupTabCount:(int)tabCount {
+  base::UmaHistogramCounts100("Tabs.CountAtStartup", tabCount);
 }
 
-+ (void)recordNumNTPTabAtStartup:(int)numTabs {
-  base::UmaHistogramCounts100("Tabs.NTPCountAtStartup", numTabs);
++ (void)recordResumeTabCount:(int)tabCount {
+  base::UmaHistogramCounts100("Tabs.CountAtResume", tabCount);
 }
 
-+ (void)recordNumNTPTabAtResume:(int)numTabs {
-  base::UmaHistogramCounts100("Tabs.NTPCountAtResume", numTabs);
++ (void)recordStartupNTPTabCount:(int)tabCount {
+  base::UmaHistogramCounts100("Tabs.NTPCountAtStartup", tabCount);
 }
 
-+ (void)recordNumLiveNTPTabAtResume:(int)numTabs {
-  base::UmaHistogramCounts100("Tabs.LiveNTPCountAtResume", numTabs);
++ (void)recordResumeNTPTabCount:(int)tabCount {
+  base::UmaHistogramCounts100("Tabs.NTPCountAtResume", tabCount);
 }
 
-+ (void)recordNumOldTabAtStartup:(int)numTabs {
-  base::UmaHistogramCounts100("Tabs.UnusedCountAtStartup", numTabs);
++ (void)recordResumeLiveNTPTabCount:(int)tabCount {
+  base::UmaHistogramCounts100("Tabs.LiveNTPCountAtResume", tabCount);
 }
 
-+ (void)recordNumDuplicatedTabAtStartup:(int)numTabs {
-  base::UmaHistogramCounts100("Tabs.DuplicatesCountAtStartup", numTabs);
++ (void)recordStartupOldTabCount:(int)tabCount {
+  base::UmaHistogramCounts100("Tabs.UnusedCountAtStartup", tabCount);
+}
+
++ (void)recordStartupDuplicatedTabCount:(int)tabCount {
+  base::UmaHistogramCounts100("Tabs.DuplicatesCountAtStartup", tabCount);
 }
 
 + (void)recordTabsAgeAtStartup:(const std::vector<base::TimeDelta>&)tabsAge {

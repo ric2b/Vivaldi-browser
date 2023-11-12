@@ -729,8 +729,8 @@ class PolicyTemplateChecker(object):
       # try and ensure the items are still described in the descriptions.
       value_to_names = {
           None: {'none', 'unset', 'not set', 'not configured'},
-          True: {'true', 'enable'},
-          False: {'false', 'disable'},
+          True: {'true', 'enable', 'allowed'},
+          False: {'false', 'disable', 'not allowed', 'disallowed'},
       }
       if policy['name'] not in LEGACY_NO_ENABLE_DISABLE_DESC:
         for value in required_values:
@@ -1587,7 +1587,9 @@ class PolicyTemplateChecker(object):
       with the `current_version` and previous versions of the policy.
       This also check that the policy definition schema matches the expected
       schema for a policy.
-      'skip_compatibility_check' is a flag used to bypass compatibility checks.
+      'skip_compatibility_check' is a flag used to bypass compatibility checks
+      (use `BYPASS_POLICY_COMPATIBILITY_CHECK=<reason>` in CL description to
+      skip these checks).
       Returns warnings and errors found in the policies.
     '''
     for policy_change in policy_change_list:

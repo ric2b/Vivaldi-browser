@@ -11,6 +11,7 @@
 
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/memory/raw_ptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/request_filter/request_filter.h"
 #include "content/public/browser/content_browser_client.h"
@@ -255,6 +256,10 @@ class RequestFilterManager : public KeyedService {
   // |frame| and |render_process_id| are the frame and render process id in
   // which the URLLoaderFactory will be used. |frame| can be nullptr for
   // factories proxied for service worker.
+  //
+  // |navigation_response_task_runner| is a task runner that may be non-null for
+  // navigation requests and can be used to run navigation request blocking
+  // tasks.
   bool ProxyURLLoaderFactory(
       content::BrowserContext* browser_context,
       content::RenderFrameHost* frame,
@@ -265,7 +270,8 @@ class RequestFilterManager : public KeyedService {
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
-          forwarding_header_client);
+          forwarding_header_client,
+      scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner);
 
   static void ProxiedProxyWebSocket(
       content::BrowserContext* context,

@@ -56,9 +56,9 @@ class NoteLoadDetails {
   void set_ids_reassigned(bool value) { ids_reassigned_ = value; }
   bool ids_reassigned() const { return ids_reassigned_; }
 
-  // Whether new GUIDs were assigned to Notes that lacked them.
-  void set_guids_reassigned(bool value) { guids_reassigned_ = value; }
-  bool guids_reassigned() const { return guids_reassigned_; }
+  // Whether new UUIDs were assigned to Notes that lacked them.
+  void set_uuids_reassigned(bool value) { uuids_reassigned_ = value; }
+  bool uuids_reassigned() const { return uuids_reassigned_; }
 
   void set_has_deprecated_attachments(bool value) {
     has_deprecated_attachments_ = value;
@@ -84,7 +84,7 @@ class NoteLoadDetails {
   std::string stored_checksum_;
   int64_t max_id_ = 1;
   bool ids_reassigned_ = false;
-  bool guids_reassigned_ = false;
+  bool uuids_reassigned_ = false;
   bool has_deprecated_attachments_ = false;
   // A string blob represetning the sync metadata stored in the json file.
   std::string sync_metadata_str_;

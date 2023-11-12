@@ -210,6 +210,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCSSCounterText) {
   RunCSSTest(FILE_PATH_LITERAL("counter-text.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityCSSDisplayContents) {
+  RunCSSTest(FILE_PATH_LITERAL("display-contents.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCSSFontStyle) {
   RunCSSTest(FILE_PATH_LITERAL("font-style.html"));
 }
@@ -283,6 +288,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCSSFirstLetter) {
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityCSSInlinePositionRelative) {
   RunCSSTest(FILE_PATH_LITERAL("inline-position-relative.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityCSSIframeHidden) {
+  RunCSSTest(FILE_PATH_LITERAL("iframe-hidden.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCSSLanguage) {
@@ -1403,11 +1413,6 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityAriaTouchPassthrough) {
-  RunAriaTest(FILE_PATH_LITERAL("aria-touchpassthrough.html"));
-}
-
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        DISABLED_AccessibilityAriaTextboxWithSelection) {
   RunAriaTest(FILE_PATH_LITERAL("aria-textbox-with-selection.html"));
 }
@@ -2034,10 +2039,12 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 class DumpAccessibilityTreeFencedFrameTest : public DumpAccessibilityTreeTest {
  protected:
   DumpAccessibilityTreeFencedFrameTest() {
-    feature_list_.InitWithFeatures({{blink::features::kFencedFrames},
-                                    {features::kPrivacySandboxAdsAPIsOverride},
-                                    {blink::features::kFencedFramesAPIChanges}},
-                                   {/* disabled_features */});
+    feature_list_.InitWithFeatures(
+        {{blink::features::kFencedFrames},
+         {features::kPrivacySandboxAdsAPIsOverride},
+         {blink::features::kFencedFramesAPIChanges},
+         {blink::features::kFencedFramesDefaultMode}},
+        {/* disabled_features */});
 
     UseHttpsTestServer();
   }
@@ -2059,16 +2066,8 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::ValuesIn(ui::AXInspectTestHelper::TreeTestPasses()),
     DumpAccessibilityTreeTestPassToString());
 
-// TODO(crbug.com/1428918): Re-enable this test.
-#if BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_AccessibilityFencedFrameScrollable \
-  DISABLED_AccessibilityFencedFrameScrollable
-#else
-#define MAYBE_AccessibilityFencedFrameScrollable \
-  AccessibilityFencedFrameScrollable
-#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeFencedFrameTest,
-                       MAYBE_AccessibilityFencedFrameScrollable) {
+                       AccessibilityFencedFrameScrollable) {
   RunHtmlTest(FILE_PATH_LITERAL("fencedframe-scrollable-mparch.html"));
 }
 
@@ -2526,6 +2525,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityLink) {
   RunHtmlTest(FILE_PATH_LITERAL("link.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityLinkTarget) {
+  RunHtmlTest(FILE_PATH_LITERAL("link-target.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityLinkInsideHeading) {
   RunHtmlTest(FILE_PATH_LITERAL("link-inside-heading.html"));
@@ -2653,12 +2656,14 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityModalDialogClosed) {
+                       // TODO(crbug.com/1446550): Re-enable this test
+                       DISABLED_AccessibilityModalDialogClosed) {
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-closed.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityModalDialogOpened) {
+                       // TODO(crbug.com/1446550): Re-enable this test
+                       DISABLED_AccessibilityModalDialogOpened) {
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-opened.html"));
 }
 
@@ -2682,7 +2687,8 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTestWithIgnoredNodes,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityModalDialogStack) {
+                       // TODO(crbug.com/1446550): Re-enable this test
+                       DISABLED_AccessibilityModalDialogStack) {
   RunHtmlTest(FILE_PATH_LITERAL("modal-dialog-stack.html"));
 }
 
@@ -2851,8 +2857,9 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("portal-with-widget-inside.html"));
 }
 
+// TODO(crbug.com/1367886): Flaky on multiple platforms
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityPortalNameFromVisibleText) {
+                       DISABLED_AccessibilityPortalNameFromVisibleText) {
   RunHtmlTest(FILE_PATH_LITERAL("portal-name-from-visible-text.html"));
 }
 
@@ -3423,7 +3430,9 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
       FILE_PATH_LITERAL("frozen-ancestor-cannot-change-descendants.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, HiddenTable) {
+// TODO(crbug.com/1454778) Flaky on ChromeOS, Linux, Mac, Windows for parameter
+// "blink".
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, DISABLED_HiddenTable) {
   RunRegressionTest(FILE_PATH_LITERAL("hidden-table.html"));
 }
 
@@ -3437,6 +3446,12 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, MissingParent) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        NullObjectOnHypertextOffsetComputation) {
+  if (!base::FeatureList::IsEnabled(blink::features::kMutationEvents)) {
+    // TODO(crbug.com/1446498) Remove this test (and the .html file) when
+    // MutationEvents are disabled for good. This is just a crash test related
+    // to `DOMNodeInserted`.
+    return;
+  }
   RunRegressionTest(
       FILE_PATH_LITERAL("null-object-on-hypertext-offset-computation.html"));
 }
@@ -3546,6 +3561,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, MathMLUnknown) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, MalformedMap) {
   RunHtmlTest(FILE_PATH_LITERAL("malformed-map.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, ShadowDomFirstChild) {
+  RunHtmlTest(FILE_PATH_LITERAL("shadow-dom-first-child.html"));
 }
 
 //

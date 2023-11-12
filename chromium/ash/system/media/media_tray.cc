@@ -16,6 +16,7 @@
 #include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/icon_button.h"
+#include "ash/style/typography.h"
 #include "ash/system/media/media_notification_provider.h"
 #include "ash/system/tray/tray_bubble_view.h"
 #include "ash/system/tray/tray_bubble_wrapper.h"
@@ -27,6 +28,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/media_message_center/notification_theme.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -78,21 +80,6 @@ bool GetIsPinnedToShelfByDefault() {
   return diagonal_len > kMinimumScreenSizeDiagonal;
 }
 
-// Used for getting default pin state for experiment.
-bool GetIsPinnedToShelfByFeatureParams() {
-  switch (media::kCrosGlobalMediaControlsPinParam.Get()) {
-    case media::kCrosGlobalMediaControlsPinOptions::kPin:
-      return true;
-    case media::kCrosGlobalMediaControlsPinOptions::kNotPin:
-      return false;
-    case media::kCrosGlobalMediaControlsPinOptions::kHeuristic:
-      return GetIsPinnedToShelfByDefault();
-  }
-
-  NOTREACHED();
-  return false;
-}
-
 // Enum that specifies the pin state of global media controls.
 enum PinState {
   kDefault = 0,
@@ -118,8 +105,13 @@ class GlobalMediaControlsTitleView : public views::View {
     if (base::FeatureList::IsEnabled(
             media::kGlobalMediaControlsCrOSUpdatedUI)) {
       title_label_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
-      TrayPopupUtils::SetLabelFontList(title_label_,
-                                       TrayPopupUtils::FontStyle::kTitle);
+      if (chromeos::features::IsJellyEnabled()) {
+        TypographyProvider::Get()->StyleLabel(TypographyToken::kCrosTitle1,
+                                              *title_label_);
+      } else {
+        TrayPopupUtils::SetLabelFontList(title_label_,
+                                         TrayPopupUtils::FontStyle::kTitle);
+      }
     } else {
       title_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
       title_label_->SetFontList(views::Label::GetDefaultFontList().Derive(
@@ -178,7 +170,7 @@ bool MediaTray::IsPinnedToShelf() {
     case PinState::kUnpinned:
       return false;
     case PinState::kDefault:
-      return GetIsPinnedToShelfByFeatureParams();
+      return GetIsPinnedToShelfByDefault();
   }
 
   NOTREACHED();
@@ -232,9 +224,13 @@ MediaTray::MediaTray(Shelf* shelf)
   auto icon = std::make_unique<views::ImageView>();
   icon->SetTooltipText(l10n_util::GetStringUTF16(
       IDS_ASH_GLOBAL_MEDIA_CONTROLS_BUTTON_TOOLTIP_TEXT));
-  icon->SetImage(ui::ImageModel::FromVectorIcon(kGlobalMediaControlsIcon,
-                                                kColorAshIconColorPrimary));
   icon_ = tray_container()->AddChildView(std::move(icon));
+  if (chromeos::features::IsJellyEnabled()) {
+    UpdateTrayItemColor(is_active());
+  } else {
+    icon_->SetImage(ui::ImageModel::FromVectorIcon(kGlobalMediaControlsIcon,
+                                                   kColorAshIconColorPrimary));
+  }
 }
 
 MediaTray::~MediaTray() {
@@ -303,6 +299,14 @@ void MediaTray::ClickedOutsideBubble() {
   CloseBubble();
 }
 
+void MediaTray::UpdateTrayItemColor(bool is_active) {
+  DCHECK(chromeos::features::IsJellyEnabled());
+  icon_->SetImage(ui::ImageModel::FromVectorIcon(
+      kGlobalMediaControlsIcon,
+      is_active ? cros_tokens::kCrosSysSystemOnPrimaryContainer
+                : cros_tokens::kCrosSysOnSurface));
+}
+
 void MediaTray::OnLockStateChanged(bool locked) {
   UpdateDisplayState();
 }
@@ -345,7 +349,8 @@ void MediaTray::ShowBubbleWithItem(const std::string& item_id) {
   DCHECK(MediaNotificationProvider::Get());
   SetNotificationColorTheme();
 
-  std::unique_ptr<TrayBubbleView> bubble_view = CreateTrayBubbleView();
+  std::unique_ptr<TrayBubbleView> bubble_view =
+      std::make_unique<TrayBubbleView>(CreateInitParamsForTrayBubble(this));
 
   auto* title_view = bubble_view->AddChildView(
       std::make_unique<GlobalMediaControlsTitleView>());
@@ -438,24 +443,6 @@ void MediaTray::AnchorUpdated() {
 
   bubble_->GetBubbleView()->SetAnchorRect(
       shelf()->GetStatusAreaWidget()->GetMediaTrayAnchorRect());
-}
-
-std::unique_ptr<TrayBubbleView> MediaTray::CreateTrayBubbleView() {
-  TrayBubbleView::InitParams init_params;
-  init_params.delegate = GetWeakPtr();
-  init_params.parent_window = GetBubbleWindowContainer();
-  init_params.anchor_view = nullptr;
-  init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
-  init_params.anchor_rect = GetAnchorBoundsInScreen();
-  init_params.insets = GetTrayBubbleInsets();
-  init_params.shelf_alignment = shelf()->alignment();
-  init_params.preferred_width = kTrayMenuWidth;
-  init_params.close_on_deactivate = true;
-  init_params.translucent = true;
-  init_params.corner_radius = kTrayItemCornerRadius;
-  init_params.reroute_event_handler = true;
-
-  return std::make_unique<TrayBubbleView>(init_params);
 }
 
 }  // namespace ash

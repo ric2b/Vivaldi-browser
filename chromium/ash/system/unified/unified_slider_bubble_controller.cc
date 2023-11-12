@@ -33,8 +33,11 @@ namespace ash {
 
 namespace {
 
-// The padding of QsRevamp slider toast.
-constexpr auto kQsToastSliderViewPadding = gfx::Insets::TLBR(8, 8, 8, 12);
+using SliderType = UnifiedSliderBubbleController::SliderType;
+
+// The padding of QsRevamp toast.
+constexpr auto kQsSliderToastPadding = gfx::Insets::TLBR(8, 8, 8, 12);
+constexpr auto kQsToggleToastPadding = gfx::Insets(12);
 // The rounded corner radius of the QsRevamp `bubble_view_`.
 constexpr int kQsToastCornerRadius = 28;
 
@@ -48,13 +51,19 @@ bool IsAnyMainBubbleShown() {
   return false;
 }
 
-void ConfigureSliderViewStyle(UnifiedSliderView* slider_view) {
+void ConfigureSliderViewStyle(UnifiedSliderView* slider_view,
+                              SliderType slider_type) {
   if (features::IsQsRevampEnabled()) {
+    // Toggle toast has only a button and label. Slider toast has a slider, a
+    // button on the slider body, and possible trailing buttons.
+    const bool is_toggle_toast =
+        slider_type == SliderType::SLIDER_TYPE_KEYBOARD_BACKLIGHT_TOGGLE;
     auto* layout =
         slider_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
             views::BoxLayout::Orientation::kHorizontal,
-            kQsToastSliderViewPadding, kSliderChildrenViewSpacing));
-    layout->SetFlexForView(slider_view->slider()->parent(), /*flex=*/1);
+            is_toggle_toast ? kQsToggleToastPadding : kQsSliderToastPadding,
+            kSliderChildrenViewSpacing));
+    layout->SetFlexForView(slider_view->slider(), /*flex=*/1);
     layout->set_cross_axis_alignment(
         views::BoxLayout::CrossAxisAlignment::kCenter);
     return;
@@ -185,8 +194,7 @@ void UnifiedSliderBubbleController::OnKeyboardBrightnessChanged(
     // User has made a brightness adjustment, or the KBL was made
     // no-longer-forced-off implicitly in response to a user adjustment.
     ShowBubble(SLIDER_TYPE_KEYBOARD_BRIGHTNESS);
-    if (features::IsRgbKeyboardEnabled() &&
-        Shell::Get()->rgb_keyboard_manager()->IsRgbKeyboardSupported()) {
+    if (Shell::Get()->rgb_keyboard_manager()->IsRgbKeyboardSupported()) {
       // Show the education nudge to change the keyboard backlight color if
       // applicable. |bubble_view_| is used as the anchor view.
       Shell::Get()
@@ -262,7 +270,7 @@ void UnifiedSliderBubbleController::ShowBubble(SliderType slider_type) {
   // If the bubble already exists, update the content of the bubble and extend
   // the autoclose timer.
   if (bubble_widget_) {
-    DCHECK(bubble_view_);
+    CHECK(bubble_view_);
 
     if (slider_type_ != slider_type) {
       bubble_view_->RemoveAllChildViews();
@@ -271,7 +279,7 @@ void UnifiedSliderBubbleController::ShowBubble(SliderType slider_type) {
       CreateSliderController();
       UnifiedSliderView* slider_view = static_cast<UnifiedSliderView*>(
           bubble_view_->AddChildView(slider_controller_->CreateView()));
-      ConfigureSliderViewStyle(slider_view);
+      ConfigureSliderViewStyle(slider_view, slider_type);
       bubble_view_->Layout();
     }
 
@@ -284,31 +292,30 @@ void UnifiedSliderBubbleController::ShowBubble(SliderType slider_type) {
 
   tray_->CloseSecondaryBubbles();
 
-  DCHECK(!bubble_view_);
+  CHECK(!bubble_view_);
 
   slider_type_ = slider_type;
   CreateSliderController();
 
-  TrayBubbleView::InitParams init_params;
+  TrayBubbleView::InitParams init_params =
+      CreateInitParamsForTrayBubble(tray_, /*anchor_to_shelf_corner=*/true);
+  init_params.reroute_event_handler = false;
 
-  init_params.shelf_alignment = tray_->shelf()->alignment();
-  init_params.preferred_width = kTrayMenuWidth;
+  // Use this controller as the delegate rather than the tray.
   init_params.delegate = GetWeakPtr();
-  init_params.parent_window = tray_->GetBubbleWindowContainer();
-  init_params.anchor_view = nullptr;
-  init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
-  init_params.anchor_rect = tray_->shelf()->GetSystemTrayAnchorRect();
-  init_params.insets = GetTrayBubbleInsets();
-  init_params.translucent = true;
+
   if (features::IsQsRevampEnabled()) {
     init_params.corner_radius = kQsToastCornerRadius;
+    // `bubble_view_` is fully rounded, so sets it to be true and paints the
+    // shadow on texture layer.
+    init_params.has_large_corner_radius = true;
   }
 
   bubble_view_ = new TrayBubbleView(init_params);
   bubble_view_->SetCanActivate(false);
   slider_view_ = static_cast<UnifiedSliderView*>(
       bubble_view_->AddChildView(slider_controller_->CreateView()));
-  ConfigureSliderViewStyle(slider_view_);
+  ConfigureSliderViewStyle(slider_view_, slider_type);
 
   bubble_widget_ = views::BubbleDialogDelegateView::CreateBubble(bubble_view_);
 

@@ -93,12 +93,11 @@ void ShortcutSubManager::Execute(
 
   // Second, handle shortcut creation.
   if (desired_state.has_shortcut() && !current_state.has_shortcut()) {
-    // This is required to create the app shim registry for the current profile
-    // on Mac, otherwise updates to the AppShimRegistry do not happen.
 #if BUILDFLAG(IS_MAC)
     AppShimRegistry::Get()->OnAppInstalledForProfile(app_id,
                                                      profile_->GetPath());
 #endif
+
     std::unique_ptr<ShortcutInfo> desired_shortcut_info =
         BuildShortcutInfoWithoutFavicon(
             app_id, registrar_->GetAppStartUrl(app_id), profile_->GetPath(),
@@ -154,6 +153,7 @@ void ShortcutSubManager::Execute(
       std::move(desired_shortcut_info),
       base::BindOnce(&ShortcutSubManager::UpdateShortcut,
                      weak_ptr_factory_.GetWeakPtr(), app_id,
+                     synchronize_options,
                      base::UTF8ToUTF16(current_state.shortcut().title()),
                      std::move(callback_for_update)));
 
@@ -241,14 +241,26 @@ void ShortcutSubManager::CreateShortcut(
 
 void ShortcutSubManager::UpdateShortcut(
     const AppId& app_id,
+    absl::optional<SynchronizeOsOptions> synchronize_options,
     const std::u16string& old_app_title,
     base::OnceClosure on_complete,
     std::unique_ptr<ShortcutInfo> shortcut_info) {
+  absl::optional<ShortcutLocations> locations = absl::nullopt;
+  if (synchronize_options.has_value()) {
+    ShortcutLocations creation_locations;
+    creation_locations.on_desktop =
+        synchronize_options->add_shortcut_to_desktop;
+    creation_locations.in_quick_launch_bar =
+        synchronize_options->add_to_quick_launch_bar;
+    locations = creation_locations;
+  }
+
   base::FilePath shortcut_data_dir =
       internals::GetShortcutDataDir(*shortcut_info);
   internals::PostShortcutIOTaskAndReplyWithResult(
       base::BindOnce(&internals::UpdatePlatformShortcuts,
-                     std::move(shortcut_data_dir), std::move(old_app_title)),
+                     std::move(shortcut_data_dir), std::move(old_app_title),
+                     locations),
       std::move(shortcut_info),
       base::BindOnce([](Result result) {
         base::UmaHistogramBoolean("WebApp.Shortcuts.Update.Result",

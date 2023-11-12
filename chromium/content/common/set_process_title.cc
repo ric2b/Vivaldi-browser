@@ -40,6 +40,10 @@
 #include "content/common/set_process_title_linux.h"
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
+#include "chromium/extensions/common/switches.cc"
+#include "content/public/common/content_switches.h"
+
+
 namespace content {
 
 // TODO(jrg): Find out if setproctitle or equivalent is available on Android.
@@ -99,6 +103,40 @@ void SetProcessTitleFromCommandLine(const char** main_argv) {
   }
   // Disable prepending argv[0] with '-' if we prepended it ourselves above.
   setproctitle(have_argv0 ? "-%s" : "%s", title.c_str());
+
+
+
+  //Give Vivaldi processes more descriptive names. 15 chars + NUL terminator.
+#if BUILDFLAG(IS_LINUX) // BSD and other POSIX platforms have not been tested.
+  auto type = base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+      switches::kProcessType);
+  if (type == switches::kRendererProcess) {
+    // Some stuff required for the Vivaldi browser is an extension,
+    // so best to separate it so users would not kill it accidentally
+    // as that would cause the whole browser to crash.
+    // Other extensions also get this name, as things are now.
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          extensions::switches::kExtensionProcess)) {
+      prctl(PR_SET_NAME, (unsigned long)"Vivaldi-Extens", 0, 0, 0);
+    }
+    else {
+      prctl(PR_SET_NAME, (unsigned long)"Vivaldi-Content", 0, 0, 0);
+    }
+  }
+  else if (type == switches::kUtilityProcess) {
+    prctl(PR_SET_NAME, (unsigned long)"Vivaldi-Util", 0, 0, 0);
+  }
+  else if (type == switches::kGpuProcess) {
+    prctl(PR_SET_NAME, (unsigned long)"Vivaldi-Gpu", 0, 0, 0);
+  }
+  else if (type == switches::kZygoteProcess) {
+    prctl(PR_SET_NAME, (unsigned long)"Vivaldi-Zygote", 0, 0, 0);
+  }
+  else if (type == switches::kPpapiPluginProcess) {
+    prctl(PR_SET_NAME, (unsigned long)"Vivaldi-Ppapi", 0, 0, 0);
+  }
+  // ELSE should be the main browser process, so do nothing
+#endif
 }
 
 #else

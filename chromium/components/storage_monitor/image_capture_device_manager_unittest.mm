@@ -266,7 +266,7 @@ class ImageCaptureDeviceManagerTest : public testing::Test {
 
  protected:
   content::BrowserTaskEnvironment task_environment_;
-  raw_ptr<TestStorageMonitor> monitor_;
+  raw_ptr<TestStorageMonitor, DanglingUntriaged> monitor_;
   TestCameraListener listener_;
 };
 
@@ -399,7 +399,7 @@ TEST_F(ImageCaptureDeviceManagerTest, TestSubdirectories) {
   std::string kTestFileName("pic1");
   base::scoped_nsobject<MockICCameraFile> picture1(
       [[MockICCameraFile alloc] init:base::SysUTF8ToNSString(kTestFileName)]);
-  [picture1 setParent:base::SysUTF8ToNSString("dir")];
+  [picture1 setParent:@"dir"];
   [device addMediaFile:picture1];
   [camera cameraDevice:device didAddItems:@[ picture1 ]];
 

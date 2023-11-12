@@ -2,7 +2,6 @@
 
 #include <string>
 #include "base/base64.h"
-#include "base/guid.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -40,8 +39,8 @@ std::unique_ptr<DeprecatedNoteAttachment> DeprecatedNoteAttachment::Decode(
   DCHECK(input.is_dict());
   DCHECK(checksummer);
 
-  const std::string* checksum = input.FindStringKey("checksum");
-  const std::string* content = input.FindStringKey("content");
+  const std::string* checksum = input.GetDict().FindString("checksum");
+  const std::string* content = input.GetDict().FindString("content");
 
   if (!content)
     return nullptr;

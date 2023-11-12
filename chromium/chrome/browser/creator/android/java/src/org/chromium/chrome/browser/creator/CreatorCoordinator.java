@@ -23,7 +23,6 @@ import org.chromium.base.Callback;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.supplier.UnownedUserDataSupplier;
 import org.chromium.chrome.browser.feed.FeedActionDelegate;
-import org.chromium.chrome.browser.feed.FeedAutoplaySettingsDelegate;
 import org.chromium.chrome.browser.feed.FeedContentFirstLoadWatcher;
 import org.chromium.chrome.browser.feed.FeedListContentManager;
 import org.chromium.chrome.browser.feed.FeedListContentManager.FeedContent;
@@ -48,7 +47,7 @@ import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.ProcessScope;
-import org.chromium.chrome.browser.xsurface.SurfaceScope;
+import org.chromium.chrome.browser.xsurface.feed.FeedSurfaceScope;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
@@ -81,9 +80,8 @@ import java.util.List;
  * Sets up the Coordinator for Cormorant Creator surface.  It is based on the doc at
  * https://chromium.googlesource.com/chromium/src/+/HEAD/docs/ui/android/mvc_simple_list_tutorial.md
  */
-public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
-                                           FeedContentFirstLoadWatcher,
-                                           View.OnLayoutChangeListener {
+public class CreatorCoordinator
+        implements FeedContentFirstLoadWatcher, View.OnLayoutChangeListener {
     private final ViewGroup mCreatorViewGroup;
     private CreatorMediator mMediator;
     private CreatorTabMediator mTabMediator;
@@ -94,7 +92,7 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
     private View mProfileView;
     private ViewGroup mLayoutView;
     private HybridListRenderer mHybridListRenderer;
-    private SurfaceScope mSurfaceScope;
+    private FeedSurfaceScope mSurfaceScope;
     private FeedSurfaceScopeDependencyProviderImpl mDependencyProvider;
     private PropertyModel mCreatorModel;
     private PropertyModelChangeProcessor<PropertyModel, CreatorProfileView, PropertyKey>
@@ -250,8 +248,7 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
         mStream = new FeedStream(mActivity, mSnackbarManager, mBottomSheetController,
                 /* isPlaceholderShownInitially */ false, mWindowAndroid,
                 /* shareSupplier */ shareDelegateSupplier, StreamKind.SINGLE_WEB_FEED,
-                /* FeedAutoplaySettingsDelegate */ this, feedActionDelegate,
-                helpAndFeedbackLauncher,
+                feedActionDelegate, helpAndFeedbackLauncher,
                 /* FeedContentFirstLoadWatcher */ this,
                 /* streamsMediator */ new StreamsMediatorImpl(),
                 new SingleWebFeedParameters(
@@ -298,7 +295,7 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
         if (processScope != null) {
             mDependencyProvider = new FeedSurfaceScopeDependencyProviderImpl(
                     mActivity, mActivity, ColorUtils.inNightMode(mActivity));
-            mSurfaceScope = processScope.obtainSurfaceScope(mDependencyProvider);
+            mSurfaceScope = processScope.obtainFeedSurfaceScope(mDependencyProvider);
         } else {
             mDependencyProvider = null;
             mSurfaceScope = null;
@@ -401,11 +398,6 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
         });
     }
 
-    /**
-     * Launches autoplay settings activity.
-     */
-    @Override
-    public void launchAutoplaySettings() {}
     @Override
     public void nonNativeContentLoaded(@StreamKind int kind) {}
 
@@ -579,6 +571,14 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
                         getContentPreviewsPaddingPx(), CREATOR_PRIVACY_ID, privacyView));
                 mContentManager.addContents(mHeaderCount, privacyList);
                 mHeaderCount += privacyList.size();
+                mStream.removeOnContentChangedListener(this);
+                mStream.notifyNewHeaderCount(mHeaderCount);
+            } else if (TextUtils.isEmpty(mCreatorModel.get(CreatorProperties.URL_KEY))
+                    || TextUtils.isEmpty(mCreatorModel.get(CreatorProperties.TITLE_KEY))) {
+                // If there is an error, hide the profile section if either the creator URL or
+                // creator title is unavailable.
+                mContentManager.removeContents(0, 1);
+                mHeaderCount -= 1;
                 mStream.removeOnContentChangedListener(this);
                 mStream.notifyNewHeaderCount(mHeaderCount);
             }

@@ -16,12 +16,12 @@
 #include <stddef.h>
 #include <userenv.h>
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
 
 #include "base/check.h"
-#include "base/cxx17_backports.h"
 #include "base/enterprise_util.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -135,7 +135,6 @@ bool IsDomainJoined() {
       &::NetGetJoinInformation;
   decltype(&::NetApiBufferFree) net_api_buffer_free_function =
       &::NetApiBufferFree;
-  bool got_function_addresses = false;
   // Use an absolute path to load the DLL to avoid DLL preloading attacks.
   base::FilePath path;
   if (base::PathService::Get(base::DIR_SYSTEM, &path)) {
@@ -156,16 +155,12 @@ bool IsDomainJoined() {
           reinterpret_cast<decltype(&::NetApiBufferFree)>(
               ::GetProcAddress(net_api_library, "NetApiBufferFree"));
 
-      if (net_get_join_information_function && net_api_buffer_free_function) {
-        got_function_addresses = true;
-      } else {
+      if (!net_get_join_information_function || !net_api_buffer_free_function) {
         net_get_join_information_function = &::NetGetJoinInformation;
         net_api_buffer_free_function = &::NetApiBufferFree;
       }
     }
   }
-  base::UmaHistogramBoolean("EnterpriseCheck.NetGetJoinInformationAddress",
-                            got_function_addresses);
 
   LPWSTR buffer = nullptr;
   NETSETUP_JOIN_STATUS buffer_type = NetSetupUnknownStatus;

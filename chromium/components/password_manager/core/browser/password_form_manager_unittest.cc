@@ -166,7 +166,7 @@ class MockAutofillDownloadManager : public autofill::AutofillDownloadManager {
 
 class MockPasswordManagerClient : public StubPasswordManagerClient {
  public:
-  MOCK_METHOD(bool, IsIncognito, (), (const, override));
+  MOCK_METHOD(bool, IsOffTheRecord, (), (const, override));
   MOCK_METHOD(autofill::AutofillDownloadManager*,
               GetAutofillDownloadManager,
               (),
@@ -833,7 +833,7 @@ TEST_P(PasswordFormManagerTest, CreatePendingCredentialsAlreadySaved) {
   // pretending we are in incognito mode.
 #if !BUILDFLAG(IS_IOS) && !defined(ANDROID)
   for (bool is_incognito : {false, true}) {
-    EXPECT_CALL(client_, IsIncognito).WillOnce(Return(is_incognito));
+    EXPECT_CALL(client_, IsOffTheRecord).WillOnce(Return(is_incognito));
 #endif
     form_manager_->Fill();
     EXPECT_TRUE(
@@ -1175,6 +1175,77 @@ TEST_P(PasswordFormManagerTest, VotesUploadingOnPasswordUpdate) {
   }
 }
 
+// When Chrome picks a wrong field as the username (e.g. full name) on a signup
+// form, the user will probably type the stored password and overwrite the
+// username with the correct value when the user will log in. At that moment,
+// Chrome will check whether the new username value was typed on that sign-up
+// form (highly likely, it was) and upload so called username correction vote
+// for the field of the signup form where the correct username value was.
+TEST_P(PasswordFormManagerTest, UsernameCorrectionVote) {
+  // The credential was saved on a sign-up form, i.e. a form with many text
+  // fields where is not trivial to pick the right field as username. Chrome
+  // picked the wrong field as username - the full name field.
+  saved_match_.username_value = u"John Smith";
+  // The actual username (the email address) is among these values. They are all
+  // values entered by the user on the signup form. Password form deserialized
+  // from a form storage and doesn't contain field_renderer_id.
+  saved_match_.all_alternative_usernames = {
+      {AlternativeElement::Value(u"user@gmail.com"),
+       autofill::FieldRendererId(), AlternativeElement::Name(u"email_field")},
+      {AlternativeElement::Value(u"John Smith"), autofill::FieldRendererId(),
+       AlternativeElement::Name(u"fname_field")},
+      {AlternativeElement::Value(u"+1(650)000-0000"),
+       autofill::FieldRendererId(), AlternativeElement::Name(u"phone_field")}};
+  // Add fields because it is necessary for vote uploading.
+  for (const AlternativeElement& alternative :
+       saved_match_.all_alternative_usernames) {
+    FormFieldData text_field;
+    text_field.name = alternative.name;
+    text_field.form_control_type = "text";
+    // Uniqueness doesn't matter in this test.
+    text_field.unique_renderer_id = autofill::FieldRendererId();
+    saved_match_.form_data.fields.push_back(text_field);
+  }
+  FormFieldData password_field;
+  password_field.name = saved_match_.password_element;
+  password_field.form_control_type = "password";
+  password_field.unique_renderer_id = autofill::FieldRendererId();
+  saved_match_.form_data.fields.push_back(password_field);
+  SetNonFederatedAndNotifyFetchCompleted({&saved_match_});
+
+  // On a login form, the user uses the password value.
+  submitted_form_.fields[kPasswordFieldIndex].value =
+      saved_match_.password_value;
+  // The username should be corrected. To intensify testing, simulate that the
+  // user changes the username value many times.
+  for (const std::u16string& new_username_value :
+       {saved_match_.all_alternative_usernames[2].value,
+        saved_match_.all_alternative_usernames[1].value,
+        saved_match_.all_alternative_usernames[0].value,
+        std::u16string(u"random"), std::u16string(),
+        saved_match_.all_alternative_usernames[0].value}) {
+    submitted_form_.fields[kUsernameFieldIndex].value = new_username_value;
+    EXPECT_TRUE(
+        form_manager_->ProvisionallySave(submitted_form_, &driver_,
+                                         /*possible_username=*/nullptr));
+  }
+
+  testing::InSequence in_sequence;
+  // Unrelated regular PASSWORD vote.
+  EXPECT_CALL(mock_autofill_download_manager_,
+              StartUploadRequest(_, _, _, _, _, _, _));
+  std::map<std::u16string, autofill::ServerFieldType> expected_types;
+  expected_types[saved_match_.all_alternative_usernames[0].name] =
+      autofill::USERNAME;
+  expected_types[saved_match_.password_element] =
+      autofill::ACCOUNT_CREATION_PASSWORD;
+  EXPECT_CALL(mock_autofill_download_manager_,
+              StartUploadRequest(UploadedAutofillTypesAre(expected_types), _, _,
+                                 _, _, _, _));
+
+  form_manager_->Save();
+}
+
 TEST_P(PasswordFormManagerTest, UpdateUsernameEmptyStore) {
   fetcher_->NotifyFetchCompleted();
 
@@ -1209,10 +1280,11 @@ TEST_P(PasswordFormManagerTest, UpdateUsernameToAnotherFieldValue) {
   EXPECT_EQ(user_chosen_username,
             form_manager_->GetPendingCredentials().username_value);
 
-  FieldTypeMap expected_types = {{u"firstname", autofill::USERNAME},
-                                 {u"password", autofill::PASSWORD}};
+  std::map<std::u16string, ServerFieldType> expected_types = {
+      {u"firstname", autofill::USERNAME}, {u"password", autofill::PASSWORD}};
   VoteTypeMap expected_vote_types = {
-      {u"firstname", AutofillUploadContents::Field::USERNAME_EDITED}};
+      {submitted_form_.fields[0].unique_renderer_id,
+       AutofillUploadContents::Field::USERNAME_EDITED}};
   EXPECT_CALL(mock_autofill_download_manager_,
               StartUploadRequest(AllOf(UploadedAutofillTypesAre(expected_types),
                                        HasGenerationVote(false),
@@ -2897,8 +2969,6 @@ TEST_P(PasswordFormManagerTest, ReportSubmittedFormFrameCrossOriginIframe) {
 TEST_P(PasswordFormManagerTest,
        ClientShouldShowErrorMessageForAuthErrorResolvable) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kUnifiedPasswordManagerErrorMessages);
   fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
       PasswordStoreBackendErrorType::kAuthErrorResolvable,
       PasswordStoreBackendErrorRecoveryType::kRecoverable));
@@ -2912,9 +2982,6 @@ TEST_P(PasswordFormManagerTest,
 
 TEST_P(PasswordFormManagerTest,
        ClientShouldShowErrorMessageForAuthErrorUnresolvable) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kUnifiedPasswordManagerErrorMessages);
   fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
       PasswordStoreBackendErrorType::kAuthErrorUnresolvable,
       PasswordStoreBackendErrorRecoveryType::kRecoverable));
@@ -2927,23 +2994,7 @@ TEST_P(PasswordFormManagerTest,
 }
 
 TEST_P(PasswordFormManagerTest,
-       ClientShouldNotShowErrorMessageWhenFeatureIsDisabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(
-      features::kUnifiedPasswordManagerErrorMessages);
-  fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
-      PasswordStoreBackendErrorType::kAuthErrorResolvable,
-      PasswordStoreBackendErrorRecoveryType::kRecoverable));
-
-  EXPECT_CALL(client_, ShowPasswordManagerErrorMessage).Times(0);
-  fetcher_->NotifyFetchCompleted();
-}
-
-TEST_P(PasswordFormManagerTest,
        ClientShouldNotShowErrorMessageWhenThereIsNoError) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kUnifiedPasswordManagerErrorMessages);
   fetcher_->SetProfileStoreBackendError(absl::nullopt);
 
   EXPECT_CALL(client_, ShowPasswordManagerErrorMessage).Times(0);
@@ -2952,9 +3003,6 @@ TEST_P(PasswordFormManagerTest,
 
 TEST_P(PasswordFormManagerTest,
        ClientShouldNotShowErrorMessageWhenErrorIsNotAuthError) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kUnifiedPasswordManagerErrorMessages);
   fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
       PasswordStoreBackendErrorType::kUncategorized,
       PasswordStoreBackendErrorRecoveryType::kUnspecified));
@@ -2964,9 +3012,6 @@ TEST_P(PasswordFormManagerTest,
 }
 
 TEST_P(PasswordFormManagerTest, ClientShouldNotShowErrorMessageWhenUnenrolled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kUnifiedPasswordManagerErrorMessages);
   client_.GetPrefs()->SetBoolean(
       password_manager::prefs::kUnenrolledFromGoogleMobileServicesDueToErrors,
       true);
@@ -3078,7 +3123,8 @@ class PasswordFormManagerTestWithMockedSaver : public PasswordFormManagerTest {
   }
 
  private:
-  raw_ptr<NiceMock<MockPasswordSaveManager>> mock_password_save_manager_;
+  raw_ptr<NiceMock<MockPasswordSaveManager>, DanglingUntriaged>
+      mock_password_save_manager_;
 };
 
 TEST_F(

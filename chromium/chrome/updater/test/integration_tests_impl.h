@@ -66,7 +66,8 @@ void ExpectClean(UpdaterScope scope);
 // Places the updater into test mode (redirect server URLs and disable CUP).
 void EnterTestMode(const GURL& update_url,
                    const GURL& crash_upload_url,
-                   const GURL& device_management_url);
+                   const GURL& device_management_url,
+                   const base::TimeDelta& idle_timeout);
 
 // Takes the updater our of the test mode by deleting the external constants
 // JSON file.
@@ -116,6 +117,10 @@ void RunWakeActive(UpdaterScope scope, int exit_code);
 // Starts an updater process with switch `--crash-me`.
 void RunCrashMe(UpdaterScope scope);
 
+// Runs the server and waits for it to exit. Assert that it exits with
+// `exit_code`.
+void RunServer(UpdaterScope scope, int exit_code, bool internal);
+
 // Invokes the active instance's UpdateService::Update (via RPC) for an app.
 void Update(UpdaterScope scope,
             const std::string& app_id,
@@ -128,6 +133,12 @@ void CheckForUpdate(UpdaterScope scope, const std::string& app_id);
 // Invokes the active instance's UpdateService::UpdateAll (via RPC).
 void UpdateAll(UpdaterScope scope);
 
+void GetAppStates(UpdaterScope updater_scope,
+                  const base::Value::Dict& expected_app_states);
+
+// Deletes the file.
+void DeleteFile(UpdaterScope scope, const base::FilePath& path);
+
 // Deletes the updater executable directory. Does not do any kind of cleanup
 // related to service registration. The intent of this command is to replicate
 // a common mode of breaking the updater, so we can test how it recovers.
@@ -138,13 +149,6 @@ void Run(UpdaterScope scope, base::CommandLine command_line, int* exit_code);
 
 // Returns the path of the Updater executable.
 absl::optional<base::FilePath> GetInstalledExecutablePath(UpdaterScope scope);
-
-// Creates Prefs with the fake updater version set as active.
-void SetupFakeUpdaterPrefs(UpdaterScope scope, const base::Version& version);
-
-// Creates an install folder on the system with the fake updater version.
-void SetupFakeUpdaterInstallFolder(UpdaterScope scope,
-                                   const base::Version& version);
 
 // Sets up a fake updater on the system at a version lower than the test.
 void SetupFakeUpdaterLowerVersion(UpdaterScope scope);
@@ -208,7 +212,6 @@ void ExpectLegacyAppCommandWebSucceeds(UpdaterScope scope,
                                        const base::Value::List& parameters,
                                        int expected_exit_code);
 void ExpectLegacyPolicyStatusSucceeds(UpdaterScope scope);
-void RunTestServiceCommand(const std::string& sub_command);
 
 // Calls a function defined in test/service/win/rpc_client.py.
 // Entries of the `arguments` dictionary should be the function's parameter
@@ -279,6 +282,16 @@ void UninstallApp(UpdaterScope scope, const std::string& app_id);
 void RunOfflineInstall(UpdaterScope scope,
                        bool is_legacy_install,
                        bool is_silent_install);
+
+void RunOfflineInstallOsNotSupported(UpdaterScope scope,
+                                     bool is_legacy_install,
+                                     bool is_silent_install);
+
+base::CommandLine MakeElevated(base::CommandLine command_line);
+
+void DMDeregisterDevice(UpdaterScope scope);
+void DMCleanup(UpdaterScope scope);
+
 }  // namespace updater::test
 
 #endif  // CHROME_UPDATER_TEST_INTEGRATION_TESTS_IMPL_H_

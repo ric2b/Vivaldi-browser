@@ -43,6 +43,7 @@
 #include "third_party/blink/renderer/core/css/active_style_sheets.h"
 #include "third_party/blink/renderer/core/css/color_scheme_flags.h"
 #include "third_party/blink/renderer/core/css/css_global_rule_set.h"
+#include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
 #include "third_party/blink/renderer/core/css/invalidation/pending_invalidations.h"
 #include "third_party/blink/renderer/core/css/invalidation/style_invalidator.h"
 #include "third_party/blink/renderer/core/css/layout_tree_rebuild_root.h"
@@ -52,6 +53,7 @@
 #include "third_party/blink/renderer/core/css/style_invalidation_root.h"
 #include "third_party/blink/renderer/core/css/style_recalc_root.h"
 #include "third_party/blink/renderer/core/css/vision_deficiency.h"
+#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/layout/geometry/axis.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
@@ -74,6 +76,7 @@ namespace blink {
 class ComputedStyleBuilder;
 class CounterStyle;
 class CounterStyleMap;
+class StyleContainmentScopeTree;
 class CSSFontSelector;
 class CSSPropertyValueSet;
 class CSSStyleSheet;
@@ -344,6 +347,11 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
     return *resolver_;
   }
 
+  StyleContainmentScopeTree& EnsureStyleContainmentScopeTree();
+  StyleContainmentScopeTree* GetStyleContainmentScopeTree() const {
+    return style_containment_scope_tree_;
+  }
+
   void SetRuleUsageTracker(StyleRuleUsageTracker*);
 
   Font ComputeFont(Element& element,
@@ -436,7 +444,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void CollectFeaturesTo(RuleFeatureSet& features);
 
   void EnsureUAStyleForFullscreen();
-  void EnsureUAStyleForXrOverlay();
   void EnsureUAStyleForElement(const Element&);
   void EnsureUAStyleForPseudoElement(PseudoId);
   void EnsureUAStyleForForcedColors();
@@ -656,8 +663,16 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   RuleSet* DefaultViewTransitionStyle() const;
   void InvalidateUAViewTransitionStyle();
 
-  const ActiveStyleSheetVector& ActiveUserStyleSheetsForDebug() const {
+  const ActiveStyleSheetVector& ActiveUserStyleSheets() const {
     return active_user_style_sheets_;
+  }
+
+  // See comment on viewport_size_.
+  void UpdateViewportSize();
+  const CSSToLengthConversionData::ViewportSize& GetViewportSize() const {
+    DCHECK(viewport_size_ == CSSToLengthConversionData::ViewportSize(
+                                 GetDocument().GetLayoutView()));
+    return viewport_size_;
   }
 
  private:
@@ -821,6 +836,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   bool AllowSkipStyleRecalcForScope() const;
 
   Member<Document> document_;
+
+  // Tree of style containment scopes. Is in charge of the document's quotes.
+  Member<StyleContainmentScopeTree> style_containment_scope_tree_;
 
   // Tracks the number of currently loading top-level stylesheets. Sheets loaded
   // using the @import directive are not included in this count. We use this
@@ -1012,6 +1030,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // for more info.
   HeapHashMap<AtomicString, Member<const CSSValue>>
       fill_or_clip_path_uri_value_cache_;
+
+  // Cached because it can be expensive to compute anew for each element.
+  // You must call UpdateViewportSize() once before resolving style.
+  CSSToLengthConversionData::ViewportSize viewport_size_;
 };
 
 void PossiblyScheduleNthPseudoInvalidations(Node& node);

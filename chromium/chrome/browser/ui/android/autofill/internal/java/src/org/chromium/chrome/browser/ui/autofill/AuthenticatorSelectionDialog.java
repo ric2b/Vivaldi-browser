@@ -86,12 +86,12 @@ public class AuthenticatorSelectionDialog implements AuthenticatorOptionsAdapter
             @CardUnmaskChallengeOptionType int authenticatorOptionType) {
         switch (authenticatorOptionType) {
             case CardUnmaskChallengeOptionType.SMS_OTP:
+            case CardUnmaskChallengeOptionType.EMAIL_OTP:
                 return mContext.getResources().getString(
                         R.string.autofill_card_unmask_authentication_selection_dialog_ok_button_label_send);
             case CardUnmaskChallengeOptionType.CVC:
                 return mContext.getResources().getString(
                         R.string.autofill_card_unmask_authentication_selection_dialog_ok_button_label_continue);
-            case CardUnmaskChallengeOptionType.EMAIL_OTP:
             case CardUnmaskChallengeOptionType.UNKNOWN_TYPE:
                 // This will never happen.
                 assert false
@@ -136,7 +136,9 @@ public class AuthenticatorSelectionDialog implements AuthenticatorOptionsAdapter
                                 mContext.getResources().getString(
                                         R.string.autofill_payments_authenticator_selection_dialog_negative_button_label))
                         .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT,
-                                getPositiveButtonText(mSelectedAuthenticatorOption.getType()));
+                                getPositiveButtonText(mSelectedAuthenticatorOption.getType()))
+                        .with(ModalDialogProperties.BUTTON_STYLES,
+                                ModalDialogProperties.ButtonStyles.PRIMARY_FILLED_NEGATIVE_OUTLINE);
         mDialogModel = builder.build();
         mModalDialogManager.showDialog(mDialogModel, ModalDialogManager.ModalDialogType.TAB);
     }

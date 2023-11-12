@@ -44,7 +44,7 @@
 <!-- TODO(b/162365553): Implement accessibility attributes. -->
 <div id="labelWrapper">
   <div id="label" aria-hidden="true">
-    <div id="apnName">[[apn.accessPointName]]</div>
+    <div id="apnName">[[getApnDisplayName_(apn)]]</div>
     <div id="autoDetected" hidden="[[apn.id]]">
       [[i18n('apnAutoDetected')]]
     </div>
@@ -56,7 +56,7 @@
 </div>
 <cr-icon-button id="actionMenuButton" class="icon-more-vert"
     on-click="onMenuButtonClicked_"
-    title="[[i18n('apnMoreActionsTitle')]]"
+    title="[[i18n('apnMoreActionsTitle', apn.accessPointName)]]"
     focus-row-control focus-type="menu">
 </cr-icon-button>
 

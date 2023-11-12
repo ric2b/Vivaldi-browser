@@ -163,12 +163,10 @@ std::string DiagnosticsLogController::GenerateSessionStringOnBlockingPool()
   // Add the network events section.
   log_pieces.push_back(networking_log_->GetNetworkEvents());
 
-  if (features::IsInputInDiagnosticsAppEnabled()) {
-    std::string input_log_contents = keyboard_input_log_->GetLogContents();
-    if (!input_log_contents.empty()) {
-      log_pieces.push_back(kKeyboardLogSectionHeader);
-      log_pieces.push_back(std::move(input_log_contents));
-    }
+  std::string input_log_contents = keyboard_input_log_->GetLogContents();
+  if (!input_log_contents.empty()) {
+    log_pieces.push_back(kKeyboardLogSectionHeader);
+    log_pieces.push_back(std::move(input_log_contents));
   }
 
   return base::JoinString(log_pieces, "\n");
@@ -192,20 +190,20 @@ void DiagnosticsLogController::ResetAndInitializeLogWriters() {
   telemetry_log_ = std::make_unique<TelemetryLog>();
 }
 
-KeyboardInputLog* DiagnosticsLogController::GetKeyboardInputLog() {
-  return keyboard_input_log_.get();
+KeyboardInputLog& DiagnosticsLogController::GetKeyboardInputLog() {
+  return *keyboard_input_log_;
 }
 
-NetworkingLog* DiagnosticsLogController::GetNetworkingLog() {
-  return networking_log_.get();
+NetworkingLog& DiagnosticsLogController::GetNetworkingLog() {
+  return *networking_log_;
 }
 
-RoutineLog* DiagnosticsLogController::GetRoutineLog() {
-  return routine_log_.get();
+RoutineLog& DiagnosticsLogController::GetRoutineLog() {
+  return *routine_log_;
 }
 
-TelemetryLog* DiagnosticsLogController::GetTelemetryLog() {
-  return telemetry_log_.get();
+TelemetryLog& DiagnosticsLogController::GetTelemetryLog() {
+  return *telemetry_log_;
 }
 
 void DiagnosticsLogController::ResetLogBasePath() {
@@ -261,6 +259,26 @@ void DiagnosticsLogController::RemoveDirectory(const base::FilePath& path) {
   if (base::PathExists(path)) {
     base::DeletePathRecursively(path);
   }
+}
+
+void DiagnosticsLogController::SetKeyboardInputLogForTesting(
+    std::unique_ptr<KeyboardInputLog> keyboard_input_log) {
+  keyboard_input_log_ = std::move(keyboard_input_log);
+}
+
+void DiagnosticsLogController::SetNetworkingLogForTesting(
+    std::unique_ptr<NetworkingLog> networking_log) {
+  networking_log_ = std::move(networking_log);
+}
+
+void DiagnosticsLogController::SetRoutineLogForTesting(
+    std::unique_ptr<RoutineLog> routine_log) {
+  routine_log_ = std::move(routine_log);
+}
+
+void DiagnosticsLogController::SetTelemetryLogForTesting(
+    std::unique_ptr<TelemetryLog> telemetry_log) {
+  telemetry_log_ = std::move(telemetry_log);
 }
 
 }  // namespace diagnostics

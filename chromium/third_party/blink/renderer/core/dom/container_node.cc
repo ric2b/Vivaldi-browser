@@ -1258,8 +1258,36 @@ void ContainerNode::SetDragged(bool new_value) {
     this_element->PseudoStateChanged(CSSSelector::kPseudoDrag);
 }
 
-HTMLCollection* ContainerNode::Children() {
+HTMLCollection* ContainerNode::children() {
   return EnsureCachedCollection<HTMLCollection>(kNodeChildren);
+}
+
+Element* ContainerNode::firstElementChild() {
+  return ElementTraversal::FirstChild(*this);
+}
+
+Element* ContainerNode::lastElementChild() {
+  return ElementTraversal::LastChild(*this);
+}
+
+unsigned ContainerNode::childElementCount() {
+  unsigned count = 0;
+  for (Element* child = ElementTraversal::FirstChild(*this); child;
+       child = ElementTraversal::NextSibling(*child)) {
+    ++count;
+  }
+  return count;
+}
+
+Element* ContainerNode::querySelector(const AtomicString& selectors,
+                                      ExceptionState& exception_state) {
+  return QuerySelector(selectors, exception_state);
+}
+
+StaticElementList* ContainerNode::querySelectorAll(
+    const AtomicString& selectors,
+    ExceptionState& exception_state) {
+  return QuerySelectorAll(selectors, exception_state);
 }
 
 unsigned ContainerNode::CountChildren() const {
@@ -1379,33 +1407,15 @@ void ContainerNode::RecalcDescendantStyles(
   DCHECK(GetDocument().InStyleRecalc());
   DCHECK(!NeedsStyleRecalc());
 
-  StyleRecalcChange local_change = change;
   for (Node* child = firstChild(); child; child = child->nextSibling()) {
-    if (!local_change.TraverseChild(*child))
+    if (!change.TraverseChild(*child)) {
       continue;
+    }
     if (auto* child_text_node = DynamicTo<Text>(child))
-      child_text_node->RecalcTextStyle(local_change);
+      child_text_node->RecalcTextStyle(change);
 
     if (auto* child_element = DynamicTo<Element>(child)) {
-      local_change = local_change.Combine(
-          child_element->RecalcStyle(local_change, style_recalc_context));
-    }
-  }
-}
-
-void ContainerNode::RecalcSubsequentSiblingStyles(
-    const StyleRecalcChange change,
-    const StyleRecalcContext& style_recalc_context) {
-  DCHECK(GetDocument().InStyleRecalc());
-  DCHECK(!NeedsStyleRecalc());
-
-  // We use LayoutTreeBuilderTraversal to skip siblings which are not in the
-  // flat tree, because they don't have a ComputedStyle (and are therefore not
-  // affected by any change on this node).
-  for (Node* sibling = LayoutTreeBuilderTraversal::NextSibling(*this); sibling;
-       sibling = LayoutTreeBuilderTraversal::NextSibling(*sibling)) {
-    if (auto* sibling_element = DynamicTo<Element>(sibling)) {
-      sibling_element->RecalcStyle(change, style_recalc_context);
+      child_element->RecalcStyle(change, style_recalc_context);
     }
   }
 }
@@ -1639,14 +1649,6 @@ NodeListsNodeData& ContainerNode::EnsureNodeLists() {
 Element* ContainerNode::GetAutofocusDelegate() const {
   Element* element = ElementTraversal::Next(*this, this);
   while (element) {
-    if (auto* html_element = DynamicTo<HTMLElement>(element)) {
-      if (DynamicTo<HTMLDialogElement>(html_element) ||
-          html_element->HasPopoverAttribute()) {
-        element = ElementTraversal::NextSkippingChildren(*element, this);
-        continue;
-      }
-    }
-
     if (!element->IsAutofocusable()) {
       element = ElementTraversal::Next(*element, this);
       continue;

@@ -9,14 +9,10 @@
 #import "base/test/scoped_feature_list.h"
 #import "components/bookmarks/test/bookmark_test_helpers.h"
 #import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/favicon/favicon_service_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #import "ios/chrome/browser/history/history_service_factory.h"
-#import "ios/chrome/browser/main/browser_list.h"
-#import "ios/chrome/browser/main/browser_list_factory.h"
-#import "ios/chrome/browser/main/test_browser_list_observer.h"
 #import "ios/chrome/browser/prerender/prerender_service_factory.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/sessions/scene_util_test_support.h"
@@ -24,6 +20,10 @@
 #import "ios/chrome/browser/sessions/test_session_service.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
+#import "ios/chrome/browser/shared/model/browser/test/test_browser_list_observer.h"
+#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/fake_authentication_service_delegate.h"
 #import "ios/chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
@@ -264,6 +264,42 @@ TEST_F(BrowserViewWranglerTest, TestInactiveInterface) {
   // After shutdown all browsers are destroyed.
   [wrangler shutdown];
   EXPECT_EQ(0UL, browser_list->AllRegularBrowsers().size());
+
+  browser_list->RemoveObserver(&observer);
+}
+
+TEST_F(BrowserViewWranglerTest, TestIncognitoBrowserSessionRestorationLogic) {
+  BrowserList* browser_list =
+      BrowserListFactory::GetForBrowserState(chrome_browser_state_.get());
+  TestBrowserListObserver observer;
+  browser_list->AddObserver(&observer);
+
+  BrowserViewWrangler* wrangler = [[BrowserViewWrangler alloc]
+             initWithBrowserState:chrome_browser_state_.get()
+                       sceneState:scene_state_
+       applicationCommandEndpoint:nil
+      browsingDataCommandEndpoint:nil];
+
+  // Creation of the main browser should restore the sessions.
+  [wrangler createMainBrowser];
+  [wrangler createMainCoordinatorAndInterface];
+  EXPECT_EQ(1, test_session_service_.loadSessionCallsCount);
+
+  // Initial creation of incognito browser should restore the sessions.
+  EXPECT_EQ(wrangler.incognitoInterface.browser,
+            observer.GetLastAddedIncognitoBrowser());
+  EXPECT_EQ(2, test_session_service_.loadSessionCallsCount);
+
+  // Destroing and rebuilding the incognito browser should not restore the
+  // sessions.
+  [wrangler willDestroyIncognitoBrowserState];
+  chrome_browser_state_->DestroyOffTheRecordChromeBrowserState();
+  chrome_browser_state_->GetOffTheRecordChromeBrowserState();
+  [wrangler incognitoBrowserStateCreated];
+  EXPECT_EQ(2, test_session_service_.loadSessionCallsCount);
+
+  [wrangler createInactiveBrowser];
+  [wrangler shutdown];
 
   browser_list->RemoveObserver(&observer);
 }

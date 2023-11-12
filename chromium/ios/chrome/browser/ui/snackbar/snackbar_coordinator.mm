@@ -6,7 +6,7 @@
 
 #import <MaterialComponents/MaterialSnackbar.h>
 
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -44,6 +44,8 @@
       [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   [[MDCSnackbarManager defaultManager] setMessageFont:defaultSnackbarFont];
   [[MDCSnackbarManager defaultManager] setButtonFont:defaultSnackbarFont];
+
+  [MDCSnackbarManager defaultManager].usesGM3Shapes = YES;
 
   CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
   [dispatcher startDispatchingToTarget:self

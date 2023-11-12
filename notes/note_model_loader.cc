@@ -42,7 +42,7 @@ void LoadNotes(const base::FilePath& profile_path, NoteLoadDetails* details) {
       details->set_computed_checksum(codec.computed_checksum());
       details->set_stored_checksum(codec.stored_checksum());
       details->set_ids_reassigned(codec.ids_reassigned());
-      details->set_guids_reassigned(codec.guids_reassigned());
+      details->set_uuids_reassigned(codec.uuids_reassigned());
       details->set_has_deprecated_attachments(
           codec.has_deprecated_attachments());
     }

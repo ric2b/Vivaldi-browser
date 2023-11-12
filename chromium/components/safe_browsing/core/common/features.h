@@ -21,6 +21,9 @@ BASE_DECLARE_FEATURE(kAdSamplerTriggerFeature);
 // Adds page load token to client safe browsing report.
 BASE_DECLARE_FEATURE(kAddPageLoadTokenToClientSafeBrowsingReport);
 
+// Enables logging new phishing prevention data.
+BASE_DECLARE_FEATURE(kAntiPhishingTelemetry);
+
 // Killswitch for client side phishing detection. Since client side models are
 // run on a large fraction of navigations, crashes due to the model are very
 // impactful, even if only a small fraction of users have a bad version of the
@@ -45,6 +48,9 @@ BASE_DECLARE_FEATURE(kClientSideDetectionTypeForceRequest);
 
 // Enables serving the Android Protego allowlist through the component updater.
 BASE_DECLARE_FEATURE(kComponentUpdaterAndroidProtegoAllowlist);
+
+// Controls whether new deep scanning UX is enabled or not.
+BASE_DECLARE_FEATURE(kDeepScanningUpdatedUX);
 
 // Controls whether the delayed warning experiment is enabled.
 BASE_DECLARE_FEATURE(kDelayedWarnings);
@@ -79,6 +85,13 @@ extern const base::FeatureParam<bool> kEsbIphBubbleAndCollapseSettingsEnableIph;
 // or not.
 extern const base::FeatureParam<bool>
     kEsbIphBubbleAndCollapseSettingsEnableCollapse;
+
+// Enables decreased Phishguard password length minimum.
+BASE_DECLARE_FEATURE(kEvaluateProtectedPasswordLengthMinimum);
+
+// Specifies the minimum password length for password protection.
+extern const base::FeatureParam<int>
+    kEvaluateProtectedPasswordLengthMinimumValue;
 
 // Enables collection of signals related to extension activity and uploads
 // of telemetry reports to SB servers.
@@ -156,12 +169,30 @@ BASE_DECLARE_FEATURE(kFileTypePoliciesTag);
 // `kFileTypePoliciesTag`.
 const char kFileTypePoliciesTagParamName[] = "policy_omaha_tag";
 
-// Enables sending real time hash lookup requests over OHTTP to anonymize the
-// source of the requests.
+// Enables the new text, layout, and icons on both the privacy guide and on the
+// security settings page. Also, this will only affect the safe browsing level
+// settings.
+BASE_DECLARE_FEATURE(kFriendlierSafeBrowsingSettings);
+
+// Sends hash-prefix real-time lookup requests on navigations for Standard Safe
+// Browsing users instead of hash-prefix database lookups.
+BASE_DECLARE_FEATURE(kHashPrefixRealTimeLookups);
+
+// This parameter controls the relay URL that will forward the lookup requests
+// to the Safe Browsing server. This is similar to the
+// kHashRealTimeOverOhttpRelayUrl parameter, but it applies to the
+// kHashPrefixRealTimeLookups feature.
+extern const base::FeatureParam<std::string> kHashPrefixRealTimeLookupsRelayUrl;
+
+// For hash-prefix real-time lookup requests that are triggered by the lookup
+// mechanism experiment (see kSafeBrowsingLookupMechanismExperiment), enables
+// sending the requests over OHTTP to anonymize the source of the requests.
 BASE_DECLARE_FEATURE(kHashRealTimeOverOhttp);
 
 // This parameter controls the relay URL that will forward the lookup requests
-// to the Safe Browsing server.
+// to the Safe Browsing server. This is similar to the
+// kHashPrefixRealTimeLookupsRelayUrl parameter, but it applies to the
+// kHashRealTimeOverOhttp feature.
 extern const base::FeatureParam<std::string> kHashRealTimeOverOhttpRelayUrl;
 
 // Enable logging of the account enhanced protection setting in Protego pings.
@@ -170,6 +201,10 @@ BASE_DECLARE_FEATURE(kLogAccountEnhancedProtectionStateInProtegoPings);
 // If enabled, the Safe Browsing database will be stored in a separate file and
 // mapped into memory.
 BASE_DECLARE_FEATURE(kMmapSafeBrowsingDatabase);
+
+// Whether hash prefix lookups are done on a background thread when
+// kMmapSafeBrowsingDatabase is enabled.
+extern const base::FeatureParam<bool> kMmapSafeBrowsingDatabaseAsync;
 
 // Enables unpacking of nested archives during downloads.
 BASE_DECLARE_FEATURE(kNestedArchives);
@@ -211,6 +246,9 @@ extern const base::FeatureParam<bool>
 
 // Run Safe Browsing code on UI thread.
 BASE_DECLARE_FEATURE(kSafeBrowsingOnUIThread);
+
+// Enable adding copy/paste navigation to the referrer chain.
+BASE_DECLARE_FEATURE(kSafeBrowsingReferrerChainWithCopyPasteNavigation);
 
 // Controls whether cookies are removed when the access token is present.
 BASE_DECLARE_FEATURE(kSafeBrowsingRemoveCookiesInAuthRequests);
@@ -293,6 +331,8 @@ BASE_DECLARE_FEATURE(kSafeBrowsingDailyPhishingReportsLimit);
 
 // Specifies the CSD-Phishing daily reports limit for ESB users
 extern const base::FeatureParam<int> kSafeBrowsingDailyPhishingReportsLimitESB;
+
+BASE_DECLARE_FEATURE(kClientSideDetectionModelImageEmbedder);
 
 }  // namespace safe_browsing
 #endif  // COMPONENTS_SAFE_BROWSING_CORE_COMMON_FEATURES_H_

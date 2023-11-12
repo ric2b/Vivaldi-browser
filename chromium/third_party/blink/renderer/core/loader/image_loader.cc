@@ -161,7 +161,6 @@ ImageLoader::ImageLoader(Element* element)
     : element_(element),
       image_complete_(true),
       suppress_error_events_(false),
-      was_deferred_explicitly_(false),
       lazy_image_load_state_(LazyImageLoadState::kNone) {
   RESOURCE_LOADING_DVLOG(1) << "new ImageLoader " << this;
 }
@@ -352,13 +351,10 @@ static void ConfigureRequest(
         element.GetExecutionContext()->GetSecurityOrigin(), cross_origin);
   }
 
-  if (RuntimeEnabledFeatures::PriorityHintsEnabled(
-          element.GetExecutionContext())) {
-    mojom::blink::FetchPriorityHint fetch_priority_hint =
-        GetFetchPriorityAttributeValue(
-            element.FastGetAttribute(html_names::kFetchpriorityAttr));
-    params.SetFetchPriorityHint(fetch_priority_hint);
-  }
+  mojom::blink::FetchPriorityHint fetch_priority_hint =
+      GetFetchPriorityAttributeValue(
+          element.FastGetAttribute(html_names::kFetchpriorityAttr));
+  params.SetFetchPriorityHint(fetch_priority_hint);
 
   auto* html_image_element = DynamicTo<HTMLImageElement>(element);
   if ((client_hints_preferences.ShouldSend(
@@ -518,7 +514,7 @@ void ImageLoader::DoUpdateFromElement(
         document.PageDismissalEventBeingDispatched() != Document::kNoDismissal;
     if (page_is_being_dismissed) {
       resource_request.SetHttpHeaderField(http_names::kCacheControl,
-                                          "max-age=0");
+                                          AtomicString("max-age=0"));
       resource_request.SetKeepalive(true);
       resource_request.SetRequestContext(
           mojom::blink::RequestContextType::PING);
@@ -544,26 +540,17 @@ void ImageLoader::DoUpdateFromElement(
     if (update_behavior != kUpdateForcedReload &&
         lazy_image_load_state_ != LazyImageLoadState::kFullImage) {
       if (auto* html_image = DynamicTo<HTMLImageElement>(GetElement())) {
-        LoadingAttributeValue loading_attr = GetLoadingAttributeValue(
-            html_image->FastGetAttribute(html_names::kLoadingAttr));
-        switch (LazyImageHelper::DetermineEligibilityAndTrackVisibilityMetrics(
-            *frame, html_image, params.Url())) {
-          case LazyImageHelper::Eligibility::kEnabledFullyDeferred:
-            lazy_image_load_state_ = LazyImageLoadState::kDeferred;
-            was_deferred_explicitly_ =
-                (loading_attr == LoadingAttributeValue::kLazy);
-            params.SetLazyImageDeferred();
-            break;
-          case LazyImageHelper::Eligibility::kDisabled:
-            break;
+        if (LazyImageHelper::ShouldDeferImageLoad(*frame, html_image)) {
+          LazyImageHelper::StartMonitoringVisibilityMetrics(html_image);
+          lazy_image_load_state_ = LazyImageLoadState::kDeferred;
+          params.SetLazyImageDeferred();
         }
       }
     }
 
     // If we're now loading in a once-deferred image, make sure it doesn't block
     // the load event.
-    if (was_deferred_explicitly_ &&
-        lazy_image_load_state_ == LazyImageLoadState::kFullImage &&
+    if (lazy_image_load_state_ == LazyImageLoadState::kFullImage &&
         !force_blocking) {
       params.SetLazyImageNonBlocking();
     }

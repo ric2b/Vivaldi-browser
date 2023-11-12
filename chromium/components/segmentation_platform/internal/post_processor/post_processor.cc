@@ -8,6 +8,7 @@
 
 #include "base/check_op.h"
 #include "base/notreached.h"
+#include "components/segmentation_platform/public/result.h"
 
 namespace segmentation_platform {
 
@@ -71,11 +72,11 @@ std::vector<std::string> PostProcessor::GetMultiClassClassifierResults(
                                  model_scores[index]);
   }
   // Sort the labels in descending order of score.
-  std::sort(labeled_results.begin(), labeled_results.end(),
-            [](const std::pair<std::string, float>& a,
-               const std::pair<std::string, float>& b) {
-              return a.second > b.second;
-            });
+  std::stable_sort(labeled_results.begin(), labeled_results.end(),
+                   [](const std::pair<std::string, float>& a,
+                      const std::pair<std::string, float>& b) {
+                     return a.second > b.second;
+                  });
   float threshold = multi_class_classifier.threshold();
   int top_k_outputs = multi_class_classifier.top_k_outputs();
 
@@ -190,6 +191,20 @@ base::TimeDelta PostProcessor::GetTTLForPredictedResult(
     return ttl_to_use * metadata_utils::ConvertToTimeDelta(time_unit);
   }
   return base::TimeDelta();
+}
+
+RawResult PostProcessor::GetRawResult(
+    const proto::PredictionResult& prediction_result,
+    PredictionStatus status) {
+  if (status != PredictionStatus::kSucceeded) {
+    return RawResult(status);
+  }
+  if (!IsValidResult(prediction_result)) {
+    return RawResult(PredictionStatus::kFailed);
+  }
+  RawResult result(status);
+  result.result = prediction_result;
+  return result;
 }
 
 }  // namespace segmentation_platform

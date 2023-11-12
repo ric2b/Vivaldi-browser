@@ -7,6 +7,10 @@
 #import "ios/public/provider/chrome/browser/text_zoom/text_zoom_api.h"
 #import "ui/base/device_form_factor.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -19,6 +23,11 @@ void SetTextZoomForWebState(web::WebState* web_state, int size) {
 }
 
 bool IsTextZoomEnabled() {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    return YES;
+  } // End Vivaldi
+
   return base::FeatureList::IsEnabled(web::kWebPageTextZoomIPad) ||
          ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET;
 }

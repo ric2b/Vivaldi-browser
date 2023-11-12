@@ -5,7 +5,7 @@
 #include "gpu/ipc/client/client_shared_image_interface.h"
 
 #include "build/build_config.h"
-#include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/ipc/client/shared_image_interface_proxy.h"
 #include "ui/gfx/gpu_fence.h"
@@ -104,6 +104,11 @@ Mailbox ClientSharedImageInterface::CreateSharedImage(
   // Pixel upload path only supports single-planar formats.
   DCHECK(format.is_single_plane());
   DCHECK(gpu::IsValidClientUsage(usage));
+
+  // EstimatedSizeInBytes() returns the minimum size in bytes needed to store
+  // `format` at `size` so if span is smaller there is a problem.
+  CHECK_GE(pixel_data.size(), format.EstimatedSizeInBytes(size));
+
   return AddMailbox(proxy_->CreateSharedImage(format, size, color_space,
                                               surface_origin, alpha_type, usage,
                                               debug_label, pixel_data));
@@ -120,7 +125,7 @@ Mailbox ClientSharedImageInterface::CreateSharedImage(
     gfx::GpuMemoryBufferHandle buffer_handle) {
   DCHECK(gpu::IsValidClientUsage(usage));
   DCHECK(viz::HasEquivalentBufferFormat(format));
-  DCHECK(format.is_multi_plane());
+  CHECK(!format.IsLegacyMultiplanar());
   return AddMailbox(proxy_->CreateSharedImage(
       format, size, color_space, surface_origin, alpha_type, usage, debug_label,
       std::move(buffer_handle)));

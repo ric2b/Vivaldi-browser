@@ -15,11 +15,10 @@
 #import "components/bookmarks/common/bookmark_features.h"
 #import "ios/chrome/browser/bookmarks/account_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
-#import "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_navigation_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/folder_chooser/bookmarks_folder_chooser_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/bookmarks/folder_chooser/bookmarks_folder_chooser_mediator.h"
@@ -31,10 +30,10 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_folder_view_controller.h"
-#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_prefs.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_item.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmark_add_edit_folder_view_controller.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmark_prefs.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_item.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -133,6 +132,10 @@ using vivaldi::IsVivaldiRunning;
   _mediator.selectedFolderNode = _selectedFolder;
 }
 
+- (void)dealloc {
+  DCHECK(!_viewController);
+}
+
 #pragma mark - ChromeCoordinator
 
 - (void)start {
@@ -149,16 +152,16 @@ using vivaldi::IsVivaldiRunning;
           browserState);
   bookmarks::BookmarkModel* accountModel =
       ios::AccountBookmarkModelFactory::GetForBrowserState(browserState);
+  AuthenticationService* authenticationService =
+      AuthenticationServiceFactory::GetForBrowserState(browserState);
+  syncer::SyncService* syncService =
+      SyncServiceFactory::GetForBrowserState(browserState);
   _mediator = [[BookmarksFolderChooserMediator alloc]
       initWithProfileBookmarkModel:profileModel
               accountBookmarkModel:accountModel
                        editedNodes:std::move(_hiddenNodes)
-             authenticationService:AuthenticationServiceFactory::
-                                       GetForBrowserState(browserState)
-                  syncSetupService:SyncSetupServiceFactory::GetForBrowserState(
-                                       browserState)
-                       syncService:SyncServiceFactory::GetForBrowserState(
-                                       browserState)];
+             authenticationService:authenticationService
+                       syncService:syncService];
   _hiddenNodes.clear();
   _mediator.delegate = self;
   _mediator.selectedFolderNode = _selectedFolder;
@@ -203,6 +206,7 @@ using vivaldi::IsVivaldiRunning;
   _mediator = nil;
   if (_navigationController) {
     [self.baseViewController dismissViewControllerAnimated:YES completion:nil];
+    _navigationController.presentationController.delegate = nil;
     _navigationController = nil;
   } else if (_baseNavigationController &&
              _baseNavigationController.presentingViewController) {
@@ -307,6 +311,7 @@ using vivaldi::IsVivaldiRunning;
   base::RecordAction(
       base::UserMetricsAction("IOSBookmarksFolderChooserClosedWithSwipeDown"));
   DCHECK(_navigationController);
+  _navigationController.presentationController.delegate = nil;
   _navigationController = nil;
   [_delegate bookmarksFolderChooserCoordinatorDidCancel:self];
 }

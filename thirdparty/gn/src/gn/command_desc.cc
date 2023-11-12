@@ -308,6 +308,7 @@ std::map<std::string, DescHandlerFunc> GetHandlers() {
           {variables::kRustCrateRoot, DefaultHandler},
           {variables::kSwiftModuleName, DefaultHandler},
           {variables::kSwiftBridgeHeader, DefaultHandler},
+          {variables::kMnemonic, DefaultHandler},
           {"runtime_deps", DefaultHandler}};
 }
 

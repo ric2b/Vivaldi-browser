@@ -5,9 +5,15 @@
 
 #include <set>
 
-#include "base/guid.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
+#include "base/uuid.h"
 #include "base/values.h"
+#if !BUILDFLAG(IS_IOS)
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profile_manager_observer.h"
+#endif //!IS_IOS
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 
 class PrefService;
@@ -18,21 +24,37 @@ class BookmarkNode;
 }  // namespace bookmarks
 
 namespace vivaldi_partners {
-class RemovedPartnersTracker : public bookmarks::BookmarkModelObserver {
+class RemovedPartnersTracker : public bookmarks::BookmarkModelObserver
+#if !BUILDFLAG(IS_IOS)
+, public ProfileManagerObserver
+#endif //!BUILDFLAG(IS_IOS)
+ {
  public:
+#if !BUILDFLAG(IS_IOS)
+  static void Create(Profile* profile, bookmarks::BookmarkModel* model);
+#else
   static void Create(PrefService* prefs, bookmarks::BookmarkModel* model);
-  static std::set<base::GUID> ReadRemovedPartners(
+#endif
+  static std::set<base::Uuid> ReadRemovedPartners(
       const base::Value::List& deleted_partners,
       bool& upgraded_old_id);
 
  private:
   class MetaInfoChangeFilter;
 
+#if !BUILDFLAG(IS_IOS)
+  RemovedPartnersTracker(Profile* profile, bookmarks::BookmarkModel* model);
+#else
   RemovedPartnersTracker(PrefService* prefs, bookmarks::BookmarkModel* model);
+#endif
   ~RemovedPartnersTracker() override;
   RemovedPartnersTracker(const RemovedPartnersTracker&) = delete;
   RemovedPartnersTracker& operator=(const RemovedPartnersTracker&) = delete;
 
+#if !BUILDFLAG(IS_IOS)
+  // ProfileManagerObserver implementation.
+  void OnProfileMarkedForPermanentDeletion(Profile* profile) override;
+#endif //!BUILDFLAG(IS_IOS)
   // Implementing BookmarkModelObserver
   void BookmarkNodeChanged(bookmarks::BookmarkModel* model,
                            const bookmarks::BookmarkNode* node) override;
@@ -76,8 +98,12 @@ class RemovedPartnersTracker : public bookmarks::BookmarkModelObserver {
 
   const raw_ptr<bookmarks::BookmarkModel> model_;
   const raw_ptr<PrefService> prefs_;
-  std::set<base::GUID> removed_partners_;
-
+  std::set<base::Uuid> removed_partners_;
+#if !BUILDFLAG(IS_IOS)
+  base::ScopedObservation<ProfileManager, ProfileManagerObserver>
+      profile_manager_observation_{this};
+  const raw_ptr<Profile> profile_ = nullptr;
+#endif //!IS_IOS
   std::unique_ptr<MetaInfoChangeFilter> change_filter_;
 
   base::WeakPtrFactory<RemovedPartnersTracker> weak_factory_{this};

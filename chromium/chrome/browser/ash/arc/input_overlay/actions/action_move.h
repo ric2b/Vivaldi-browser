@@ -14,6 +14,8 @@ namespace arc::input_overlay {
 // UI specs.
 constexpr int kActionMoveMinRadius = 99;
 
+class TouchInjector;
+
 // ActionMoveKey transforms key/mouse events to touch events with touch
 // move involved.
 class ActionMove : public Action {
@@ -24,7 +26,7 @@ class ActionMove : public Action {
   ~ActionMove() override;
 
   // Override from Action.
-  bool ParseFromJson(const base::Value& value) override;
+  bool ParseFromJson(const base::Value::Dict& value) override;
   bool InitFromEditor() override;
   bool RewriteEvent(const ui::Event& origin,
                     const bool is_mouse_locked,
@@ -36,6 +38,7 @@ class ActionMove : public Action {
       DisplayOverlayController* display_overlay_controller) override;
   void UnbindInput(const InputElement& input_element) override;
   std::unique_ptr<ActionProto> ConvertToProtoIfCustomized() const override;
+  ActionType GetType() override;
 
   void set_move_distance(int move_distance) { move_distance_ = move_distance; }
   int move_distance() { return move_distance_; }
@@ -60,7 +63,7 @@ class ActionMove : public Action {
   //     {}
   //   ]
   // }
-  bool ParseJsonFromKeyboard(const base::Value& value);
+  bool ParseJsonFromKeyboard(const base::Value::Dict& value);
   // Json value format:
   // {
   //   "id": 0,
@@ -84,7 +87,7 @@ class ActionMove : public Action {
   //       {}
   //   }
   // }
-  bool ParseJsonFromMouse(const base::Value& value);
+  bool ParseJsonFromMouse(const base::Value::Dict& value);
   bool RewriteKeyEvent(const ui::KeyEvent* key_event,
                        const gfx::RectF& content_bounds,
                        const gfx::Transform* rotation_transform,

@@ -511,7 +511,8 @@ void VRServiceImpl::GetPermissionStatus(SessionRequestData request,
   DCHECK_EQ(runtime->GetId(), request.runtime_id);
 
 #if BUILDFLAG(ENABLE_OPENXR)
-  if (request.options->mode == device::mojom::XRSessionMode::kImmersiveAr) {
+  if (request.options->mode == device::mojom::XRSessionMode::kImmersiveAr &&
+      runtime->GetId() == device::mojom::XRDeviceId::OPENXR_DEVICE_ID) {
     DCHECK(
         base::FeatureList::IsEnabled(
             device::features::kOpenXrExtendedFeatureSupport));
@@ -713,6 +714,11 @@ void VRServiceImpl::DoRequestSession(SessionRequestData request) {
     send_renderer_information =
         send_renderer_information ||
         request.runtime_id == device::mojom::XRDeviceId::CARDBOARD_DEVICE_ID;
+#endif
+#if BUILDFLAG(ENABLE_OPENXR) && BUILDFLAG(IS_ANDROID)
+    send_renderer_information =
+        send_renderer_information ||
+        request.runtime_id == device::mojom::XRDeviceId::OPENXR_DEVICE_ID;
 #endif
     if (send_renderer_information) {
       runtime_options->render_process_id =

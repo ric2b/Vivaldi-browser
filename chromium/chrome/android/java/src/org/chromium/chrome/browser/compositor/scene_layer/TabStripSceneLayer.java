@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.compositor.scene_layer;
 
 import android.content.Context;
-import android.os.Build;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.VisibleForTesting;
@@ -20,6 +19,7 @@ import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutTab;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneOverlayLayer;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.ResourceManager;
 
@@ -36,9 +36,6 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
     private static boolean sTestFlag;
     private long mNativePtr;
     private float mDpToPx;
-    private SceneLayer mChildSceneLayer;
-    private int mOrientation;
-    private int mNumReaddBackground;
 
     // Vivaldi
     private boolean mShouldHideOverlay;
@@ -60,8 +57,9 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
     @Override
     protected void initializeNative() {
         if (mNativePtr == 0) {
-            mNativePtr = TabStripSceneLayerJni.get().init(
-                    TabStripSceneLayer.this, ChromeFeatureList.sTabStripRedesign.isEnabled());
+            mNativePtr = TabStripSceneLayerJni.get().init(TabStripSceneLayer.this,
+                    ChromeFeatureList.sTabStripRedesign.isEnabled(),
+                    TabUiFeatureUtilities.isTabStripButtonStyleDisabled());
         }
         // Set flag for testing
         if (!sTestFlag) {
@@ -112,20 +110,6 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         TabStripSceneLayerJni.get().finishBuildingFrame(mNativePtr, TabStripSceneLayer.this);
     }
 
-    private boolean shouldReadBackground(int orientation) {
-        // Sometimes layer trees do not get updated on rotation on Nexus 10.
-        // This is a workaround that reads the background to prevent it.
-        // See https://crbug.com/503930 for more.
-        if (Build.MODEL == null || !Build.MODEL.contains("Nexus 10")) return false;
-        if (mOrientation != orientation) {
-            // This is a random number. Empirically this is enough.
-            mNumReaddBackground = 10;
-            mOrientation = orientation;
-        }
-        mNumReaddBackground--;
-        return mNumReaddBackground >= 0;
-    }
-
     private void pushButtonsAndBackground(StripLayoutHelperManager layoutHelper,
             ResourceManager resourceManager, float yOffset) {
         final int width = Math.round(layoutHelper.getWidth() * mDpToPx);
@@ -135,8 +119,7 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         // that happens but by adding the offset it fixes it. See ref. VAB-4399.
         height += VivaldiUtils.isTopToolbarOn() ? 0 : 1;
         TabStripSceneLayerJni.get().updateTabStripLayer(mNativePtr, TabStripSceneLayer.this, width,
-                height, yOffset * mDpToPx, shouldReadBackground(layoutHelper.getOrientation()),
-                layoutHelper.getBackgroundColor());
+                height, yOffset * mDpToPx, layoutHelper.getBackgroundColor());
 
         TintedCompositorButton newTabButton = layoutHelper.getNewTabButton();
         CompositorButton modelSelectorButton = layoutHelper.getModelSelectorButton();
@@ -194,9 +177,12 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
             StripLayoutTab[] stripTabs, int selectedTabId) {
         final int tabsCount = stripTabs != null ? stripTabs.length : 0;
 
+        // TODO(https://crbug.com/1450380): Cleanup params, as some don't change and others are now
+        //  unused.
         for (int i = 0; i < tabsCount; i++) {
             final StripLayoutTab st = stripTabs[i];
             boolean isSelected = st.getId() == selectedTabId;
+
             TabStripSceneLayerJni.get().putStripTabLayer(mNativePtr, TabStripSceneLayer.this,
                     st.getId(), st.getCloseButton().getResourceId(), st.getDividerResourceId(),
                     st.getResourceId(), st.getOutlineResourceId(), st.getCloseButton().getTint(),
@@ -205,10 +191,11 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                     st.getDrawX() * mDpToPx, st.getDrawY() * mDpToPx, st.getWidth() * mDpToPx,
                     st.getHeight() * mDpToPx, st.getContentOffsetX() * mDpToPx,
                     st.getContentOffsetY() * mDpToPx, st.getDividerOffsetX() * mDpToPx,
-                    st.getBottomMargin() * mDpToPx, st.getCloseButtonPadding() * mDpToPx,
-                    st.getCloseButton().getOpacity(), st.isStartDividerVisible(),
-                    st.isEndDividerVisible(), st.isLoading(), st.getLoadingSpinnerRotation(),
-                    st.getBrightness(), st.getContainerOpacity(), layerTitleCache, resourceManager,
+                    st.getBottomMargin() * mDpToPx, st.getTopMargin() * mDpToPx,
+                    st.getCloseButtonPadding() * mDpToPx, st.getCloseButton().getOpacity(),
+                    st.isStartDividerVisible(), st.isEndDividerVisible(), st.isLoading(),
+                    st.getLoadingSpinnerRotation(), st.getBrightness(), st.getContainerOpacity(),
+                    layerTitleCache, resourceManager,
                     // Note(david@vivaldi.com): From here we pass the Vivaldi parameters.
                     st.getAlpha(), layoutHelper.getActiveStripLayoutHelper().showTabsAsFavIcon(),
                     st.getTitleOffset() * mDpToPx);
@@ -257,13 +244,13 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
 
     @NativeMethods
     public interface Natives {
-        long init(TabStripSceneLayer caller, boolean isTabStripRedesignEnabled);
+        long init(TabStripSceneLayer caller, boolean isTabStripRedesignEnabled,
+                boolean isTsrButtonStyleDisabled);
         void beginBuildingFrame(
                 long nativeTabStripSceneLayer, TabStripSceneLayer caller, boolean visible);
         void finishBuildingFrame(long nativeTabStripSceneLayer, TabStripSceneLayer caller);
         void updateTabStripLayer(long nativeTabStripSceneLayer, TabStripSceneLayer caller,
-                int width, int height, float yOffset, boolean shouldReadBackground,
-                @ColorInt int backgroundColor);
+                int width, int height, float yOffset, @ColorInt int backgroundColor);
         void updateNewTabButton(long nativeTabStripSceneLayer, TabStripSceneLayer caller,
                 int resourceId, int backgroundResourceId, float x, float y, float touchTargetOffset,
                 boolean visible, int tint, int backgroundTint, float buttonAlpha,
@@ -286,7 +273,7 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 int handleOutlineResourceId, int closeTint, int dividerTint, int handleTint,
                 int handleOutlineTint, boolean foreground, boolean closePressed, float toolbarWidth,
                 float x, float y, float width, float height, float contentOffsetX,
-                float contentOffsetY, float dividerOffsetX, float bottomOffsetY,
+                float contentOffsetY, float dividerOffsetX, float bottomMargin, float topMargin,
                 float closeButtonPadding, float closeButtonAlpha, boolean isStartDividerVisible,
                 boolean isEndDividerVisible, boolean isLoading, float spinnerRotation,
                 float brightness, float opacity, LayerTitleCache layerTitleCache,

@@ -123,4 +123,8 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDetachExternallyOwned(
   current_web_contents_->FrameTreeNodeDestroyed();
 }
 
+void WebContentsImpl::SetResumePending(bool resume) {
+  is_resume_pending_ = resume;
+}
+
 }  // namespace content

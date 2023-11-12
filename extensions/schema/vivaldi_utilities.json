@@ -30,69 +30,6 @@
         }
       },
       {
-        "id": "PopupWindow",
-        "type": "object",
-        "description": "PopupWindow in vivaldi/vivapp/src/stores/PopupWindowStore.js",
-        "properties": {
-          "identifier": {
-            "type": "string",
-            "description": "UUID identifying the popup."
-          },
-          "windowBounds": {
-            "type": "object",
-            "description": "Size and position of window.",
-            "properties": {
-              "height": {
-                "type": "number",
-                "description": "Height."
-              },
-              "width": {
-                "type": "number",
-                "description": "Width."
-              },
-              "left": {
-                "type": "number",
-                "optional": true,
-                "description": "Left screen position."
-              },
-              "top": {
-                "type": "number",
-                "optional": true,
-                "description": "Top screen position."
-              },
-              "minHeight": {
-                "type": "number",
-                "optional": true,
-                "description": "Minimum height."
-              },
-              "minWidth": {
-                "type": "number",
-                "optional": true,
-                "description": "Minimum width of window.."
-              }
-            }
-          },
-          "ownerWindowId": {
-            "type": "number",
-            "description": "WindowId of owner browser."
-          },
-          "acceptOrBlockCallback": {
-            "type": "function",
-            "parameters": [
-              {
-                "name": "windowId",
-                "type": "integer",
-                "description": "windowId of the window accepting the popup."
-              }
-            ]
-          },
-          "incognito": {
-            "type": "boolean",
-            "description": "Popup is incognito."
-          }
-        }
-      },
-      {
         "id": "WindowState",
         "type": "string",
         "description": "The state of this browser window.",
@@ -234,18 +171,6 @@
         "type": "object",
         "description": "Identifies broadcast type. Only one property should be used.",
         "properties": {
-          "showSettingsWindow": {
-            "description": "Show the settingswindow.",
-            "type": "object",
-            "optional": true,
-            "properties": {
-              "settingsCategory": {
-                "type": "string",
-                "description": "String with settings to show on the form: category&query. ie. all&languages",
-                "optional": true
-              }
-            }
-          },
           "actionChanged": {
             "description": "An action has changed. Message contains the new settings",
             "type": "object",
@@ -706,6 +631,58 @@
             "description": "The translated text corresponding to the given sourceText."
           }
         }
+      },
+      {
+        "id": "ProxyPlatformSupport",
+        "type": "object",
+        "properties": {
+          "support": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "id": "ProxyHost",
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "number"
+          }
+        }
+      },
+      {
+        "id": "ProxyConnectInfo",
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Information when success is false."
+          },
+          "pid": {
+            "type": "number"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "id": "ProxyOptions",
+        "type": "object",
+        "properties": {
+          "local": {
+            "$ref": "ProxyHost"
+          },
+          "remote": {
+            "$ref": "ProxyHost"
+          },
+          "token": {
+            "type": "string"
+          }
+        }
       }
     ],
     "functions": [
@@ -794,15 +771,6 @@
               "type": "boolean"
             }
           ]
-        }
-      },
-      {
-        "name": "generateGUID",
-        "type": "function",
-        "description": "Generate new GUID string.",
-        "parameters": [],
-        "returns": {
-          "type": "string"
         }
       },
       {
@@ -1774,6 +1742,22 @@
         }
       },
       {
+        "name": "getFOAuthClientId",
+        "type": "function",
+        "description": "Returns Fastmail OAuth client id.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "Vivaldi Fastmail's OAuth client id."
+            }
+          ]
+        }
+      },
+      {
         "name": "getCommandLineValue",
         "type": "function",
         "description": "Gets the command line value for the given named argument.",
@@ -1899,8 +1883,51 @@
           "name": "callback",
           "parameters": []
         }
+      },
+      {
+        "name": "supportsProxy",
+        "type": "function",
+        "description": "Returns true or false depending on invisiv proxy can be used or not. This is a platform test, not a test of other condtitions.",
+        "parameters": [],
+        "returns": {
+          "$ref": "ProxyPlatformSupport"
+        }
+      },
+      {
+        "name": "connectProxy",
+        "type": "function",
+        "description": "Connects to invisiv proxy.",
+        "parameters": [
+          {
+            "name": "options",
+            "$ref": "ProxyOptions"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "info",
+              "$ref": "ProxyConnectInfo"
+            }
+          ]
+        }
+      },
+      {
+        "name": "disconnectProxy",
+        "type": "function",
+        "description": "Disconnects from invisiv proxy.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       }
-
     ],
     "events": [
       {

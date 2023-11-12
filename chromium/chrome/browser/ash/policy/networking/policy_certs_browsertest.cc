@@ -23,7 +23,6 @@
 #include "chrome/browser/ash/login/existing_user_controller.h"
 #include "chrome/browser/ash/login/helper.h"
 #include "chrome/browser/ash/login/startup_utils.h"
-#include "chrome/browser/ash/login/test/embedded_policy_test_server_mixin.h"
 #include "chrome/browser/ash/login/test/login_or_lock_screen_visible_waiter.h"
 #include "chrome/browser/ash/login/test/oobe_base_test.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
@@ -34,6 +33,7 @@
 #include "chrome/browser/ash/policy/core/device_policy_cros_browser_test.h"
 #include "chrome/browser/ash/policy/login/login_policy_test_base.h"
 #include "chrome/browser/ash/policy/login/signin_profile_extensions_policy_test_base.h"
+#include "chrome/browser/ash/policy/test_support/embedded_policy_test_server_mixin.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/nss_service.h"
@@ -136,8 +136,8 @@ class WebTrustedCertsChangedObserver
   base::RunLoop run_loop_;
 };
 
-// Allows waiting until the |CertDatabase| notifies its observers that it has
-// changd.
+// Allows waiting until the |CertDatabase| notifies its observers that a client
+// cert change has occurred.
 class CertDatabaseChangedObserver : public net::CertDatabase::Observer {
  public:
   CertDatabaseChangedObserver() {}
@@ -146,7 +146,7 @@ class CertDatabaseChangedObserver : public net::CertDatabase::Observer {
   CertDatabaseChangedObserver& operator=(const CertDatabaseChangedObserver&) =
       delete;
 
-  void OnCertDBChanged() override { run_loop_.Quit(); }
+  void OnClientCertStoreChanged() override { run_loop_.Quit(); }
 
   void Wait() { run_loop_.Run(); }
 

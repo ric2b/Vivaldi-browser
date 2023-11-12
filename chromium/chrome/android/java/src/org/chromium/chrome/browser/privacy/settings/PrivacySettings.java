@@ -76,7 +76,6 @@ public class PrivacySettings extends PreferenceFragmentCompat
     private static final String PREF_DO_NOT_TRACK = "do_not_track";
     private static final String PREF_SAFE_BROWSING = "safe_browsing";
     private static final String PREF_SYNC_AND_SERVICES_LINK = "sync_and_services_link";
-    private static final String PREF_CLEAR_BROWSING_DATA = "clear_browsing_data";
     private static final String PREF_PRIVACY_SANDBOX = "privacy_sandbox";
     private static final String PREF_PRIVACY_GUIDE = "privacy_guide";
     private static final String PREF_INCOGNITO_LOCK = "incognito_lock";
@@ -122,6 +121,12 @@ public class PrivacySettings extends PreferenceFragmentCompat
             // available to restricted users.
             getPreferenceScreen().removePreference(sandboxPreference);
         } else {
+            if (PrivacySandboxBridge.isRestrictedNoticeEnabled()) {
+                // Update the summary to one that describes only ad measurement if ad-measurement
+                // is available to restricted users.
+                sandboxPreference.setSummary(getContext().getString(
+                        R.string.settings_ad_privacy_restricted_link_row_sub_label));
+            }
             // Overwrite the click listener to pass a correct referrer to the fragment.
             sandboxPreference.setOnPreferenceClickListener(preference -> {
                 PrivacySandboxSettingsBaseFragment.launchPrivacySandboxSettings(getContext(),

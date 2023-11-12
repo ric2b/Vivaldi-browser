@@ -93,6 +93,18 @@ class SessionsPrivateGetAllFunction : public ExtensionFunction,
   ResponseAction Run() override;
 };
 
+class SessionsPrivateGetAutosaveIdsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sessionsPrivate.getAutosaveIds", SESSIONS_GET_AUTOSAVE_IDS)
+  SessionsPrivateGetAutosaveIdsFunction() = default;
+
+ private:
+  ~SessionsPrivateGetAutosaveIdsFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+};
+
 class SessionsPrivateGetContentFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("sessionsPrivate.getContent", SESSIONS_GET_CONTENT)
@@ -104,7 +116,6 @@ class SessionsPrivateGetContentFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 };
-
 
 class SessionsPrivateModifyContentFunction : public ExtensionFunction {
  public:

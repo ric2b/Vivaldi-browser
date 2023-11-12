@@ -42,9 +42,15 @@ class TestAutofillDriverTemplate : public T {
   ~TestAutofillDriverTemplate() override = default;
 
   // AutofillDriver:
+  LocalFrameToken GetFrameToken() const override { return {}; }
+  TestAutofillDriverTemplate* GetParent() override { return nullptr; }
+  absl::optional<LocalFrameToken> Resolve(FrameToken query) override {
+    return absl::nullopt;
+  }
   bool IsInActiveFrame() const override { return is_in_active_frame_; }
   bool IsInAnyMainFrame() const override { return is_in_any_main_frame_; }
   bool IsPrerendering() const override { return false; }
+  bool HasSharedAutofillPermission() const override { return false; }
   bool CanShowAutofillUi() const override { return true; }
   ui::AXTreeID GetAxTreeId() const override {
     NOTIMPLEMENTED() << "See https://crbug.com/985933";
@@ -59,6 +65,9 @@ class TestAutofillDriverTemplate : public T {
       const std::u16string& value) override {}
   void RendererShouldClearFilledSection() override {}
   void RendererShouldClearPreviewedForm() override {}
+  void RendererShouldTriggerSuggestions(
+      const FieldGlobalId& field_id,
+      AutofillSuggestionTriggerSource trigger_source) override {}
   void RendererShouldFillFieldWithValue(const FieldGlobalId& field,
                                         const std::u16string& value) override {}
   void RendererShouldPreviewFieldWithValue(
@@ -72,9 +81,14 @@ class TestAutofillDriverTemplate : public T {
   void SendFieldsEligibleForManualFillingToRenderer(
       const std::vector<FieldGlobalId>& fields) override {}
   void SetShouldSuppressKeyboard(bool suppress) override {}
-  void TriggerReparseInAllFrames(
-      base::OnceCallback<void(bool)> trigger_reparse_finished_callback)
+  void TriggerFormExtraction() override {}
+  void TriggerFormExtractionInAllFrames(
+      base::OnceCallback<void(bool)> form_extraction_finished_callback)
       override {}
+  void GetFourDigitCombinationsFromDOM(
+      base::OnceCallback<void(const std::vector<std::string>&)>
+          potential_matches) override {}
+
   // The return value contains the members (field, type) of `field_type_map` for
   // which `field_type_map_filter_.Run(triggered_origin, field, type)` is true.
   std::vector<FieldGlobalId> FillOrPreviewForm(

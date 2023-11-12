@@ -10,6 +10,7 @@
 
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
@@ -128,7 +129,13 @@ ServiceTransferCache::CacheEntryInternal::CacheEntryInternal(
     std::unique_ptr<cc::ServiceTransferCacheEntry> entry)
     : handle(handle), entry(std::move(entry)) {}
 
-ServiceTransferCache::CacheEntryInternal::~CacheEntryInternal() {}
+ServiceTransferCache::CacheEntryInternal::~CacheEntryInternal() {
+  if (entry) {
+    UMA_HISTOGRAM_COUNTS_1M("GPU.TransferCache.ReusedTimes", num_reuse);
+    UMA_HISTOGRAM_LONG_TIMES("GPU.TransferCache.TimeSinceLastUseOnDelete",
+                             base::TimeTicks::Now() - last_use);
+  }
+}
 
 ServiceTransferCache::CacheEntryInternal::CacheEntryInternal(
     CacheEntryInternal&& other) = default;
@@ -157,21 +164,26 @@ ServiceTransferCache::~ServiceTransferCache() {
       this);
 }
 
-bool ServiceTransferCache::CreateLockedEntry(const EntryKey& key,
-                                             ServiceDiscardableHandle handle,
-                                             GrDirectContext* context,
-                                             base::span<uint8_t> data) {
+bool ServiceTransferCache::CreateLockedEntry(
+    const EntryKey& key,
+    ServiceDiscardableHandle handle,
+    GrDirectContext* context,
+    skgpu::graphite::Recorder* graphite_recorder,
+    base::span<uint8_t> data) {
   auto found = entries_.Peek(key);
-  if (found != entries_.end())
+  if (found != entries_.end()) {
     return false;
+  }
 
   std::unique_ptr<cc::ServiceTransferCacheEntry> entry =
       cc::ServiceTransferCacheEntry::Create(key.entry_type);
-  if (!entry)
+  if (!entry) {
     return false;
+  }
 
-  if (!entry->Deserialize(context, data))
+  if (!entry->Deserialize(context, graphite_recorder, data)) {
     return false;
+  }
 
   total_size_ += entry->CachedSize();
   if (key.entry_type == cc::TransferCacheEntryType::kImage) {
@@ -238,10 +250,24 @@ bool ServiceTransferCache::DeleteEntry(const EntryKey& key) {
 
 cc::ServiceTransferCacheEntry* ServiceTransferCache::GetEntry(
     const EntryKey& key) {
-  auto found = entries_.Get(key);
-  if (found == entries_.end())
+  auto entry = entries_.Get(key);
+  bool found = entry != entries_.end();
+  UMA_HISTOGRAM_BOOLEAN("GPU.TransferCache.EntryFound", found);
+  if (!found) {
     return nullptr;
-  return found->second.entry.get();
+  }
+  base::TimeTicks now = base::TimeTicks::Now();
+  base::TimeDelta last_use_delta = now - entry->second.last_use;
+  if (last_use_delta > entry->second.max_last_use_delta) {
+    entry->second.max_last_use_delta = last_use_delta;
+  }
+  entry->second.last_use = now;
+  entry->second.num_reuse++;
+  UMA_HISTOGRAM_LONG_TIMES("GPU.TransferCache.TimeSinceLastUse",
+                           last_use_delta);
+  UMA_HISTOGRAM_LONG_TIMES("GPU.TransferCache.MaxHistoricalTimeSinceLastUse",
+                           entry->second.max_last_use_delta);
+  return entry->second.entry.get();
 }
 
 void ServiceTransferCache::EnforceLimits() {

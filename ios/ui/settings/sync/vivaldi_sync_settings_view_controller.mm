@@ -10,6 +10,7 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_button_item.h"
 #import "ios/chrome/browser/ui/settings/utils/settings_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
 #import "ios/ui/table_view/cells/vivaldi_table_view_segmented_control_item.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -48,6 +49,18 @@
   [super loadModel];
 
   [self.modelDelegate vivaldiSyncSettingsViewControllerLoadModel:self];
+}
+
+#pragma mark - UITableViewDelegate
+
+- (void)tableView:(UITableView*)tableView
+      willDisplayCell:(UITableViewCell*)cell
+    forRowAtIndexPath:(NSIndexPath*)indexPath {
+  if ([cell isKindOfClass:[VivaldiTableViewSyncStatusCell class]]) {
+    VivaldiTableViewSyncStatusCell* editCell =
+        base::mac::ObjCCastStrict<VivaldiTableViewSyncStatusCell>(cell);
+    [editCell updateLabelCornerRadius];
+  }
 }
 
 #pragma mark - UITableViewDataSource
@@ -121,6 +134,7 @@
     case ItemTypeStartSyncingButton: {
       TableViewTextButtonCell* tableViewTextButtonCell =
           base::mac::ObjCCastStrict<TableViewTextButtonCell>(cell);
+      [self clearExistingTarget:tableViewTextButtonCell.button];
       [tableViewTextButtonCell.button
                  addTarget:self
                     action:@selector(startSyncingAllButtonPressed:)
@@ -163,6 +177,7 @@
     case ItemTypeLogOutButton: {
       TableViewTextButtonCell* tableViewTextButtonCell =
           base::mac::ObjCCastStrict<TableViewTextButtonCell>(cell);
+      [self clearExistingTarget:tableViewTextButtonCell.button];
       [tableViewTextButtonCell.button
                  addTarget:self
                     action:@selector(logOutButtonPressed:)
@@ -172,6 +187,7 @@
     case ItemTypeDeleteDataButton: {
       TableViewTextButtonCell* tableViewTextButtonCell =
           base::mac::ObjCCastStrict<TableViewTextButtonCell>(cell);
+      [self clearExistingTarget:tableViewTextButtonCell.button];
       [tableViewTextButtonCell.button
                  addTarget:self
                     action:@selector(deleteDataButtonPressed:)
@@ -208,13 +224,40 @@
   NSUInteger index = [self.tableViewModel
       sectionForSectionIdentifier:sectionIdentifier];
   [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:index]
-                withRowAnimation:UITableViewRowAnimationAutomatic];
+                withRowAnimation:UITableViewRowAnimationNone];
 }
 
 #pragma mark - Private Methods
 
 - (void)backupEncryptionKeyButtonPressed {
-  [self.serviceDelegate backupEncryptionKeyButtonPressed];
+  NSString* filePath = [self.serviceDelegate createTempBackupEncryptionKeyFile];
+
+  // Get the URL of your text file
+  NSURL* fileURL = [NSURL fileURLWithPath:filePath];
+
+  // Create an array containing the items to share
+  NSArray* itemsToShare = @[fileURL];
+
+  UIActivityViewController* activityVC = [[UIActivityViewController alloc]
+      initWithActivityItems:itemsToShare applicationActivities:nil];
+
+  NSArray* excludedActivityTypes = @[
+    UIActivityTypeAddToReadingList,
+    UIActivityTypeCopyToPasteboard, UIActivityTypeOpenInIBooks,
+    UIActivityTypePostToFacebook, UIActivityTypePostToFlickr,
+    UIActivityTypePostToTencentWeibo, UIActivityTypePostToTwitter,
+    UIActivityTypePostToVimeo, UIActivityTypePostToWeibo, UIActivityTypePrint
+  ];
+  activityVC.excludedActivityTypes = excludedActivityTypes;
+
+  __weak __typeof(self) weakSelf = self;
+  activityVC.completionWithItemsHandler =
+      ^(NSString *activityType, BOOL completed,
+        NSArray *returnedItems, NSError *activityError) {
+    [weakSelf.serviceDelegate removeTempBackupEncryptionKeyFile:filePath];
+  };
+
+  [self presentViewController:activityVC animated:YES completion:nil];
 }
 
 - (void)encryptionInfoButtonPressed {
@@ -285,6 +328,14 @@
 - (void)historySwitchToggled:(UISwitch*)sender {
   [self.serviceDelegate updateChosenTypes:
       syncer::UserSelectableType::kHistory isOn:sender.isOn];
+}
+
+#pragma mark - PRIVATE
+
+- (void)clearExistingTarget:(UIButton*)button {
+  [button removeTarget:nil
+                action:nil
+      forControlEvents:UIControlEventAllEvents];
 }
 
 @end

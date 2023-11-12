@@ -9,6 +9,7 @@
 
 #include "gn/build_settings.h"
 #include "gn/config.h"
+#include "gn/resolved_target_data.h"
 #include "gn/scheduler.h"
 #include "gn/settings.h"
 #include "gn/test_with_scheduler.h"
@@ -35,98 +36,6 @@ void AssertSchedulerHasOneUnknownFileMatching(const Target* target,
 }  // namespace
 
 using TargetTest = TestWithScheduler;
-
-// Tests that lib[_dir]s are inherited across deps boundaries for static
-// libraries but not executables.
-TEST_F(TargetTest, LibInheritance) {
-  TestWithScope setup;
-  Err err;
-
-  const LibFile lib("foo");
-  const SourceDir libdir("/foo_dir/");
-
-  // Leaf target with ldflags set.
-  TestTarget z(setup, "//foo:z", Target::STATIC_LIBRARY);
-  z.config_values().libs().push_back(lib);
-  z.config_values().lib_dirs().push_back(libdir);
-  ASSERT_TRUE(z.OnResolved(&err));
-
-  // All lib[_dir]s should be set when target is resolved.
-  ASSERT_EQ(1u, z.all_libs().size());
-  EXPECT_EQ(lib, z.all_libs()[0]);
-  ASSERT_EQ(1u, z.all_lib_dirs().size());
-  EXPECT_EQ(libdir, z.all_lib_dirs()[0]);
-
-  // Shared library target should inherit the libs from the static library
-  // and its own. Its own flag should be before the inherited one.
-  const LibFile second_lib("bar");
-  const SourceDir second_libdir("/bar_dir/");
-  TestTarget shared(setup, "//foo:shared", Target::SHARED_LIBRARY);
-  shared.config_values().libs().push_back(second_lib);
-  shared.config_values().lib_dirs().push_back(second_libdir);
-  shared.private_deps().push_back(LabelTargetPair(&z));
-  ASSERT_TRUE(shared.OnResolved(&err));
-
-  ASSERT_EQ(2u, shared.all_libs().size());
-  EXPECT_EQ(second_lib, shared.all_libs()[0]);
-  EXPECT_EQ(lib, shared.all_libs()[1]);
-  ASSERT_EQ(2u, shared.all_lib_dirs().size());
-  EXPECT_EQ(second_libdir, shared.all_lib_dirs()[0]);
-  EXPECT_EQ(libdir, shared.all_lib_dirs()[1]);
-
-  // Executable target shouldn't get either by depending on shared.
-  TestTarget exec(setup, "//foo:exec", Target::EXECUTABLE);
-  exec.private_deps().push_back(LabelTargetPair(&shared));
-  ASSERT_TRUE(exec.OnResolved(&err));
-  EXPECT_EQ(0u, exec.all_libs().size());
-  EXPECT_EQ(0u, exec.all_lib_dirs().size());
-}
-
-// Tests that framework[_dir]s are inherited across deps boundaries for static
-// libraries but not executables.
-TEST_F(TargetTest, FrameworkInheritance) {
-  TestWithScope setup;
-  Err err;
-
-  const std::string framework("Foo.framework");
-  const SourceDir frameworkdir("//out/foo/");
-
-  // Leaf target with ldflags set.
-  TestTarget z(setup, "//foo:z", Target::STATIC_LIBRARY);
-  z.config_values().frameworks().push_back(framework);
-  z.config_values().framework_dirs().push_back(frameworkdir);
-  ASSERT_TRUE(z.OnResolved(&err));
-
-  // All framework[_dir]s should be set when target is resolved.
-  ASSERT_EQ(1u, z.all_frameworks().size());
-  EXPECT_EQ(framework, z.all_frameworks()[0]);
-  ASSERT_EQ(1u, z.all_framework_dirs().size());
-  EXPECT_EQ(frameworkdir, z.all_framework_dirs()[0]);
-
-  // Shared library target should inherit the libs from the static library
-  // and its own. Its own flag should be before the inherited one.
-  const std::string second_framework("Bar.framework");
-  const SourceDir second_frameworkdir("//out/bar/");
-  TestTarget shared(setup, "//foo:shared", Target::SHARED_LIBRARY);
-  shared.config_values().frameworks().push_back(second_framework);
-  shared.config_values().framework_dirs().push_back(second_frameworkdir);
-  shared.private_deps().push_back(LabelTargetPair(&z));
-  ASSERT_TRUE(shared.OnResolved(&err));
-
-  ASSERT_EQ(2u, shared.all_frameworks().size());
-  EXPECT_EQ(second_framework, shared.all_frameworks()[0]);
-  EXPECT_EQ(framework, shared.all_frameworks()[1]);
-  ASSERT_EQ(2u, shared.all_framework_dirs().size());
-  EXPECT_EQ(second_frameworkdir, shared.all_framework_dirs()[0]);
-  EXPECT_EQ(frameworkdir, shared.all_framework_dirs()[1]);
-
-  // Executable target shouldn't get either by depending on shared.
-  TestTarget exec(setup, "//foo:exec", Target::EXECUTABLE);
-  exec.private_deps().push_back(LabelTargetPair(&shared));
-  ASSERT_TRUE(exec.OnResolved(&err));
-  EXPECT_EQ(0u, exec.all_frameworks().size());
-  EXPECT_EQ(0u, exec.all_framework_dirs().size());
-}
 
 // Test all_dependent_configs and public_config inheritance.
 TEST_F(TargetTest, DependentConfigs) {
@@ -292,169 +201,6 @@ TEST_F(TargetTest, DependentConfigsBetweenToolchainsWhenSet) {
   EXPECT_EQ(&public_config, a.configs()[1].ptr);
   ASSERT_EQ(1u, a.all_dependent_configs().size());
   EXPECT_EQ(&all_dependent, a.all_dependent_configs()[0].ptr);
-}
-
-TEST_F(TargetTest, InheritLibs) {
-  TestWithScope setup;
-  Err err;
-
-  // Create a dependency chain:
-  //   A (executable) -> B (shared lib) -> C (static lib) -> D (source set)
-  TestTarget a(setup, "//foo:a", Target::EXECUTABLE);
-  TestTarget b(setup, "//foo:b", Target::SHARED_LIBRARY);
-  TestTarget c(setup, "//foo:c", Target::STATIC_LIBRARY);
-  TestTarget d(setup, "//foo:d", Target::SOURCE_SET);
-  a.private_deps().push_back(LabelTargetPair(&b));
-  b.private_deps().push_back(LabelTargetPair(&c));
-  c.private_deps().push_back(LabelTargetPair(&d));
-
-  ASSERT_TRUE(d.OnResolved(&err));
-  ASSERT_TRUE(c.OnResolved(&err));
-  ASSERT_TRUE(b.OnResolved(&err));
-  ASSERT_TRUE(a.OnResolved(&err));
-
-  // C should have D in its inherited libs.
-  std::vector<const Target*> c_inherited = c.inherited_libraries().GetOrdered();
-  ASSERT_EQ(1u, c_inherited.size());
-  EXPECT_EQ(&d, c_inherited[0]);
-
-  // B should have C and D in its inherited libs.
-  std::vector<const Target*> b_inherited = b.inherited_libraries().GetOrdered();
-  ASSERT_EQ(2u, b_inherited.size());
-  EXPECT_EQ(&c, b_inherited[0]);
-  EXPECT_EQ(&d, b_inherited[1]);
-
-  // A should have B in its inherited libs, but not any others (the shared
-  // library will include the static library and source set).
-  std::vector<const Target*> a_inherited = a.inherited_libraries().GetOrdered();
-  ASSERT_EQ(1u, a_inherited.size());
-  EXPECT_EQ(&b, a_inherited[0]);
-}
-
-TEST_F(TargetTest, InheritCompleteStaticLib) {
-  TestWithScope setup;
-  Err err;
-
-  // Create a dependency chain:
-  //   A (executable) -> B (complete static lib) -> C (source set)
-  TestTarget a(setup, "//foo:a", Target::EXECUTABLE);
-  TestTarget b(setup, "//foo:b", Target::STATIC_LIBRARY);
-  b.set_complete_static_lib(true);
-
-  const LibFile lib("foo");
-  const SourceDir lib_dir("/foo_dir/");
-  TestTarget c(setup, "//foo:c", Target::SOURCE_SET);
-  c.config_values().libs().push_back(lib);
-  c.config_values().lib_dirs().push_back(lib_dir);
-
-  a.public_deps().push_back(LabelTargetPair(&b));
-  b.public_deps().push_back(LabelTargetPair(&c));
-
-  ASSERT_TRUE(c.OnResolved(&err));
-  ASSERT_TRUE(b.OnResolved(&err));
-  ASSERT_TRUE(a.OnResolved(&err));
-
-  // B should have C in its inherited libs.
-  std::vector<const Target*> b_inherited = b.inherited_libraries().GetOrdered();
-  ASSERT_EQ(1u, b_inherited.size());
-  EXPECT_EQ(&c, b_inherited[0]);
-
-  // A should have B in its inherited libs, but not any others (the complete
-  // static library will include the source set).
-  std::vector<const Target*> a_inherited = a.inherited_libraries().GetOrdered();
-  ASSERT_EQ(1u, a_inherited.size());
-  EXPECT_EQ(&b, a_inherited[0]);
-
-  // A should inherit the libs and lib_dirs from the C.
-  ASSERT_EQ(1u, a.all_libs().size());
-  EXPECT_EQ(lib, a.all_libs()[0]);
-  ASSERT_EQ(1u, a.all_lib_dirs().size());
-  EXPECT_EQ(lib_dir, a.all_lib_dirs()[0]);
-}
-
-TEST_F(TargetTest, InheritCompleteStaticLibStaticLibDeps) {
-  TestWithScope setup;
-  Err err;
-
-  // Create a dependency chain:
-  //   A (executable) -> B (complete static lib) -> C (static lib)
-  TestTarget a(setup, "//foo:a", Target::EXECUTABLE);
-  TestTarget b(setup, "//foo:b", Target::STATIC_LIBRARY);
-  b.set_complete_static_lib(true);
-  TestTarget c(setup, "//foo:c", Target::STATIC_LIBRARY);
-  a.public_deps().push_back(LabelTargetPair(&b));
-  b.public_deps().push_back(LabelTargetPair(&c));
-
-  ASSERT_TRUE(c.OnResolved(&err));
-  ASSERT_TRUE(b.OnResolved(&err));
-  ASSERT_TRUE(a.OnResolved(&err));
-
-  // B should have C in its inherited libs.
-  std::vector<const Target*> b_inherited = b.inherited_libraries().GetOrdered();
-  ASSERT_EQ(1u, b_inherited.size());
-  EXPECT_EQ(&c, b_inherited[0]);
-
-  // A should have B in its inherited libs, but not any others (the complete
-  // static library will include the static library).
-  std::vector<const Target*> a_inherited = a.inherited_libraries().GetOrdered();
-  ASSERT_EQ(1u, a_inherited.size());
-  EXPECT_EQ(&b, a_inherited[0]);
-}
-
-TEST_F(TargetTest, InheritCompleteStaticLibInheritedCompleteStaticLibDeps) {
-  TestWithScope setup;
-  Err err;
-
-  // Create a dependency chain:
-  //   A (executable) -> B (complete static lib) -> C (complete static lib)
-  TestTarget a(setup, "//foo:a", Target::EXECUTABLE);
-  TestTarget b(setup, "//foo:b", Target::STATIC_LIBRARY);
-  b.set_complete_static_lib(true);
-  TestTarget c(setup, "//foo:c", Target::STATIC_LIBRARY);
-  c.set_complete_static_lib(true);
-
-  a.private_deps().push_back(LabelTargetPair(&b));
-  b.private_deps().push_back(LabelTargetPair(&c));
-
-  ASSERT_TRUE(c.OnResolved(&err));
-  ASSERT_TRUE(b.OnResolved(&err));
-  ASSERT_TRUE(a.OnResolved(&err));
-
-  // B should have C in its inherited libs.
-  std::vector<const Target*> b_inherited = b.inherited_libraries().GetOrdered();
-  ASSERT_EQ(1u, b_inherited.size());
-  EXPECT_EQ(&c, b_inherited[0]);
-
-  // A should have B and C in its inherited libs.
-  std::vector<const Target*> a_inherited = a.inherited_libraries().GetOrdered();
-  ASSERT_EQ(2u, a_inherited.size());
-  EXPECT_EQ(&b, a_inherited[0]);
-  EXPECT_EQ(&c, a_inherited[1]);
-}
-
-TEST_F(TargetTest, NoActionDepPropgation) {
-  TestWithScope setup;
-  Err err;
-
-  // Create a dependency chain:
-  //   A (exe) -> B (action) -> C (source_set)
-  {
-    TestTarget a(setup, "//foo:a", Target::EXECUTABLE);
-    TestTarget b(setup, "//foo:b", Target::ACTION);
-    TestTarget c(setup, "//foo:c", Target::SOURCE_SET);
-
-    a.private_deps().push_back(LabelTargetPair(&b));
-    b.private_deps().push_back(LabelTargetPair(&c));
-
-    ASSERT_TRUE(c.OnResolved(&err));
-    ASSERT_TRUE(b.OnResolved(&err));
-    ASSERT_TRUE(a.OnResolved(&err));
-
-    // The executable should not have inherited the source set across the
-    // action.
-    std::vector<const Target*> libs = a.inherited_libraries().GetOrdered();
-    ASSERT_TRUE(libs.empty());
-  }
 }
 
 TEST_F(TargetTest, GetComputedOutputName) {
@@ -684,8 +430,10 @@ TEST_F(TargetTest, PublicConfigs) {
 
   // Libs have special handling, check that they were forwarded from the
   // public config to all_libs.
-  ASSERT_EQ(1u, dep_on_pub.all_libs().size());
-  ASSERT_EQ(lib_name, dep_on_pub.all_libs()[0]);
+  ResolvedTargetData resolved;
+  const auto& dep_on_pub_all_libs = resolved.GetLinkedLibraries(&dep_on_pub);
+  ASSERT_EQ(1u, dep_on_pub_all_libs.size());
+  ASSERT_EQ(lib_name, dep_on_pub_all_libs[0]);
 
   // This target has a private dependency on dest for forwards configs.
   TestTarget forward(setup, "//a:f", Target::SOURCE_SET);
@@ -1017,48 +765,6 @@ TEST_F(TargetTest, GetOutputFilesForSource_Action) {
                                              &computed_outputs, &err));
   ASSERT_EQ(1u, computed_outputs.size()) << computed_outputs.size();
   EXPECT_EQ("//out/Debug/one", computed_outputs[0].value());
-}
-
-// Shared libraries should be inherited across public shared library
-// boundaries.
-TEST_F(TargetTest, SharedInheritance) {
-  TestWithScope setup;
-  Err err;
-
-  // Create two leaf shared libraries.
-  TestTarget pub(setup, "//foo:pub", Target::SHARED_LIBRARY);
-  ASSERT_TRUE(pub.OnResolved(&err));
-
-  TestTarget priv(setup, "//foo:priv", Target::SHARED_LIBRARY);
-  ASSERT_TRUE(priv.OnResolved(&err));
-
-  // Intermediate shared library with the leaf shared libraries as
-  // dependencies, one public, one private.
-  TestTarget inter(setup, "//foo:inter", Target::SHARED_LIBRARY);
-  inter.public_deps().push_back(LabelTargetPair(&pub));
-  inter.private_deps().push_back(LabelTargetPair(&priv));
-  ASSERT_TRUE(inter.OnResolved(&err));
-
-  // The intermediate shared library should have both "pub" and "priv" in its
-  // inherited libraries.
-  std::vector<const Target*> inter_inherited =
-      inter.inherited_libraries().GetOrdered();
-  ASSERT_EQ(2u, inter_inherited.size());
-  EXPECT_EQ(&pub, inter_inherited[0]);
-  EXPECT_EQ(&priv, inter_inherited[1]);
-
-  // Make a toplevel executable target depending on the intermediate one.
-  TestTarget exe(setup, "//foo:exe", Target::SHARED_LIBRARY);
-  exe.private_deps().push_back(LabelTargetPair(&inter));
-  ASSERT_TRUE(exe.OnResolved(&err));
-
-  // The exe's inherited libraries should be "inter" (because it depended
-  // directly on it) and "pub" (because inter depended publicly on it).
-  std::vector<const Target*> exe_inherited =
-      exe.inherited_libraries().GetOrdered();
-  ASSERT_EQ(2u, exe_inherited.size());
-  EXPECT_EQ(&inter, exe_inherited[0]);
-  EXPECT_EQ(&pub, exe_inherited[1]);
 }
 
 TEST_F(TargetTest, GeneratedInputs) {
@@ -1395,18 +1101,18 @@ TEST_F(TargetTest, PullRecursiveBundleData) {
   ASSERT_EQ(a.bundle_data().file_rules()[0].sources().size(), 2u);
   ASSERT_EQ(a.bundle_data().file_rules()[1].sources().size(), 3u);
   ASSERT_EQ(a.bundle_data().assets_catalog_sources().size(), 1u);
-  ASSERT_EQ(a.bundle_data().bundle_deps().size(), 2u);
+  ASSERT_EQ(a.bundle_data().forwarded_bundle_deps().size(), 2u);
 
   // C gets its data from D.
   ASSERT_EQ(c.bundle_data().file_rules().size(), 1u);
   ASSERT_EQ(c.bundle_data().file_rules()[0].sources().size(), 1u);
-  ASSERT_EQ(c.bundle_data().bundle_deps().size(), 1u);
+  ASSERT_EQ(c.bundle_data().forwarded_bundle_deps().size(), 1u);
 
   // E does not have any bundle_data information but gets a list of
-  // bundle_deps to propagate them during target resolution.
+  // forwarded_bundle_deps to propagate them during target resolution.
   ASSERT_TRUE(e.bundle_data().file_rules().empty());
   ASSERT_TRUE(e.bundle_data().assets_catalog_sources().empty());
-  ASSERT_EQ(e.bundle_data().bundle_deps().size(), 2u);
+  ASSERT_EQ(e.bundle_data().forwarded_bundle_deps().size(), 2u);
 }
 
 TEST(TargetTest, CollectMetadataNoRecurse) {

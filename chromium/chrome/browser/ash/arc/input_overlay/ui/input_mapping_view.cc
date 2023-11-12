@@ -6,6 +6,7 @@
 
 #include "chrome/browser/ash/arc/input_overlay/actions/action.h"
 #include "chrome/browser/ash/arc/input_overlay/display_overlay_controller.h"
+#include "chrome/browser/ash/arc/input_overlay/touch_injector.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/action_view.h"
 #include "chrome/browser/ash/arc/input_overlay/util.h"
 #include "chrome/grit/generated_resources.h"
@@ -15,8 +16,6 @@
 namespace arc::input_overlay {
 namespace {
 // UI specs.
-constexpr SkColor kEditModeBgColorAlpha =
-    SkColorSetA(SK_ColorBLACK, 0x99 /*60%*/);
 constexpr SkColor kEditModeBgColor = SkColorSetA(SK_ColorBLACK, 0x66 /*40%*/);
 
 // Return true if |v1| is on top than |v2|, or |v1| is on the left side of |v2|
@@ -35,24 +34,24 @@ bool CompareActionViewPosition(const ActionView* v1, const ActionView* v2) {
 
 InputMappingView::InputMappingView(
     DisplayOverlayController* display_overlay_controller)
-    : display_overlay_controller_(display_overlay_controller) {
-  auto content_bounds =
-      display_overlay_controller_->touch_injector()->content_bounds();
-  auto& actions = display_overlay_controller_->touch_injector()->actions();
+    : controller_(display_overlay_controller) {
+  auto content_bounds = controller_->touch_injector()->content_bounds();
+  auto& actions = controller_->touch_injector()->actions();
   SetBounds(content_bounds.x(), content_bounds.y(), content_bounds.width(),
             content_bounds.height());
   for (auto& action : actions) {
-    if (action->deleted()) {
-      continue;
-    }
-    auto view = action->CreateView(display_overlay_controller_);
+    auto view = action->CreateView(controller_);
     if (view) {
       AddChildView(std::move(view));
     }
   }
+
+  controller_->AddTouchInjectorObserver(this);
 }
 
-InputMappingView::~InputMappingView() = default;
+InputMappingView::~InputMappingView() {
+  controller_->RemoveTouchInjectorObserver(this);
+}
 
 void InputMappingView::SetDisplayMode(const DisplayMode mode) {
   DCHECK(mode != DisplayMode::kEducation);
@@ -66,8 +65,7 @@ void InputMappingView::SetDisplayMode(const DisplayMode mode) {
       break;
     case DisplayMode::kEdit:
       SortChildren();
-      SetBackground(views::CreateSolidBackground(
-          AllowReposition() ? kEditModeBgColor : kEditModeBgColorAlpha));
+      SetBackground(views::CreateSolidBackground(kEditModeBgColor));
       break;
     default:
       NOTREACHED();
@@ -81,27 +79,6 @@ void InputMappingView::SetDisplayMode(const DisplayMode mode) {
   current_display_mode_ = mode;
 }
 
-void InputMappingView::OnActionAdded(Action* action) {
-  auto view = action->CreateView(display_overlay_controller_);
-  if (view) {
-    view->SetDisplayMode(current_display_mode_);
-    AddChildView(std::move(view));
-  }
-}
-
-void InputMappingView::OnActionRemoved(Action* action) {
-  for (auto* view : children()) {
-    auto* action_view = static_cast<ActionView*>(view);
-    if (action != action_view->action()) {
-      continue;
-    }
-
-    action->set_action_view(nullptr);
-    RemoveChildViewT(action_view);
-    break;
-  }
-}
-
 void InputMappingView::ProcessPressedEvent(const ui::LocatedEvent& event) {
   auto event_location = event.root_location();
   for (auto* const child : children()) {
@@ -113,7 +90,7 @@ void InputMappingView::ProcessPressedEvent(const ui::LocatedEvent& event) {
       auto bounds = action_label->GetBoundsInScreen();
       if (!bounds.Contains(event_location)) {
         action_label->ClearFocus();
-        display_overlay_controller_->AddEditMessage(
+        controller_->AddEditMessage(
             l10n_util::GetStringUTF8(IDS_INPUT_OVERLAY_EDIT_INSTRUCTIONS),
             MessageType::kInfo);
         break;
@@ -156,6 +133,51 @@ void InputMappingView::OnGestureEvent(ui::GestureEvent* event) {
   if (event->type() == ui::ET_GESTURE_TAP ||
       event->type() == ui::ET_GESTURE_TAP_DOWN) {
     ProcessPressedEvent(*event);
+  }
+}
+
+void InputMappingView::OnActionAdded(Action& action) {
+  // No add function for pre-beta version.
+  DCHECK(IsBeta());
+
+  auto view = action.CreateView(controller_);
+  if (view) {
+    AddChildView(std::move(view))->SetDisplayMode(current_display_mode_);
+  }
+}
+
+void InputMappingView::OnActionRemoved(const Action& action) {
+  // No remove function for pre-beta version.
+  DCHECK(IsBeta());
+
+  for (auto* const child : children()) {
+    auto* action_view = static_cast<ActionView*>(child);
+    if (action_view->action() == &action) {
+      RemoveChildViewT(action_view);
+      break;
+    }
+  }
+}
+
+void InputMappingView::OnActionTypeChanged(const Action& action,
+                                           const Action& new_action) {
+  // No action type change function for pre-beta version.
+  DCHECK(IsBeta());
+  NOTIMPLEMENTED();
+}
+
+void InputMappingView::OnActionUpdated(const Action& action) {
+  // Action is updated in another function already for pre-beta version.
+  if (!IsBeta()) {
+    return;
+  }
+
+  for (auto* const child : children()) {
+    auto* action_view = static_cast<ActionView*>(child);
+    if (action_view->action() == &action) {
+      action_view->OnActionUpdated();
+      break;
+    }
   }
 }
 

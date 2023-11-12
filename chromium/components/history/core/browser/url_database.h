@@ -17,6 +17,11 @@
 #include "components/query_parser/query_parser.h"
 #include "sql/statement.h"
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#include "extensions/schema/history_private.h"
+#include "db/vivaldi_history_types.h"
+#endif
+
 class GURL;
 
 namespace base {

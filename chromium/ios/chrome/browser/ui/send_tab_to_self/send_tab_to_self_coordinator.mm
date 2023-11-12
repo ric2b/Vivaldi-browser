@@ -19,11 +19,12 @@
 #import "components/send_tab_to_self/target_device_info.h"
 #import "components/signin/public/base/consent_level.h"
 #import "components/signin/public/base/signin_metrics.h"
-#import "components/sync/driver/sync_service.h"
-#import "components/sync/driver/sync_service_observer.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_service_observer.h"
 #import "ios/chrome/browser/send_tab_to_self/send_tab_to_self_browser_agent.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -39,12 +40,12 @@
 #import "ios/chrome/browser/signin/system_identity.h"
 #import "ios/chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
+#import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
 #import "ios/chrome/browser/ui/authentication/signin_presenter.h"
 #import "ios/chrome/browser/ui/infobars/presentation/infobar_modal_positioner.h"
 #import "ios/chrome/browser/ui/send_tab_to_self/send_tab_to_self_modal_delegate.h"
 #import "ios/chrome/browser/ui/send_tab_to_self/send_tab_to_self_modal_presentation_controller.h"
 #import "ios/chrome/browser/ui/send_tab_to_self/send_tab_to_self_table_view_controller.h"
-#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "third_party/abseil-cpp/absl/types/optional.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -340,9 +341,11 @@ void OpenManageDevicesTab(CommandDispatcher* dispatcher) {
           send_tab_to_self::SendingEvent::kShowSigninPromo);
 
       __weak __typeof(self) weakSelf = self;
-      ShowSigninCommandCompletionCallback callback = ^(BOOL succeeded) {
-        [weakSelf onSigninComplete:succeeded];
-      };
+      ShowSigninCommandCompletionCallback callback =
+          ^(SigninCoordinatorResult result) {
+            BOOL succeeded = result == SigninCoordinatorResultSuccess;
+            [weakSelf onSigninComplete:succeeded];
+          };
       ShowSigninCommand* command = [[ShowSigninCommand alloc]
           initWithOperation:AuthenticationOperationSigninOnly
                    identity:nil

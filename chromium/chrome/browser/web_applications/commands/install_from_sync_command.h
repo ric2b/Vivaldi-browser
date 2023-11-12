@@ -41,8 +41,8 @@ class InstallFromSyncCommand
     Params() = delete;
     ~Params();
     Params(const Params&);
-    Params(AppId app_id,
-           const absl::optional<std::string>& manifest_id,
+    Params(const AppId& app_id,
+           const ManifestId& manifest_id,
            const GURL& start_url,
            const std::string& title,
            const GURL& scope,
@@ -50,7 +50,7 @@ class InstallFromSyncCommand
            const absl::optional<mojom::UserDisplayMode>& user_display_mode,
            const std::vector<apps::IconInfo>& icons);
     const AppId app_id;
-    const absl::optional<std::string> manifest_id;
+    const ManifestId manifest_id;
     const GURL start_url;
     const std::string title;
     const GURL scope;
@@ -72,7 +72,6 @@ class InstallFromSyncCommand
   // WebAppCommandTemplate<SharedWebContentsWithAppLock>:
   const LockDescription& lock_description() const override;
   base::Value ToDebugValue() const override;
-  void OnSyncSourceRemoved() override;
   void OnShutdown() override;
   void StartWithLock(
       std::unique_ptr<SharedWebContentsWithAppLock> lock) override;
@@ -111,8 +110,8 @@ class InstallFromSyncCommand
   std::unique_ptr<SharedWebContentsWithAppLockDescription> lock_description_;
   std::unique_ptr<SharedWebContentsWithAppLock> lock_;
 
-  const base::raw_ptr<WebAppUrlLoader> url_loader_;
-  const base::raw_ptr<Profile> profile_;
+  const raw_ptr<WebAppUrlLoader, DanglingUntriaged> url_loader_;
+  const raw_ptr<Profile> profile_;
   const std::unique_ptr<WebAppDataRetriever> data_retriever_;
   const Params params_;
   OnceInstallCallback install_callback_;

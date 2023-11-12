@@ -23,14 +23,21 @@ SafeBrowsingNavigationObserverManagerFactory::GetForBrowserContext(
 // static
 SafeBrowsingNavigationObserverManagerFactory*
 SafeBrowsingNavigationObserverManagerFactory::GetInstance() {
-  return base::Singleton<SafeBrowsingNavigationObserverManagerFactory>::get();
+  static base::NoDestructor<SafeBrowsingNavigationObserverManagerFactory>
+      instance;
+  return instance.get();
 }
 
 SafeBrowsingNavigationObserverManagerFactory::
     SafeBrowsingNavigationObserverManagerFactory()
     : ProfileKeyedServiceFactory(
           "SafeBrowsingNavigationObserverManager",
-          ProfileSelections::BuildForRegularAndIncognito()) {}
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {}
 
 KeyedService*
 SafeBrowsingNavigationObserverManagerFactory::BuildServiceInstanceFor(

@@ -164,7 +164,7 @@ FYI_BUILDERS = {
     'android-pixel2-perf-fyi': {
         'tests': [{
             'isolate':
-            'performance_test_suite_android_clank_chrome',
+            'performance_test_suite_android_clank_monochrome',
             'extra_args': [
                 '--output-format=histograms',
                 '--experimental-tbmv3-metrics',
@@ -229,14 +229,22 @@ FYI_BUILDERS = {
         'tests': [{
             'isolate':
             'performance_web_engine_test_suite',
-            'extra_args':
-            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
-            bot_platforms.FUCHSIA_EXEC_ARGS['astro'],
+            'extra_args': [
+                '--output-format=histograms', '--experimental-tbmv3-metrics',
+                '--extra-path=/b/s/w/ir/bin/'
+            ] + bot_platforms.FUCHSIA_EXEC_ARGS['astro'],
             'type':
             TEST_TYPES.TELEMETRY,
         }],
         'platform':
         'fuchsia-wes',
+        # TODO(crbug.com/1453742): Replace with long-term solution for ssh in Fuchsia img,
+        # or codify as long-term solution.
+        'cipd': {
+            "cipd_package": "fuchsia/third_party/openssh-portable/${platform}",
+            "location": ".",
+            "revision": "build_id:8787350426829126785"
+        },
         'dimension': {
             'cpu': None,
             'device_type': 'Astro',
@@ -286,14 +294,22 @@ FYI_BUILDERS = {
         'tests': [{
             'isolate':
             'performance_web_engine_test_suite',
-            'extra_args':
-            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
-            bot_platforms.FUCHSIA_EXEC_ARGS['sherlock'],
+            'extra_args': [
+                '--output-format=histograms', '--experimental-tbmv3-metrics',
+                '--extra-path=/b/s/w/ir/bin/'
+            ] + bot_platforms.FUCHSIA_EXEC_ARGS['sherlock'],
             'type':
             TEST_TYPES.TELEMETRY,
         }],
         'platform':
         'fuchsia-wes',
+        # TODO(crbug.com/1453742): Replace with long-term solution for ssh in Fuchsia img,
+        # or codify as long-term solution.
+        'cipd': {
+            "cipd_package": "fuchsia/third_party/openssh-portable/${platform}",
+            "location": ".",
+            "revision": "build_id:8787350426829126785"
+        },
         'dimension': {
             'cpu': None,
             'device_type': 'Sherlock',
@@ -305,14 +321,22 @@ FYI_BUILDERS = {
         'tests': [{
             'isolate':
             'performance_web_engine_test_suite',
-            'extra_args':
-            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
-            bot_platforms.FUCHSIA_EXEC_ARGS['astro'],
+            'extra_args': [
+                '--output-format=histograms', '--experimental-tbmv3-metrics',
+                '--extra-path=/b/s/w/ir/bin/'
+            ] + bot_platforms.FUCHSIA_EXEC_ARGS['astro'],
             'type':
             TEST_TYPES.TELEMETRY,
         }],
         'platform':
         'fuchsia-wes',
+        # TODO(crbug.com/1453742): Replace with long-term solution for ssh in Fuchsia img,
+        # or codify as long-term solution.
+        'cipd': {
+            "cipd_package": "fuchsia/third_party/openssh-portable/${platform}",
+            "location": ".",
+            "revision": "build_id:8787350426829126785"
+        },
         'dimension': {
             'cpu': None,
             'device_type': 'Astro',
@@ -324,14 +348,22 @@ FYI_BUILDERS = {
         'tests': [{
             'isolate':
             'performance_web_engine_test_suite',
-            'extra_args':
-            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
-            bot_platforms.FUCHSIA_EXEC_ARGS['nelson'],
+            'extra_args': [
+                '--output-format=histograms', '--experimental-tbmv3-metrics',
+                '--extra-path=/b/s/w/ir/bin/'
+            ] + bot_platforms.FUCHSIA_EXEC_ARGS['nelson'],
             'type':
             TEST_TYPES.TELEMETRY,
         }],
         'platform':
         'fuchsia-wes',
+        # TODO(crbug.com/1453742): Replace with long-term solution for ssh in Fuchsia img,
+        # or codify as long-term solution.
+        'cipd': {
+            "cipd_package": "fuchsia/third_party/openssh-portable/${platform}",
+            "location": ".",
+            "revision": "build_id:8787350426829126785"
+        },
         'dimension': {
             'cpu': None,
             'device_type': 'Nelson',
@@ -343,14 +375,22 @@ FYI_BUILDERS = {
         'tests': [{
             'isolate':
             'performance_web_engine_test_suite',
-            'extra_args':
-            ['--output-format=histograms', '--experimental-tbmv3-metrics'] +
-            bot_platforms.FUCHSIA_EXEC_ARGS['sherlock'],
+            'extra_args': [
+                '--output-format=histograms', '--experimental-tbmv3-metrics',
+                '--extra-path=/b/s/w/ir/bin/'
+            ] + bot_platforms.FUCHSIA_EXEC_ARGS['sherlock'],
             'type':
             TEST_TYPES.TELEMETRY,
         }],
         'platform':
         'fuchsia-wes',
+        # TODO(crbug.com/1453742): Replace with long-term solution for ssh in Fuchsia img,
+        # or codify as long-term solution.
+        'cipd': {
+            "cipd_package": "fuchsia/third_party/openssh-portable/${platform}",
+            "location": ".",
+            "revision": "build_id:8787350426829126785"
+        },
         'dimension': {
             'cpu': None,
             'device_type': 'Sherlock',
@@ -478,8 +518,7 @@ BUILDERS = {
             'os': 'Ubuntu-18.04',
             'pool': 'chrome.tests',
         },
-        'perf_trigger':
-        False,
+        'perf_trigger': False,
     },
     'android_arm64-builder-perf': {
         'tests': [
@@ -522,8 +561,7 @@ BUILDERS = {
             'os': 'Ubuntu-18.04',
             'pool': 'chrome.tests',
         },
-        'perf_trigger':
-        False,
+        'perf_trigger': False,
     },
     'linux-builder-perf': {
         'additional_compile_targets': ['chromedriver'],
@@ -633,7 +671,7 @@ BUILDERS = {
     'android-go-perf': {
         'tests': [{
             'name': 'performance_test_suite',
-            'isolate': 'performance_test_suite_android_clank_chrome',
+            'isolate': 'performance_test_suite_android_clank_monochrome',
         }],
         'platform':
         'android-chrome',
@@ -648,7 +686,7 @@ BUILDERS = {
     'android-go-perf-pgo': {
         'tests': [{
             'name': 'performance_test_suite',
-            'isolate': 'performance_test_suite_android_clank_chrome',
+            'isolate': 'performance_test_suite_android_clank_monochrome',
         }],
         'platform':
         'android-chrome',
@@ -774,7 +812,7 @@ BUILDERS = {
     },
     'android-pixel4a_power-perf': {
         'tests': [{
-            'isolate': 'performance_test_suite_android_clank_chrome',
+            'isolate': 'performance_test_suite_android_clank_trichrome_bundle',
             'extra_args': [
                 '--experimental-tbmv3-metrics',
             ],
@@ -791,7 +829,7 @@ BUILDERS = {
     },
     'android-pixel4a_power-perf-pgo': {
         'tests': [{
-            'isolate': 'performance_test_suite_android_clank_chrome',
+            'isolate': 'performance_test_suite_android_clank_trichrome_bundle',
             'extra_args': [
                 '--experimental-tbmv3-metrics',
             ],
@@ -1549,13 +1587,15 @@ GTEST_BENCHMARKS = {
         'https://chromium.googlesource.com/chromium/src/+/HEAD/components/sync/README.md'
     ),
     'tracing_perftests':
-    BenchmarkMetadata('eseckler@chromium.org, oysteine@chromium.org',
-                      'Speed>Tracing'),
+    BenchmarkMetadata(
+        'eseckler@chromium.org, khokhlov@chromium.org, kraskevich@chromium.org',
+        'Speed>Tracing'
+    ),
     'load_library_perf_tests':
     BenchmarkMetadata('xhwang@chromium.org, jrummell@chromium.org',
                       'Internals>Media>Encrypted'),
     'performance_browser_tests':
-    BenchmarkMetadata('johnchen@chromium.org, jophba@chromium.org',
+    BenchmarkMetadata('jophba@chromium.org',
                       'Internals>Media>ScreenCapture'),
     'views_perftests':
     BenchmarkMetadata('tapted@chromium.org', 'Internals>Views'),
@@ -1563,14 +1603,14 @@ GTEST_BENCHMARKS = {
     BenchmarkMetadata('csharrison@chromium.org'),
     'dawn_perf_tests':
     BenchmarkMetadata(
-        'enga@chromium.org, chrome-gpu-perf-owners@chromium.org',
+        'enga@chromium.org',
         'Internals>GPU>Dawn',
         'https://dawn.googlesource.com/dawn/+/HEAD/src/tests/perf_tests/README.md'
     ),
 }
 
 RESOURCE_SIZES_METADATA = BenchmarkMetadata(
-    'agrieve@chromium.org, jbudorick@chromium.org', 'Build',
+    'agrieve@chromium.org', 'Build>Android',
     ('https://chromium.googlesource.com/chromium/src/+/HEAD/'
      'tools/binary_size/README.md#resource_sizes_py'))
 
@@ -1583,7 +1623,7 @@ OTHER_BENCHMARKS = {
 OTHER_BENCHMARKS.update({
     'chrome_sizes':
     BenchmarkMetadata(
-        emails='johnchen@chromium.org',
+        emails='chonggu@chromium.org',
         component='Build',
         documentation_url=(
             'https://chromium.googlesource.com/chromium/'
@@ -1594,7 +1634,7 @@ OTHER_BENCHMARKS.update({
 OTHER_BENCHMARKS.update({
     'resource_sizes_chromecast':
     BenchmarkMetadata(
-        emails='juke@chromium.org, eliribble@chromium.org',
+        emails='vigeni@chromium.org',
         component='Chromecast',
         documentation_url=(
             'https://chromium.googlesource.com/chromium/'
@@ -1605,7 +1645,7 @@ OTHER_BENCHMARKS.update({
 OTHER_BENCHMARKS.update({
     'resource_sizes_lacros_chrome':
     BenchmarkMetadata(
-        emails='erikchen@chromium.org, huangs@chromium.org',
+        emails='skuhne@chromium.org, huangs@chromium.org',
         component='OS>LaCrOS',
         documentation_url=(
             'https://chromium.googlesource.com/chromium/'
@@ -2025,6 +2065,8 @@ def generate_performance_test(tester_config, test, builder_name):
   }
   if shards:
     result['swarming']['shards'] = shards
+  if tester_config.get('cipd'):
+    result['swarming']['cipd_packages'] = [tester_config['cipd']]
   return result
 
 

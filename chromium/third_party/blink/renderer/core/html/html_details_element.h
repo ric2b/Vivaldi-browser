@@ -50,12 +50,21 @@ class HTMLDetailsElement final : public HTMLElement {
  private:
   void DispatchPendingEvent(const AttributeModificationReason);
 
+  const AtomicString& GetName() const {
+    return FastGetAttribute(html_names::kNameAttr);
+  }
+
+  // Return all the <details> elements in the group created by the name
+  // attribute, excluding |this|, in tree order.  If there is no such group
+  // (e.g., because there is no name attribute), returns an empty list.
+  HeapVector<Member<HTMLDetailsElement>> OtherElementsInNameGroup();
+
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
   void ParseAttribute(const AttributeModificationParams&) override;
   void DidAddUserAgentShadowRoot(ShadowRoot&) override;
   bool IsInteractiveContent() const override;
 
-  bool is_open_;
+  bool is_open_ = false;
   TaskHandle pending_event_;
   Member<HTMLSlotElement> summary_slot_;
   Member<HTMLSlotElement> content_slot_;

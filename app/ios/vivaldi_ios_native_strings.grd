@@ -248,6 +248,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_NOTE_CONTEXT_BAR_NEW_FOLDER" desc="The iOS context bar item for adding new note folder. ">
         New Folder
       </message>
+      <message name="IDS_IOS_SEARCH_WITH_VIVALDI" desc="Menu item for search with Vivaldi functionality in context menu. [Length: 35em]">
+        Search with Vivaldi
+      </message>
       <!-- Notes-->
       <message name="IDS_VIVALDI_TOOLS_MENU_ADD_TO_NOTES" desc="The iOS menu item for adding the current page to the notes. This is a verb  [iOS only]" meaning="Add current page to notes. [Verb]">
         Create note
@@ -414,6 +417,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_NOTE_DELETE" desc="Title of button that deletes currently edited note. [Length: 20em.]">
         Delete
       </message>
+      <message name="IDS_VIVALDI_NOTE_MOVE" desc="Title of button that opens note folder chooser for currently edited note. [Length: 20em.]">
+        Move
+      </message>
       <message name="IDS_VIVALDI_NOTE_EDIT_PARENT_FOLDER_BUTTON_HINT" desc="The accessibility hint spoken when hovering over the parent folder of a note in the editor. [iOS only]">
         Double tap to change the parent folder.
       </message>
@@ -423,6 +429,10 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_NOTE_CREATE_GROUP" desc="Button to create a new note folder [Length: 30em.]">
         New Folder…
       </message>
+      <message name="IDS_IOS_NOTE_CONTEXT_BAR_EMPTY_TRASH" desc="The iOS context bar item for empty trash. ">
+        Empty trash
+      </message>
+
       <!-- End Notes -->
       <!-- START PAGE AND SPEED DIAL -->
       <message name="IDS_IOS_TABS_SPEED_DIAL" desc="The title for the new tab on desktop tabs tab view">
@@ -523,6 +533,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_BOOKMARK_FOLDER_SELECTION_SEARCHBAR_PLACEHOLDER" desc="Placeholder text for the search bar used to search folder on folder selection page">
         Search Folder
       </message>
+      <message name="IDS_IOS_BOOKMARKED_IN" desc="Title of the snacback message for new bookmark">
+        Bookmarked in
+      </message>
       <!-- END BOOKMARK EDITOR -->
       <message name="IDS_IOS_OPEN_IN_PRIVATE_ACTION_TITLE" desc="Title of the action used to open an URL in a new Private tab. [iOS only]">
         Open in Private
@@ -535,6 +548,15 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_NEW_TAB_PRIVATE_MESSAGE" desc="Message shown when a user opens a private tab explaining Private mode">
         Browsing in a Private Tab means that searches, sites visited, cookies and temporary files won't be stored by Vivaldi. It does not encrypt or otherwise modify your connection.
+      </message>
+      <message name="IDS_IOS_NEW_TAB_PRIVATE_LEARN_MORE" desc="Title for the learn more button on the private tab">
+        Learn more about Privacy &amp; Security
+      </message>
+      <message name="IDS_VIVALDI_IOS_PRIVATE_INTERSTITIAL_TITLE" desc="Title of interstitial which lets the user choose, when they open a link from an external app, whether to open it in Private mode or in a regular tab. [iOS only]">
+        Open in Private?
+      </message>
+      <message name="IDS_VIVALDI_IOS_PRIVATE_INTERSTITIAL_OPEN_IN_VIVALDI_PRIVATE" desc="Button to open a link from an external app in Private mode rather than a regular tab. [iOS only]">
+        Open in Vivaldi Private
       </message>
       <!-- Sync -->
       <message name="IDS_PREFS_VIVALDI_SYNC" desc="(Vivaldi) Sync settings access point name">
@@ -602,9 +624,6 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_SYNC_SUCCESS" desc="(Vivaldi) Sync succeeded text.">
         Sync is active
-      </message>
-      <message name="IDS_VIVALDI_SYNC_APPLYING_CHANGES" desc="(Vivaldi) Text to inform that the changes are being applied">
-        Applying changes...
       </message>
       <message name="IDS_VIVALDI_SYNC_NOT_SYNCED_CYCLE" desc="(Vivaldi) Not Synced text.">
         Not Synced
@@ -871,7 +890,7 @@ locale.  The strings in this file are specific to iOS.
         Ad and Tracker blocker
       </message>
       <message name="IDS_IOS_TRACKER_SHIELD_ACCNAME" desc="The accessible name for the vivaldi tracker blocker shield button of the omnibox.">
-        Ad and Tracker blocker summery
+        Ad and Tracker blocker summary
       </message>
       <message name="IDS_IOS_TRACKER_BLOCKED_TEXT" desc="Label for blocked tracker (singular) counter in the blocker popup window">
         Tracker blocked

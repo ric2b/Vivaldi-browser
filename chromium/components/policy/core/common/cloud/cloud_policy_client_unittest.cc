@@ -22,7 +22,6 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "base/values.h"
@@ -36,7 +35,6 @@
 #include "components/policy/core/common/cloud/mock_signing_service.h"
 #include "components/policy/core/common/cloud/realtime_reporting_job_configuration.h"
 #include "components/policy/core/common/cloud/reporting_job_configuration_base.h"
-#include "components/policy/core/common/features.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/version_info/version_info.h"
 #include "google_apis/gaia/gaia_urls.h"
@@ -304,7 +302,8 @@ em::DeviceManagementRequest GetReregistrationRequest() {
 em::DeviceManagementRequest GetCertBasedRegistrationRequest(
     FakeSigningService* fake_signing_service,
     absl::optional<PsmExecutionResult> psm_execution_result,
-    absl::optional<int64_t> psm_determination_timestamp) {
+    absl::optional<int64_t> psm_determination_timestamp,
+    const absl::optional<em::DemoModeDimensions>& demo_mode_dimensions) {
   em::CertificateBasedDeviceRegistrationData data;
   data.set_certificate_type(em::CertificateBasedDeviceRegistrationData::
                                 ENTERPRISE_ENROLLMENT_CERTIFICATE);
@@ -331,6 +330,10 @@ em::DeviceManagementRequest GetCertBasedRegistrationRequest(
   }
   if (psm_execution_result.has_value())
     register_request->set_psm_execution_result(psm_execution_result.value());
+  if (demo_mode_dimensions.has_value()) {
+    *register_request->mutable_demo_mode_dimensions() =
+        demo_mode_dimensions.value();
+  }
 
   em::DeviceManagementRequest request;
 
@@ -436,6 +439,16 @@ em::DeviceManagementResponse GetRobotAuthCodeFetchResponse() {
 
 em::DeviceManagementResponse GetEmptyResponse() {
   return em::DeviceManagementResponse();
+}
+
+em::DemoModeDimensions GetDemoModeDimensions() {
+  em::DemoModeDimensions demo_mode_dimensions;
+  demo_mode_dimensions.set_country("GB");
+  demo_mode_dimensions.set_retailer_name("retailer");
+  demo_mode_dimensions.set_store_number("1234");
+  demo_mode_dimensions.add_customization_facets(
+      em::DemoModeDimensions::FEATURE_AWARE_DEVICE);
+  return demo_mode_dimensions;
 }
 
 }  // namespace
@@ -795,7 +808,8 @@ TEST_F(CloudPolicyClientTest, RegistrationWithCertificateAndPolicyFetch) {
       GetCertBasedRegistrationRequest(
           fake_signing_service.get(),
           /*psm_execution_result=*/absl::nullopt,
-          /*psm_determination_timestamp=*/absl::nullopt)
+          /*psm_determination_timestamp=*/absl::nullopt,
+          /*demo_mode_dimensions=*/absl::nullopt)
           .SerializePartialAsString();
   EXPECT_CALL(observer_, OnRegistrationStateChanged);
   CloudPolicyClient::RegistrationParameters device_attestation(
@@ -825,6 +839,41 @@ TEST_F(CloudPolicyClientTest, RegistrationWithCertificateAndPolicyFetch) {
             GetPolicyRequest().SerializePartialAsString());
   EXPECT_EQ(DM_STATUS_SUCCESS, client_->last_dm_status());
   CheckPolicyResponse(policy_response);
+}
+
+TEST_F(CloudPolicyClientTest, DemoModeRegistration) {
+  EXPECT_CALL(device_dmtoken_callback_observer_,
+              OnDeviceDMTokenRequested(
+                  /*user_affiliation_ids=*/std::vector<std::string>()))
+      .WillOnce(Return(kDeviceDMToken));
+  ExpectAndCaptureJob(GetRegistrationResponse());
+  auto fake_signing_service = std::make_unique<FakeSigningService>();
+  fake_signing_service->set_success(true);
+  const std::string expected_job_request_string =
+      GetCertBasedRegistrationRequest(
+          fake_signing_service.get(),
+          /*psm_execution_result=*/absl::nullopt,
+          /*psm_determination_timestamp=*/absl::nullopt,
+          GetDemoModeDimensions())
+          .SerializePartialAsString();
+  EXPECT_CALL(observer_, OnRegistrationStateChanged);
+  CloudPolicyClient::RegistrationParameters demo_enrollment_parameters(
+      em::DeviceRegisterRequest::DEVICE,
+      em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_ATTESTATION);
+  demo_enrollment_parameters.demo_mode_dimensions = GetDemoModeDimensions();
+  client_->RegisterWithCertificate(
+      demo_enrollment_parameters, std::string() /* client_id */,
+      kEnrollmentCertificate, std::string() /* sub_organization */,
+      std::move(fake_signing_service));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(
+      DeviceManagementService::JobConfiguration::TYPE_CERT_BASED_REGISTRATION,
+      job_type_);
+  EXPECT_EQ(job_request_.SerializePartialAsString(),
+            expected_job_request_string);
+  EXPECT_TRUE(client_->is_registered());
+  EXPECT_FALSE(client_->GetPolicyFor(policy_type_, std::string()));
+  EXPECT_EQ(DM_STATUS_SUCCESS, client_->last_dm_status());
 }
 
 TEST_F(CloudPolicyClientTest, RegistrationWithCertificateFailToSignRequest) {
@@ -1748,7 +1797,8 @@ TEST_P(CloudPolicyClientRegisterWithPsmParamsTest,
   const std::string expected_job_request_string =
       GetCertBasedRegistrationRequest(fake_signing_service.get(),
                                       psm_execution_result,
-                                      kExpectedPsmDeterminationTimestamp)
+                                      kExpectedPsmDeterminationTimestamp,
+                                      /*demo_mode_dimensions=*/absl::nullopt)
           .SerializePartialAsString();
   EXPECT_CALL(observer_, OnRegistrationStateChanged);
   CloudPolicyClient::RegistrationParameters device_attestation(
@@ -2693,60 +2743,6 @@ TEST_F(CloudPolicyClientTest, PolicyReregistrationAfterDMTokenDeletion) {
   EXPECT_FALSE(client_->requires_reregistration());
   EXPECT_FALSE(client_->GetPolicyFor(policy_type_, std::string()));
   EXPECT_EQ(DM_STATUS_SUCCESS, client_->last_dm_status());
-}
-
-TEST_F(CloudPolicyClientTest, PolicyFetchDMTokenDeletion_Disabled) {
-  // Disable the DMToken deletion feature.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kDmTokenDeletion);
-
-  RegisterClient();
-  EXPECT_TRUE(client_->is_registered());
-  EXPECT_FALSE(client_->requires_reregistration());
-
-  DeviceManagementService::JobConfiguration::JobType upload_type;
-  em::DeviceManagementResponse response;
-  response.add_error_detail(em::CBCM_DELETION_POLICY_PREFERENCE_DELETE_TOKEN);
-  EXPECT_CALL(job_creation_handler_, OnJobCreation)
-      .WillOnce(DoAll(
-          service_.CaptureJobType(&upload_type),
-          service_.SendJobResponseAsync(
-              net::OK, DeviceManagementService::kDeviceNotFound, response)));
-  EXPECT_CALL(observer_, OnRegistrationStateChanged);
-  EXPECT_CALL(observer_, OnClientError);
-
-  client_->FetchPolicy();
-  base::RunLoop().RunUntilIdle();
-
-  // Because the feature is disabled by default, the presence of the token
-  // deletion error detail still results in the "not found" DM status.
-  EXPECT_EQ(DM_STATUS_SERVICE_DEVICE_NOT_FOUND, client_->last_dm_status());
-}
-
-TEST_F(CloudPolicyClientTest, PolicyFetchDMTokenDeletion_Forced) {
-  // Enable the forced DMToken deletion feature.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(features::kDmTokenDeletion,
-                                                  {{"forced", "true"}});
-
-  RegisterClient();
-  EXPECT_TRUE(client_->is_registered());
-  EXPECT_FALSE(client_->requires_reregistration());
-
-  DeviceManagementService::JobConfiguration::JobType upload_type;
-  EXPECT_CALL(job_creation_handler_, OnJobCreation)
-      .WillOnce(DoAll(service_.CaptureJobType(&upload_type),
-                      service_.SendJobResponseAsync(
-                          net::OK, DeviceManagementService::kDeviceNotFound)));
-  EXPECT_CALL(observer_, OnRegistrationStateChanged);
-  EXPECT_CALL(observer_, OnClientError);
-
-  client_->FetchPolicy();
-  base::RunLoop().RunUntilIdle();
-
-  // The final DM status signals for DMToken deletion even though the
-  // corresponding error detail was never added to the response.
-  EXPECT_EQ(DM_STATUS_SERVICE_DEVICE_NEEDS_RESET, client_->last_dm_status());
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 

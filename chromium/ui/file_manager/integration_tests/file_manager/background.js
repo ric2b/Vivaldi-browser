@@ -157,12 +157,13 @@ export async function pollForChosenEntry(caller) {
  *     dialog.
  * @param {boolean} useBrowserOpen Whether to launch the select file dialog via
  *     a browser OpenFile() call.
+ * @param {boolean=} debug Whether to debug the waitForWindow().
  * @return {Promise} Promise to be fulfilled with the result entry of the
  *     dialog.
  */
 export async function openAndWaitForClosingDialog(
-    dialogParams, volumeName, expectedSet, closeDialog,
-    useBrowserOpen = false) {
+    dialogParams, volumeName, expectedSet, closeDialog, useBrowserOpen = false,
+    debug = false) {
   const caller = getCaller();
   let resultPromise;
   if (useBrowserOpen) {
@@ -172,7 +173,7 @@ export async function openAndWaitForClosingDialog(
     resultPromise = pollForChosenEntry(caller);
   }
 
-  const appId = await remoteCall.waitForWindow('dialog#');
+  const appId = await remoteCall.waitForWindow(debug);
   await remoteCall.waitForElement(appId, '#file-list');
   await remoteCall.waitFor('isFileManagerLoaded', appId, true);
   chrome.test.assertTrue(
@@ -378,11 +379,19 @@ export async function createShortcut(appId, directoryName) {
  * @return {Promise} Promise fulfilled on success.
  */
 export async function expandTreeItem(appId, treeItem) {
-  const expandIcon = treeItem +
-      '> .tree-row:is([has-children=true], [may-have-children]) .expand-icon';
+  // TODO(b/272125628): Use page object.
+  const useNewTree =
+      await sendTestMessage({name: 'isFilesExperimentalEnabled'}) === 'true';
+  const expandIcon = useNewTree ?
+      // expand-icon is inside shadow DOM.
+      [treeItem, '.tree-item > .tree-row > .expand-icon'] :
+      (treeItem +
+       ' > .tree-row:is([has-children=true], [may-have-children]) .expand-icon');
   await remoteCall.waitAndClickElement(appId, expandIcon);
 
-  const expandedSubtree = treeItem + '> .tree-children[expanded]';
+  const expandedSubtree = useNewTree ?
+      `${treeItem}[expanded]` :
+      (treeItem + '> .tree-children[expanded]');
   await remoteCall.waitForElement(appId, expandedSubtree);
 }
 
@@ -397,14 +406,19 @@ export async function expandTreeItem(appId, treeItem) {
  */
 export async function recursiveExpand(appId, breadcrumbsPath) {
   const paths = breadcrumbsPath.split('/').filter(path => path);
-  const hasChildren =
+  // TODO(b/272125628): Use page object.
+  const useNewTree =
+      await sendTestMessage({name: 'isFilesExperimentalEnabled'}) === 'true';
+  const hasChildren = useNewTree ?
+      ' > xf-tree-item' :
       ' > .tree-row:is([has-children=true], [may-have-children])';
 
   // Expand each directory in the breadcrumb.
   let query = '#directory-tree';
   for (const parentLabel of paths) {
     // Wait for parent element to be displayed.
-    query += ` [entry-label="${parentLabel}"]`;
+    query += useNewTree ? ` [label="${parentLabel}"]` :
+                          ` [entry-label="${parentLabel}"]`;
     await remoteCall.waitForElement(appId, query);
 
     // Only expand if element isn't expanded yet.

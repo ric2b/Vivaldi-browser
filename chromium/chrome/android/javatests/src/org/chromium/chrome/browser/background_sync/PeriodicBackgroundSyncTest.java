@@ -6,8 +6,8 @@ package org.chromium.chrome.browser.background_sync;
 
 import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -67,7 +67,6 @@ public final class PeriodicBackgroundSyncTest {
             "/chrome/test/data/background_sync/background_sync_test.html";
     private static final int TITLE_UPDATE_TIMEOUT_SECONDS = (int) scaleTimeout(10);
     private static final long WAIT_TIME_MS = scaleTimeout(100);
-    private static final long MIN_INTERVAL_MS = 1000;
 
     private CountDownLatch mScheduleLatch;
     private CountDownLatch mCancelLatch;

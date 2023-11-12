@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Prima o botão recarregar para enviar novamente os dados necessários para carregar a página.</translation>
 <translation id="3234666976984236645">Detetar sempre conteúdo importante neste website</translation>
 <translation id="3308738399950580893">anúncios</translation>
+<translation id="3384522979010096022">A sua organização não lhe permite ver este website</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> está inacessível de momento.</translation>
 <translation id="3427092606871434483">Permitir (pré-definição)</translation>
 <translation id="3447661539832366887">O proprietário deste equipamento desativou o jogo do dinossauro.</translation>
@@ -193,7 +194,6 @@
 <translation id="8150722005171944719">O ficheiro em <ph name="URL" /> não é legível. Pode ter sido removido, movido ou as permissões do ficheiro podem estar a impedir o acesso.</translation>
 <translation id="8184538546369750125">Utilizar pré-definição global (Permitir)</translation>
 <translation id="8211406090763984747">A ligação é segura</translation>
-<translation id="8225771182978767009">A pessoa que configurou este computador optou por bloquear este website.</translation>
 <translation id="8241707690549784388">A página que procura utilizou informações introduzidas por si. Regressar a essa página poderá originar a repetição de qualquer ação que tenha efetuado. Pretende continuar?</translation>
 <translation id="8241712895048303527">Bloquear neste website</translation>
 <translation id="8286036467436129157">Iniciar Sessão</translation>
@@ -214,7 +214,6 @@
 <translation id="9062620674789239642">Pode ter sido movido, editado ou eliminado.</translation>
 <translation id="9069693763241529744">Bloqueada por uma extensão</translation>
 <translation id="9073799351042754113">Escolheu desativar os avisos de segurança para este website.</translation>
-<translation id="910924428752220542">Palavras-passe Vivaldi</translation>
 <translation id="9169664750068251925">Bloquear sempre neste website</translation>
 <translation id="9180553614777056266">Bloqueador de anúncios</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utiliza um protocolo não suportado.</translation>

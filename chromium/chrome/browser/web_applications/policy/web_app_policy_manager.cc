@@ -111,8 +111,8 @@ const char WebAppPolicyManager::kInstallResultHistogramName[];
 WebAppPolicyManager::WebAppPolicyManager(Profile* profile)
     : profile_(profile),
       pref_service_(profile_->GetPrefs()),
-      default_settings_(std::make_unique<WebAppPolicyManager::WebAppSetting>()),
-      externally_installed_app_prefs_(profile_->GetPrefs()) {}
+      default_settings_(
+          std::make_unique<WebAppPolicyManager::WebAppSetting>()) {}
 
 WebAppPolicyManager::~WebAppPolicyManager() = default;
 
@@ -424,7 +424,7 @@ void WebAppPolicyManager::ParsePolicySettings() {
       });
 
   if (it != web_apps_list.end() && it->is_dict()) {
-    if (!default_settings_->Parse(*it, true)) {
+    if (!default_settings_->Parse(it->GetDict(), true)) {
       SYSLOG(WARNING) << "Malformed default web app management setting.";
       default_settings_->ResetSettings();
     }
@@ -432,12 +432,10 @@ void WebAppPolicyManager::ParsePolicySettings() {
 
   // Read policy for individual web apps
   for (const auto& iter : web_apps_list) {
-    const std::string* web_app_id_str = iter.FindStringKey(kManifestId);
+    const auto& dict = iter.GetDict();
+    const std::string* web_app_id_str = dict.FindString(kManifestId);
 
     if (*web_app_id_str == kWildcard)
-      continue;
-
-    if (!iter.is_dict())
       continue;
 
     GURL url = GURL(*web_app_id_str);
@@ -447,7 +445,7 @@ void WebAppPolicyManager::ParsePolicySettings() {
     }
 
     WebAppPolicyManager::WebAppSetting by_url(*default_settings_);
-    if (by_url.Parse(iter, false)) {
+    if (by_url.Parse(dict, /*for_default_settings=*/false)) {
       settings_by_url_[url.spec()] = by_url;
     } else {
       LOG(WARNING) << "Malformed web app settings for " << url;
@@ -565,13 +563,13 @@ ExternalInstallOptions WebAppPolicyManager::ParseInstallPolicyEntry(
 
 RunOnOsLoginPolicy WebAppPolicyManager::GetUrlRunOnOsLoginPolicy(
     const AppId& app_id) const {
-  return GetUrlRunOnOsLoginPolicyByUnhashedAppId(
-      app_registrar_->GetComputedUnhashedAppId(app_id));
+  return GetUrlRunOnOsLoginPolicyByManifestId(
+      app_registrar_->GetComputedManifestId(app_id).spec());
 }
 
-RunOnOsLoginPolicy WebAppPolicyManager::GetUrlRunOnOsLoginPolicyByUnhashedAppId(
-    const std::string& unhashed_app_id) const {
-  auto it = settings_by_url_.find(unhashed_app_id);
+RunOnOsLoginPolicy WebAppPolicyManager::GetUrlRunOnOsLoginPolicyByManifestId(
+    const std::string& manifest_id) const {
+  auto it = settings_by_url_.find(manifest_id);
   if (it != settings_by_url_.end())
     return it->second.run_on_os_login_policy;
   return default_settings_->run_on_os_login_policy;
@@ -617,16 +615,12 @@ void WebAppPolicyManager::MaybeOverrideManifest(
     return;
 
   // For policy-installed apps there are two ways for getting to the manifest:
-  // via the policy install URL, or via the manifest-specified start_url
+  // via the policy install URL, or via the manifest-specified identity
   // of an already installed app. Websites without a manifest will use the
   // policy-installed URL as start_url, so they are covered by the first case.
   // Second case first:
-  if (!manifest->start_url.is_empty()) {
-    const absl::optional<std::string> manifest_id =
-        manifest->id.has_value() ? absl::optional<std::string>(
-                                       base::UTF16ToUTF8(manifest->id.value()))
-                                 : absl::nullopt;
-    const AppId& app_id = GenerateAppId(manifest_id, manifest->start_url);
+  if (manifest->id.is_valid()) {
+    const AppId& app_id = GenerateAppIdFromManifestId(manifest->id);
     // List of policy-installed apps and their install URLs:
     base::flat_map<AppId, base::flat_set<GURL>> policy_installed_apps =
         app_registrar_->GetExternallyInstalledApps(
@@ -662,9 +656,8 @@ bool WebAppPolicyManager::IsPreventCloseEnabled(const AppId& app_id) const {
     return false;
   }
 
-  const std::string unhashed_id =
-      app_registrar_->GetComputedUnhashedAppId(app_id);
-  auto it = settings_by_url_.find(unhashed_id);
+  const ManifestId manifest_id = app_registrar_->GetComputedManifestId(app_id);
+  auto it = settings_by_url_.find(manifest_id.spec());
   if (it != settings_by_url_.end()) {
     return it->second.prevent_close;
   }
@@ -672,6 +665,10 @@ bool WebAppPolicyManager::IsPreventCloseEnabled(const AppId& app_id) const {
 #else
   return false;
 #endif  // BUILDFLAG(IS_CHROMEOS)
+}
+
+void WebAppPolicyManager::RefreshPolicyInstalledAppsForTesting() {
+  RefreshPolicyInstalledApps();
 }
 
 void WebAppPolicyManager::OnAppsSynchronized(
@@ -697,9 +694,9 @@ WebAppPolicyManager::WebAppSetting::WebAppSetting() {
   ResetSettings();
 }
 
-bool WebAppPolicyManager::WebAppSetting::Parse(const base::Value& dict,
+bool WebAppPolicyManager::WebAppSetting::Parse(const base::Value::Dict& dict,
                                                bool for_default_settings) {
-  const std::string* run_on_os_login_str = dict.FindStringKey(kRunOnOsLogin);
+  const std::string* run_on_os_login_str = dict.FindString(kRunOnOsLogin);
   if (run_on_os_login_str) {
     if (*run_on_os_login_str == kAllowed) {
       run_on_os_login_policy = RunOnOsLoginPolicy::kAllowed;
@@ -720,7 +717,7 @@ bool WebAppPolicyManager::WebAppSetting::Parse(const base::Value& dict,
           features::kDesktopPWAsEnforceWebAppSettingsPolicy) &&
       base::FeatureList::IsEnabled(features::kDesktopPWAsPreventClose) &&
       run_on_os_login_policy == RunOnOsLoginPolicy::kRunWindowed) {
-    absl::optional<bool> prevent_close_value = dict.FindBoolKey(kPreventClose);
+    absl::optional<bool> prevent_close_value = dict.FindBool(kPreventClose);
     if (prevent_close_value && *prevent_close_value) {
       prevent_close = true;
     }

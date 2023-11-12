@@ -4,6 +4,7 @@
 
 #include "ash/wm/desks/desk.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <utility>
 
 #include "ash/constants/app_types.h"
@@ -27,7 +28,6 @@
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
-#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
@@ -370,6 +370,10 @@ void Desk::AddWindowToDesk(aura::Window* window) {
     aura::Window* root = window->GetRootWindow();
     auto& adw_data = all_desk_window_stacking_[root];
 
+    if (!is_active_) {
+      last_active_root_ = root;
+    }
+
     // Find z-order of the added window.
     auto* container = GetDeskContainerForRoot(root);
     if (auto order =
@@ -397,9 +401,9 @@ void Desk::AddWindowToDesk(aura::Window* window) {
   if (!is_desk_being_removed_ &&
       !desks_util::IsWindowVisibleOnAllWorkspaces(window)) {
     // Setting the property for `kWindowWorkspaceKey` or
-    // `kDeskGuidKey` will trigger a save for the window state. To
+    // `kDeskUuidKey` will trigger a save for the window state. To
     // avoid doing this twice, we tell the window state to hold off on saving
-    // until we save the `kDeskGuidKey` value.
+    // until we save the `kDeskUuidKey` value.
     // TODO(b/265490703): We should eventually clean up this and
     // `GetScopedIgnorePropertyChange` when unit tests no longer need this
     // scoping to prevent double saves.
@@ -410,7 +414,7 @@ void Desk::AddWindowToDesk(aura::Window* window) {
                           desks_controller->GetDeskIndex(this));
     }
 
-    window->SetProperty(kDeskGuidKey, uuid_.AsLowercaseString());
+    window->SetProperty(aura::client::kDeskUuidKey, uuid_.AsLowercaseString());
   }
 
   MaybeIncrementWeeklyActiveDesks();
@@ -513,6 +517,10 @@ void Desk::PrepareForActivationAnimation() {
 void Desk::Activate(bool update_window_activation) {
   DCHECK(!is_active_);
 
+  absl::Cleanup last_active_root_reset = [this] {
+    last_active_root_ = nullptr;
+  };
+
   if (!MaybeResetContainersOpacities()) {
     for (aura::Window* root : Shell::GetAllRootWindows())
       root->GetChildById(container_id_)->Show();
@@ -542,13 +550,18 @@ void Desk::Activate(bool update_window_activation) {
   auto mru_window_list =
       Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk);
 
-  // If there's an adw window that has order=0 (should be on top), then we'll
-  // find it first and activate it. We use the MRU list here so that in the
-  // case that there are multiple roots that each have a topmost adw window,
-  // we'll activate the one most recently used.
+  // If there's an adw window that has order=0 (should be on top) and was on the
+  // last active root window, then we'll find it first and activate it. We use
+  // the MRU list here so that in the case that there are multiple roots that
+  // each have a topmost adw window, we'll activate the one most recently used.
   if (features::IsPerDeskZOrderEnabled()) {
     for (auto* window : mru_window_list) {
       aura::Window* root = window->GetRootWindow();
+
+      if (last_active_root_ != nullptr && last_active_root_ != root) {
+        continue;
+      }
+
       auto& adw_data = all_desk_window_stacking_[root];
 
       if (!adw_data.empty() && adw_data.front().window == window &&
@@ -844,6 +857,9 @@ void Desk::BuildAllDeskStackingData() {
   // This function should not be invoked when this feature isn't enabled.
   DCHECK(features::IsPerDeskZOrderEnabled());
 
+  auto* active_window = window_util::GetActiveWindow();
+  last_active_root_ = active_window ? active_window->GetRootWindow() : nullptr;
+
   for (aura::Window* root : Shell::GetAllRootWindows()) {
     auto& adw_data = all_desk_window_stacking_[root];
     aura::Window* container = GetDeskContainerForRoot(root);
@@ -917,6 +933,10 @@ void Desk::AddAllDeskWindow(aura::Window* window) {
   aura::Window* root = window->GetRootWindow();
   auto& adw_data = all_desk_window_stacking_[root];
 
+  if (!is_active_) {
+    last_active_root_ = root;
+  }
+
   // Assume this window is going to be on top and bump remaining windows down.
   adw_data.insert(adw_data.begin(), {.window = window, .order = 0});
   for (size_t i = 1; i != adw_data.size(); ++i)
@@ -936,6 +956,11 @@ void Desk::RemoveAllDeskWindow(aura::Window* window) {
     // an all desk window. In this case, there's nothing to do since this desk
     // doesn't have any stacking info for this window.
     return;
+  }
+
+  // Reset `last_active_root_` if the adw being removed was the mru window.
+  if (!is_active_ && root == last_active_root_ && it->order == 0) {
+    last_active_root_ = nullptr;
   }
 
   it = adw_data.erase(it);

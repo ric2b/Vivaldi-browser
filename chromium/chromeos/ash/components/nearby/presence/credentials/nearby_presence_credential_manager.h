@@ -22,11 +22,22 @@ class NearbyPresenceCredentialManager {
   virtual ~NearbyPresenceCredentialManager() = default;
 
   // Returns whether this is this device has been registered with the server
-  // for NP before.
+  // for NP before and completed the registration flow steps outlined in
+  // `RegisterPresence`.
   virtual bool IsLocalDeviceRegistered() = 0;
 
   // Kicks off the first time initialization flow for registering presence
   // with the Nearby Presence server. Returns the success of registration.
+  //
+  // The flow for registration is as follows:
+  //      1. Register this device with the server.
+  //      2. Generate this device's credentials.
+  //      3. Upload this device's credentials.
+  //      4. Download other devices' credentials.
+  //      5. Save other devices' credentials.
+  //
+  // Callers are expected to check |IsPresenceInitialized| and only call this
+  // function when it is false.
   virtual void RegisterPresence(
       base::OnceCallback<void(bool)> on_registered_callback) = 0;
 

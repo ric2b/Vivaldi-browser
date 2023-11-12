@@ -9,7 +9,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/functional/callback_forward.h"
-#include "base/memory/raw_ptr_exclusion.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list_types.h"
 #include "base/run_loop.h"
@@ -252,14 +252,20 @@ class TaskEnvironment {
   // possible.
   void RunUntilIdle();
 
-  // Only valid for instances using TimeSource::MOCK_TIME. Fast-forwards
+  // Only valid for instances using |TimeSource::MOCK_TIME|. Fast-forwards
   // virtual time by |delta|, causing all tasks on the main thread and thread
-  // pool with a remaining delay less than or equal to |delta| to be executed in
-  // their natural order before this returns. |delta| must be non-negative. Upon
-  // returning from this method, NowTicks() will be >= the initial |NowTicks() +
-  // delta|. It is guaranteed to be == iff tasks executed in this
-  // FastForwardBy() didn't result in nested calls to time-advancing-methods.
+  // pool with a remaining delay less than or equal to |delta| to be executed
+  // in their natural order before this method returns. Undelayed tasks are just
+  // delayed tasks with a delay of 0, so they are also executed. |delta| must be
+  // non-negative. Upon returning from this method, NowTicks() will be >= the
+  // initial |NowTicks() + delta|. It is guaranteed to be == iff tasks executed
+  // in this FastForwardBy() didn't result in nested calls to
+  // time-advancing-methods.
   void FastForwardBy(TimeDelta delta);
+
+  // Similar to `FastForwardBy` but doesn't advance `base::LiveTicks`, behaving
+  // as if the system was suspended for `delta` time and immediately woken up.
+  void SuspendedFastForwardBy(TimeDelta delta);
 
   // Only valid for instances using TimeSource::MOCK_TIME.
   // Short for FastForwardBy(TimeDelta::Max()).
@@ -283,6 +289,10 @@ class TaskEnvironment {
   // specifically handle more time than expected to have passed.
   void AdvanceClock(TimeDelta delta);
 
+  // Similar to `AdvanceClock` but doesn't advance `base::LiveTicks`, behaving
+  // as if the system was suspended for `delta` time and immediately woken up.
+  void SuspendedAdvanceClock(TimeDelta delta);
+
   bool UsesMockTime() const { return !!mock_clock_; }
 
   // Only valid for instances using TimeSource::MOCK_TIME. Returns a
@@ -303,6 +313,13 @@ class TaskEnvironment {
   // This is always equivalent to base::TimeTicks::Now() under
   // TimeSource::MOCK_TIME.
   base::TimeTicks NowTicks() const;
+
+  // Only valid for instances using TimeSource::MOCK_TIME. Returns the current
+  // virtual live time (based on a realistic Now(), sampled when this
+  // TaskEnvironment was created, and manually advanced from that point on).
+  // This is always equivalent to base::LiveTicks::Now() under
+  // TimeSource::MOCK_TIME.
+  base::LiveTicks NowLiveTicks() const;
 
   // Only valid for instances using TimeSource::MOCK_TIME. Returns the number of
   // pending tasks (delayed and non-delayed) of the main thread's TaskRunner.
@@ -447,6 +464,8 @@ class TaskEnvironment {
 
   void CompleteInitialization();
 
+  void FastForwardByInternal(TimeDelta delta, bool advance_live_ticks);
+
   // The template constructor has to be in the header but it delegates to this
   // constructor to initialize all other members out-of-line.
   TaskEnvironment(
@@ -487,9 +506,7 @@ class TaskEnvironment {
 #endif
 
   // Owned by the ThreadPoolInstance.
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #union
-  RAW_PTR_EXCLUSION TestTaskTracker* task_tracker_ = nullptr;
+  raw_ptr<TestTaskTracker, DanglingUntriaged> task_tracker_ = nullptr;
 
   // Ensures destruction of lazy TaskRunners when this is destroyed.
   std::unique_ptr<base::internal::ScopedLazyTaskRunnerListForTesting>

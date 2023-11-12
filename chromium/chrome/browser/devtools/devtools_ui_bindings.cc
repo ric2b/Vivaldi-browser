@@ -35,6 +35,7 @@
 #include "chrome/browser/devtools/devtools_file_watcher.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/devtools/url_constants.h"
+#include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
@@ -54,7 +55,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
-#include "components/sync/driver/sync_service.h"
+#include "components/sync/service/sync_service.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/zoom/page_zoom.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -1324,6 +1325,23 @@ void DevToolsUIBindings::DispatchProtocolMessageFromDevToolsFrontend(
       this, base::as_bytes(base::make_span(message)));
 }
 
+void DevToolsUIBindings::RecordCountHistogram(const std::string& name,
+                                              int sample,
+                                              int min,
+                                              int exclusive_max,
+                                              int buckets) {
+  if (!frontend_host_) {
+    return;
+  }
+
+  if (!(min <= sample && sample < exclusive_max && buckets >= 3)) {
+    frontend_host_->BadMessageReceived();
+    return;
+  }
+
+  base::UmaHistogramCustomCounts(name, sample, min, exclusive_max, buckets);
+}
+
 void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
                                                    int sample,
                                                    int boundary_value) {
@@ -1521,6 +1539,9 @@ void DevToolsUIBindings::AddDevToolsExtensionsToClient() {
   base::Value::List results;
   base::Value::List component_extension_origins;
   bool have_user_installed_devtools_extensions = false;
+  extensions::ExtensionManagement* management =
+      extensions::ExtensionManagementFactory::GetForBrowserContext(
+          web_contents_->GetBrowserContext());
   for (const scoped_refptr<const extensions::Extension>& extension :
        registry->enabled_extensions()) {
     if (extensions::Manifest::IsComponentLocation(extension->location())) {
@@ -1543,6 +1564,19 @@ void DevToolsUIBindings::AddDevToolsExtensionsToClient() {
         web_contents_->GetPrimaryMainFrame()->GetProcess()->GetID(),
         url::Origin::Create(extension->url()));
 
+    base::Value::List runtime_allowed_hosts;
+    std::vector<std::string> allowed_hosts =
+        management->GetPolicyAllowedHosts(extension.get()).ToStringVector();
+    for (auto& host : allowed_hosts) {
+      runtime_allowed_hosts.Append(std::move(host));
+    }
+    base::Value::List runtime_blocked_hosts;
+    std::vector<std::string> blocked_hosts =
+        management->GetPolicyBlockedHosts(extension.get()).ToStringVector();
+    for (auto& host : blocked_hosts) {
+      runtime_blocked_hosts.Append(std::move(host));
+    }
+
     base::Value::Dict extension_info;
     extension_info.Set("startPage", url.spec());
     extension_info.Set("name", extension->name());
@@ -1551,6 +1585,11 @@ void DevToolsUIBindings::AddDevToolsExtensionsToClient() {
                            extensions::mojom::APIPermissionID::kExperimental));
     extension_info.Set("allowFileAccess", extensions::util::AllowFileAccess(
                                               extension->id(), profile_));
+    extension_info.Set(
+        "hostsPolicy",
+        base::Value::Dict()
+            .Set("runtimeAllowedHosts", std::move(runtime_allowed_hosts))
+            .Set("runtimeBlockedHosts", std::move(runtime_blocked_hosts)));
     results.Append(std::move(extension_info));
 
     if (!(extensions::Manifest::IsPolicyLocation(extension->location()) ||

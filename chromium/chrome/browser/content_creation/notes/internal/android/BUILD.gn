@@ -12,6 +12,7 @@ android_library("java") {
     "//chrome/android:chrome_test_java",
   ]
 
+  srcjar_deps = [ ":jni_headers" ]
   sources = [
     "java/src/org/chromium/chrome/browser/content_creation/notes/LineLimitedTextView.java",
     "java/src/org/chromium/chrome/browser/content_creation/notes/NoteCreationCoordinatorFactory.java",
@@ -44,6 +45,7 @@ android_library("java") {
     "//chrome/browser/ui/android/strings:ui_strings_grd",
     "//components/browser_ui/share/android:java",
     "//components/browser_ui/styles/android:java_resources",
+    "//components/browser_ui/widget/android:java",
     "//components/content_creation/notes/android:java",
     "//components/image_fetcher:java",
     "//components/url_formatter/android:url_formatter_java",
@@ -57,11 +59,11 @@ android_library("java") {
     "//url:gurl_java",
   ]
   resources_package = "org.chromium.chrome.browser.content_creation.internal"
-  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
 }
 
 generate_jni("jni_headers") {
   visibility = [
+    ":*",
     "//chrome/browser",
     "//chrome/browser/content_creation/notes/internal:*",
   ]

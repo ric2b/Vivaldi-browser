@@ -60,6 +60,7 @@
 <translation id="3226128629678568754">Lähetä tiedoston lataukseen tarvittavat tiedot uudelleen painamalla päivityspainiketta.</translation>
 <translation id="3234666976984236645">Tunnista aina tärkeä sisältö tällä sivustolla</translation>
 <translation id="3308738399950580893">mainokset</translation>
+<translation id="3384522979010096022">Organisaatiosi ei salli sinun avata tätä sivustoa</translation>
 <translation id="3422472998109090673">Sivustoon <ph name="HOST_NAME" /> ei ole tällä hetkellä tavoitettavissa.</translation>
 <translation id="3427092606871434483">Salli (oletus)</translation>
 <translation id="3447661539832366887">Tämän laitteen omistaja on poistanut dinosauruspelin käytöstä.</translation>
@@ -193,7 +194,6 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="8150722005171944719">Tiedosto osoitteessa <ph name="URL" /> ei ole luettavissa. Se on voitu poistaa tai siirtää, tai tiedoston käyttöluvat voivat estää sen käytön.</translation>
 <translation id="8184538546369750125">Käytä yleistä oletusasetusta (salli)</translation>
 <translation id="8211406090763984747">Yhteys on turvallinen</translation>
-<translation id="8225771182978767009">Tämän tietokoneen määrittänyt henkilö on estänyt tämän sivuston.</translation>
 <translation id="8241707690549784388">Etsimäsi sivu käytti antamiasi tietoja. Sivulle palaaminen voi johtaa jokaisen tekemäsi toiminnon toistamiseen. Haluatko jatkaa?</translation>
 <translation id="8241712895048303527">Estä tällä sivustolla</translation>
 <translation id="8286036467436129157">Kirjaudu</translation>
@@ -214,7 +214,6 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="9062620674789239642">Se on voitu siirtää tai poistaa tai sitä on muutettu.</translation>
 <translation id="9069693763241529744">Laajennuksen estämä</translation>
 <translation id="9073799351042754113">Olet poistanut tietoturvavaroitukset käytöstä tällä sivustolla.</translation>
-<translation id="910924428752220542">Vivaldin salasanat</translation>
 <translation id="9169664750068251925">Estä aina tällä sivustolla</translation>
 <translation id="9180553614777056266">Mainosesto</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> käyttää protokollaa, jota ei tueta.</translation>

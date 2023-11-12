@@ -154,8 +154,6 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   void AddChild(LayoutObject* new_child,
                 LayoutObject* before_child = nullptr) override;
 
-  virtual void UpdateBlockLayout(bool relayout_children);
-
   void InsertPositionedObject(LayoutBox*);
   static void RemovePositionedObject(LayoutBox*);
   void RemovePositionedObjects(LayoutObject*,
@@ -236,14 +234,13 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
  protected:
   void WillBeDestroyed() override;
 
-  void UpdateLayout() override;
+  void UpdateLayout() override {
+    NOT_DESTROYED();
+    NOTREACHED_NORETURN();
+  }
 
  public:
   void Paint(const PaintInfo&) const override;
-  virtual void PaintObject(const PaintInfo&,
-                           const PhysicalOffset& paint_offset) const;
-  virtual void PaintChildren(const PaintInfo&,
-                             const PhysicalOffset& paint_offset) const;
   MinMaxSizes PreferredLogicalWidths() const override;
 
   virtual bool HasLineIfEmpty() const;
@@ -280,8 +277,6 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
     NOT_DESTROYED();
     return IsInline() && IsAtomicInlineLevel();
   }
-
-  bool NeedsPreferredWidthsRecalculation() const override;
 
   bool IsInSelfHitTestingPhase(HitTestPhase phase) const final {
     NOT_DESTROYED();
@@ -327,10 +322,6 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
       const PhysicalOffset&) const;
 
   LayoutObjectChildList children_;
-
-  // Note these quirk values can't be put in LayoutBlockRareData since they are
-  // set too frequently.
-  unsigned descendants_with_floats_marked_for_layout_ : 1;
 
   unsigned has_positioned_objects_ : 1;
   unsigned has_svg_text_descendants_ : 1;

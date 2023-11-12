@@ -4,12 +4,12 @@
 
 #import "UIKit/UIKit.h"
 
-#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
 #import "ios/ui/custom_views/custom_view_constants.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -28,6 +28,8 @@ const UIEdgeInsets underlinePadding = UIEdgeInsetsMake(2.0, 12.0, 0.0, 0.0);
 // Size for the underline
 // In order - Width, Height
 const CGSize underlineSize = CGSizeMake(0.0, 1.0);
+// Delete button size
+const CGSize deleteButtonSize = CGSizeMake(20, 20);
 }
 
 @interface VivaldiTextFieldView()<UITextFieldDelegate>
@@ -100,7 +102,8 @@ const CGSize underlineSize = CGSizeMake(0.0, 1.0);
                       leading:textField.trailingAnchor
                        bottom:nil
                      trailing:self.trailingAnchor
-                      padding:deleteTextButtonPadding];
+                      padding:deleteTextButtonPadding
+                         size:deleteButtonSize];
   [deleteTextButton centerYInSuperview];
   // Hide the delete text button initially
   [deleteTextButton setAlpha:0];

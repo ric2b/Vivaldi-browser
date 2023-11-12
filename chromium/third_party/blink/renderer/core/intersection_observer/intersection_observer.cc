@@ -47,11 +47,14 @@ class IntersectionObserverDelegateImpl final
       ExecutionContext* context,
       IntersectionObserver::EventCallback callback,
       LocalFrameUkmAggregator::MetricId ukm_metric_id,
-      IntersectionObserver::DeliveryBehavior delivery_behavior)
+      IntersectionObserver::DeliveryBehavior delivery_behavior,
+      bool needs_initial_observation_with_detached_target)
       : context_(context),
         callback_(std::move(callback)),
         ukm_metric_id_(ukm_metric_id),
-        delivery_behavior_(delivery_behavior) {}
+        delivery_behavior_(delivery_behavior),
+        needs_initial_observation_with_detached_target_(
+            needs_initial_observation_with_detached_target) {}
   IntersectionObserverDelegateImpl(const IntersectionObserverDelegateImpl&) =
       delete;
   IntersectionObserverDelegateImpl& operator=(
@@ -63,6 +66,10 @@ class IntersectionObserverDelegateImpl final
 
   IntersectionObserver::DeliveryBehavior GetDeliveryBehavior() const override {
     return delivery_behavior_;
+  }
+
+  bool NeedsInitialObservationWithDetachedTarget() const override {
+    return needs_initial_observation_with_detached_target_;
   }
 
   void Deliver(const HeapVector<Member<IntersectionObserverEntry>>& entries,
@@ -82,6 +89,7 @@ class IntersectionObserverDelegateImpl final
   IntersectionObserver::EventCallback callback_;
   LocalFrameUkmAggregator::MetricId ukm_metric_id_;
   IntersectionObserver::DeliveryBehavior delivery_behavior_;
+  bool needs_initial_observation_with_detached_target_;
 };
 
 void ParseMargin(String margin_parameter,
@@ -169,8 +177,6 @@ void ParseThresholds(
 }  // anonymous namespace
 
 static bool throttle_delay_enabled = true;
-const float IntersectionObserver::kMinimumThreshold =
-    std::numeric_limits<float>::min();
 
 void IntersectionObserver::SetThrottleDelayEnabledForTesting(bool enabled) {
   throttle_delay_enabled = enabled;
@@ -251,11 +257,12 @@ IntersectionObserver* IntersectionObserver::Create(
     bool always_report_root_bounds,
     MarginTarget margin_target,
     bool use_overflow_clip_edge,
+    bool needs_initial_observation_with_detached_target,
     ExceptionState& exception_state) {
   IntersectionObserverDelegateImpl* intersection_observer_delegate =
       MakeGarbageCollected<IntersectionObserverDelegateImpl>(
           document->GetExecutionContext(), std::move(callback), ukm_metric_id,
-          behavior);
+          behavior, needs_initial_observation_with_detached_target);
   return MakeGarbageCollected<IntersectionObserver>(
       *intersection_observer_delegate, nullptr, margin, thresholds, semantics,
       delay, track_visibility, always_report_root_bounds, margin_target,
@@ -285,7 +292,6 @@ IntersectionObserver::IntersectionObserver(
       track_visibility_(track_visibility),
       track_fraction_of_root_(semantics == kFractionOfRoot),
       always_report_root_bounds_(always_report_root_bounds),
-      can_use_cached_rects_(0),
       use_overflow_clip_edge_(use_overflow_clip_edge) {
   switch (margin.size()) {
     case 0:
@@ -337,6 +343,12 @@ bool IntersectionObserver::RootIsValid() const {
   return RootIsImplicit() || root();
 }
 
+void IntersectionObserver::InvalidateCachedRects() {
+  for (auto& observation : observations_) {
+    observation->InvalidateCachedRects();
+  }
+}
+
 void IntersectionObserver::observe(Element* target,
                                    ExceptionState& exception_state) {
   if (!RootIsValid() || !target)
@@ -360,14 +372,12 @@ void IntersectionObserver::observe(Element* target,
         .EnsureIntersectionObserverController()
         .AddTrackedObservation(*observation);
     if (LocalFrameView* frame_view = target->GetDocument().View()) {
-      // The IntersectionObsever spec requires that at least one observation
+      // The IntersectionObserver spec requires that at least one observation
       // be recorded after observe() is called, even if the frame is throttled.
       frame_view->SetIntersectionObservationState(LocalFrameView::kRequired);
       frame_view->ScheduleAnimation();
     }
-  } else {
-    // The IntersectionObsever spec requires that at least one observation
-    // be recorded after observe() is called, even if the target is detached.
+  } else if (delegate_->NeedsInitialObservationWithDetachedTarget()) {
     absl::optional<base::TimeTicks> monotonic_time;
     observation->ComputeIntersection(
         IntersectionObservation::kImplicitRootObserversNeedUpdate |
@@ -483,9 +493,7 @@ int64_t IntersectionObserver::ComputeIntersections(
     flags |= IntersectionObservation::kUseOverflowClipEdge;
 
   IntersectionGeometry::RootGeometry root_geometry(
-      IntersectionGeometry::GetRootLayoutObjectForTarget(root(), nullptr,
-                                                         false),
-      RootMargin());
+      IntersectionGeometry::GetExplicitRootLayoutObject(*root()), RootMargin());
   // TODO(szager): Is this copy necessary?
   HeapVector<Member<IntersectionObservation>> observations_to_process(
       observations_);
@@ -494,7 +502,15 @@ int64_t IntersectionObserver::ComputeIntersections(
     result +=
         observation->ComputeIntersection(root_geometry, flags, monotonic_time);
   }
-  can_use_cached_rects_ = 1;
+  return result;
+}
+
+gfx::Vector2dF IntersectionObserver::MinScrollDeltaToUpdate() const {
+  gfx::Vector2dF result(std::numeric_limits<float>::max(),
+                        std::numeric_limits<float>::max());
+  for (const auto& observation : observations_) {
+    result.SetToMin(observation->MinScrollDeltaToUpdate());
+  }
   return result;
 }
 

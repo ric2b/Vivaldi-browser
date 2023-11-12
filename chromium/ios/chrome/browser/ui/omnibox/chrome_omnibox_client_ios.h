@@ -11,12 +11,16 @@
 #include "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
 
 class ChromeBrowserState;
-class WebOmniboxEditModelDelegate;
+class WebLocationBar;
+namespace feature_engagement {
+class Tracker;
+}
 
 class ChromeOmniboxClientIOS : public OmniboxClient {
  public:
-  ChromeOmniboxClientIOS(WebOmniboxEditModelDelegate* edit_model_delegate,
-                         ChromeBrowserState* browser_state);
+  ChromeOmniboxClientIOS(WebLocationBar* location_bar,
+                         ChromeBrowserState* browser_state,
+                         feature_engagement::Tracker* tracker);
 
   ChromeOmniboxClientIOS(const ChromeOmniboxClientIOS&) = delete;
   ChromeOmniboxClientIOS& operator=(const ChromeOmniboxClientIOS&) = delete;
@@ -33,6 +37,7 @@ class ChromeOmniboxClientIOS : public OmniboxClient {
   bool IsDefaultSearchProviderEnabled() const override;
   SessionID GetSessionID() const override;
   bookmarks::BookmarkModel* GetBookmarkModel() override;
+  AutocompleteControllerEmitter* GetAutocompleteControllerEmitter() override;
   TemplateURLService* GetTemplateURLService() override;
   const AutocompleteSchemeClassifier& GetSchemeClassifier() const override;
   AutocompleteClassifier* GetAutocompleteClassifier() override;
@@ -56,11 +61,26 @@ class ChromeOmniboxClientIOS : public OmniboxClient {
   void DiscardNonCommittedNavigations() override;
   const std::u16string& GetTitle() const override;
   gfx::Image GetFavicon() const override;
+  void OnAutocompleteAccept(
+      const GURL& destination_url,
+      TemplateURLRef::PostContent* post_content,
+      WindowOpenDisposition disposition,
+      ui::PageTransition transition,
+      AutocompleteMatchType::Type match_type,
+      base::TimeTicks match_selection_timestamp,
+      bool destination_url_entered_without_scheme,
+      bool destination_url_entered_with_http_scheme,
+      const std::u16string& text,
+      const AutocompleteMatch& match,
+      const AutocompleteMatch& alternative_nav_match,
+      IDNA2008DeviationCharacter deviation_char_in_hostname) override;
+  LocationBarModel* GetLocationBarModel() override;
 
  private:
-  WebOmniboxEditModelDelegate* edit_model_delegate_;
+  WebLocationBar* location_bar_;
   ChromeBrowserState* browser_state_;
   AutocompleteSchemeClassifierImpl scheme_classifier_;
+  feature_engagement::Tracker* engagement_tracker_;
 };
 
 #endif  // IOS_CHROME_BROWSER_UI_OMNIBOX_CHROME_OMNIBOX_CLIENT_IOS_H_

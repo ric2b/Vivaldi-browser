@@ -13,7 +13,7 @@ import '//resources/cr_elements/cr_search_field/cr_search_field.js';
 import '//resources/cr_elements/icons.html.js';
 import '//resources/cr_elements/cr_shared_style.css.js';
 import '//resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
-import '../../settings_shared.css.js';
+import '../settings_shared.css.js';
 
 import {CrSearchFieldElement} from '//resources/cr_elements/cr_search_field/cr_search_field.js';
 import {FindShortcutMixin, FindShortcutMixinInterface} from '//resources/cr_elements/find_shortcut_mixin.js';
@@ -26,10 +26,10 @@ import {afterNextRender, mixinBehaviors, PolymerElement} from '//resources/polym
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 
+import {getSettingIdParameter} from '../common/setting_id_param_util.js';
 import {Constructor} from '../common/types.js';
 import {RouteObserverMixin, RouteObserverMixinInterface} from '../route_observer_mixin.js';
 import {Route, Router} from '../router.js';
-import {getSettingIdParameter} from '../setting_id_param_util.js';
 
 import {getTemplate} from './os_settings_subpage.html.js';
 

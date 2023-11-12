@@ -22,6 +22,7 @@
 #include "third_party/skia/include/gpu/GrContextThreadSafeProxy.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
+#include "third_party/skia/include/gpu/graphite/GraphiteTypes.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gl/gl_bindings.h"
@@ -51,6 +52,10 @@ void CleanupAfterSkiaFlush(void* context) {
     std::move(task).Run();
   }
   delete flush_context;
+}
+
+void CleanupAfterGraphiteRecording(void* context, skgpu::CallbackResult) {
+  CleanupAfterSkiaFlush(context);
 }
 
 template <class T>
@@ -105,7 +110,6 @@ GrContextOptions GetDefaultGrContextOptions() {
   return options;
 }
 
-#if BUILDFLAG(ENABLE_SKIA_GRAPHITE)
 skgpu::graphite::ContextOptions GetDefaultGraphiteContextOptions() {
   skgpu::graphite::ContextOptions options;
   size_t max_resource_cache_bytes;
@@ -115,7 +119,6 @@ skgpu::graphite::ContextOptions GetDefaultGraphiteContextOptions() {
   options.fGlyphCacheTextureMaximumBytes = glyph_cache_max_texture_bytes;
   return options;
 }
-#endif
 
 GLuint GetGrGLBackendTextureFormat(
     const gles2::FeatureInfo* feature_info,
@@ -196,14 +199,31 @@ void AddCleanupTaskForSkiaFlush(base::OnceClosure task,
                                 GrFlushInfo* flush_info) {
   FlushCleanupContext* context;
   if (!flush_info->fFinishedProc) {
-    DCHECK(!flush_info->fFinishedContext);
+    CHECK(!flush_info->fFinishedContext);
     flush_info->fFinishedProc = &CleanupAfterSkiaFlush;
     context = new FlushCleanupContext();
     flush_info->fFinishedContext = context;
   } else {
-    DCHECK_EQ(flush_info->fFinishedProc, &CleanupAfterSkiaFlush);
-    DCHECK(flush_info->fFinishedContext);
+    CHECK_EQ(flush_info->fFinishedProc, &CleanupAfterSkiaFlush);
+    CHECK(flush_info->fFinishedContext);
     context = static_cast<FlushCleanupContext*>(flush_info->fFinishedContext);
+  }
+  context->cleanup_tasks.push_back(std::move(task));
+}
+
+void AddCleanupTaskForGraphiteRecording(
+    base::OnceClosure task,
+    skgpu::graphite::InsertRecordingInfo* info) {
+  FlushCleanupContext* context;
+  if (!info->fFinishedProc) {
+    CHECK(!info->fFinishedContext);
+    info->fFinishedProc = &CleanupAfterGraphiteRecording;
+    context = new FlushCleanupContext();
+    info->fFinishedContext = context;
+  } else {
+    CHECK_EQ(info->fFinishedProc, &CleanupAfterGraphiteRecording);
+    CHECK(info->fFinishedContext);
+    context = static_cast<FlushCleanupContext*>(info->fFinishedContext);
   }
   context->cleanup_tasks.push_back(std::move(task));
 }

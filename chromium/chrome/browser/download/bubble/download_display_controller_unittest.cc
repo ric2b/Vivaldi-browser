@@ -7,7 +7,6 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/raw_ref.h"
 #include "base/time/time.h"
 #include "chrome/browser/download/bubble/download_bubble_ui_controller.h"
@@ -91,10 +90,17 @@ class FakeDownloadDisplay : public DownloadDisplay {
   void HideDetails() override { detail_shown_ = false; }
   bool IsShowingDetails() override { return detail_shown_; }
   bool IsFullscreenWithParentViewHidden() override { return is_fullscreen_; }
+  bool ShouldShowExclusiveAccessBubble() override {
+    return IsFullscreenWithParentViewHidden() &&
+           should_show_exclusive_access_bubble_;
+  }
 
   DownloadIconState GetDownloadIconState() { return icon_state_; }
   bool IsActive() { return is_active_; }
   void SetIsFullscreen(bool is_fullscreen) { is_fullscreen_ = is_fullscreen; }
+  void SetShouldShowExclusiveAccessBubble(bool show) {
+    should_show_exclusive_access_bubble_ = show;
+  }
 
  private:
   bool shown_ = false;
@@ -103,9 +109,8 @@ class FakeDownloadDisplay : public DownloadDisplay {
   bool is_active_ = false;
   bool detail_shown_ = false;
   bool is_fullscreen_ = false;
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #constexpr-ctor-field-initializer
-  RAW_PTR_EXCLUSION DownloadDisplayController* controller_ = nullptr;
+  bool should_show_exclusive_access_bubble_ = true;
+  raw_ptr<DownloadDisplayController, DanglingUntriaged> controller_ = nullptr;
 };
 
 // TODO(chlily): Pull this and the very similar class in
@@ -155,8 +160,8 @@ class MockDownloadBubbleUpdateService : public DownloadBubbleUpdateService {
     }
   }
 
-  const DownloadDisplayController::AllDownloadUIModelsInfo& GetAllModelsInfo()
-      override {
+  const DownloadDisplayController::AllDownloadUIModelsInfo& GetAllModelsInfo(
+      const web_app::AppId* web_app_id) override {
     info_ = DownloadDisplayController::AllDownloadUIModelsInfo{};
     int download_item_index = 0, offline_item_index = 0;
     // Compose a list of models from the items stored in the test fixture.
@@ -197,7 +202,7 @@ class MockDownloadBubbleUpdateService : public DownloadBubbleUpdateService {
 
   MOCK_METHOD(DownloadDisplayController::ProgressInfo,
               GetProgressInfo,
-              (),
+              (const web_app::AppId*),
               (const override));
 
  private:
@@ -219,7 +224,7 @@ class MockDownloadCoreService : public DownloadCoreService {
               GetExtensionEventRouter,
               ());
   MOCK_METHOD(bool, HasCreatedDownloadManager, ());
-  MOCK_METHOD(int, NonMaliciousDownloadCount, (), (const));
+  MOCK_METHOD(int, BlockingShutdownCount, (), (const));
   MOCK_METHOD(void, CancelDownloads, ());
   MOCK_METHOD(void,
               SetDownloadManagerDelegateForTesting,
@@ -346,7 +351,7 @@ class DownloadDisplayControllerTest : public testing::Test {
     DownloadDisplayController::ProgressInfo progress_info;
     progress_info.download_count = in_progress_count_;
     progress_info.progress_percentage = in_progress_count_ > 0 ? 50 : 0;
-    EXPECT_CALL(*mock_update_service_, GetProgressInfo())
+    EXPECT_CALL(*mock_update_service_, GetProgressInfo(_))
         .WillRepeatedly(Return(progress_info));
     controller().OnNewItem(/*show_animation=*/false);
   }
@@ -362,7 +367,7 @@ class DownloadDisplayControllerTest : public testing::Test {
     progress_info.download_count = in_progress_count_;
     progress_info.progress_percentage = in_progress_count_ > 0 ? 50 : 0;
     progress_info.progress_certain = false;
-    EXPECT_CALL(*mock_update_service_, GetProgressInfo())
+    EXPECT_CALL(*mock_update_service_, GetProgressInfo(_))
         .WillRepeatedly(Return(progress_info));
     mock_update_service_->AddModel(
         MockDownloadBubbleUpdateService::ModelType::kOfflineItem);
@@ -981,6 +986,41 @@ TEST_F(DownloadDisplayControllerTest,
 
   task_environment_.FastForwardBy(base::Minutes(1));
   // The display is still showing but the state has changed to inactive.
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kComplete,
+                                 /*is_active=*/false));
+}
+
+// Test the path where the exclusive access bubble should not be shown (e.g. in
+// kiosk mode or in immersive fullscreen).
+TEST_F(DownloadDisplayControllerTest,
+       Fullscreen_ShouldNotShowExclusiveAccessBubble) {
+  display().SetIsFullscreen(true);
+  display().SetShouldShowExclusiveAccessBubble(false);
+  InitDownloadItem(FILE_PATH_LITERAL("/foo/bar.pdf"),
+                   download::DownloadItem::IN_PROGRESS);
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kProgress,
+                                 /*is_active=*/true));
+
+  UpdateDownloadItem(/*item_index=*/0, DownloadState::COMPLETE,
+                     download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS);
+  // While the bubble does not pop up, and the toolbar not shown, the icon
+  // state is still updated. So |is_active| should be true for one minute
+  // after completed download.
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kComplete,
+                                 /*is_active=*/true));
+
+  task_environment_.FastForwardBy(base::Minutes(1));
+  // The display is still showing but the state has changed to inactive.
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kComplete,
+                                 /*is_active=*/false));
+
+  display().SetIsFullscreen(false);
+  controller().OnFullscreenStateChanged();
+  // On exiting full screen, the details were not shown.
   EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
                                  /*icon_state=*/DownloadIconState::kComplete,
                                  /*is_active=*/false));

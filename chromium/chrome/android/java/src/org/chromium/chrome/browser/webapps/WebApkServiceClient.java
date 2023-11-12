@@ -57,13 +57,11 @@ public class WebApkServiceClient {
         @Override
         default void onConnected(IBinder api) {
             if (api == null) {
-                WebApkUmaRecorder.recordBindToWebApkServiceSucceeded(false);
                 return;
             }
 
             try {
                 useApi(IWebApkApi.Stub.asInterface(api));
-                WebApkUmaRecorder.recordBindToWebApkServiceSucceeded(true);
             } catch (RemoteException e) {
                 Log.w(TAG, "WebApkAPI use failed.", e);
             }
@@ -261,8 +259,8 @@ public class WebApkServiceClient {
     }
 
     /** Decodes into a Bitmap an Image resource stored in an APK with the given package name. */
-    @Nullable
-    private static Bitmap decodeImageResourceFromPackage(String packageName, int resourceId) {
+    private static @Nullable Bitmap decodeImageResourceFromPackage(
+            String packageName, int resourceId) {
         PackageManager packageManager = ContextUtils.getApplicationContext().getPackageManager();
         try {
             Resources resources = packageManager.getResourcesForApplication(packageName);
@@ -277,8 +275,8 @@ public class WebApkServiceClient {
                 ContextUtils.getApplicationContext(), webApkPackage, connectionCallback);
     }
 
-    @ContentSettingValues
-    private static int toContentSettingValue(@PermissionStatus int permissionStatus) {
+    private static @ContentSettingValues int toContentSettingValue(
+            @PermissionStatus int permissionStatus) {
         if (permissionStatus == PermissionStatus.ALLOW) {
             return ContentSettingValues.ALLOW;
         }

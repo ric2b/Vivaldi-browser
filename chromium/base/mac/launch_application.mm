@@ -11,6 +11,10 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/types/expected.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace base::mac {
 
 namespace {
@@ -87,9 +91,9 @@ void LaunchApplication(const base::FilePath& app_bundle_path,
   if (!bundle_url) {
     dispatch_async(dispatch_get_main_queue(), ^{
       std::move(callback_block_access)
-          .Run(base::unexpected([NSError errorWithDomain:NSCocoaErrorDomain
-                                                    code:NSFileNoSuchFileError
-                                                userInfo:nil]));
+          .Run(nil, [NSError errorWithDomain:NSCocoaErrorDomain
+                                        code:NSFileNoSuchFileError
+                                    userInfo:nil]);
     });
     return;
   }
@@ -109,9 +113,9 @@ void LaunchApplication(const base::FilePath& app_bundle_path,
           dispatch_async(dispatch_get_main_queue(), ^{
             if (error) {
               LOG(ERROR) << base::SysNSStringToUTF8(error.localizedDescription);
-              std::move(callback_block_access).Run(base::unexpected(error));
+              std::move(callback_block_access).Run(nil, error);
             } else {
-              std::move(callback_block_access).Run(app);
+              std::move(callback_block_access).Run(app, nil);
             }
           });
         };
@@ -155,9 +159,9 @@ void LaunchApplication(const base::FilePath& app_bundle_path,
     dispatch_async(dispatch_get_main_queue(), ^{
       if (error) {
         LOG(ERROR) << base::SysNSStringToUTF8(error.localizedDescription);
-        std::move(callback_block_access).Run(base::unexpected(error));
+        std::move(callback_block_access).Run(nil, error);
       } else {
-        std::move(callback_block_access).Run(app);
+        std::move(callback_block_access).Run(app, nil);
       }
     });
   }

@@ -38,7 +38,7 @@ dialog:popover-open {
 
 /* Popovers using anchor positioning get their inset and anchor-scroll properties
    reset, to make it easier to position them. */
-[anchor]:popover-open {
+[popover][anchor] {
   inset:auto;
   anchor-scroll: implicit;
 }
@@ -49,12 +49,11 @@ dialog:popover-open {
   overlay: auto !important;
 }
 
-[popover]:popover-open::backdrop {
+[popover]:-internal-popover-in-top-layer::backdrop {
   /* From the (modified) fullscreen spec: https://fullscreen.spec.whatwg.org/#user-agent-level-style-sheet-defaults: */
   position: fixed;
   inset: 0;
   /* Specific to [popover]: */
   pointer-events: none !important;
   background-color: transparent;
-  overlay: auto !important;
 }

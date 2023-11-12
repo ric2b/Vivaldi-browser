@@ -14,8 +14,8 @@
 #import "components/crash/core/common/crash_key.h"
 #import "components/previous_session_info/previous_session_info.h"
 #import "ios/chrome/browser/crash_report/crash_helper.h"
-#import "ios/chrome/browser/web_state_list/all_web_state_observation_forwarder.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/all_web_state_observation_forwarder.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/web/public/browser_state.h"
 #import "ios/web/public/navigation/navigation_context.h"
 #import "ios/web/public/navigation/navigation_item.h"
@@ -61,20 +61,33 @@ const char kPreloadWebStateGroup[] = "PreloadGroup";
 - (void)removeReportParameter:(NSNumber*)key pending:(BOOL)pending {
   int index = key.intValue;
   DCHECK(index < kNumberOfURLsToSend);
-  if (pending)
+  if (pending) {
     pending_url_crash_keys[index].Clear();
-  else
+  } else {
     url_crash_keys[index].Clear();
+    if (index == 0) {
+      // Only sync (and clear) the first non-pending URL to PreviousSessionInfo.
+      [[PreviousSessionInfo sharedInstance]
+          removeReportParameterForKey:@"url0"];
+    }
+  }
 }
 - (void)setReportParameterURL:(const GURL&)URL
                        forKey:(NSNumber*)key
                       pending:(BOOL)pending {
   int index = key.intValue;
   DCHECK(index < kNumberOfURLsToSend);
-  if (pending)
+  if (pending) {
     pending_url_crash_keys[index].Set(URL.spec());
-  else
+  } else {
     url_crash_keys[index].Set(URL.spec());
+    if (index == 0) {
+      // Only sync (and clear) the first non-pending URL to PreviousSessionInfo.
+      [[PreviousSessionInfo sharedInstance]
+          setReportParameterValue:base::SysUTF8ToNSString(URL.spec())
+                           forKey:@"url0"];
+    }
+  }
 }
 @end
 
@@ -227,37 +240,53 @@ void CrashReporterURLObserver::StopObservingWebStateList(
 
 #pragma mark - WebStateListObserver
 
-void CrashReporterURLObserver::WebStateDetachedAt(WebStateList* web_state_list,
-                                                  web::WebState* web_state,
-                                                  int index) {
-  web_state_to_group_.erase(web_state);
-  if (web_state == current_web_states_[GroupForWebStateList(web_state_list)]) {
-    RemoveGroup(GroupForWebStateList(web_state_list));
-  }
-}
-
-void CrashReporterURLObserver::WebStateInsertedAt(WebStateList* web_state_list,
-                                                  web::WebState* web_state,
-                                                  int index,
-                                                  bool activating) {
-  web_state_to_group_[web_state] = GroupForWebStateList(web_state_list);
-  if (activating) {
-    RecordURLForWebState(web_state);
-  }
-}
-
-void CrashReporterURLObserver::WebStateReplacedAt(WebStateList* web_state_list,
-                                                  web::WebState* old_web_state,
-                                                  web::WebState* new_web_state,
-                                                  int index) {
-  if (old_web_state) {
-    web_state_to_group_.erase(old_web_state);
-  }
-  if (new_web_state) {
-    web_state_to_group_[new_web_state] = GroupForWebStateList(web_state_list);
-  }
-  if (web_state_list->GetActiveWebState() == new_web_state) {
-    RecordURLForWebState(new_web_state);
+void CrashReporterURLObserver::WebStateListChanged(
+    WebStateList* web_state_list,
+    const WebStateListChange& change,
+    const WebStateSelection& selection) {
+  switch (change.type()) {
+    case WebStateListChange::Type::kSelectionOnly:
+      // TODO(crbug.com/1442546): Move the implementation from
+      // WebStateActivatedAt() to here. Note that here is reachable only when
+      // `reason` == ActiveWebStateChangeReason::Activated.
+      break;
+    case WebStateListChange::Type::kDetach: {
+      const WebStateListChangeDetach& detach_change =
+          change.As<WebStateListChangeDetach>();
+      web::WebState* detached_web_state = detach_change.detached_web_state();
+      web_state_to_group_.erase(detached_web_state);
+      if (detached_web_state ==
+          current_web_states_[GroupForWebStateList(web_state_list)]) {
+        RemoveGroup(GroupForWebStateList(web_state_list));
+      }
+      break;
+    }
+    case WebStateListChange::Type::kMove:
+      // Do nothing when a WebState is moved.
+      break;
+    case WebStateListChange::Type::kReplace: {
+      const WebStateListChangeReplace& replace_change =
+          change.As<WebStateListChangeReplace>();
+      web_state_to_group_.erase(replace_change.replaced_web_state());
+      web::WebState* inserted_web_state = replace_change.inserted_web_state();
+      web_state_to_group_[inserted_web_state] =
+          GroupForWebStateList(web_state_list);
+      if (web_state_list->GetActiveWebState() == inserted_web_state) {
+        RecordURLForWebState(inserted_web_state);
+      }
+      break;
+    }
+    case WebStateListChange::Type::kInsert: {
+      const WebStateListChangeInsert& insert_change =
+          change.As<WebStateListChangeInsert>();
+      web::WebState* inserted_web_state = insert_change.inserted_web_state();
+      web_state_to_group_[inserted_web_state] =
+          GroupForWebStateList(web_state_list);
+      if (selection.activating) {
+        RecordURLForWebState(inserted_web_state);
+      }
+      break;
+    }
   }
 }
 

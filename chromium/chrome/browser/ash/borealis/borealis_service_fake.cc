@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/borealis/borealis_service_fake.h"
 
+#include "chrome/browser/ash/borealis/borealis_install_url_handler.h"
 #include "chrome/browser/ash/borealis/borealis_service.h"
 #include "chrome/browser/ash/borealis/borealis_service_factory.h"
 
@@ -53,6 +54,11 @@ BorealisInstaller& BorealisServiceFake::Installer() {
   return *installer_;
 }
 
+BorealisInstallUrlHandler& BorealisServiceFake::InstallUrlHandler() {
+  CHECK(install_url_handler_);
+  return *install_url_handler_;
+}
+
 BorealisLaunchOptions& BorealisServiceFake::LaunchOptions() {
   CHECK(launch_options_);
   return *launch_options_;
@@ -66,6 +72,11 @@ BorealisShutdownMonitor& BorealisServiceFake::ShutdownMonitor() {
 BorealisWindowManager& BorealisServiceFake::WindowManager() {
   CHECK(window_manager_);
   return *window_manager_;
+}
+
+BorealisSurveyHandler& BorealisServiceFake::SurveyHandler() {
+  CHECK(survey_handler_);
+  return *survey_handler_;
 }
 
 void BorealisServiceFake::SetAppLauncherForTesting(
@@ -96,6 +107,11 @@ void BorealisServiceFake::SetInstallerForTesting(BorealisInstaller* installer) {
   installer_ = installer;
 }
 
+void BorealisServiceFake::SetInstallUrlHandlerForTesting(
+    BorealisInstallUrlHandler* install_url_handler) {
+  install_url_handler_ = install_url_handler;
+}
+
 void BorealisServiceFake::SetShutdownMonitorForTesting(
     BorealisShutdownMonitor* shutdown_monitor) {
   shutdown_monitor_ = shutdown_monitor;
@@ -104,6 +120,11 @@ void BorealisServiceFake::SetShutdownMonitorForTesting(
 void BorealisServiceFake::SetWindowManagerForTesting(
     BorealisWindowManager* window_manager) {
   window_manager_ = window_manager;
+}
+
+void BorealisServiceFake::SetSurveyHandlerForTesting(
+    BorealisSurveyHandler* survey_handler) {
+  survey_handler_ = survey_handler;
 }
 
 }  // namespace borealis

@@ -187,9 +187,6 @@ DumpAccessibilityTestBase::~DumpAccessibilityTestBase() {}
 void DumpAccessibilityTestBase::SetUpCommandLine(
     base::CommandLine* command_line) {
   IsolateAllSitesForTesting(command_line);
-
-  // Each test pass may require custom command-line setup.
-  test_helper_.SetUpCommandLine(command_line);
 }
 
 void DumpAccessibilityTestBase::SetUpOnMainThread() {
@@ -199,6 +196,9 @@ void DumpAccessibilityTestBase::SetUpOnMainThread() {
 }
 
 void DumpAccessibilityTestBase::SetUp() {
+  // Each test pass may require custom feature setup.
+  test_helper_.InitializeFeatureList();
+
   std::vector<base::test::FeatureRef> enabled_features;
   std::vector<base::test::FeatureRef> disabled_features;
   ChooseFeatures(&enabled_features, &disabled_features);
@@ -211,6 +211,12 @@ void DumpAccessibilityTestBase::SetUp() {
   EnablePixelOutput();
 
   ContentBrowserTest::SetUp();
+}
+
+void DumpAccessibilityTestBase::TearDown() {
+  ContentBrowserTest::TearDown();
+  scoped_feature_list_.Reset();
+  test_helper_.ResetFeatureList();
 }
 
 void DumpAccessibilityTestBase::SignalRunTestOnMainThread(int) {
@@ -444,9 +450,9 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
   // Execute and wait for specified string
   for (const auto& function_name : scenario_.execute) {
     DLOG(INFO) << "executing: " << function_name;
-    base::Value result = ExecuteScriptAndGetValue(
-        web_contents->GetPrimaryMainFrame(), function_name);
-    const std::string& str = result.is_string() ? result.GetString() : "";
+    const std::string str =
+        EvalJs(web_contents->GetPrimaryMainFrame(), function_name)
+            .ExtractString();
     // If no string is specified, do not wait.
     bool wait_for_string = str != "";
     while (wait_for_string) {
@@ -504,8 +510,8 @@ std::map<std::string, unsigned> DumpAccessibilityTestBase::CollectAllFrameUrls(
     // WebContents as the node doesn't have a url set.
 
     std::string url = node->current_url().spec();
-    if (url != url::kAboutBlankURL && !url.empty() &&
-        !SkipUrlMatch(skip_urls, url) &&
+    if (url != url::kAboutBlankURL && url != url::kAboutSrcdocURL &&
+        !url.empty() && !SkipUrlMatch(skip_urls, url) &&
         node->frame_owner_element_type() !=
             blink::FrameOwnerElementType::kPortal) {
       all_frame_urls[url] += 1;
@@ -585,7 +591,7 @@ std::unique_ptr<AXTreeFormatter> DumpAccessibilityTestBase::CreateFormatter()
   return AXInspectFactory::CreateFormatter(GetParam());
 }
 
-std::pair<base::Value, std::vector<std::string>>
+std::pair<EvalJsResult, std::vector<std::string>>
 DumpAccessibilityTestBase::CaptureEvents(InvokeAction invoke_action,
                                          ui::AXMode mode) {
   // Create a new Event Recorder for the run.
@@ -617,7 +623,7 @@ DumpAccessibilityTestBase::CaptureEvents(InvokeAction invoke_action,
   // If an action was performed, we already waited for the kClicked event in
   // PerformAndWaitForDefaultActions(), which means the action is already
   // completed.
-  base::Value action_result = std::move(invoke_action).Run();
+  EvalJsResult action_result = std::move(invoke_action).Run();
 
   // Wait for at least one event. This may unblock either when |waiter|
   // observes either an ax::mojom::Event or ui::AXEventGenerator::Event, or

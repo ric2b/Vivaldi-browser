@@ -25,6 +25,7 @@
 #include "chrome/test/base/browser_process_platform_part_test_api_chromeos.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
+#include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/test/browser_test.h"
@@ -321,7 +322,14 @@ IN_PROC_BROWSER_TEST_F(DemoSessionLoginTest, SessionStartup) {
   login_manager_mixin_.WaitForActiveSession();
 }
 
-IN_PROC_BROWSER_TEST_F(DemoSessionLoginTest, DemoSWALaunchesOnSessionStartup) {
+#if BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_DemoSWALaunchesOnSessionStartup \
+  DISABLED_DemoSWALaunchesOnSessionStartup
+#else
+#define MAYBE_DemoSWALaunchesOnSessionStartup DemoSWALaunchesOnSessionStartup
+#endif
+IN_PROC_BROWSER_TEST_F(DemoSessionLoginTest,
+                       MAYBE_DemoSWALaunchesOnSessionStartup) {
   base::ScopedAllowBlockingForTesting scoped_allow_blocking;
 
   login_manager_mixin_.WaitForActiveSession();

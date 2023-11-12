@@ -10,7 +10,7 @@
 
 #ifndef NDEBUG
 #include "base/files/file_util.h"
-#include "base/guid.h"
+#include "base/uuid.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #endif  // NDEBUG
@@ -28,7 +28,7 @@ void DebugBufferLogger::Initialize(const std::string& stream_type) {
 #if !defined(NDEBUG) && defined(CONTENT_LOG_FOLDER)
   log_directory_ = base::FilePath(CONTENT_LOG_FOLDER)
                        .Append(base::ASCIIToUTF16(stream_type) + L" - " +
-                               base::ASCIIToUTF16(base::GenerateGUID()));
+                               base::ASCIIToUTF16(base::Uuid::GenerateRandomV4()));
   if (!CreateDirectory(log_directory_))
     log_directory_.clear();
 #endif  // NDEBUG && CONTENT_LOG_FOLDERs

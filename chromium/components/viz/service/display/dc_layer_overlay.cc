@@ -21,6 +21,7 @@
 #include "components/viz/service/display/overlay_processor_interface.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/config/gpu_finch_features.h"
+#include "media/base/media_switches.h"
 #include "media/base/win/mf_feature_checks.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
@@ -62,16 +63,43 @@ enum DCLayerResult {
   kMaxValue = DC_LAYER_FAILED_YUV_VIDEO_QUAD_HLG,
 };
 
-gfx::RectF GetExpandedRectWithPixelMovingFilter(
-    const AggregatedRenderPassDrawQuad* rpdq,
-    float max_pixel_movement) {
-  const SharedQuadState* shared_quad_state = rpdq->shared_quad_state;
-  gfx::RectF expanded_rect(rpdq->rect);
-  expanded_rect.Inset(-max_pixel_movement);
+DCLayerResult ValidateYUVOverlay(
+    const gfx::ProtectedVideoType& protected_video_type,
+    const gfx::ColorSpace& video_color_space,
+    const absl::optional<gfx::HDRMetadata>& hdr_metadata,
+    bool has_overlay_support,
+    int allowed_yuv_overlay_count,
+    int processed_yuv_overlay_count) {
+  // Note: Do not override this value based on base::Feature values. It is the
+  // result after the GPU blocklist has been consulted.
+  if (!has_overlay_support) {
+    return DC_LAYER_FAILED_UNSUPPORTED_QUAD;
+  }
 
-  // expanded_rect in the target space
-  return cc::MathUtil::MapClippedRect(
-      shared_quad_state->quad_to_target_transform, expanded_rect);
+  // Hardware protected video must use Direct Composition Overlay
+  if (protected_video_type == gfx::ProtectedVideoType::kHardwareProtected) {
+    return DC_LAYER_SUCCESS;
+  }
+
+  if (processed_yuv_overlay_count >= allowed_yuv_overlay_count) {
+    return DC_LAYER_FAILED_TOO_MANY_OVERLAYS;
+  }
+
+  // HLG shouldn't have the hdr metadata, but we don't want to promote it to
+  // overlay, as VideoProcessor doesn't support HLG tone mapping well between
+  // different gpu vendors, see: https://crbug.com/1144260#c6.
+  // Some HLG streams may carry hdr metadata, see: https://crbug.com/1429172.
+  if (video_color_space.GetTransferID() == gfx::ColorSpace::TransferID::HLG) {
+    return DC_LAYER_FAILED_YUV_VIDEO_QUAD_HLG;
+  }
+
+  // Otherwise, it could be a parser bug like https://crbug.com/1362288 if the
+  // hdr metadata is still missing. We shouldn't promote too for that case.
+  if (video_color_space.IsHDR() && !hdr_metadata.has_value()) {
+    return DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_HDR_METADATA;
+  }
+
+  return DC_LAYER_SUCCESS;
 }
 
 DCLayerResult ValidateYUVQuad(
@@ -172,6 +200,9 @@ void FromYUVQuad(const YUVVideoDrawQuad* quad,
 DCLayerResult ValidateTextureQuad(
     const TextureDrawQuad* quad,
     const std::vector<gfx::Rect>& backdrop_filter_rects,
+    bool has_overlay_support,
+    int allowed_yuv_overlay_count,
+    int processed_yuv_overlay_count,
     DisplayResourceProvider* resource_provider) {
   // Check that resources are overlay compatible first so that subsequent
   // assumptions are valid.
@@ -194,11 +225,24 @@ DCLayerResult ValidateTextureQuad(
       return DC_LAYER_FAILED_BACKDROP_FILTERS;
   }
 
+  auto si_format = resource_provider->GetSharedImageFormat(quad->resource_id());
+  if (media::IsMultiPlaneFormatForHardwareVideoEnabled() &&
+      si_format.is_multi_plane()) {
+    auto color_space =
+        resource_provider->GetOverlayColorSpace(quad->resource_id());
+    auto result = ValidateYUVOverlay(quad->protected_video_type, color_space,
+                                     quad->hdr_metadata, has_overlay_support,
+                                     allowed_yuv_overlay_count,
+                                     processed_yuv_overlay_count);
+    return result;
+  }
+
   return DC_LAYER_SUCCESS;
 }
 
 void FromTextureQuad(const TextureDrawQuad* quad,
                      const gfx::Transform& transform_to_root_target,
+                     DisplayResourceProvider* resource_provider,
                      OverlayCandidate* dc_layer) {
   dc_layer->resource_id = quad->resource_id();
   dc_layer->plane_z_order = 1;
@@ -229,8 +273,8 @@ void FromTextureQuad(const TextureDrawQuad* quad,
         quad->shared_quad_state->clip_rect.value_or(gfx::Rect()));
   }
 
-  dc_layer->color_space = gfx::ColorSpace::CreateSRGB();
-
+  dc_layer->color_space =
+      resource_provider->GetOverlayColorSpace(quad->resource_id());
   // Both color space and protected_video_type are hard-coded for stream video.
   // TODO(crbug.com/1384544): Consider using quad->protected_video_type.
   if (quad->is_stream_video) {
@@ -294,9 +338,8 @@ bool IsOccluded(
       auto render_pass_it = render_pass_filters.find(rpdq->render_pass_id);
       if (render_pass_it != render_pass_filters.end()) {
         auto* filters = render_pass_it->second;
-        float max_pixel_movement = filters->MaximumPixelMovement();
-        overlap_rect =
-            GetExpandedRectWithPixelMovingFilter(rpdq, max_pixel_movement);
+        overlap_rect = gfx::RectF(
+            GetExpandedRectWithPixelMovingForegroundFilter(*rpdq, *filters));
         has_pixel_moving_filter = true;
       }
     }
@@ -618,16 +661,15 @@ bool DCLayerOverlayProcessor::IsPreviousFrameUnderlayRect(
 
 void DCLayerOverlayProcessor::RemoveClearVideoQuadCandidatesIfMoving(
     const QuadList* quad_list,
-    std::vector<size_t>* candidate_index_list) {
+    std::vector<QuadList::Iterator>& candidates) {
   // The number of frames all overlay candidates need to be stable before we
   // allow overlays again. This number was chosen experimentally.
   constexpr int kFramesOfStabilityForOverlayPromotion = 5;
 
   std::vector<gfx::Rect> current_frame_overlay_candidate_rects;
-  current_frame_overlay_candidate_rects.reserve(candidate_index_list->size());
+  current_frame_overlay_candidate_rects.reserve(candidates.size());
 
-  for (auto index : *candidate_index_list) {
-    auto candidate_it = std::next(quad_list->begin(), index);
+  for (const auto& candidate_it : candidates) {
     if (IsClearVideoQuad(candidate_it)) {
       gfx::Rect quad_rectangle_in_target_space =
           ClippedQuadRectangle(*candidate_it);
@@ -649,14 +691,14 @@ void DCLayerOverlayProcessor::RemoveClearVideoQuadCandidatesIfMoving(
   if (frames_since_last_overlay_candidate_rects_change_ <=
       kFramesOfStabilityForOverlayPromotion) {
     // Remove all video quad candidates if any of them moved recently
-    auto candidate_index_it = candidate_index_list->begin();
-    while (candidate_index_it != candidate_index_list->end()) {
-      auto candidate_it = std::next(quad_list->begin(), *candidate_index_it);
-      if (IsClearVideoQuad(candidate_it)) {
-        candidate_index_it = candidate_index_list->erase(candidate_index_it);
-        RecordDCLayerResult(DC_LAYER_FAILED_YUV_VIDEO_QUAD_MOVED, candidate_it);
+    auto candidate_it = candidates.begin();
+    while (candidate_it != candidates.end()) {
+      if (IsClearVideoQuad(*candidate_it)) {
+        RecordDCLayerResult(DC_LAYER_FAILED_YUV_VIDEO_QUAD_MOVED,
+                            *candidate_it);
+        candidate_it = candidates.erase(candidate_it);
       } else {
-        candidate_index_it++;
+        candidate_it++;
       }
     }
   }
@@ -692,22 +734,15 @@ void DCLayerOverlayProcessor::Process(
     return;
   }
 
-  // Used for generating the candidate index list.
-  std::vector<size_t> candidate_index_list;
-  size_t candidate = 0;
-
-  // Used for looping through candidate_index_list to UpdateDCLayerOverlays()
-  size_t prev_index = 0;
+  std::vector<QuadList::Iterator> candidates;
   QuadList* quad_list = &render_pass->quad_list;
-  auto prev_it = quad_list->begin();
 
   // Used for whether overlay should be skipped
   int yuv_quads_in_quad_list = 0;
   int damaged_yuv_quads_in_quad_list = 0;
   bool has_protected_video_or_texture_overlays = false;
 
-  for (auto it = quad_list->begin(); it != quad_list->end();
-       ++it, ++candidate) {
+  for (auto it = quad_list->begin(); it != quad_list->end(); ++it) {
     if (it->material == DrawQuad::Material::kAggregatedRenderPass) {
       const auto* rpdq = AggregatedRenderPassDrawQuad::MaterialCast(*it);
       auto render_pass_it =
@@ -720,28 +755,14 @@ void DCLayerOverlayProcessor::Process(
 
     gpu::Mailbox promotion_hint_mailbox;
     DCLayerResult result;
+    bool is_yuv_overlay = false;
     switch (it->material) {
       case DrawQuad::Material::kYuvVideoContent:
         result = ValidateYUVQuad(
             YUVVideoDrawQuad::MaterialCast(*it), backdrop_filter_rects,
             has_overlay_support_, allowed_yuv_overlay_count_,
             processed_yuv_overlay_count_, resource_provider);
-        yuv_quads_in_quad_list++;
-
-        if (no_undamaged_overlay_promotion_) {
-          if (it->shared_quad_state->overlay_damage_index.has_value() &&
-              !surface_damage_rect_list_[it->shared_quad_state
-                                             ->overlay_damage_index.value()]
-                   .IsEmpty()) {
-            damaged_yuv_quads_in_quad_list++;
-            if (result == DC_LAYER_SUCCESS)
-              processed_yuv_overlay_count_++;
-          }
-        } else {
-          if (result == DC_LAYER_SUCCESS)
-            processed_yuv_overlay_count_++;
-        }
-
+        is_yuv_overlay = true;
         break;
       case DrawQuad::Material::kTextureContent: {
         const TextureDrawQuad* tex_quad = TextureDrawQuad::MaterialCast(*it);
@@ -751,8 +772,16 @@ void DCLayerOverlayProcessor::Process(
           // always presented as overlay.
           result = DC_LAYER_SUCCESS;
         } else {
-          result = ValidateTextureQuad(tex_quad, backdrop_filter_rects,
-                                       resource_provider);
+          result = ValidateTextureQuad(
+              tex_quad, backdrop_filter_rects, has_overlay_support_,
+              allowed_yuv_overlay_count_, processed_yuv_overlay_count_,
+              resource_provider);
+        }
+        auto si_format =
+            resource_provider->GetSharedImageFormat(tex_quad->resource_id());
+        if (media::IsMultiPlaneFormatForHardwareVideoEnabled() &&
+            si_format.is_multi_plane()) {
+          is_yuv_overlay = true;
         }
 
         if (allow_promotion_hinting_) {
@@ -766,6 +795,25 @@ void DCLayerOverlayProcessor::Process(
       } break;
       default:
         result = DC_LAYER_FAILED_UNSUPPORTED_QUAD;
+    }
+
+    if (is_yuv_overlay) {
+      yuv_quads_in_quad_list++;
+      if (no_undamaged_overlay_promotion_) {
+        if (it->shared_quad_state->overlay_damage_index.has_value() &&
+            !surface_damage_rect_list_[it->shared_quad_state
+                                           ->overlay_damage_index.value()]
+                 .IsEmpty()) {
+          damaged_yuv_quads_in_quad_list++;
+          if (result == DC_LAYER_SUCCESS) {
+            processed_yuv_overlay_count_++;
+          }
+        }
+      } else {
+        if (result == DC_LAYER_SUCCESS) {
+          processed_yuv_overlay_count_++;
+        }
+      }
     }
 
     if (!promotion_hint_mailbox.IsZero()) {
@@ -790,12 +838,7 @@ void DCLayerOverlayProcessor::Process(
     if (is_protected_video || is_texture_quad)
       has_protected_video_or_texture_overlays = true;
 
-    if (candidate_index_list.size() == 0) {
-      prev_index = candidate;
-      prev_it = it;
-    }
-
-    candidate_index_list.push_back(candidate);
+    candidates.push_back(it);
   }
 
   // We might not save power if there are more than one videos and only part of
@@ -830,16 +873,12 @@ void DCLayerOverlayProcessor::Process(
   processed_yuv_overlay_count_ = 0;
 
   if (base::FeatureList::IsEnabled(features::kDisableVideoOverlayIfMoving)) {
-    RemoveClearVideoQuadCandidatesIfMoving(quad_list, &candidate_index_list);
+    RemoveClearVideoQuadCandidatesIfMoving(quad_list, candidates);
   }
 
   // Copy the overlay quad info to dc_layer_overlays and replace/delete overlay
   // quads in quad_list.
-  for (auto index : candidate_index_list) {
-    auto it = std::next(prev_it, index - prev_index);
-    prev_it = it;
-    prev_index = index;
-
+  for (auto& it : candidates) {
     if (reject_overlays) {
       RecordDCLayerResult(DC_LAYER_FAILED_TOO_MANY_OVERLAYS, it);
       continue;
@@ -897,10 +936,9 @@ void DCLayerOverlayProcessor::Process(
         HasOccludingDamageRect(it->shared_quad_state, surface_damage_rect_list_,
                                quad_rectangle_in_root_space);
 
-    UpdateDCLayerOverlays(display_rect, render_pass, it,
-                          quad_rectangle_in_root_space, is_overlay, &prev_it,
-                          &prev_index, damage_rect, dc_layer_overlays,
-                          is_page_fullscreen_mode);
+    UpdateDCLayerOverlays(resource_provider, display_rect, render_pass, it,
+                          quad_rectangle_in_root_space, is_overlay, damage_rect,
+                          dc_layer_overlays, is_page_fullscreen_mode);
   }
 
   // Update previous frame state after processing root pass. If there is no
@@ -978,13 +1016,12 @@ bool DCLayerOverlayProcessor::ShouldSkipOverlay(
 }
 
 void DCLayerOverlayProcessor::UpdateDCLayerOverlays(
+    DisplayResourceProvider* resource_provider,
     const gfx::RectF& display_rect,
     AggregatedRenderPass* render_pass,
     const QuadList::Iterator& it,
     const gfx::Rect& quad_rectangle_in_root_space,
     bool is_overlay,
-    QuadList::Iterator* new_it,
-    size_t* new_index,
     gfx::Rect* damage_rect,
     OverlayCandidateList* dc_layer_overlays,
     bool is_page_fullscreen_mode) {
@@ -992,7 +1029,7 @@ void DCLayerOverlayProcessor::UpdateDCLayerOverlays(
   RecordDCLayerResult(DC_LAYER_SUCCESS, it);
 
   OverlayCandidate dc_layer;
-  dc_layer.maybe_video_fullscreen_letterboxing =
+  dc_layer.possible_video_fullscreen_letterboxing =
       is_page_fullscreen_mode
           ? IsPossibleFullScreenLetterboxing(it, render_pass->quad_list.end(),
                                              display_rect)
@@ -1003,10 +1040,17 @@ void DCLayerOverlayProcessor::UpdateDCLayerOverlays(
                   render_pass->transform_to_root_target, &dc_layer);
       processed_yuv_overlay_count_++;
       break;
-    case DrawQuad::Material::kTextureContent:
-      FromTextureQuad(TextureDrawQuad::MaterialCast(*it),
-                      render_pass->transform_to_root_target, &dc_layer);
-      break;
+    case DrawQuad::Material::kTextureContent: {
+      const TextureDrawQuad* tex_quad = TextureDrawQuad::MaterialCast(*it);
+      FromTextureQuad(tex_quad, render_pass->transform_to_root_target,
+                      resource_provider, &dc_layer);
+      auto si_format =
+          resource_provider->GetSharedImageFormat(tex_quad->resource_id());
+      if (media::IsMultiPlaneFormatForHardwareVideoEnabled() &&
+          si_format.is_multi_plane()) {
+        processed_yuv_overlay_count_++;
+      }
+    } break;
     default:
       NOTREACHED();
   }
@@ -1014,8 +1058,7 @@ void DCLayerOverlayProcessor::UpdateDCLayerOverlays(
   // Underlays are less efficient, so attempt regular overlays first. We can
   // only check for occlusion within a render pass.
   if (is_overlay) {
-    *new_it = ProcessForOverlay(display_rect, render_pass, it);
-    (*new_index)++;
+    ProcessForOverlay(display_rect, render_pass, it);
   } else {
     ProcessForUnderlay(display_rect, render_pass, quad_rectangle_in_root_space,
                        it, dc_layer_overlays->size(), damage_rect, &dc_layer);
@@ -1023,14 +1066,13 @@ void DCLayerOverlayProcessor::UpdateDCLayerOverlays(
 
   current_frame_overlay_rects_.push_back(
       {quad_rectangle_in_root_space, is_overlay});
-
   dc_layer_overlays->push_back(dc_layer);
 
   // Recorded for each overlay.
   UMA_HISTOGRAM_BOOLEAN("GPU.DirectComposition.IsUnderlay", !is_overlay);
 }
 
-QuadList::Iterator DCLayerOverlayProcessor::ProcessForOverlay(
+void DCLayerOverlayProcessor::ProcessForOverlay(
     const gfx::RectF& display_rect,
     AggregatedRenderPass* render_pass,
     const QuadList::Iterator& it) {
@@ -1045,7 +1087,11 @@ QuadList::Iterator DCLayerOverlayProcessor::ProcessForOverlay(
     RemoveOverlayDamageRect(it);
   }
 
-  return render_pass->quad_list.EraseAndInvalidateAllPointers(it);
+  // Overlay quads should not be drawn. Removing the quads from the quad list
+  // creates extra complexity since we would be traversing the list while
+  // removing them. Instead, we can just make the visible rect empty, which
+  // would then be skipped by DirectRenderer::ShouldSkipQuad.
+  it->visible_rect = gfx::Rect();
 }
 
 void DCLayerOverlayProcessor::ProcessForUnderlay(

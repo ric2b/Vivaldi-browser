@@ -14,6 +14,10 @@ namespace net {
 class HttpRequestHeaders;
 }  // namespace net
 
+namespace download {
+class DownloadUrlParameters;
+}  // namespace download
+
 namespace content {
 
 class DevToolsAgentHostImpl;
@@ -101,6 +105,8 @@ class EmulationHandler : public DevToolsDomainHandler,
                       bool* accept_language_overridden);
   bool ApplyUserAgentMetadataOverrides(
       absl::optional<blink::UserAgentMetadata>* override_out);
+  void ApplyNetworkOverridesForDownload(
+      download::DownloadUrlParameters* parameters);
 
   // NOTE(david@vivaldi.com): This method checks if there is another
   // RenderWidgetHostImpl existing which requires an enabled touch emulator.

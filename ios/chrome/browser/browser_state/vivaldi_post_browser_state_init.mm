@@ -7,10 +7,10 @@
 #import "browser/vivaldi_default_bookmarks.h"
 #import "components/keyed_service/core/service_access_type.h"
 #import "ios/ad_blocker/adblock_rule_service_factory.h"
-#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/favicon/favicon_service_factory.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/notes/notes_factory.h"
 
 namespace vivaldi_default_bookmarks {

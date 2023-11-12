@@ -8,6 +8,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.ui.accessibility.AccessibilityState;
 
 /**
@@ -113,7 +114,7 @@ public class AccessibilityHistogramRecorder {
      */
     public void recordHistograms() {
         // If the OnDemand feature is enabled, log UMA metrics and reset counters.
-        if (ContentFeatureList.isEnabled(ContentFeatureList.ON_DEMAND_ACCESSIBILITY_EVENTS)) {
+        if (ContentFeatureMap.isEnabled(ContentFeatureList.ON_DEMAND_ACCESSIBILITY_EVENTS)) {
             recordEventsHistograms();
         }
 
@@ -126,9 +127,9 @@ public class AccessibilityHistogramRecorder {
      */
     public void recordEventsHistograms() {
         // To investigate whether adding more AXModes could be beneficial, track separate
-        // stats when both the AccessibilityAXModes and OnDemand features are enabled.
-        boolean isAccessibilityAXModesEnabled =
-                ContentFeatureList.isEnabled(ContentFeatureList.ACCESSIBILITY_AX_MODES);
+        // stats when both the AccessibilityPerformanceFiltering and OnDemand features are enabled.
+        boolean isAccessibilityPerformanceFilteringEnabled =
+                ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PERFORMANCE_FILTERING);
 
         // There are only 2 AXModes, kAXModeComplete is used when a screenreader is active.
         boolean isAXModeComplete = AccessibilityState.isScreenReaderEnabled();
@@ -141,7 +142,7 @@ public class AccessibilityHistogramRecorder {
             RecordHistogram.recordPercentageHistogram(
                     PERCENTAGE_DROPPED_HISTOGRAM, 100 - percentSent);
             // Log the percentage dropped per AXMode as well.
-            if (isAccessibilityAXModesEnabled) {
+            if (isAccessibilityPerformanceFilteringEnabled) {
                 RecordHistogram.recordPercentageHistogram(isAXModeComplete
                                 ? PERCENTAGE_DROPPED_HISTOGRAM_AXMODE_COMPLETE
                                 : isAXModeFormControls
@@ -165,7 +166,7 @@ public class AccessibilityHistogramRecorder {
                         EVENTS_DROPPED_HISTOGRAM_BUCKET_COUNT);
 
                 // Log the 100% events count per AXMode as well.
-                if (isAccessibilityAXModesEnabled) {
+                if (isAccessibilityPerformanceFilteringEnabled) {
                     RecordHistogram.recordCustomCountHistogram(isAXModeComplete
                                     ? ONE_HUNDRED_PERCENT_HISTOGRAM_AXMODE_COMPLETE
                                     : isAXModeFormControls

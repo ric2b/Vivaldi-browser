@@ -106,8 +106,14 @@ class CORE_EXPORT HTMLFormControlElement : public HTMLElement,
   virtual PopoverTriggerSupport SupportsPopoverTriggering() const {
     return PopoverTriggerSupport::kNone;
   }
+  // The IDL reflections:
+  AtomicString popoverTargetAction() const;
+  void setPopoverTargetAction(const AtomicString& value);
 
   void DefaultEventHandler(Event&) override;
+
+  void SetHovered(bool hovered) override;
+  void HandlePopoverInvokerHovered(bool hovered);
 
   // Getter and setter for the PII type of the element derived from the autofill
   // field semantic prediction.

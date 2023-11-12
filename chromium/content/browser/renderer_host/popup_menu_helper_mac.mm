@@ -8,6 +8,7 @@
 #import "base/mac/scoped_sending_event.h"
 #import "base/message_loop/message_pump_mac.h"
 #include "base/task/current_thread.h"
+#import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 #import "content/app_shim_remote_cocoa/render_widget_host_view_cocoa.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
@@ -71,6 +72,15 @@ void PopupMenuHelper::ShowPopupMenu(
   if (rwhvm->IsRenderWidgetHostViewMac()) {
     cocoa_view.reset([rwhvm->GetInProcessNSView() retain]);
   }
+
+  // Check if the underlying native window is headless and if so, return early
+  // to avoid showing the popup menu.
+  NativeWidgetMacNSWindow* ns_window =
+      base::mac::ObjCCastStrict<NativeWidgetMacNSWindow>([cocoa_view window]);
+  if (ns_window && [ns_window isHeadless]) {
+    return;
+  }
+
   // Display the menu.
   base::scoped_nsobject<WebMenuRunner> runner([[WebMenuRunner alloc]
       initWithItems:items

@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
@@ -42,15 +43,18 @@
 #include "chrome/browser/reading_list/reading_list_model_factory.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_base.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/sessions/session_service_lookup.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
+#include "chrome/browser/sharing_hub/sharing_hub_features.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/accelerator_utils.h"
 #include "chrome/browser/ui/autofill/payments/iban_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/manage_migration_ui_controller.h"
+#include "chrome/browser/ui/autofill/payments/mandatory_reauth_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/offer_notification_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/virtual_card_enroll_bubble_controller_impl.h"
@@ -90,10 +94,7 @@
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
-#include "chrome/browser/ui/translate/translate_bubble_ui_action_logger.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/user_education/reopen_tab_in_product_help.h"
-#include "chrome/browser/ui/user_education/reopen_tab_in_product_help_factory.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
@@ -132,6 +133,7 @@
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/translate/core/browser/language_state.h"
+#include "components/translate/core/browser/translate_manager.h"
 #include "components/user_education/common/feature_promo_controller.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/zoom/page_zoom.h"
@@ -201,6 +203,7 @@
 
 #include "app/vivaldi_constants.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
+#include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace {
@@ -209,23 +212,6 @@ const char kOsOverrideForTabletSite[] = "Linux; Android 9; Chrome tablet";
 const char kChPlatformOverrideForTabletSite[] = "Android";
 const char kBackForwardNavigationIsTriggered[] =
     "back_forward_navigation_is_triggered";
-
-translate::TranslateBubbleUiEvent TranslateBubbleResultToUiEvent(
-    ShowTranslateBubbleResult result) {
-  switch (result) {
-    default:
-      NOTREACHED();
-      [[fallthrough]];
-    case ShowTranslateBubbleResult::SUCCESS:
-      return translate::TranslateBubbleUiEvent::BUBBLE_SHOWN;
-    case ShowTranslateBubbleResult::BROWSER_WINDOW_MINIMIZED:
-      return translate::TranslateBubbleUiEvent::
-          BUBBLE_NOT_SHOWN_WINDOW_MINIMIZED;
-    case ShowTranslateBubbleResult::EDITABLE_FIELD_IS_ACTIVE:
-      return translate::TranslateBubbleUiEvent::
-          BUBBLE_NOT_SHOWN_EDITABLE_FIELD_IS_ACTIVE;
-  }
-}
 
 // Creates a new tabbed browser window, with the same size, type and profile as
 // |original_browser|'s window, inserts |contents| into it, and shows it.
@@ -435,10 +421,10 @@ bool IsShowingWebContentsModalDialog(Browser* browser) {
 bool PrintPreviewShowing(const Browser* browser) {
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   WebContents* contents = browser->tab_strip_model()->GetActiveWebContents();
-  printing::PrintPreviewDialogController* controller =
-      printing::PrintPreviewDialogController::GetInstance();
-  return controller && (controller->GetPrintPreviewForContents(contents) ||
-                        controller->is_creating_print_preview_dialog());
+  auto* controller = printing::PrintPreviewDialogController::GetInstance();
+  CHECK(controller);
+  return controller->GetPrintPreviewForContents(contents) ||
+         controller->is_creating_print_preview_dialog();
 #else
   return false;
 #endif
@@ -778,7 +764,7 @@ base::WeakPtr<content::NavigationHandle> OpenCurrentURL(Browser* browser) {
     return nullptr;
   }
 
-  GURL url(location_bar->GetDestinationURL());
+  GURL url(location_bar->navigation_params().destination_url);
   TRACE_EVENT1("navigation", "chrome::OpenCurrentURL", "url", url);
 
   if (ShouldInterceptChromeURLNavigationInIncognito(browser, url)) {
@@ -786,17 +772,21 @@ base::WeakPtr<content::NavigationHandle> OpenCurrentURL(Browser* browser) {
     return nullptr;
   }
 
-  NavigateParams params(browser, url, location_bar->GetPageTransition());
-  params.disposition = location_bar->GetWindowOpenDisposition();
+  NavigateParams params(browser, url,
+                        location_bar->navigation_params().transition);
+  params.disposition = location_bar->navigation_params().disposition;
   // Use ADD_INHERIT_OPENER so that all pages opened by the omnibox at least
   // inherit the opener. In some cases the tabstrip will determine the group
   // should be inherited, in which case the group is inherited instead of the
   // opener.
   params.tabstrip_add_types =
       AddTabTypes::ADD_FORCE_INDEX | AddTabTypes::ADD_INHERIT_OPENER;
-  params.input_start = location_bar->GetMatchSelectionTimestamp();
+  params.input_start =
+      location_bar->navigation_params().match_selection_timestamp;
   params.is_using_https_as_default_scheme =
-      location_bar->IsInputTypedUrlWithoutScheme();
+      location_bar->navigation_params().url_typed_without_scheme;
+  params.url_typed_with_http_scheme =
+      location_bar->navigation_params().url_typed_with_http_scheme;
   auto result = Navigate(&params);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -878,13 +868,6 @@ void NewTab(Browser* browser) {
   // user-initiated commands.
   UMA_HISTOGRAM_ENUMERATION("Tab.NewTab", NewTabTypes::NEW_TAB_COMMAND,
                             NewTabTypes::NEW_TAB_ENUM_COUNT);
-
-  if (!browser->is_vivaldi()) {
-  // Notify IPH that new tab was opened.
-  auto* reopen_tab_iph =
-      ReopenTabInProductHelpFactory::GetForProfile(browser->profile());
-  reopen_tab_iph->NewTabOpened();
-  } // !Vivaldi browser.
 
   if (browser->SupportsWindowFeature(Browser::FEATURE_TABSTRIP)) {
     AddTabAt(browser, GURL(), -1, true);
@@ -1410,6 +1393,15 @@ void SaveIBAN(Browser* browser) {
   controller->ReshowBubble();
 }
 
+void ShowMandatoryReauthOptInPrompt(Browser* browser) {
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  autofill::MandatoryReauthBubbleControllerImpl* controller =
+      autofill::MandatoryReauthBubbleControllerImpl::FromWebContents(
+          web_contents);
+  controller->ReshowBubble();
+}
+
 void MigrateLocalCards(Browser* browser) {
   WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
@@ -1448,14 +1440,23 @@ void ShowVirtualCardEnrollBubble(Browser* browser) {
     controller->ReshowBubble();
 }
 
-void Translate(Browser* browser) {
-  if (!browser->window()->IsActive())
+void ShowTranslateBubble(Browser* browser) {
+  if (!browser->window()->IsActive()) {
     return;
+  }
 
   WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
   ChromeTranslateClient* chrome_translate_client =
       ChromeTranslateClient::FromWebContents(web_contents);
+
+  if (!chrome_translate_client) {
+    return;
+  }
+
+  // The Translate bubble will not show if a text field is focused, so we clear
+  // focus here as the user has intentionally opened the bubble.
+  web_contents->ClearFocusedElement();
 
   std::string source_language;
   std::string target_language;
@@ -1463,20 +1464,19 @@ void Translate(Browser* browser) {
                                                  &target_language);
 
   translate::TranslateStep step = translate::TRANSLATE_STEP_BEFORE_TRANSLATE;
-  if (chrome_translate_client) {
-    if (chrome_translate_client->GetLanguageState().translation_pending())
-      step = translate::TRANSLATE_STEP_TRANSLATING;
-    else if (chrome_translate_client->GetLanguageState().translation_error())
-      step = translate::TRANSLATE_STEP_TRANSLATE_ERROR;
-    else if (chrome_translate_client->GetLanguageState().IsPageTranslated())
-      step = translate::TRANSLATE_STEP_AFTER_TRANSLATE;
+  auto* language_state =
+      chrome_translate_client->GetTranslateManager()->GetLanguageState();
+
+  if (language_state->translation_pending()) {
+    step = translate::TRANSLATE_STEP_TRANSLATING;
+  } else if (language_state->translation_error()) {
+    step = translate::TRANSLATE_STEP_TRANSLATE_ERROR;
+  } else if (language_state->IsPageTranslated()) {
+    step = translate::TRANSLATE_STEP_AFTER_TRANSLATE;
   }
-  ShowTranslateBubbleResult result = browser->window()->ShowTranslateBubble(
+  browser->window()->ShowTranslateBubble(
       web_contents, step, source_language, target_language,
       translate::TranslateErrors::NONE, true);
-  if (result != ShowTranslateBubbleResult::SUCCESS)
-    translate::ReportTranslateBubbleUiAction(
-        TranslateBubbleResultToUiEvent(result));
 }
 
 void ManagePasswordsForPage(Browser* browser) {
@@ -1484,6 +1484,8 @@ void ManagePasswordsForPage(Browser* browser) {
       feature_engagement::kIPHPasswordsManagementBubbleAfterSaveFeature);
   browser->window()->CloseFeaturePromo(
       feature_engagement::kIPHPasswordsManagementBubbleDuringSigninFeature);
+  browser->window()->CloseFeaturePromo(
+      feature_engagement::kIPHPasswordManagerShortcutFeature);
   WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
   ManagePasswordsUIController* controller =
@@ -1492,10 +1494,25 @@ void ManagePasswordsForPage(Browser* browser) {
       ->ShowManagePasswordsBubble(!controller->IsAutomaticallyOpeningBubble());
 }
 
+bool CanSendTabToSelf(const Browser* browser) {
+  return send_tab_to_self::ShouldDisplayEntryPoint(
+      browser->tab_strip_model()->GetActiveWebContents());
+}
+
 void SendTabToSelfFromPageAction(Browser* browser) {
   WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
   send_tab_to_self::ShowBubble(web_contents);
+}
+
+bool CanGenerateQrCode(const Browser* browser) {
+  return !sharing_hub::SharingIsDisabledByPolicy(browser->profile()) &&
+         qrcode_generator::QRCodeGeneratorBubbleController::
+             IsGeneratorAvailable(browser->tab_strip_model()
+                                      ->GetActiveWebContents()
+                                      ->GetController()
+                                      .GetLastCommittedEntry()
+                                      ->GetURL());
 }
 
 void GenerateQRCodeFromPageAction(Browser* browser) {
@@ -1555,9 +1572,12 @@ void Print(Browser* browser) {
 #if BUILDFLAG(ENABLE_PRINTING)
   auto* web_contents = browser->tab_strip_model()->GetActiveWebContents();
   printing::StartPrint(
-      web_contents, mojo::NullAssociatedRemote() /* print_renderer */,
+      web_contents,
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      /*print_renderer=*/mojo::NullAssociatedRemote(),
+#endif
       browser->profile()->GetPrefs()->GetBoolean(prefs::kPrintPreviewDisabled),
-      false /* has_selection? */);
+      /*has_selection=*/false);
 #endif
 }
 
@@ -1742,8 +1762,8 @@ void OpenTaskManager(Browser* browser) {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // Open linux version of task manager UI if ash TaskManager
   // interface is in an old version.
-  if (chromeos::LacrosService::Get()->GetInterfaceVersion(
-          crosapi::mojom::TaskManager::Uuid_) < 1) {
+  if (chromeos::LacrosService::Get()
+          ->GetInterfaceVersion<crosapi::mojom::TaskManager>() < 1) {
     base::RecordAction(UserMetricsAction("TaskManager"));
     chrome::ShowTaskManager(browser);
     return;
@@ -1922,6 +1942,11 @@ Browser* OpenInChrome(Browser* hosted_app_browser) {
         std::move(dest_contents), true);
     target_browser->window()->Show();
 
+    if (security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
+            source_contents.get())) {
+      source_tabstrip->AppendWebContents(std::move(source_contents), true);
+    }
+
     return target_browser;
   }
 
@@ -2092,13 +2117,19 @@ void ExecLensRegionSearch(Browser* browser) {
   GURL url = contents->GetController().GetLastCommittedEntry()->GetURL();
 
   if (lens::IsRegionSearchEnabled(browser, profile, service, url)) {
+    const bool is_google_dsp = search::DefaultSearchProviderIsGoogle(profile);
+    const lens::AmbientSearchEntryPoint entry_point =
+        is_google_dsp ? lens::AmbientSearchEntryPoint::
+                            CONTEXT_MENU_SEARCH_REGION_WITH_GOOGLE_LENS
+                      : lens::AmbientSearchEntryPoint::
+                            CONTEXT_MENU_SEARCH_REGION_WITH_WEB;
     auto lens_region_search_controller_data =
         std::make_unique<lens::LensRegionSearchControllerData>();
     lens_region_search_controller_data->lens_region_search_controller =
         std::make_unique<lens::LensRegionSearchController>(browser);
     lens_region_search_controller_data->lens_region_search_controller->Start(
         contents, lens::features::IsLensFullscreenSearchEnabled(),
-        search::DefaultSearchProviderIsGoogle(profile));
+        is_google_dsp, entry_point);
     browser->SetUserData(lens::LensRegionSearchControllerData::kDataKey,
                          std::move(lens_region_search_controller_data));
   }

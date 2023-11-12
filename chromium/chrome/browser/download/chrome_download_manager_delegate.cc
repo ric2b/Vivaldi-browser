@@ -108,8 +108,10 @@
 #include "net/http/http_content_disposition.h"
 #include "ui/android/window_android.h"
 #else
+#include "chrome/browser/download/download_item_web_app_data.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -377,6 +379,10 @@ void MaybeReportDangerousDownloadBlocked(
           DownloadPrefs::DownloadRestriction::DANGEROUS_FILES &&
       download_restriction !=
           DownloadPrefs::DownloadRestriction::MALICIOUS_FILES) {
+    return;
+  }
+
+  if (!download) {
     return;
   }
 
@@ -1139,7 +1145,8 @@ void ChromeDownloadManagerDelegate::RequestConfirmation(
           DownloadPathReservationTracker::UNIQUIFY,
           base::BindOnce(
               &ChromeDownloadManagerDelegate::GenerateUniqueFileNameDone,
-              weak_ptr_factory_.GetWeakPtr(), native_window,
+              weak_ptr_factory_.GetWeakPtr(),
+              base::UnsafeDanglingUntriaged(native_window),
               std::move(callback)));
       return;
     }
@@ -1823,6 +1830,22 @@ void ChromeDownloadManagerDelegate::OnCheckDownloadAllowedComplete(
 
   std::move(check_download_allowed_cb).Run(allow);
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+void ChromeDownloadManagerDelegate::AttachExtraInfo(
+    download::DownloadItem* item) {
+  content::WebContents* web_contents =
+      content::DownloadItemUtils::GetWebContents(item);
+  Browser* browser =
+      web_contents ? chrome::FindBrowserWithWebContents(web_contents) : nullptr;
+  // Attach the info for whether the download came from a web app.
+  if (browser && web_app::AppBrowserController::IsWebApp(browser) &&
+      browser->app_controller()) {
+    DownloadItemWebAppData::CreateAndAttachToItem(
+        item, browser->app_controller()->app_id());
+  }
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
 ChromeDownloadManagerDelegate::SafeBrowsingState::~SafeBrowsingState() {}

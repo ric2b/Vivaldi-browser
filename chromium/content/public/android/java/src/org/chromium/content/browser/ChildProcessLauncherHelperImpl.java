@@ -43,6 +43,7 @@ import org.chromium.content.app.SandboxedProcessService;
 import org.chromium.content.common.ContentSwitchUtils;
 import org.chromium.content_public.browser.ChildProcessImportance;
 import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.browser.ContentFeatureMap;
 import org.chromium.content_public.common.ContentFeatures;
 import org.chromium.content_public.common.ContentSwitches;
 
@@ -396,7 +397,7 @@ public final class ChildProcessLauncherHelperImpl {
         if (!ContentSwitches.SWITCH_RENDERER_PROCESS.equals(processType)) {
             if (ContentSwitches.SWITCH_GPU_PROCESS.equals(processType)) {
                 sandboxed = false;
-                reducePriorityOnBackground = ContentFeatureList.isEnabled(
+                reducePriorityOnBackground = ContentFeatureMap.isEnabled(
                         ContentFeatures.REDUCE_GPU_PRIORITY_ON_BACKGROUND);
             } else {
                 // We only support sandboxed utility processes now.
@@ -463,9 +464,6 @@ public final class ChildProcessLauncherHelperImpl {
      */
     public static void startBindingManagement(final Context context) {
         assert ThreadUtils.runningOnUiThread();
-        final int maxConnections = ContentFeatureList.getFieldTrialParamByFeatureAsInt(
-                ContentFeatures.BINDING_MANAGER_CONNECTION_LIMIT, "max_connections",
-                BindingManager.NO_MAX_SIZE);
         LauncherThread.post(new Runnable() {
             @Override
             public void run() {
@@ -473,12 +471,9 @@ public final class ChildProcessLauncherHelperImpl {
                         getConnectionAllocator(context, true /* sandboxed */);
                 if (ChildProcessConnection.supportVariableConnections()) {
                     sBindingManager = new BindingManager(
-                            context, maxConnections, sSandboxedChildConnectionRanking);
+                            context, BindingManager.NO_MAX_SIZE, sSandboxedChildConnectionRanking);
                 } else {
-                    sBindingManager = new BindingManager(context,
-                            (maxConnections == BindingManager.NO_MAX_SIZE)
-                                    ? allocator.getNumberOfServices()
-                                    : Math.min(allocator.getNumberOfServices(), maxConnections),
+                    sBindingManager = new BindingManager(context, allocator.getNumberOfServices(),
                             sSandboxedChildConnectionRanking);
                 }
                 ChildProcessConnectionMetrics.getInstance().setBindingManager(sBindingManager);
@@ -725,7 +720,7 @@ public final class ChildProcessLauncherHelperImpl {
             boostForPendingViews = false;
         }
 
-        boolean mediaRendererHasModerate = ContentFeatureList.isEnabled(
+        boolean mediaRendererHasModerate = ContentFeatureMap.isEnabled(
                 ContentFeatureList.BACKGROUND_MEDIA_RENDERER_HAS_MODERATE_BINDING);
 
         @ChildProcessImportance

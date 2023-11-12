@@ -34,9 +34,9 @@
 #include "net/cert/pki/trust_store_collection.h"
 #include "net/cert/pki/trust_store_in_memory.h"
 #include "net/cert/test_root_certs.h"
+#include "net/cert/time_conversions.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
-#include "net/der/encode_values.h"
 #include "net/log/net_log_values.h"
 #include "net/log/net_log_with_source.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -548,9 +548,8 @@ scoped_refptr<X509Certificate> CreateVerifiedCertChain(
     intermediates.push_back(bssl::UpRef(path.certs[i]->cert_buffer()));
   }
 
-  scoped_refptr<X509Certificate> result = X509Certificate::CreateFromBuffer(
-      bssl::UpRef(target_cert->cert_buffer()), std::move(intermediates));
-  // |target_cert| was already successfully parsed, so this should never fail.
+  scoped_refptr<X509Certificate> result =
+      target_cert->CloneWithDifferentIntermediates(std::move(intermediates));
   DCHECK(result);
 
   return result;
@@ -738,8 +737,7 @@ int CertVerifyProcBuiltin::VerifyInternal(
   base::Time verification_time = base::Time::Now();
   base::TimeTicks deadline = base::TimeTicks::Now() + kMaxVerificationTime;
   der::GeneralizedTime der_verification_time;
-  if (!der::EncodeTimeAsGeneralizedTime(verification_time,
-                                        &der_verification_time)) {
+  if (!EncodeTimeAsGeneralizedTime(verification_time, &der_verification_time)) {
     // This shouldn't be possible.
     // We don't really have a good error code for this type of error.
     verify_result->cert_status |= CERT_STATUS_AUTHORITY_INVALID;

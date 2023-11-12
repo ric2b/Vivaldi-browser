@@ -24,13 +24,19 @@ BinaryUploadService* CloudBinaryUploadServiceFactory::GetForProfile(
 // static
 CloudBinaryUploadServiceFactory*
 CloudBinaryUploadServiceFactory::GetInstance() {
-  return base::Singleton<CloudBinaryUploadServiceFactory>::get();
+  static base::NoDestructor<CloudBinaryUploadServiceFactory> instance;
+  return instance.get();
 }
 
 CloudBinaryUploadServiceFactory::CloudBinaryUploadServiceFactory()
     : ProfileKeyedServiceFactory(
           "CloudBinaryUploadService",
-          ProfileSelections::BuildForRegularAndIncognito()) {}
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {}
 
 KeyedService* CloudBinaryUploadServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {

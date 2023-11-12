@@ -5,8 +5,8 @@
 #ifndef CHROME_UPDATER_UTIL_MAC_UTIL_H_
 #define CHROME_UPDATER_UTIL_MAC_UTIL_H_
 
-#include "base/mac/scoped_cftyperef.h"
-#include "chrome/common/mac/launchd.h"
+#include <string>
+
 #include "chrome/updater/updater_scope.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -33,16 +33,18 @@ absl::optional<base::FilePath> GetKeystoneFolderPath(UpdaterScope scope);
 // the shim installed by this updater or a Keystone ksadmin.
 absl::optional<base::FilePath> GetKSAdminPath(UpdaterScope scope);
 
-base::ScopedCFTypeRef<CFStringRef> CopyWakeLaunchdName(UpdaterScope scope);
+// Returns the path to the wake task plist.
+absl::optional<base::FilePath> GetWakeTaskPlistPath(UpdaterScope scope);
 
-// Removes the Launchd job with the given 'name'.
-bool RemoveJobFromLaunchd(UpdaterScope scope,
-                          Launchd::Domain domain,
-                          Launchd::Type type,
-                          base::ScopedCFTypeRef<CFStringRef> name);
+std::string GetWakeLaunchdName(UpdaterScope scope);
+
+// Removes the wake launch job.
+bool RemoveWakeJobFromLaunchd(UpdaterScope scope);
 
 // Recursively remove quarantine attributes on the path.
 bool RemoveQuarantineAttributes(const base::FilePath& path);
+
+std::string GetDomain(UpdaterScope scope);
 
 }  // namespace updater
 

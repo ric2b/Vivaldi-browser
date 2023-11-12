@@ -11,10 +11,13 @@
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
 #import "components/sessions/core/tab_restore_service.h"
-#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
 #import "ios/chrome/browser/sessions/session_window_ios.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/url/url_util.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/snapshots/snapshot_browser_agent.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache_observer.h"
@@ -24,9 +27,6 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/inactive_tabs_info_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_utils.h"
 #import "ios/chrome/browser/ui/tab_switcher/web_state_tab_switcher_item.h"
-#import "ios/chrome/browser/url/url_util.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "ui/base/device_form_factor.h"
@@ -87,8 +87,6 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
                                     PrefObserverDelegate,
                                     SnapshotCacheObserver,
                                     WebStateListObserving> {
-  // The UI consumer to which updates are made.
-  __weak id<TabCollectionConsumer, InactiveTabsInfoConsumer> _consumer;
   // The list of inactive tabs.
   WebStateList* _webStateList;
   // The snapshot cache of _webStateList.
@@ -123,17 +121,14 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
 
 @implementation InactiveTabsMediator
 
-- (instancetype)
-           initWithConsumer:
-               (id<TabCollectionConsumer, InactiveTabsInfoConsumer>)consumer
-               webStateList:(WebStateList*)webStateList
-                prefService:(PrefService*)prefService
-    sessionRestorationAgent:
-        (SessionRestorationBrowserAgent*)sessionRestorationAgent
-              snapshotAgent:(SnapshotBrowserAgent*)snapshotAgent
-          tabRestoreService:(sessions::TabRestoreService*)tabRestoreService {
+- (instancetype)initWithWebStateList:(WebStateList*)webStateList
+                         prefService:(PrefService*)prefService
+             sessionRestorationAgent:
+                 (SessionRestorationBrowserAgent*)sessionRestorationAgent
+                       snapshotAgent:(SnapshotBrowserAgent*)snapshotAgent
+                   tabRestoreService:
+                       (sessions::TabRestoreService*)tabRestoreService {
   CHECK(IsInactiveTabsAvailable());
-  CHECK(consumer);
   CHECK(webStateList);
   CHECK(prefService);
   CHECK(sessionRestorationAgent);
@@ -142,7 +137,6 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
   CHECK(tabRestoreService);
   self = [super init];
   if (self) {
-    _consumer = consumer;
     _webStateList = webStateList;
 
     // Observe the web state list.
@@ -169,12 +163,6 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
     _prefObserverBridge->ObserveChangesForPreference(
         prefs::kInactiveTabsTimeThreshold, &_prefChangeRegistrar);
 
-    // Push the tabs to the consumer.
-    PopulateConsumerItems(_consumer, _webStateList);
-    // Push the info to the consumer.
-    NSInteger daysThreshold = InactiveTabsTimeThreshold().InDays();
-    [_consumer updateInactiveTabsDaysThreshold:daysThreshold];
-
     _snapshotCache = snapshotAgent->snapshot_cache();
     [_snapshotCache addObserver:self];
 
@@ -187,6 +175,21 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
 
 - (void)dealloc {
   [_snapshotCache removeObserver:self];
+}
+
+- (void)setConsumer:
+    (id<TabCollectionConsumer, InactiveTabsInfoConsumer>)consumer {
+  if (_consumer == consumer) {
+    return;
+  }
+
+  _consumer = consumer;
+
+  // Push the tabs to the consumer.
+  PopulateConsumerItems(_consumer, _webStateList);
+  // Push the info to the consumer.
+  NSInteger daysThreshold = InactiveTabsTimeThreshold().InDays();
+  [_consumer updateInactiveTabsDaysThreshold:daysThreshold];
 }
 
 - (NSInteger)numberOfItems {
@@ -243,56 +246,71 @@ void PopulateConsumerItems(id<TabCollectionConsumer> consumer,
 #pragma mark - SnapshotCacheObserver
 
 - (void)snapshotCache:(SnapshotCache*)snapshotCache
-    didUpdateSnapshotForIdentifier:(NSString*)identifier {
-  web::WebState* webState =
-      GetWebState(_webStateList, WebStateSearchCriteria{
-                                     .identifier = identifier,
-                                 });
+    didUpdateSnapshotForID:(NSString*)snapshotID {
+  web::WebState* webState = nullptr;
+  for (int i = 0; i < _webStateList->count(); i++) {
+    SnapshotTabHelper* snapshotTabHelper =
+        SnapshotTabHelper::FromWebState(_webStateList->GetWebStateAt(i));
+    if ([snapshotID isEqualToString:snapshotTabHelper->GetSnapshotID()]) {
+      webState = _webStateList->GetWebStateAt(i);
+      break;
+    }
+  }
   if (webState) {
     // It is possible to observe an updated snapshot for a WebState before
     // observing that the WebState has been added to the WebStateList. It is the
     // consumer's responsibility to ignore any updates before inserts.
     TabSwitcherItem* item =
         [[WebStateTabSwitcherItem alloc] initWithWebState:webState];
-    [_consumer replaceItemID:identifier withItem:item];
+    // Items are indexed with the stable identifier. Don't pass a snapshot ID
+    // here.
+    [_consumer replaceItemID:webState->GetStableIdentifier() withItem:item];
   }
 }
 
 #pragma mark - WebStateListObserving
 
-- (void)webStateList:(WebStateList*)webStateList
-    didInsertWebState:(web::WebState*)webState
-              atIndex:(int)index
-           activating:(BOOL)activating {
+- (void)didChangeWebStateList:(WebStateList*)webStateList
+                       change:(const WebStateListChange&)change
+                    selection:(const WebStateSelection&)selection {
   DCHECK_EQ(_webStateList, webStateList);
   if (_webStateList->IsBatchInProgress()) {
     // Updates are handled in the batch operation observer methods.
     return;
   }
-  // Insertions are only supported for iPad multiwindow support when changing
-  // the user settings for Inactive Tabs (i.e. when picking a longer inactivity
-  // threshold).
-  DCHECK_EQ(ui::GetDeviceFormFactor(), ui::DEVICE_FORM_FACTOR_TABLET);
 
-  TabSwitcherItem* item =
-      [[WebStateTabSwitcherItem alloc] initWithWebState:webState];
-  [_consumer insertItem:item atIndex:index selectedItemID:nil];
+  switch (change.type()) {
+    case WebStateListChange::Type::kSelectionOnly:
+      // TODO(crbug.com/1442546): Move the implementation from
+      // webStateList:didChangeActiveWebState:oldWebState:atIndex:reason and
+      // webStateList:didChangePinnedStateForWebState:atIndexto here. Note that
+      // here is reachable only when `reason` ==
+      // ActiveWebStateChangeReason::Activated for didChangeActiveWebState:.
+      break;
+    case WebStateListChange::Type::kDetach:
+      // TODO(crbug.com/1442546): Move the implementation from
+      // webStateList:didDetachWebState:atIndex: to here.
+      break;
+    case WebStateListChange::Type::kMove:
+    case WebStateListChange::Type::kReplace:
+      NOTREACHED_NORETURN();
+    case WebStateListChange::Type::kInsert: {
+      // Insertions are only supported for iPad multiwindow support when
+      // changing the user settings for Inactive Tabs (i.e. when picking a
+      // longer inactivity threshold).
+      DCHECK_EQ(ui::GetDeviceFormFactor(), ui::DEVICE_FORM_FACTOR_TABLET);
 
-  _scopedWebStateObservation->AddObservation(webState);
-}
+      const WebStateListChangeInsert& insertChange =
+          change.As<WebStateListChangeInsert>();
+      web::WebState* insertedWebState = insertChange.inserted_web_state();
+      TabSwitcherItem* item =
+          [[WebStateTabSwitcherItem alloc] initWithWebState:insertedWebState];
+      [_consumer insertItem:item atIndex:selection.index selectedItemID:nil];
 
-- (void)webStateList:(WebStateList*)webStateList
-     didMoveWebState:(web::WebState*)webState
-           fromIndex:(int)fromIndex
-             toIndex:(int)toIndex {
-  NOTREACHED_NORETURN();
-}
-
-- (void)webStateList:(WebStateList*)webStateList
-    didReplaceWebState:(web::WebState*)oldWebState
-          withWebState:(web::WebState*)newWebState
-               atIndex:(int)index {
-  NOTREACHED_NORETURN();
+      _scopedWebStateObservation->AddObservation(insertedWebState);
+      break;
+    }
+  }
 }
 
 - (void)webStateList:(WebStateList*)webStateList

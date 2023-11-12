@@ -39,6 +39,7 @@
 #include "components/feed/core/v2/wire_response_translator.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/search_engines/template_url_service.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "net/http/http_status_code.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -83,6 +84,7 @@ class TestReliabilityLoggingBridge : public ReliabilityLoggingBridge {
   ~TestReliabilityLoggingBridge() override;
 
   std::string GetEventsString() const;
+  void ClearEventsString();
 
   // ReliabilityLoggingBridge implementation.
   void LogFeedLaunchOtherStart(base::TimeTicks timestamp) override;
@@ -112,6 +114,13 @@ class TestReliabilityLoggingBridge : public ReliabilityLoggingBridge {
 
   void LogLaunchFinishedAfterStreamUpdate(
       feedwire::DiscoverLaunchResult result) override;
+  void LogLoadMoreStarted() override;
+  void LogLoadMoreActionUploadRequestStarted() override;
+  void LogLoadMoreRequestSent() override;
+  void LogLoadMoreResponseReceived(int64_t server_receive_timestamp_ns,
+                                   int64_t server_send_timestamp_ns) override;
+  void LogLoadMoreRequestFinished(int canonical_status) override;
+  void LogLoadMoreEnded(bool success) override;
 
  private:
   std::vector<std::string> events_;
@@ -161,6 +170,8 @@ class TestSurfaceBase : public FeedStreamSurface {
   absl::optional<feedui::StreamUpdate> initial_state;
   // The last stream update received.
   absl::optional<feedui::StreamUpdate> update;
+  // All stream updates.
+  std::vector<feedui::StreamUpdate> all_updates;
 
   TestReliabilityLoggingBridge reliability_logging_bridge;
 
@@ -362,7 +373,6 @@ class TestFeedNetwork : public FeedNetwork {
   AccountInfo last_account_info;
   // The consistency token to use when constructing default network responses.
   std::string consistency_token;
-  bool forced_signed_out_request = false;
   net::HttpStatusCode http_status_code = net::HttpStatusCode::HTTP_OK;
   net::Error error = net::Error::OK;
 
@@ -476,7 +486,6 @@ class FeedApiTest : public testing::Test, public FeedStream::Delegate {
   bool IsOffline() override;
   DisplayMetrics GetDisplayMetrics() override;
   std::string GetLanguageTag() override;
-  bool IsAutoplayEnabled() override;
   TabGroupEnabledState GetTabGroupEnabledState() override;
   void ClearAll() override;
   AccountInfo GetAccountInfo() override;
@@ -532,6 +541,8 @@ class FeedApiTest : public testing::Test, public FeedStream::Delegate {
               leveldb_proto::ProtoDbType::FEED_KEY_VALUE_DATABASE,
               /*db_dir=*/{},
               task_environment_.GetMainThreadTaskRunner()));
+
+  std::unique_ptr<TemplateURLService> template_url_service_;
 
   FakeRefreshTaskScheduler refresh_scheduler_;
   StreamModel::Context stream_model_context_;

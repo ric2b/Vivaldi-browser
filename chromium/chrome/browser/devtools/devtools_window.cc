@@ -1493,6 +1493,9 @@ bool DevToolsWindow::HandleContextMenu(
 }
 
 void DevToolsWindow::CloseContents(WebContents* source) {
+  // We shouldn't get here as long as we're owned by the browser.
+  CHECK(!browser_);
+
   // NOTE(pettern@vivaldi.com): Until we can move devtools to
   // a native UI again, don't have a CHECK crash us here.
   // CHECK(is_docked_);

@@ -4,13 +4,14 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
+import static org.junit.Assert.assertNotNull;
+
 import android.app.Activity;
 import android.view.View;
 import android.widget.FrameLayout;
 
 import androidx.test.ext.junit.rules.ActivityScenarioRule;
 
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -26,28 +27,31 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
-import org.chromium.chrome.browser.sync.SyncService;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.favicon.LargeIconBridgeJni;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.sync.SyncService;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.TestActivity;
 
-/** Unit tests for BookmarkManagerCoordinator. */
+/** Unit tests for {@link BookmarkManagerCoordinator}. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 @CommandLineFlags.
 Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, ChromeSwitches.DISABLE_NATIVE_INITIALIZATION})
-@Features.EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH})
+@Features.EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH, ChromeFeatureList.EMPTY_STATES})
 public class BookmarkManagerCoordinatorTest {
     @Rule
     public MockitoRule mMockitoRule = MockitoJUnit.rule();
@@ -60,25 +64,27 @@ public class BookmarkManagerCoordinatorTest {
     public TestRule mFeaturesProcessorRule = new Features.JUnitProcessor();
 
     @Mock
-    SnackbarManager mSnackbarManager;
+    private SnackbarManager mSnackbarManager;
     @Mock
-    Profile mProfile;
+    private Profile mProfile;
     @Mock
-    LargeIconBridge.Natives mMockLargeIconBridgeJni;
+    private LargeIconBridge.Natives mMockLargeIconBridgeJni;
     @Mock
-    SyncService mSyncService;
+    private SyncService mSyncService;
     @Mock
-    IdentityServicesProvider mIdentityServicesProvider;
+    private IdentityServicesProvider mIdentityServicesProvider;
     @Mock
-    SigninManager mSigninManager;
+    private SigninManager mSigninManager;
     @Mock
-    AccountManagerFacade mAccountManagerFacade;
+    private AccountManagerFacade mAccountManagerFacade;
     @Mock
-    IdentityManager mIdentityManager;
+    private IdentityManager mIdentityManager;
     @Mock
-    BookmarkModel mBookmarkModel;
+    private BookmarkModel mBookmarkModel;
     @Mock
-    BookmarkUiPrefs mBookmarkUiPrefs;
+    private BookmarkUiPrefs mBookmarkUiPrefs;
+    @Mock
+    private ShoppingService mShoppingService;
 
     private Activity mActivity;
     private BookmarkManagerCoordinator mCoordinator;
@@ -89,12 +95,13 @@ public class BookmarkManagerCoordinatorTest {
         mJniMocker.mock(LargeIconBridgeJni.TEST_HOOKS, mMockLargeIconBridgeJni);
 
         // Setup service mocks.
-        SyncService.overrideForTests(mSyncService);
+        SyncServiceFactory.overrideForTests(mSyncService);
         IdentityServicesProvider.setInstanceForTests(mIdentityServicesProvider);
         Mockito.doReturn(mSigninManager).when(mIdentityServicesProvider).getSigninManager(mProfile);
         Mockito.doReturn(mIdentityManager).when(mSigninManager).getIdentityManager();
         AccountManagerFacadeProvider.setInstanceForTests(mAccountManagerFacade);
         BookmarkModel.setInstanceForTesting(mBookmarkModel);
+        ShoppingServiceFactory.setShoppingServiceForTesting(mShoppingService);
 
         mActivityScenarioRule.getScenario().onActivity((activity) -> {
             mActivity = activity;
@@ -110,21 +117,24 @@ public class BookmarkManagerCoordinatorTest {
     public void testGetView() {
         View mainView = mCoordinator.getView();
 
-        Assert.assertNotNull(mainView);
-        Assert.assertNotNull(mainView.findViewById(R.id.selectable_list));
-        Assert.assertNotNull(mainView.findViewById(R.id.action_bar));
+        assertNotNull(mainView);
+        assertNotNull(mainView.findViewById(R.id.selectable_list));
+        assertNotNull(mainView.findViewById(R.id.action_bar));
     }
 
     @Test
     public void testCreateView() {
         FrameLayout parent = new FrameLayout(mActivity);
-        Assert.assertNotNull(mCoordinator.buildPersonalizedPromoView(parent));
-        Assert.assertNotNull(mCoordinator.buildLegacyPromoView(parent));
-        Assert.assertNotNull(BookmarkManagerCoordinator.buildSectionHeaderView(parent));
-        Assert.assertNotNull(mCoordinator.buildAndInitBookmarkFolderView(parent));
-        Assert.assertNotNull(mCoordinator.buildAndInitBookmarkItemRow(parent));
-        Assert.assertNotNull(mCoordinator.buildAndInitShoppingItemView(parent));
-        Assert.assertNotNull(BookmarkManagerCoordinator.buildDividerView(parent));
-        Assert.assertNotNull(BookmarkManagerCoordinator.buildShoppingFilterView(parent));
+        assertNotNull(mCoordinator.buildPersonalizedPromoView(parent));
+        assertNotNull(mCoordinator.buildLegacyPromoView(parent));
+        assertNotNull(BookmarkManagerCoordinator.buildSectionHeaderView(parent));
+        assertNotNull(mCoordinator.buildAndInitBookmarkFolderView(parent));
+        assertNotNull(mCoordinator.buildAndInitBookmarkItemRow(parent));
+        assertNotNull(mCoordinator.buildAndInitShoppingItemView(parent));
+        assertNotNull(BookmarkManagerCoordinator.buildDividerView(parent));
+        assertNotNull(BookmarkManagerCoordinator.buildShoppingFilterView(parent));
+        assertNotNull(mCoordinator.buildAndInitCompactImprovedBookmarkRow(parent));
+        assertNotNull(mCoordinator.buildAndInitVisualImprovedBookmarkRow(parent));
+        assertNotNull(mCoordinator.buildSearchBoxRow(parent));
     }
 }

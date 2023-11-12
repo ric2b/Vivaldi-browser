@@ -13,12 +13,14 @@
 
 #import "base/observer_list.h"
 #import "build/blink_buildflags.h"
+#import "content/public/browser/web_contents_delegate.h"
 #import "content/public/browser/web_contents_observer.h"
 #import "ios/web/content/js_messaging/content_web_frames_manager.h"
 #import "ios/web/content/navigation/content_navigation_manager.h"
 #import "ios/web/public/favicon/favicon_status.h"
 #import "ios/web/public/session/session_certificate_policy_cache.h"
 
+@class CRCWebViewportContainerView;
 @class CRWWebViewProxy;
 
 #if !BUILDFLAG(USE_BLINK)
@@ -35,7 +37,9 @@ class WebContents;
 namespace web {
 
 // ContentWebState is an implementation of WebState that's based on WebContents.
-class ContentWebState : public WebState, public content::WebContentsObserver {
+class ContentWebState : public WebState,
+                        public content::WebContentsObserver,
+                        public content::WebContentsDelegate {
  public:
   explicit ContentWebState(const CreateParams& params);
 
@@ -101,7 +105,7 @@ class ContentWebState : public WebState, public content::WebContentsObserver {
   int GetNavigationItemCount() const override;
   const GURL& GetVisibleURL() const override;
   const GURL& GetLastCommittedURL() const override;
-  GURL GetCurrentURL(URLVerificationTrustLevel* trust_level) const override;
+  absl::optional<GURL> GetLastCommittedURLIfTrusted() const override;
   WebFramesManager* GetWebFramesManager(ContentWorld world) override;
   CRWWebViewProxyType GetWebViewProxy() const override;
   void AddObserver(WebStateObserver* observer) override;
@@ -125,6 +129,7 @@ class ContentWebState : public WebState, public content::WebContentsObserver {
   void SetFindInteractionEnabled(bool enabled) final;
   id<CRWFindInteraction> GetFindInteraction() final API_AVAILABLE(ios(16));
   id GetActivityItem() API_AVAILABLE(ios(16.4)) final;
+  UIColor* GetThemeColor() final;
   void AddPolicyDecider(WebStatePolicyDecider* decider) override;
   void RemovePolicyDecider(WebStatePolicyDecider* decider) override;
   void DidChangeVisibleSecurityState() override;
@@ -163,10 +168,29 @@ class ContentWebState : public WebState, public content::WebContentsObserver {
   void PrimaryMainFrameRenderProcessGone(
       base::TerminationStatus status) override;
 
+  // WebContentsDelegate
+  void AddNewContents(content::WebContents* source,
+                      std::unique_ptr<content::WebContents> new_contents,
+                      const GURL& target_url,
+                      WindowOpenDisposition disposition,
+                      const blink::mojom::WindowFeatures& window_features,
+                      bool user_gesture,
+                      bool* was_blocked) override;
+  int GetTopControlsHeight() override;
+  int GetTopControlsMinHeight() override;
+  int GetBottomControlsHeight() override;
+  int GetBottomControlsMinHeight() override;
+  bool ShouldAnimateBrowserControlsHeightChanges() override;
+  bool DoBrowserControlsShrinkRendererSize(
+      content::WebContents* web_contents) override;
+  bool OnlyExpandTopControlsAtPageTop() override;
+
  private:
-  UIScrollView* web_view_;
+  WebStateDelegate* delegate_ = nullptr;
+  CRCWebViewportContainerView* web_view_;
   CRWSessionStorage* session_storage_;
   std::unique_ptr<content::WebContents> web_contents_;
+  std::unique_ptr<content::WebContents> child_web_contents_;
   std::unique_ptr<web::SessionCertificatePolicyCache> certificate_policy_cache_;
   id<CRWWebViewProxy> web_view_proxy_;
   NSString* UUID_;

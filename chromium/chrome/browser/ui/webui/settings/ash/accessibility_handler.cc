@@ -24,6 +24,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/components/kiosk/kiosk_utils.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/language/core/common/locale_util.h"
 #include "components/prefs/pref_service.h"
@@ -96,6 +97,10 @@ void AccessibilityHandler::RegisterMessages() {
       base::BindRepeating(
           &AccessibilityHandler::HandleUpdateBluetoothBrailleDisplayAddress,
           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getStartupSoundEnabled",
+      base::BindRepeating(&AccessibilityHandler::HandleGetStartupSoundEnabled,
+                          base::Unretained(this)));
 }
 
 void AccessibilityHandler::HandleShowBrowserAppearanceSettings(
@@ -167,6 +172,14 @@ void AccessibilityHandler::HandleUpdateBluetoothBrailleDisplayAddress(
   AccessibilityManager::Get()->UpdateBluetoothBrailleDisplayAddress(address);
 }
 
+void AccessibilityHandler::HandleGetStartupSoundEnabled(
+    const base::Value::List& args) {
+  AllowJavascript();
+  FireWebUIListener(
+      "startup-sound-setting-retrieved",
+      base::Value(AccessibilityManager::Get()->GetStartupSoundEnabled()));
+}
+
 void AccessibilityHandler::OpenExtensionOptionsPage(const char extension_id[]) {
   const extensions::Extension* extension =
       extensions::ExtensionRegistry::Get(profile_)->GetExtensionById(
@@ -180,7 +193,7 @@ void AccessibilityHandler::OpenExtensionOptionsPage(const char extension_id[]) {
   // doesn't support SWA but already hide the navigation bar.
   bool open_with_os_url_handler =
       !crosapi::browser_util::IsAshWebBrowserEnabled() &&
-      !profiles::IsKioskSession();
+      !chromeos::IsKioskSession();
   if (open_with_os_url_handler) {
     DCHECK(extensions::OptionsPageInfo::ShouldOpenInTab(extension));
     GURL url = extensions::OptionsPageInfo::GetOptionsPage(extension);

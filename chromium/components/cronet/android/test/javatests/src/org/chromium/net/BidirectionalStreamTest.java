@@ -4,18 +4,9 @@
 
 package org.chromium.net;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static com.google.common.truth.Truth.assertThat;
 
-import static org.chromium.base.CollectionUtil.newHashSet;
-import static org.chromium.net.CronetTestRule.SERVER_CERT_PEM;
-import static org.chromium.net.CronetTestRule.SERVER_KEY_PKCS8_PEM;
-import static org.chromium.net.CronetTestRule.assertContains;
-import static org.chromium.net.CronetTestRule.getContext;
+import static org.junit.Assert.assertThrows;
 
 import android.os.Build;
 import android.os.ConditionVariable;
@@ -31,7 +22,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.Log;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.net.CronetTestRule.OnlyRunNativeCronet;
 import org.chromium.net.CronetTestRule.RequiresMinAndroidApi;
 import org.chromium.net.CronetTestRule.RequiresMinApi;
@@ -46,7 +36,6 @@ import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -60,41 +49,35 @@ public class BidirectionalStreamTest {
     private static final String TAG = BidirectionalStreamTest.class.getSimpleName();
 
     @Rule
-    public final CronetTestRule mTestRule = new CronetTestRule();
+    public final CronetTestRule mTestRule = CronetTestRule.withManualEngineStartup();
 
     private ExperimentalCronetEngine mCronetEngine;
 
     @Before
     public void setUp() throws Exception {
-        // Load library first to create MockCertVerifier.
-        System.loadLibrary("cronet_tests");
-        ExperimentalCronetEngine.Builder builder =
-                new ExperimentalCronetEngine.Builder(getContext());
-        CronetTestUtil.setMockCertVerifierForTesting(
-                builder, QuicTestServer.createMockCertVerifier());
+        mTestRule.getTestFramework().applyEngineBuilderPatch(
+                (builder)
+                        -> CronetTestUtil.setMockCertVerifierForTesting(
+                                builder, QuicTestServer.createMockCertVerifier()));
 
-        mCronetEngine = builder.build();
-        assertTrue(Http2TestServer.startHttp2TestServer(
-                getContext(), SERVER_CERT_PEM, SERVER_KEY_PKCS8_PEM));
+        mCronetEngine = mTestRule.getTestFramework().startEngine();
+        assertThat(Http2TestServer.startHttp2TestServer(mTestRule.getTestFramework().getContext()))
+                .isTrue();
     }
 
     @After
     public void tearDown() throws Exception {
-        assertTrue(Http2TestServer.shutdownHttp2TestServer());
-        if (mCronetEngine != null) {
-            mCronetEngine.shutdown();
-        }
+        assertThat(Http2TestServer.shutdownHttp2TestServer()).isTrue();
     }
 
     private static void checkResponseInfo(UrlResponseInfo responseInfo, String expectedUrl,
             int expectedHttpStatusCode, String expectedHttpStatusText) {
-        assertEquals(expectedUrl, responseInfo.getUrl());
-        assertEquals(
-                expectedUrl, responseInfo.getUrlChain().get(responseInfo.getUrlChain().size() - 1));
-        assertEquals(expectedHttpStatusCode, responseInfo.getHttpStatusCode());
-        assertEquals(expectedHttpStatusText, responseInfo.getHttpStatusText());
-        assertFalse(responseInfo.wasCached());
-        assertTrue(responseInfo.toString().length() > 0);
+        assertThat(responseInfo.getUrl()).isEqualTo(expectedUrl);
+        assertThat(responseInfo.getUrlChain()).containsExactly(expectedUrl);
+        assertThat(responseInfo.getHttpStatusCode()).isEqualTo(expectedHttpStatusCode);
+        assertThat(responseInfo.getHttpStatusText()).isEqualTo(expectedHttpStatusText);
+        assertThat(responseInfo.wasCached()).isFalse();
+        assertThat(responseInfo.toString()).isNotEmpty();
     }
 
     private static String createLongString(String base, int repetition) {
@@ -131,86 +114,69 @@ public class BidirectionalStreamTest {
                         .build();
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
+        assertThat(stream.isDone()).isTrue();
         requestFinishedListener.blockUntilDone();
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
         // Default method is 'GET'.
-        assertEquals("GET", callback.mResponseAsString);
+        assertThat(callback.mResponseAsString).isEqualTo("GET");
         UrlResponseInfo urlResponseInfo = createUrlResponseInfo(
                 new String[] {url}, "", 200, expectedReceivedBytes, ":status", "200");
         mTestRule.assertResponseEquals(urlResponseInfo, callback.mResponseInfo);
         checkResponseInfo(callback.mResponseInfo, Http2TestServer.getEchoMethodUrl(), 200, "");
         RequestFinishedInfo finishedInfo = requestFinishedListener.getRequestInfo();
-        assertTrue(finishedInfo.getAnnotations().isEmpty());
+        assertThat(finishedInfo.getAnnotations()).isEmpty();
     }
 
     @Test
     @SmallTest
     public void testBuilderCheck() throws Exception {
+        ExperimentalCronetEngine engine = mTestRule.getTestFramework().getEngine();
         if (mTestRule.testingJavaImpl()) {
-            runBuilderCheckJavaImpl();
+            runBuilderCheckJavaImpl(engine);
         } else {
-            runBuilderCheckNativeImpl();
+            runBuilderCheckNativeImpl(engine);
         }
     }
 
-    private void runBuilderCheckNativeImpl() throws Exception {
+    private static void runBuilderCheckNativeImpl(ExperimentalCronetEngine engine)
+            throws Exception {
         TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
-        try {
-            mCronetEngine.newBidirectionalStreamBuilder(null, callback, callback.getExecutor());
-            fail("URL not null-checked");
-        } catch (NullPointerException e) {
-            assertEquals("URL is required.", e.getMessage());
-        }
-        try {
-            mCronetEngine.newBidirectionalStreamBuilder(
-                    Http2TestServer.getServerUrl(), null, callback.getExecutor());
-            fail("Callback not null-checked");
-        } catch (NullPointerException e) {
-            assertEquals("Callback is required.", e.getMessage());
-        }
-        try {
-            mCronetEngine.newBidirectionalStreamBuilder(
-                    Http2TestServer.getServerUrl(), callback, null);
-            fail("Executor not null-checked");
-        } catch (NullPointerException e) {
-            assertEquals("Executor is required.", e.getMessage());
-        }
+
+        NullPointerException e = assertThrows(NullPointerException.class,
+                () -> engine.newBidirectionalStreamBuilder(null, callback, callback.getExecutor()));
+        assertThat(e).hasMessageThat().isEqualTo("URL is required.");
+
+        e = assertThrows(NullPointerException.class,
+                ()
+                        -> engine.newBidirectionalStreamBuilder(
+                                Http2TestServer.getServerUrl(), null, callback.getExecutor()));
+        assertThat(e).hasMessageThat().isEqualTo("Callback is required.");
+
+        e = assertThrows(NullPointerException.class,
+                ()
+                        -> engine.newBidirectionalStreamBuilder(
+                                Http2TestServer.getServerUrl(), callback, null));
+        assertThat(e).hasMessageThat().isEqualTo("Executor is required.");
+
         // Verify successful creation doesn't throw.
-        BidirectionalStream.Builder builder = mCronetEngine.newBidirectionalStreamBuilder(
+        BidirectionalStream.Builder builder = engine.newBidirectionalStreamBuilder(
                 Http2TestServer.getServerUrl(), callback, callback.getExecutor());
-        try {
-            builder.addHeader(null, "value");
-            fail("Header name is not null-checked");
-        } catch (NullPointerException e) {
-            assertEquals("Invalid header name.", e.getMessage());
-        }
-        try {
-            builder.addHeader("name", null);
-            fail("Header value is not null-checked");
-        } catch (NullPointerException e) {
-            assertEquals("Invalid header value.", e.getMessage());
-        }
-        try {
-            builder.setHttpMethod(null);
-            fail("Method name is not null-checked");
-        } catch (NullPointerException e) {
-            assertEquals("Method is required.", e.getMessage());
-        }
+
+        e = assertThrows(NullPointerException.class, () -> builder.addHeader(null, "value"));
+        assertThat(e).hasMessageThat().isEqualTo("Invalid header name.");
+        e = assertThrows(NullPointerException.class, () -> builder.addHeader("name", null));
+        assertThat(e).hasMessageThat().isEqualTo("Invalid header value.");
+        e = assertThrows(NullPointerException.class, () -> builder.setHttpMethod(null));
+        assertThat(e).hasMessageThat().isEqualTo("Method is required.");
     }
 
-    private void runBuilderCheckJavaImpl() {
-        try {
-            TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
-            CronetTestRule.createJavaEngineBuilder(CronetTestRule.getContext())
-                    .build()
-                    .newBidirectionalStreamBuilder(
-                            Http2TestServer.getServerUrl(), callback, callback.getExecutor());
-            fail("JavaCronetEngine doesn't support BidirectionalStream."
-                    + " Expected UnsupportedOperationException");
-        } catch (UnsupportedOperationException e) {
-            // Expected.
-        }
+    private void runBuilderCheckJavaImpl(ExperimentalCronetEngine engine) {
+        TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
+        assertThrows("JavaCronetEngine doesn't support BidirectionalStream.",
+                UnsupportedOperationException.class,
+                ()
+                        -> engine.newBidirectionalStreamBuilder(
+                                Http2TestServer.getServerUrl(), callback, callback.getExecutor()));
     }
 
     @Test
@@ -225,10 +191,12 @@ public class BidirectionalStreamTest {
                         .build();
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
-        assertContains("Exception in BidirectionalStream: net::ERR_DISALLOWED_URL_SCHEME",
-                callback.mError.getMessage());
-        assertEquals(-301, ((NetworkException) callback.mError).getCronetInternalErrorCode());
+        assertThat(stream.isDone()).isTrue();
+        assertThat(callback.mError)
+                .hasMessageThat()
+                .contains("Exception in BidirectionalStream: net::ERR_DISALLOWED_URL_SCHEME");
+        assertThat(((NetworkException) callback.mError).getCronetInternalErrorCode())
+                .isEqualTo(-301);
     }
 
     @Test
@@ -253,9 +221,9 @@ public class BidirectionalStreamTest {
                         .build();
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("HEAD", callback.mResponseAsString);
+        assertThat(stream.isDone()).isTrue();
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo("HEAD");
         UrlResponseInfo urlResponseInfo =
                 createUrlResponseInfo(new String[] {url}, "", 200, 32, ":status", "200");
         mTestRule.assertResponseEquals(urlResponseInfo, callback.mResponseInfo);
@@ -285,21 +253,58 @@ public class BidirectionalStreamTest {
         Date startTime = new Date();
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
+        assertThat(stream.isDone()).isTrue();
         requestFinishedListener.blockUntilDone();
         Date endTime = new Date();
         RequestFinishedInfo finishedInfo = requestFinishedListener.getRequestInfo();
         MetricsTestUtil.checkRequestFinishedInfo(finishedInfo, url, startTime, endTime);
-        assertEquals(RequestFinishedInfo.SUCCEEDED, finishedInfo.getFinishedReason());
+        assertThat(finishedInfo.getFinishedReason()).isEqualTo(RequestFinishedInfo.SUCCEEDED);
         MetricsTestUtil.checkHasConnectTiming(finishedInfo.getMetrics(), startTime, endTime, true);
-        assertEquals(newHashSet("request annotation", this),
-                new HashSet<Object>(finishedInfo.getAnnotations()));
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("Test String1234567890woot!", callback.mResponseAsString);
-        assertEquals("bar", callback.mResponseInfo.getAllHeaders().get("echo-foo").get(0));
-        assertEquals("", callback.mResponseInfo.getAllHeaders().get("echo-empty").get(0));
-        assertEquals(
-                "zebra", callback.mResponseInfo.getAllHeaders().get("echo-content-type").get(0));
+        assertThat(finishedInfo.getAnnotations()).containsExactly("request annotation", this);
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo("Test String1234567890woot!");
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-foo", Arrays.asList("bar"));
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-empty", Arrays.asList(""));
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-content-type", Arrays.asList("zebra"));
+    }
+
+    @Test
+    @SmallTest
+    @OnlyRunNativeCronet
+    public void testGetActiveRequestCount() throws Exception {
+        TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
+        callback.addWriteData("Test String".getBytes());
+        callback.setBlockOnTerminalState(true);
+        BidirectionalStream stream =
+                mCronetEngine
+                        .newBidirectionalStreamBuilder(Http2TestServer.getEchoStreamUrl(), callback,
+                                callback.getExecutor())
+                        .build();
+        assertThat(mCronetEngine.getActiveRequestCount()).isEqualTo(0);
+        stream.start();
+        callback.blockForDone();
+        assertThat(mCronetEngine.getActiveRequestCount()).isEqualTo(1);
+        callback.setBlockOnTerminalState(false);
+        waitForActiveRequestCount(0);
+    }
+
+    @Test
+    @SmallTest
+    @OnlyRunNativeCronet
+    public void testGetActiveRequestCountWithInvalidRequest() throws Exception {
+        TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
+        BidirectionalStream stream =
+                mCronetEngine
+                        .newBidirectionalStreamBuilder(Http2TestServer.getEchoStreamUrl(), callback,
+                                callback.getExecutor())
+                        .addHeader("", "") // Deliberately invalid
+                        .build();
+        assertThat(mCronetEngine.getActiveRequestCount()).isEqualTo(0);
+        assertThrows(IllegalArgumentException.class, stream::start);
+        assertThat(mCronetEngine.getActiveRequestCount()).isEqualTo(0);
     }
 
     @Test
@@ -317,15 +322,15 @@ public class BidirectionalStreamTest {
                         .build();
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
+        assertThat(stream.isDone()).isTrue();
         requestFinishedListener.blockUntilDone();
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
         // Default method is 'GET'.
-        assertEquals("GET", callback.mResponseAsString);
-        assertEquals("bar", callback.mResponseInfo.getAllHeaders().get("foo").get(0));
-        assertEquals("bar2", callback.mResponseInfo.getAllHeaders().get("foo").get(1));
+        assertThat(callback.mResponseAsString).isEqualTo("GET");
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("foo", Arrays.asList("bar", "bar2"));
         RequestFinishedInfo finishedInfo = requestFinishedListener.getRequestInfo();
-        assertTrue(finishedInfo.getAnnotations().isEmpty());
+        assertThat(finishedInfo.getAnnotations()).isEmpty();
     }
 
     @Test
@@ -348,17 +353,19 @@ public class BidirectionalStreamTest {
 
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
+        assertThat(stream.isDone()).isTrue();
 
         // Flush after stream is completed is no-op. It shouldn't call into the destroyed adapter.
         stream.flush();
 
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("Test String1234567890woot!", callback.mResponseAsString);
-        assertEquals("bar", callback.mResponseInfo.getAllHeaders().get("echo-foo").get(0));
-        assertEquals("", callback.mResponseInfo.getAllHeaders().get("echo-empty").get(0));
-        assertEquals(
-                "zebra", callback.mResponseInfo.getAllHeaders().get("echo-content-type").get(0));
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo("Test String1234567890woot!");
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-foo", Arrays.asList("bar"));
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-empty", Arrays.asList(""));
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-content-type", Arrays.asList("zebra"));
     }
 
     @Test
@@ -388,31 +395,31 @@ public class BidirectionalStreamTest {
                     // "6" is in pending queue.
                     List<ByteBuffer> pendingData =
                             ((CronetBidirectionalStream) stream).getPendingDataForTesting();
-                    assertEquals(1, pendingData.size());
+                    assertThat(pendingData).hasSize(1);
                     ByteBuffer pendingBuffer = pendingData.get(0);
                     byte[] content = new byte[pendingBuffer.remaining()];
                     pendingBuffer.get(content);
-                    assertTrue(Arrays.equals("6".getBytes(), content));
+                    assertThat(content).isEqualTo("6".getBytes());
 
                     // "4" and "5" have been flushed.
-                    assertEquals(0,
-                            ((CronetBidirectionalStream) stream).getFlushDataForTesting().size());
+                    assertThat(((CronetBidirectionalStream) stream).getFlushDataForTesting())
+                            .isEmpty();
                 } else if (mNumWriteCompleted == 5) {
                     // Now flush "6", which is still in pending queue.
                     List<ByteBuffer> pendingData =
                             ((CronetBidirectionalStream) stream).getPendingDataForTesting();
-                    assertEquals(1, pendingData.size());
+                    assertThat(pendingData).hasSize(1);
                     ByteBuffer pendingBuffer = pendingData.get(0);
                     byte[] content = new byte[pendingBuffer.remaining()];
                     pendingBuffer.get(content);
-                    assertTrue(Arrays.equals("6".getBytes(), content));
+                    assertThat(content).isEqualTo("6".getBytes());
 
                     stream.flush();
 
-                    assertEquals(0,
-                            ((CronetBidirectionalStream) stream).getPendingDataForTesting().size());
-                    assertEquals(0,
-                            ((CronetBidirectionalStream) stream).getFlushDataForTesting().size());
+                    assertThat(((CronetBidirectionalStream) stream).getPendingDataForTesting())
+                            .isEmpty();
+                    assertThat(((CronetBidirectionalStream) stream).getFlushDataForTesting())
+                            .isEmpty();
                 }
             }
         };
@@ -432,8 +439,8 @@ public class BidirectionalStreamTest {
         stream.start();
         waitOnStreamReady.block();
 
-        assertEquals(0, stream.getPendingDataForTesting().size());
-        assertEquals(0, stream.getFlushDataForTesting().size());
+        assertThat(stream.getPendingDataForTesting()).isEmpty();
+        assertThat(stream.getFlushDataForTesting()).isEmpty();
 
         // Write 1, 2, 3 and flush().
         callback.startNextWrite(stream);
@@ -443,12 +450,14 @@ public class BidirectionalStreamTest {
         callback.startNextWrite(stream);
 
         callback.blockForDone();
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("123456", callback.mResponseAsString);
-        assertEquals("bar", callback.mResponseInfo.getAllHeaders().get("echo-foo").get(0));
-        assertEquals("", callback.mResponseInfo.getAllHeaders().get("echo-empty").get(0));
-        assertEquals(
-                "zebra", callback.mResponseInfo.getAllHeaders().get("echo-content-type").get(0));
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo("123456");
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-foo", Arrays.asList("bar"));
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-empty", Arrays.asList(""));
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-content-type", Arrays.asList("zebra"));
     }
 
     @Test
@@ -463,9 +472,10 @@ public class BidirectionalStreamTest {
             @Override
             public void onStreamReady(BidirectionalStream stream) {
                 // Start the first write.
-                stream.write(getDummyData(), false);
+                stream.write(getSampleData(), false);
                 stream.flush();
             }
+
             @Override
             public void onReadCompleted(BidirectionalStream stream, UrlResponseInfo info,
                     ByteBuffer byteBuffer, boolean endOfStream) {
@@ -473,25 +483,27 @@ public class BidirectionalStreamTest {
                 // Cancel now when the write side is busy.
                 stream.cancel();
             }
+
             @Override
             public void onWriteCompleted(BidirectionalStream stream, UrlResponseInfo info,
                     ByteBuffer buffer, boolean endOfStream) {
                 // Flush twice to keep the flush queue non-empty.
-                stream.write(getDummyData(), false);
+                stream.write(getSampleData(), false);
                 stream.flush();
-                stream.write(getDummyData(), false);
+                stream.write(getSampleData(), false);
                 stream.flush();
             }
-            // Returns a piece of dummy data to send to the server.
-            private ByteBuffer getDummyData() {
+
+            // Returns a piece of sample data to send to the server.
+            private ByteBuffer getSampleData() {
                 byte[] data = new byte[100];
                 for (int i = 0; i < data.length; i++) {
                     data[i] = 'x';
                 }
-                ByteBuffer dummyData = ByteBuffer.allocateDirect(data.length);
-                dummyData.put(data);
-                dummyData.flip();
-                return dummyData;
+                ByteBuffer sampleData = ByteBuffer.allocateDirect(data.length);
+                sampleData.put(data);
+                sampleData.flip();
+                return sampleData;
             }
         };
         CronetBidirectionalStream stream =
@@ -500,7 +512,7 @@ public class BidirectionalStreamTest {
                         .build();
         stream.start();
         callback.blockForDone();
-        assertTrue(callback.mOnCanceledCalled);
+        assertThat(callback.mOnCanceledCalled).isTrue();
     }
 
     @Test
@@ -513,22 +525,18 @@ public class BidirectionalStreamTest {
             TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback() {
                 @Override
                 public void onStreamReady(BidirectionalStream stream) {
-                    try {
-                        // Attempt to write data for GET request.
-                        stream.write(ByteBuffer.wrap("dummy".getBytes()), true);
-                    } catch (IllegalArgumentException e) {
-                        // Expected.
-                    }
+                    // Attempt to write data for GET request.
+                    assertThrows(IllegalArgumentException.class,
+                            () -> stream.write(ByteBuffer.wrap("sample".getBytes()), true));
+
                     // If there are delayed headers, this flush should try to send them.
                     // If nothing to flush, it should not crash.
                     stream.flush();
                     super.onStreamReady(stream);
-                    try {
-                        // Attempt to write data for GET request.
-                        stream.write(ByteBuffer.wrap("dummy".getBytes()), true);
-                    } catch (IllegalArgumentException e) {
-                        // Expected.
-                    }
+
+                    // Attempt to write data for GET request.
+                    assertThrows(IllegalArgumentException.class,
+                            () -> stream.write(ByteBuffer.wrap("sample".getBytes()), true));
                 }
             };
             BidirectionalStream stream =
@@ -544,16 +552,18 @@ public class BidirectionalStreamTest {
 
             stream.start();
             callback.blockForDone();
-            assertTrue(stream.isDone());
+            assertThat(stream.isDone()).isTrue();
 
             // Flush after stream is completed is no-op. It shouldn't call into the destroyed
             // adapter.
             stream.flush();
 
-            assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-            assertEquals("", callback.mResponseAsString);
-            assertEquals("bar", callback.mResponseInfo.getAllHeaders().get("echo-foo").get(0));
-            assertEquals("", callback.mResponseInfo.getAllHeaders().get("echo-empty").get(0));
+            assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+            assertThat(callback.mResponseAsString).isEmpty();
+            assertThat(callback.mResponseInfo.getAllHeaders())
+                    .containsEntry("echo-foo", Arrays.asList("bar"));
+            assertThat(callback.mResponseInfo.getAllHeaders())
+                    .containsEntry("echo-empty", Arrays.asList(""));
         }
     }
 
@@ -576,14 +586,16 @@ public class BidirectionalStreamTest {
                             .build();
             stream.start();
             callback.blockForDone();
-            assertTrue(stream.isDone());
+            assertThat(stream.isDone()).isTrue();
 
-            assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-            assertEquals("Test String", callback.mResponseAsString);
-            assertEquals("bar", callback.mResponseInfo.getAllHeaders().get("echo-foo").get(0));
-            assertEquals("", callback.mResponseInfo.getAllHeaders().get("echo-empty").get(0));
-            assertEquals("zebra",
-                    callback.mResponseInfo.getAllHeaders().get("echo-content-type").get(0));
+            assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+            assertThat(callback.mResponseAsString).isEqualTo("Test String");
+            assertThat(callback.mResponseInfo.getAllHeaders())
+                    .containsEntry("echo-foo", Arrays.asList("bar"));
+            assertThat(callback.mResponseInfo.getAllHeaders())
+                    .containsEntry("echo-empty", Arrays.asList(""));
+            assertThat(callback.mResponseInfo.getAllHeaders())
+                    .containsEntry("echo-content-type", Arrays.asList("zebra"));
         }
     }
 
@@ -611,14 +623,16 @@ public class BidirectionalStreamTest {
                             .build();
             stream.start();
             callback.blockForDone();
-            assertTrue(stream.isDone());
-            assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-            assertEquals("Test String1234567890woot!Test String1234567890woot!",
-                    callback.mResponseAsString);
-            assertEquals("bar", callback.mResponseInfo.getAllHeaders().get("echo-foo").get(0));
-            assertEquals("", callback.mResponseInfo.getAllHeaders().get("echo-empty").get(0));
-            assertEquals("zebra",
-                    callback.mResponseInfo.getAllHeaders().get("echo-content-type").get(0));
+            assertThat(stream.isDone()).isTrue();
+            assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+            assertThat(callback.mResponseAsString)
+                    .isEqualTo("Test String1234567890woot!Test String1234567890woot!");
+            assertThat(callback.mResponseInfo.getAllHeaders())
+                    .containsEntry("echo-foo", Arrays.asList("bar"));
+            assertThat(callback.mResponseInfo.getAllHeaders())
+                    .containsEntry("echo-empty", Arrays.asList(""));
+            assertThat(callback.mResponseInfo.getAllHeaders())
+                    .containsEntry("echo-content-type", Arrays.asList("zebra"));
         }
     }
 
@@ -634,6 +648,7 @@ public class BidirectionalStreamTest {
                 super.onStreamReady(stream);
                 startNextRead(stream);
             }
+
             @Override
             public void onResponseHeadersReceived(
                     BidirectionalStream stream, UrlResponseInfo info) {
@@ -651,13 +666,15 @@ public class BidirectionalStreamTest {
                         .build();
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("Test String1234567890woot!", callback.mResponseAsString);
-        assertEquals("bar", callback.mResponseInfo.getAllHeaders().get("echo-foo").get(0));
-        assertEquals("", callback.mResponseInfo.getAllHeaders().get("echo-empty").get(0));
-        assertEquals(
-                "zebra", callback.mResponseInfo.getAllHeaders().get("echo-content-type").get(0));
+        assertThat(stream.isDone()).isTrue();
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo("Test String1234567890woot!");
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-foo", Arrays.asList("bar"));
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-empty", Arrays.asList(""));
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-content-type", Arrays.asList("zebra"));
     }
 
     @Test
@@ -673,7 +690,7 @@ public class BidirectionalStreamTest {
                 super.onStreamReady(stream);
                 // Write a second time before the previous nativeWritevData has completed.
                 startNextWrite(stream);
-                assertEquals(0, numPendingWrites());
+                assertThat(numPendingWrites()).isEqualTo(0);
             }
         };
         callback.addWriteData("Test String".getBytes(), false);
@@ -690,14 +707,16 @@ public class BidirectionalStreamTest {
                         .build();
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals(
-                "Test String1234567890woot!Test String1234567890woot!", callback.mResponseAsString);
-        assertEquals("bar", callback.mResponseInfo.getAllHeaders().get("echo-foo").get(0));
-        assertEquals("", callback.mResponseInfo.getAllHeaders().get("echo-empty").get(0));
-        assertEquals(
-                "zebra", callback.mResponseInfo.getAllHeaders().get("echo-content-type").get(0));
+        assertThat(stream.isDone()).isTrue();
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString)
+                .isEqualTo("Test String1234567890woot!Test String1234567890woot!");
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-foo", Arrays.asList("bar"));
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-empty", Arrays.asList(""));
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-content-type", Arrays.asList("zebra"));
     }
 
     @Test
@@ -712,9 +731,10 @@ public class BidirectionalStreamTest {
         builder.setHttpMethod(methodName);
         builder.build().start();
         callback.blockForDone();
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("Put This Data!", callback.mResponseAsString);
-        assertEquals(methodName, callback.mResponseInfo.getAllHeaders().get("echo-method").get(0));
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo("Put This Data!");
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-method", Arrays.asList(methodName));
     }
 
     @Test
@@ -724,13 +744,10 @@ public class BidirectionalStreamTest {
         TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
         BidirectionalStream.Builder builder = mCronetEngine.newBidirectionalStreamBuilder(
                 Http2TestServer.getServerUrl(), callback, callback.getExecutor());
-        try {
-            builder.setHttpMethod("bad:method!");
-            builder.build().start();
-            fail("IllegalArgumentException not thrown.");
-        } catch (IllegalArgumentException e) {
-            assertEquals("Invalid http method bad:method!", e.getMessage());
-        }
+        builder.setHttpMethod("bad:method!");
+        IllegalArgumentException e =
+                assertThrows(IllegalArgumentException.class, () -> builder.build().start());
+        assertThat(e).hasMessageThat().isEqualTo("Invalid http method bad:method!");
     }
 
     @Test
@@ -740,15 +757,12 @@ public class BidirectionalStreamTest {
         TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
         BidirectionalStream.Builder builder = mCronetEngine.newBidirectionalStreamBuilder(
                 Http2TestServer.getServerUrl(), callback, callback.getExecutor());
-        try {
-            builder.addHeader("goodheader1", "headervalue");
-            builder.addHeader("header:name", "headervalue");
-            builder.addHeader("goodheader2", "headervalue");
-            builder.build().start();
-            fail("IllegalArgumentException not thrown.");
-        } catch (IllegalArgumentException e) {
-            assertEquals("Invalid header header:name=headervalue", e.getMessage());
-        }
+        builder.addHeader("goodheader1", "headervalue");
+        builder.addHeader("header:name", "headervalue");
+        builder.addHeader("goodheader2", "headervalue");
+        IllegalArgumentException e =
+                assertThrows(IllegalArgumentException.class, () -> builder.build().start());
+        assertThat(e).hasMessageThat().isEqualTo("Invalid header header:name=headervalue");
     }
 
     @Test
@@ -758,13 +772,10 @@ public class BidirectionalStreamTest {
         TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
         BidirectionalStream.Builder builder = mCronetEngine.newBidirectionalStreamBuilder(
                 Http2TestServer.getServerUrl(), callback, callback.getExecutor());
-        try {
-            builder.addHeader("headername", "bad header\r\nvalue");
-            builder.build().start();
-            fail("IllegalArgumentException not thrown.");
-        } catch (IllegalArgumentException e) {
-            assertEquals("Invalid header headername=bad header\r\nvalue", e.getMessage());
-        }
+        builder.addHeader("headername", "bad header\r\nvalue");
+        IllegalArgumentException e =
+                assertThrows(IllegalArgumentException.class, () -> builder.build().start());
+        assertThat(e).hasMessageThat().isEqualTo("Invalid header headername=bad header\r\nvalue");
     }
 
     @Test
@@ -780,8 +791,8 @@ public class BidirectionalStreamTest {
         builder.setHttpMethod("GET");
         builder.build().start();
         callback.blockForDone();
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals(headerValue, callback.mResponseAsString);
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo(headerValue);
     }
 
     @Test
@@ -799,7 +810,7 @@ public class BidirectionalStreamTest {
         builder.setHttpMethod("GET");
         builder.build().start();
         callback.blockForDone();
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
         String headers = callback.mResponseAsString;
         Pattern pattern = Pattern.compile(headerName + ":\\s(.*)\\r\\n");
         Matcher matcher = pattern.matcher(headers);
@@ -807,8 +818,8 @@ public class BidirectionalStreamTest {
         while (matcher.find()) {
             actualValues.add(matcher.group(1));
         }
-        assertEquals(1, actualValues.size());
-        assertEquals("header-value2", actualValues.get(0));
+
+        assertThat(actualValues).containsExactly("header-value2");
     }
 
     @Test
@@ -824,10 +835,11 @@ public class BidirectionalStreamTest {
         builder.setHttpMethod("GET");
         builder.build().start();
         callback.blockForDone();
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertNotNull(callback.mTrailers);
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mTrailers).isNotNull();
         // Verify that header value is properly echoed in trailers.
-        assertEquals(headerValue, callback.mTrailers.getAsMap().get("echo-" + headerName).get(0));
+        assertThat(callback.mTrailers.getAsMap())
+                .containsEntry("echo-" + headerName, Arrays.asList(headerValue));
     }
 
     @Test
@@ -843,8 +855,8 @@ public class BidirectionalStreamTest {
         builder.addHeader(userAgentName, userAgentValue);
         builder.build().start();
         callback.blockForDone();
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals(userAgentValue, callback.mResponseAsString);
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo(userAgentValue);
     }
 
     @Test
@@ -854,7 +866,7 @@ public class BidirectionalStreamTest {
         String userAgentName = "User-Agent";
         String userAgentValue = "User-Agent-Value";
         ExperimentalCronetEngine.Builder engineBuilder =
-                new ExperimentalCronetEngine.Builder(getContext());
+                new ExperimentalCronetEngine.Builder(mTestRule.getTestFramework().getContext());
         engineBuilder.setUserAgent(userAgentValue);
         CronetTestUtil.setMockCertVerifierForTesting(
                 engineBuilder, QuicTestServer.createMockCertVerifier());
@@ -865,8 +877,8 @@ public class BidirectionalStreamTest {
         builder.setHttpMethod("GET");
         builder.build().start();
         callback.blockForDone();
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals(userAgentValue, callback.mResponseAsString);
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo(userAgentValue);
     }
 
     @Test
@@ -880,9 +892,10 @@ public class BidirectionalStreamTest {
         builder.setHttpMethod("GET");
         builder.build().start();
         callback.blockForDone();
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals(new CronetEngine.Builder(getContext()).getDefaultUserAgent(),
-                callback.mResponseAsString);
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString)
+                .isEqualTo(new CronetEngine.Builder(mTestRule.getTestFramework().getContext())
+                                   .getDefaultUserAgent());
     }
 
     @Test
@@ -905,13 +918,13 @@ public class BidirectionalStreamTest {
                         .build();
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals(stringData.toString(), callback.mResponseAsString);
-        assertEquals(
-                "Value with Spaces", callback.mResponseInfo.getAllHeaders().get("echo-foo").get(0));
-        assertEquals(
-                "zebra", callback.mResponseInfo.getAllHeaders().get("echo-content-type").get(0));
+        assertThat(stream.isDone()).isTrue();
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo(stringData.toString());
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-foo", Arrays.asList("Value with Spaces"));
+        assertThat(callback.mResponseInfo.getAllHeaders())
+                .containsEntry("echo-content-type", Arrays.asList("zebra"));
     }
 
     @Test
@@ -927,9 +940,9 @@ public class BidirectionalStreamTest {
                         .build();
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("", callback.mResponseAsString);
+        assertThat(stream.isDone()).isTrue();
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEmpty();
     }
 
     @Test
@@ -945,7 +958,7 @@ public class BidirectionalStreamTest {
                 // Call Write() again.
                 startNextWrite(stream);
                 // Make sure there is no pending write.
-                assertEquals(0, numPendingWrites());
+                assertThat(numPendingWrites()).isEqualTo(0);
             }
         };
         callback.addWriteData("1".getBytes());
@@ -956,9 +969,9 @@ public class BidirectionalStreamTest {
                         .build();
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("12", callback.mResponseAsString);
+        assertThat(stream.isDone()).isTrue();
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo("12");
     }
 
     @Test
@@ -971,15 +984,12 @@ public class BidirectionalStreamTest {
             public void onResponseHeadersReceived(
                     BidirectionalStream stream, UrlResponseInfo info) {
                 startNextRead(stream);
-                try {
-                    // Second read from callback invoked on single-threaded executor throws
-                    // an exception because previous read is still pending until its completion
-                    // is handled on executor.
-                    stream.read(ByteBuffer.allocateDirect(5));
-                    fail("Exception is not thrown.");
-                } catch (Exception e) {
-                    assertEquals("Unexpected read attempt.", e.getMessage());
-                }
+                // Second read from callback invoked on single-threaded executor throws an
+                // exception because previous read is still pending until its completion is
+                // handled on executor.
+                Exception e = assertThrows(
+                        Exception.class, () -> stream.read(ByteBuffer.allocateDirect(5)));
+                assertThat(e).hasMessageThat().isEqualTo("Unexpected read attempt.");
             }
         };
         callback.addWriteData("1".getBytes());
@@ -990,15 +1000,14 @@ public class BidirectionalStreamTest {
                         .build();
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("12", callback.mResponseAsString);
+        assertThat(stream.isDone()).isTrue();
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo("12");
     }
 
     @Test
     @SmallTest
     @OnlyRunNativeCronet
-    @DisabledTest(message = "Disabled due to timeout. See crbug.com/591112")
     public void testReadAndWrite() throws Exception {
         String url = Http2TestServer.getEchoStreamUrl();
         TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback() {
@@ -1021,12 +1030,12 @@ public class BidirectionalStreamTest {
         stream.start();
         callback.waitForNextWriteStep();
         callback.waitForNextReadStep();
-        callback.startNextRead(stream);
         callback.setAutoAdvance(true);
+        callback.startNextRead(stream);
         callback.blockForDone();
-        assertTrue(stream.isDone());
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("12", callback.mResponseAsString);
+        assertThat(stream.isDone()).isTrue();
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo("12");
     }
 
     @Test
@@ -1057,20 +1066,20 @@ public class BidirectionalStreamTest {
 
         // Wait for read step, but don't read yet.
         callback.waitForNextReadStep(); // onResponseHeadersReceived
-        assertEquals("", callback.mResponseAsString);
+        assertThat(callback.mResponseAsString).isEmpty();
         // Read back.
         callback.startNextRead(stream);
         callback.waitForNextReadStep(); // onReadCompleted
         // Verify that some part of proper response is read.
-        assertTrue(callback.mResponseAsString.startsWith(testData[0]));
-        assertTrue(stringData.toString().startsWith(callback.mResponseAsString));
+        assertThat(callback.mResponseAsString).startsWith(testData[0]);
+        assertThat(callback.mResponseAsString).startsWith(stringData.toString());
         // Read the rest of the response.
         callback.setAutoAdvance(true);
         callback.startNextRead(stream);
         callback.blockForDone();
-        assertTrue(stream.isDone());
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals(stringData.toString(), callback.mResponseAsString);
+        assertThat(stream.isDone()).isTrue();
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo(stringData.toString());
     }
 
     @Test
@@ -1103,16 +1112,16 @@ public class BidirectionalStreamTest {
             ByteBuffer readBuffer = ByteBuffer.allocateDirect(100);
             callback.startNextRead(stream, readBuffer);
             callback.waitForNextReadStep();
-            assertEquals(expected.length(), readBuffer.position());
-            assertFalse(stream.isDone());
+            assertThat(readBuffer.position()).isEqualTo(expected.length());
+            assertThat(stream.isDone()).isFalse();
         }
 
         callback.setAutoAdvance(true);
         callback.startNextRead(stream);
         callback.blockForDone();
-        assertTrue(stream.isDone());
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals(stringData.toString(), callback.mResponseAsString);
+        assertThat(stream.isDone()).isTrue();
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo(stringData.toString());
     }
 
     /**
@@ -1133,36 +1142,36 @@ public class BidirectionalStreamTest {
         stream.start();
         callback.waitForNextReadStep();
 
-        assertEquals(null, callback.mError);
-        assertFalse(callback.isDone());
-        assertEquals(TestBidirectionalStreamCallback.ResponseStep.ON_RESPONSE_STARTED,
-                callback.mResponseStep);
+        assertThat(callback.mError).isNull();
+        assertThat(callback.isDone()).isFalse();
+        assertThat(callback.mResponseStep)
+                .isEqualTo(TestBidirectionalStreamCallback.ResponseStep.ON_RESPONSE_STARTED);
 
         ByteBuffer readBuffer = ByteBuffer.allocateDirect(5);
         readBuffer.put("FOR".getBytes());
-        assertEquals(3, readBuffer.position());
+        assertThat(readBuffer.position()).isEqualTo(3);
 
         // Read first two characters of the response ("GE"). It's theoretically
         // possible to need one read per character, though in practice,
         // shouldn't happen.
         while (callback.mResponseAsString.length() < 2) {
-            assertFalse(callback.isDone());
+            assertThat(callback.isDone()).isFalse();
             callback.startNextRead(stream, readBuffer);
             callback.waitForNextReadStep();
         }
 
         // Make sure the two characters were read.
-        assertEquals("GE", callback.mResponseAsString);
+        assertThat(callback.mResponseAsString).isEqualTo("GE");
 
         // Check the contents of the entire buffer. The first 3 characters
         // should not have been changed, and the last two should be the first
         // two characters from the response.
-        assertEquals("FORGE", bufferContentsToString(readBuffer, 0, 5));
+        assertThat(bufferContentsToString(readBuffer, 0, 5)).isEqualTo("FORGE");
         // The limit and position should be 5.
-        assertEquals(5, readBuffer.limit());
-        assertEquals(5, readBuffer.position());
+        assertThat(readBuffer.limit()).isEqualTo(5);
+        assertThat(readBuffer.position()).isEqualTo(5);
 
-        assertEquals(ResponseStep.ON_READ_COMPLETED, callback.mResponseStep);
+        assertThat(callback.mResponseStep).isEqualTo(ResponseStep.ON_READ_COMPLETED);
 
         // Start reading from position 3. Since the only remaining character
         // from the response is a "T", when the read completes, the buffer
@@ -1172,17 +1181,17 @@ public class BidirectionalStreamTest {
         callback.waitForNextReadStep();
 
         // Make sure all three characters of the response have now been read.
-        assertEquals("GET", callback.mResponseAsString);
+        assertThat(callback.mResponseAsString).isEqualTo("GET");
 
         // Check the entire contents of the buffer. Only the third character
         // should have been modified.
-        assertEquals("FORTE", bufferContentsToString(readBuffer, 0, 5));
+        assertThat(bufferContentsToString(readBuffer, 0, 5)).isEqualTo("FORTE");
 
         // Make sure position and limit were updated correctly.
-        assertEquals(4, readBuffer.position());
-        assertEquals(5, readBuffer.limit());
+        assertThat(readBuffer.position()).isEqualTo(4);
+        assertThat(readBuffer.limit()).isEqualTo(5);
 
-        assertEquals(ResponseStep.ON_READ_COMPLETED, callback.mResponseStep);
+        assertThat(callback.mResponseStep).isEqualTo(ResponseStep.ON_READ_COMPLETED);
 
         // One more read attempt. The request should complete.
         readBuffer.position(1);
@@ -1191,19 +1200,19 @@ public class BidirectionalStreamTest {
         callback.startNextRead(stream, readBuffer);
         callback.blockForDone();
 
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("GET", callback.mResponseAsString);
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo("GET");
         checkResponseInfo(callback.mResponseInfo, Http2TestServer.getEchoMethodUrl(), 200, "");
 
         // Check that buffer contents were not modified.
-        assertEquals("FORTE", bufferContentsToString(readBuffer, 0, 5));
+        assertThat(bufferContentsToString(readBuffer, 0, 5)).isEqualTo("FORTE");
 
         // Position should not have been modified, since nothing was read.
-        assertEquals(1, readBuffer.position());
+        assertThat(readBuffer.position()).isEqualTo(1);
         // Limit should be unchanged as always.
-        assertEquals(5, readBuffer.limit());
+        assertThat(readBuffer.limit()).isEqualTo(5);
 
-        assertEquals(ResponseStep.ON_SUCCEEDED, callback.mResponseStep);
+        assertThat(callback.mResponseStep).isEqualTo(ResponseStep.ON_SUCCEEDED);
 
         // TestRequestFinishedListener expects a single call to onRequestFinished. Here we
         // explicitly wait for the call to happen to avoid a race condition with the other
@@ -1231,44 +1240,37 @@ public class BidirectionalStreamTest {
         stream.start();
         callback.waitForNextReadStep();
 
-        assertEquals(null, callback.mError);
-        assertFalse(callback.isDone());
-        assertEquals(TestBidirectionalStreamCallback.ResponseStep.ON_RESPONSE_STARTED,
-                callback.mResponseStep);
+        assertThat(callback.mError).isNull();
+        assertThat(callback.isDone()).isFalse();
+        assertThat(callback.mResponseStep)
+                .isEqualTo(TestBidirectionalStreamCallback.ResponseStep.ON_RESPONSE_STARTED);
 
         // Try to read using a full buffer.
-        try {
-            ByteBuffer readBuffer = ByteBuffer.allocateDirect(4);
-            readBuffer.put("full".getBytes());
-            stream.read(readBuffer);
-            fail("Exception not thrown");
-        } catch (IllegalArgumentException e) {
-            assertEquals("ByteBuffer is already full.", e.getMessage());
-        }
+        ByteBuffer readBuffer = ByteBuffer.allocateDirect(4);
+        readBuffer.put("full".getBytes());
+        IllegalArgumentException e =
+                assertThrows(IllegalArgumentException.class, () -> stream.read(readBuffer));
+        assertThat(e).hasMessageThat().isEqualTo("ByteBuffer is already full.");
 
         // Try to read using a non-direct buffer.
-        try {
-            ByteBuffer readBuffer = ByteBuffer.allocate(5);
-            stream.read(readBuffer);
-            fail("Exception not thrown");
-        } catch (Exception e) {
-            assertEquals("byteBuffer must be a direct ByteBuffer.", e.getMessage());
-        }
+        ByteBuffer readBuffer1 = ByteBuffer.allocate(5);
+        e = assertThrows(IllegalArgumentException.class, () -> stream.read(readBuffer1));
+        assertThat(e).hasMessageThat().isEqualTo("byteBuffer must be a direct ByteBuffer.");
 
         // Finish the stream with a direct ByteBuffer.
         callback.setAutoAdvance(true);
-        ByteBuffer readBuffer = ByteBuffer.allocateDirect(5);
-        stream.read(readBuffer);
+        ByteBuffer readBuffer2 = ByteBuffer.allocateDirect(5);
+        stream.read(readBuffer2);
         callback.blockForDone();
-        assertEquals(200, callback.mResponseInfo.getHttpStatusCode());
-        assertEquals("GET", callback.mResponseAsString);
+        assertThat(callback.mResponseInfo.getHttpStatusCode()).isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo("GET");
     }
 
     private void throwOrCancel(
             FailureType failureType, ResponseStep failureStep, boolean expectError) {
         // Use a fresh CronetEngine each time so Http2 session is not reused.
         ExperimentalCronetEngine.Builder builder =
-                new ExperimentalCronetEngine.Builder(getContext());
+                new ExperimentalCronetEngine.Builder(mTestRule.getTestFramework().getContext());
         CronetTestUtil.setMockCertVerifierForTesting(
                 builder, QuicTestServer.createMockCertVerifier());
         mCronetEngine = builder.build();
@@ -1282,18 +1284,18 @@ public class BidirectionalStreamTest {
         Date startTime = new Date();
         stream.start();
         callback.blockForDone();
-        assertTrue(stream.isDone());
+        assertThat(stream.isDone()).isTrue();
         requestFinishedListener.blockUntilDone();
         Date endTime = new Date();
         RequestFinishedInfo finishedInfo = requestFinishedListener.getRequestInfo();
         RequestFinishedInfo.Metrics metrics = finishedInfo.getMetrics();
-        assertNotNull(metrics);
+        assertThat(metrics).isNotNull();
         // Cancellation when stream is ready does not guarantee that
         // mResponseInfo is null because there might be a
         // onResponseHeadersReceived already queued in the executor.
         // See crbug.com/594432.
         if (failureStep != ResponseStep.ON_STREAM_READY) {
-            assertNotNull(callback.mResponseInfo);
+            assertThat(callback.mResponseInfo).isNotNull();
         }
         // Check metrics information.
         if (failureStep == ResponseStep.ON_RESPONSE_STARTED
@@ -1303,28 +1305,28 @@ public class BidirectionalStreamTest {
             // connect timing metrics.
             MetricsTestUtil.checkTimingMetrics(metrics, startTime, endTime);
             MetricsTestUtil.checkHasConnectTiming(metrics, startTime, endTime, true);
-            assertTrue(metrics.getSentByteCount() > 0);
-            assertTrue(metrics.getReceivedByteCount() > 0);
+            assertThat(metrics.getSentByteCount()).isGreaterThan(0L);
+            assertThat(metrics.getReceivedByteCount()).isGreaterThan(0L);
         } else if (failureStep == ResponseStep.ON_STREAM_READY) {
-            assertNotNull(metrics.getRequestStart());
+            assertThat(metrics.getRequestStart()).isNotNull();
             MetricsTestUtil.assertAfter(metrics.getRequestStart(), startTime);
-            assertNotNull(metrics.getRequestEnd());
+            assertThat(metrics.getRequestEnd()).isNotNull();
             MetricsTestUtil.assertAfter(endTime, metrics.getRequestEnd());
             MetricsTestUtil.assertAfter(metrics.getRequestEnd(), metrics.getRequestStart());
         }
-        assertEquals(expectError, callback.mError != null);
-        assertEquals(expectError, callback.mOnErrorCalled);
+        assertThat(callback.mError != null).isEqualTo(expectError);
+        assertThat(callback.mOnErrorCalled).isEqualTo(expectError);
         if (expectError) {
-            assertNotNull(finishedInfo.getException());
-            assertEquals(RequestFinishedInfo.FAILED, finishedInfo.getFinishedReason());
+            assertThat(finishedInfo.getException()).isNotNull();
+            assertThat(finishedInfo.getFinishedReason()).isEqualTo(RequestFinishedInfo.FAILED);
         } else {
-            assertNull(finishedInfo.getException());
-            assertEquals(RequestFinishedInfo.CANCELED, finishedInfo.getFinishedReason());
+            assertThat(finishedInfo.getException()).isNull();
+            assertThat(finishedInfo.getFinishedReason()).isEqualTo(RequestFinishedInfo.CANCELED);
         }
-        assertEquals(failureType == FailureType.CANCEL_SYNC
+        assertThat(callback.mOnCanceledCalled)
+                .isEqualTo(failureType == FailureType.CANCEL_SYNC
                         || failureType == FailureType.CANCEL_ASYNC
-                        || failureType == FailureType.CANCEL_ASYNC_WITHOUT_PAUSE,
-                callback.mOnCanceledCalled);
+                        || failureType == FailureType.CANCEL_ASYNC_WITHOUT_PAUSE);
         mCronetEngine.removeRequestFinishedListener(requestFinishedListener);
     }
 
@@ -1361,12 +1363,12 @@ public class BidirectionalStreamTest {
         BidirectionalStream stream = builder.setHttpMethod("GET").build();
         stream.start();
         callback.blockForDone();
-        assertEquals(callback.mResponseStep, ResponseStep.ON_SUCCEEDED);
-        assertTrue(stream.isDone());
-        assertNotNull(callback.mResponseInfo);
+        assertThat(ResponseStep.ON_SUCCEEDED).isEqualTo(callback.mResponseStep);
+        assertThat(stream.isDone()).isTrue();
+        assertThat(callback.mResponseInfo).isNotNull();
         // Check that error thrown from 'onSucceeded' callback is not reported.
-        assertNull(callback.mError);
-        assertFalse(callback.mOnErrorCalled);
+        assertThat(callback.mError).isNull();
+        assertThat(callback.mOnErrorCalled).isFalse();
     }
 
     @Test
@@ -1382,8 +1384,8 @@ public class BidirectionalStreamTest {
                 (CronetBidirectionalStream) builder.setHttpMethod("GET").build();
         stream.start();
         callback.waitForNextReadStep();
-        assertFalse(callback.isDone());
-        assertFalse(stream.isDone());
+        assertThat(callback.isDone()).isFalse();
+        assertThat(stream.isDone()).isFalse();
 
         final ConditionVariable streamDestroyed = new ConditionVariable(false);
         stream.setOnDestroyedCallbackForTesting(new Runnable() {
@@ -1401,8 +1403,8 @@ public class BidirectionalStreamTest {
         // but stream will be destroyed from network thread.
         streamDestroyed.block();
 
-        assertFalse(callback.isDone());
-        assertTrue(stream.isDone());
+        assertThat(callback.isDone()).isFalse();
+        assertThat(stream.isDone()).isTrue();
     }
 
     /**
@@ -1450,31 +1452,19 @@ public class BidirectionalStreamTest {
         CronetBidirectionalStream stream =
                 (CronetBidirectionalStream) builder.setHttpMethod("GET").build();
         stream.start();
-        try {
-            mCronetEngine.shutdown();
-            fail("Should throw an exception");
-        } catch (Exception e) {
-            assertEquals("Cannot shutdown with active requests.", e.getMessage());
-        }
+        Exception e = assertThrows(Exception.class, mCronetEngine::shutdown);
+        assertThat(e).hasMessageThat().isEqualTo("Cannot shutdown with running requests.");
 
         callback.waitForNextReadStep();
-        assertEquals(ResponseStep.ON_RESPONSE_STARTED, callback.mResponseStep);
-        try {
-            mCronetEngine.shutdown();
-            fail("Should throw an exception");
-        } catch (Exception e) {
-            assertEquals("Cannot shutdown with active requests.", e.getMessage());
-        }
+        assertThat(callback.mResponseStep).isEqualTo(ResponseStep.ON_RESPONSE_STARTED);
+        e = assertThrows(Exception.class, mCronetEngine::shutdown);
+        assertThat(e).hasMessageThat().isEqualTo("Cannot shutdown with running requests.");
         callback.startNextRead(stream);
 
         callback.waitForNextReadStep();
-        assertEquals(ResponseStep.ON_READ_COMPLETED, callback.mResponseStep);
-        try {
-            mCronetEngine.shutdown();
-            fail("Should throw an exception");
-        } catch (Exception e) {
-            assertEquals("Cannot shutdown with active requests.", e.getMessage());
-        }
+        assertThat(callback.mResponseStep).isEqualTo(ResponseStep.ON_READ_COMPLETED);
+        e = assertThrows(Exception.class, mCronetEngine::shutdown);
+        assertThat(e).hasMessageThat().isEqualTo("Cannot shutdown with running requests.");
 
         // May not have read all the data, in theory. Just enable auto-advance
         // and finish the request.
@@ -1496,8 +1486,8 @@ public class BidirectionalStreamTest {
         stream.start();
         callback.setFailure(FailureType.THROW_SYNC, ResponseStep.ON_READ_COMPLETED);
         callback.blockForDone();
-        assertTrue(callback.mOnErrorCalled);
-        assertNull(mCronetEngine);
+        assertThat(callback.mOnErrorCalled).isTrue();
+        assertThat(mCronetEngine).isNull();
     }
 
     @Test
@@ -1515,18 +1505,14 @@ public class BidirectionalStreamTest {
         // if there are active requests.
         callback.setAutoAdvance(false);
         stream.start();
-        try {
-            mCronetEngine.shutdown();
-            fail("Should throw an exception");
-        } catch (Exception e) {
-            assertEquals("Cannot shutdown with active requests.", e.getMessage());
-        }
+        Exception e = assertThrows(Exception.class, mCronetEngine::shutdown);
+        assertThat(e).hasMessageThat().isEqualTo("Cannot shutdown with running requests.");
         callback.waitForNextReadStep();
-        assertEquals(ResponseStep.ON_RESPONSE_STARTED, callback.mResponseStep);
+        assertThat(callback.mResponseStep).isEqualTo(ResponseStep.ON_RESPONSE_STARTED);
         stream.cancel();
         callback.blockForDone();
-        assertTrue(callback.mOnCanceledCalled);
-        assertNull(mCronetEngine);
+        assertThat(callback.mOnCanceledCalled).isTrue();
+        assertThat(mCronetEngine).isNull();
     }
 
     /*
@@ -1576,9 +1562,9 @@ public class BidirectionalStreamTest {
             int netError, int errorCode, boolean immediatelyRetryable) throws Exception {
         NetworkException exception =
                 new BidirectionalStreamNetworkException("", errorCode, netError);
-        assertEquals(immediatelyRetryable, exception.immediatelyRetryable());
-        assertEquals(netError, exception.getCronetInternalErrorCode());
-        assertEquals(errorCode, exception.getErrorCode());
+        assertThat(exception.immediatelyRetryable()).isEqualTo(immediatelyRetryable);
+        assertThat(exception.getCronetInternalErrorCode()).isEqualTo(netError);
+        assertThat(exception.getErrorCode()).isEqualTo(errorCode);
     }
 
     @Test
@@ -1602,7 +1588,7 @@ public class BidirectionalStreamTest {
                 .build()
                 .start();
         callback.blockForDone();
-        assertTrue(CronetTestUtil.nativeGetTaggedBytes(tag) > priorBytes);
+        assertThat(CronetTestUtil.nativeGetTaggedBytes(tag)).isGreaterThan(priorBytes);
 
         // Test explicit tagging.
         tag = 0x12345678;
@@ -1611,10 +1597,10 @@ public class BidirectionalStreamTest {
         callback.addWriteData(new byte[] {0});
         ExperimentalBidirectionalStream.Builder builder =
                 mCronetEngine.newBidirectionalStreamBuilder(url, callback, callback.getExecutor());
-        assertEquals(builder.setTrafficStatsTag(tag), builder);
+        assertThat(builder).isEqualTo(builder.setTrafficStatsTag(tag));
         builder.build().start();
         callback.blockForDone();
-        assertTrue(CronetTestUtil.nativeGetTaggedBytes(tag) > priorBytes);
+        assertThat(CronetTestUtil.nativeGetTaggedBytes(tag)).isGreaterThan(priorBytes);
 
         // Test a different tag value to make sure reused connections are retagged.
         tag = 0x87654321;
@@ -1623,10 +1609,10 @@ public class BidirectionalStreamTest {
         callback.addWriteData(new byte[] {0});
         builder =
                 mCronetEngine.newBidirectionalStreamBuilder(url, callback, callback.getExecutor());
-        assertEquals(builder.setTrafficStatsTag(tag), builder);
+        assertThat(builder).isEqualTo(builder.setTrafficStatsTag(tag));
         builder.build().start();
         callback.blockForDone();
-        assertTrue(CronetTestUtil.nativeGetTaggedBytes(tag) > priorBytes);
+        assertThat(CronetTestUtil.nativeGetTaggedBytes(tag)).isGreaterThan(priorBytes);
 
         // Test tagging with our UID.
         tag = 0;
@@ -1635,9 +1621,20 @@ public class BidirectionalStreamTest {
         callback.addWriteData(new byte[] {0});
         builder =
                 mCronetEngine.newBidirectionalStreamBuilder(url, callback, callback.getExecutor());
-        assertEquals(builder.setTrafficStatsUid(Process.myUid()), builder);
+        assertThat(builder).isEqualTo(builder.setTrafficStatsUid(Process.myUid()));
         builder.build().start();
         callback.blockForDone();
-        assertTrue(CronetTestUtil.nativeGetTaggedBytes(tag) > priorBytes);
+        assertThat(CronetTestUtil.nativeGetTaggedBytes(tag)).isGreaterThan(priorBytes);
+    }
+
+    /**
+     * Cronet does not currently provide an API to wait for the active request
+     * count to change. We can't just wait for the terminal callback to fire
+     * because Cronet updates the count some time *after* we return from the
+     * callback. We hack around this by polling the active request count in a
+     * loop.
+     */
+    private void waitForActiveRequestCount(int expectedCount) throws Exception {
+        while (mCronetEngine.getActiveRequestCount() != expectedCount) Thread.sleep(100);
     }
 }

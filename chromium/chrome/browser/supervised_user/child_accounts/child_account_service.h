@@ -14,15 +14,14 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/supervised_user/child_accounts/family_info_fetcher.h"
-#include "chrome/browser/supervised_user/kids_chrome_management/kids_profile_manager.h"
-#include "chrome/browser/supervised_user/supervised_user_service.h"
-#include "chrome/common/pref_names.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
-#include "components/supervised_user/core/browser/kids_external_fetcher.h"
+#include "components/supervised_user/core/browser/list_family_members_service.h"
 #include "components/supervised_user/core/browser/proto/kidschromemanagement_messages.pb.h"
+#include "components/supervised_user/core/browser/proto_fetcher.h"
+#include "components/supervised_user/core/browser/supervised_user_service.h"
+#include "components/supervised_user/core/common/pref_names.h"
 #include "net/base/backoff_entry.h"
 
 #if !(BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS))
@@ -35,10 +34,10 @@ class Profile;
 // This class handles detection of child accounts (on sign-in as well as on
 // browser restart), and triggers the appropriate behavior (e.g. enable the
 // supervised user experience, fetch information about the parent(s)).
-class ChildAccountService : public KeyedService,
-                            public FamilyInfoFetcher::Consumer,
-                            public signin::IdentityManager::Observer,
-                            public SupervisedUserService::Delegate {
+class ChildAccountService
+    : public KeyedService,
+      public signin::IdentityManager::Observer,
+      public supervised_user::SupervisedUserService::Delegate {
  public:
   enum class AuthState { AUTHENTICATED, NOT_AUTHENTICATED, PENDING };
 
@@ -85,17 +84,19 @@ class ChildAccountService : public KeyedService,
       const base::RepeatingCallback<void()>& callback);
 
  private:
-  friend class ChildAccountServiceTest;
   friend class ChildAccountServiceFactory;
   // Use |ChildAccountServiceFactory::GetForProfile(...)| to get an instance of
   // this service.
-  explicit ChildAccountService(Profile* profile);
+  ChildAccountService(
+      Profile* profile,
+      supervised_user::ListFamilyMembersService* list_family_members_service);
 
   // SupervisedUserService::Delegate implementation.
   void SetActive(bool active) override;
 
-  // Sets whether the signed-in account is a child account.
-  void SetIsChildAccount(bool is_child_account);
+  // Sets whether the signed-in account is a supervised account.
+  void SetSupervisionStatusAndNotifyObservers(
+      bool is_subject_to_parental_controls);
 
   // signin::IdentityManager::Observer implementation.
   void OnPrimaryAccountChanged(
@@ -103,19 +104,10 @@ class ChildAccountService : public KeyedService,
   void OnExtendedAccountInfoUpdated(const AccountInfo& info) override;
   void OnExtendedAccountInfoRemoved(const AccountInfo& info) override;
 
-  // FamilyInfoFetcher::Consumer implementation.
-  void OnGetFamilyMembersSuccess(
-      const std::vector<FamilyInfoFetcher::FamilyMember>& members) override;
-  void OnFailure(FamilyInfoFetcher::ErrorCode error) override;
-
   // IdentityManager::Observer implementation.
   void OnAccountsInCookieUpdated(
       const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
       const GoogleServiceAuthError& error) override;
-
-  void StartFetchingFamilyInfo();
-  void CancelFetchingFamilyInfo();
-  void ScheduleNextFamilyInfoUpdate(base::TimeDelta delay);
 
   // Asserts that `is_child` matches the child status of the primary user.
   // Terminates user session in case of status mismatch in order to prevent
@@ -123,30 +115,18 @@ class ChildAccountService : public KeyedService,
   // of the user.
   void AssertChildStatusOfTheUser(bool is_child);
 
-  void SetFirstCustodianPrefs(const FamilyInfoFetcher::FamilyMember& custodian);
-  void SetSecondCustodianPrefs(
-      const FamilyInfoFetcher::FamilyMember& custodian);
-  void ClearFirstCustodianPrefs();
-  void ClearSecondCustodianPrefs();
-
-  void ConsumeListFamilyMembers(
-      KidsExternalFetcherStatus status,
-      std::unique_ptr<kids_chrome_management::ListFamilyMembersResponse>
-          response);
-
   // Owns us via the KeyedService mechanism.
   raw_ptr<Profile> profile_;
 
   bool active_{false};
 
-  std::unique_ptr<FamilyInfoFetcher> family_fetcher_;
-  std::unique_ptr<
-      KidsExternalFetcher<kids_chrome_management::ListFamilyMembersRequest,
-                          kids_chrome_management::ListFamilyMembersResponse>>
-      list_family_members_fetcher_;
-  // If fetching the family info fails, retry with exponential backoff.
-  base::OneShotTimer family_fetch_timer_;
-  net::BackoffEntry family_fetch_backoff_;
+  // Enables or disables scheduled fetch of family members list.
+  raw_ptr<supervised_user::ListFamilyMembersService>
+      list_family_members_service_;
+
+  // Subscription to binding between list_family_members_service_ and
+  // family_preferences_service_.
+  base::CallbackListSubscription set_family_members_subscription_;
 
   raw_ptr<signin::IdentityManager> identity_manager_;
 

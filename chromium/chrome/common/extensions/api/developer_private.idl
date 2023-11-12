@@ -140,6 +140,7 @@ namespace developerPrivate {
     boolean suspiciousInstall;
     boolean corruptInstall;
     boolean updateRequired;
+    boolean publishedInStoreRequired;
     boolean blockedByPolicy;
     boolean reloading;
     boolean custodianApprovalRequired;
@@ -170,6 +171,11 @@ namespace developerPrivate {
     ON_CLICK,
     ON_SPECIFIC_SITES,
     ON_ALL_SITES
+  };
+
+  dictionary SafetyCheckStrings {
+    DOMString? panelString;
+    DOMString? detailString;
   };
 
   dictionary ControlledInfo {
@@ -223,6 +229,7 @@ namespace developerPrivate {
 
   dictionary ExtensionInfo {
     DOMString? blacklistText;
+    SafetyCheckStrings? safetyCheckText;
     Command[] commands;
     ControlledInfo? controlledInfo;
     DependentExtension[] dependentExtensions;
@@ -317,6 +324,7 @@ namespace developerPrivate {
     boolean? errorCollection;
     HostAccess? hostAccess;
     boolean? showAccessRequestsInToolbar;
+    boolean? acknowledgeSafetyCheckWarning;
   };
 
   dictionary ProfileConfigurationUpdate {
@@ -653,15 +661,6 @@ namespace developerPrivate {
     [supportsPromises] static void getExtensionSize(DOMString id,
                                                     StringCallback callback);
 
-    // Returns information of all the extensions and apps installed.
-    // |includeDisabled| : include disabled items.
-    // |includeTerminated| : include terminated items.
-    // |callback| : Called with items info.
-    [deprecated="Use getExtensionsInfo"] static void getItemsInfo(
-        boolean includeDisabled,
-        boolean includeTerminated,
-        ItemsInfoCallback callback);
-
     // Returns the current profile's configuration.
     [supportsPromises] static void getProfileConfiguration(
         ProfileInfoCallback callback);
@@ -671,12 +670,6 @@ namespace developerPrivate {
     //     properties omitted from |update| will not be changed.
     [supportsPromises] static void updateProfileConfiguration(
         ProfileConfigurationUpdate update,
-        optional VoidCallback callback);
-
-    // Opens a permissions dialog.
-    // |extensionId| : The id of the extension to show permissions for.
-    [supportsPromises] static void showPermissionsDialog(
-        DOMString extensionId,
         optional VoidCallback callback);
 
     // Reloads a given extension.
@@ -837,18 +830,6 @@ namespace developerPrivate {
         ExtensionSiteAccessUpdate[] updates,
         optional VoidCallback callback);
 
-    [nocompile, deprecated="Use management.setEnabled"]
-        static void enable(DOMString id,
-                           boolean enabled,
-                           optional VoidCallback callback);
-    [nocompile, deprecated="Use updateExtensionConfiguration"]
-        static void allowIncognito(DOMString extensionId,
-                                   boolean allow,
-                                   optional VoidCallback callback);
-    [nocompile, deprecated="Use updateExtensionConfiguration"]
-        static void allowFileAccess(DOMString extensionId,
-                                    boolean allow,
-                                    optional VoidCallback callback);
     [nocompile, deprecated="Use openDevTools"]
         static void inspect(InspectOptions options,
                             optional VoidCallback callback);
